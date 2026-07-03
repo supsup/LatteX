@@ -1,16 +1,36 @@
 package com.lattex.api;
 
+import com.lattex.font.SfntFont;
+import com.lattex.layout.Layout;
+import com.lattex.layout.LayoutContext;
+import com.lattex.layout.LayoutEngine;
+import com.lattex.parse.MathNode;
+import com.lattex.parse.MathNode.Atom;
+import com.lattex.parse.MathNode.SupSub;
+import com.lattex.parse.MathParser;
+import com.lattex.svg.SvgEmitter;
+
 /**
  * LatteX — render LaTeX math to SVG.
  *
- * <p>Renders inline and display math to self-contained SVG using a bundled
- * OFL math font, with baseline metrics for inline placement. Zero runtime
- * dependencies.
+ * <p>Renders math to self-contained SVG using a bundled OFL math font
+ * (STIX Two Math), emitting glyphs as inline filled {@code <path>}s in a
+ * minimal, sanitizer-safe element subset. Zero runtime dependencies.
  *
- * <p><strong>Status:</strong> scaffold (S1). The parse &rarr; layout &rarr; SVG
- * pipeline lands across S2&ndash;S6 &mdash; see the {@code lattex-mvp} plan.
+ * <p><strong>Status:</strong> M0 walking skeleton — the full font &rarr; parse
+ * &rarr; layout &rarr; SVG pipeline is wired end-to-end, but only for a single
+ * expression class ({@code x^2}: an atom with a superscript). Breadth lands
+ * across the later milestones.
  */
 public final class LatteX {
+
+    /** Default display font size, in user units (px at 1:1). */
+    public static final double DISPLAY_FONT_SIZE = 40.0;
+
+    // The bundled font is immutable and ~1.5 MB; parse it once, lazily.
+    private static final class FontHolder {
+        static final SfntFont FONT = SfntFont.loadBundled();
+    }
 
     private LatteX() {
     }
@@ -20,10 +40,26 @@ public final class LatteX {
      *
      * @param latex the LaTeX math source (without surrounding {@code $} delimiters)
      * @return the SVG document
-     * @throws UnsupportedOperationException not yet implemented (S1 scaffold)
      */
     public static String render(String latex) {
-        throw new UnsupportedOperationException(
-            "LatteX.render lands in S2-S6; see the lattex-mvp plan.");
+        MathNode node = MathParser.parse(latex);
+        SfntFont font = FontHolder.FONT;
+        LayoutContext ctx = new LayoutContext(font, font.mathConstants(), DISPLAY_FONT_SIZE);
+        Layout layout = LayoutEngine.layout(node, ctx);
+        return SvgEmitter.emit(layout, font, describe(node));
+    }
+
+    /** A plain-language accessibility label for a math tree (M0 subset). */
+    static String describe(MathNode node) {
+        return switch (node) {
+            case Atom atom -> Character.toString(atom.codePoint());
+            case SupSub sup -> {
+                String base = describe(sup.base());
+                String exp = describe(sup.sup());
+                yield exp.equals("2")
+                    ? base + " squared"
+                    : base + " to the power of " + exp;
+            }
+        };
     }
 }

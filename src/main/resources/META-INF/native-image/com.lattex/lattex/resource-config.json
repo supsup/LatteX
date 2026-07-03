@@ -1,0 +1,9 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": "\\Qcom/lattex/font/STIXTwoMath-Regular.ttf\\E"
+      }
+    ]
+  }
+}
