@@ -118,6 +118,25 @@ public final class SfntFont {
     }
 
     /**
+     * Left-side bearing of a glyph, in font design units, from {@code hmtx}.
+     *
+     * <p>The first {@code numberOfHMetrics} glyphs carry a full
+     * {@code longHorMetric} (advance + lsb); trailing glyphs share the last
+     * advance and store only an lsb in the {@code leftSideBearings} array.
+     */
+    public int leftSideBearing(int glyphId) {
+        if (glyphId < 0 || glyphId >= numGlyphs) {
+            throw new IndexOutOfBoundsException("glyphId " + glyphId);
+        }
+        int hmtx = tableOffset.get("hmtx");
+        if (glyphId < numberOfHMetrics) {
+            return s16(hmtx + glyphId * 4 + 2);
+        }
+        int trailing = glyphId - numberOfHMetrics;
+        return s16(hmtx + numberOfHMetrics * 4 + trailing * 2);
+    }
+
+    /**
      * Italic correction of a glyph, in font design units, from the MATH table's
      * {@code MathItalicsCorrectionInfo}. Returns 0 when the glyph has no entry
      * (or the font provides no italics-correction info).
@@ -148,14 +167,205 @@ public final class SfntFont {
     }
 
     /**
-     * Parses a glyph's outline from {@code loca}/{@code glyf}. Composite glyphs
-     * are not supported in M0 (the skeleton's {@code x} and {@code 2} are both
-     * simple glyphs).
+     * Top-accent attachment point of a glyph (horizontal position, design
+     * units), from the MATH table's {@code MathTopAccentAttachment}. This is the
+     * x at which an accent centres over the glyph. Returns 0 when the glyph has
+     * no entry.
+     *
+     * <p>Structurally identical to {@code MathItalicsCorrectionInfo}: a Coverage
+     * plus a parallel {@code MathValueRecord} array.
+     */
+    public int topAccentAttachment(int glyphId) {
+        int glyphInfo = mathGlyphInfo();
+        if (glyphInfo < 0) {
+            return 0;
+        }
+        int rel = u16(glyphInfo + 2); // mathTopAccentAttachment
+        if (rel == 0) {
+            return 0;
+        }
+        int t = glyphInfo + rel;
+        int coverageRel = u16(t);
+        int count = u16(t + 2);
+        if (coverageRel == 0 || count == 0) {
+            return 0;
+        }
+        int idx = coverageIndex(t + coverageRel, glyphId);
+        if (idx < 0 || idx >= count) {
+            return 0;
+        }
+        return s16(t + 4 + idx * 4);
+    }
+
+    /**
+     * Per-glyph math kern staircases (the four corners), from the MATH table's
+     * {@code MathKernInfo}. Returns {@code null} when the glyph has no kern
+     * record (or the font provides no kern info). Individual corners inside the
+     * returned {@link MathKernInfo} may also be {@code null}.
+     */
+    public MathKernInfo mathKernInfo(int glyphId) {
+        int glyphInfo = mathGlyphInfo();
+        if (glyphInfo < 0) {
+            return null;
+        }
+        int rel = u16(glyphInfo + 6); // mathKernInfo
+        if (rel == 0) {
+            return null;
+        }
+        int t = glyphInfo + rel;
+        int coverageRel = u16(t);
+        int count = u16(t + 2);
+        if (coverageRel == 0 || count == 0) {
+            return null;
+        }
+        int idx = coverageIndex(t + coverageRel, glyphId);
+        if (idx < 0 || idx >= count) {
+            return null;
+        }
+        // MathKernInfoRecord[count] at t+4: four Offset16 (topRight, topLeft,
+        // bottomRight, bottomLeft), each relative to the MathKernInfo table (t).
+        int rec = t + 4 + idx * 8;
+        return new MathKernInfo(
+            readMathKern(t, u16(rec)),
+            readMathKern(t, u16(rec + 2)),
+            readMathKern(t, u16(rec + 4)),
+            readMathKern(t, u16(rec + 6)));
+    }
+
+    private MathKern readMathKern(int base, int rel) {
+        if (rel == 0) {
+            return null;
+        }
+        int k = base + rel;
+        int heightCount = u16(k);
+        List<Integer> heights = new ArrayList<>(heightCount);
+        for (int i = 0; i < heightCount; i++) {
+            heights.add(s16(k + 2 + i * 4)); // MathValueRecord value
+        }
+        int kernBase = k + 2 + heightCount * 4;
+        List<Integer> kerns = new ArrayList<>(heightCount + 1);
+        for (int i = 0; i <= heightCount; i++) {
+            kerns.add(s16(kernBase + i * 4));
+        }
+        return new MathKern(heights, kerns);
+    }
+
+    /**
+     * Vertical stretch construction for a glyph (tall delimiters, radicals,
+     * braces), from {@code MathVariants.vertGlyphConstruction}. Returns
+     * {@code null} when the glyph has no vertical construction.
+     */
+    public MathGlyphConstruction verticalVariants(int glyphId) {
+        return glyphConstruction(glyphId, true);
+    }
+
+    /**
+     * Horizontal stretch construction for a glyph (wide arrows, over/underbraces),
+     * from {@code MathVariants.horizGlyphConstruction}. Returns {@code null} when
+     * the glyph has no horizontal construction.
+     */
+    public MathGlyphConstruction horizontalVariants(int glyphId) {
+        return glyphConstruction(glyphId, false);
+    }
+
+    /** The minimum overlap (design units) between adjacent assembly parts. */
+    public int minConnectorOverlap() {
+        int mv = mathVariants();
+        return mv < 0 ? 0 : u16(mv);
+    }
+
+    private MathGlyphConstruction glyphConstruction(int glyphId, boolean vertical) {
+        int mv = mathVariants();
+        if (mv < 0) {
+            return null;
+        }
+        // MathVariants header:
+        //   uint16   minConnectorOverlap        (mv+0)
+        //   Offset16 vertGlyphCoverage          (mv+2)
+        //   Offset16 horizGlyphCoverage         (mv+4)
+        //   uint16   vertGlyphCount             (mv+6)
+        //   uint16   horizGlyphCount            (mv+8)
+        //   Offset16 vertGlyphConstruction[vertGlyphCount]   (mv+10)
+        //   Offset16 horizGlyphConstruction[horizGlyphCount] (after vert array)
+        int vertCount = u16(mv + 6);
+        int coverageRel = vertical ? u16(mv + 2) : u16(mv + 4);
+        int count = vertical ? vertCount : u16(mv + 8);
+        if (coverageRel == 0 || count == 0) {
+            return null;
+        }
+        int idx = coverageIndex(mv + coverageRel, glyphId);
+        if (idx < 0 || idx >= count) {
+            return null;
+        }
+        int arrayBase = mv + 10 + (vertical ? 0 : vertCount * 2);
+        int constrRel = u16(arrayBase + idx * 2);
+        if (constrRel == 0) {
+            return null;
+        }
+        return readGlyphConstruction(mv + constrRel);
+    }
+
+    private MathGlyphConstruction readGlyphConstruction(int gc) {
+        // MathGlyphConstruction:
+        //   Offset16 glyphAssembly (may be 0)   (gc+0)  — relative to gc
+        //   uint16   variantCount               (gc+2)
+        //   MathGlyphVariantRecord[variantCount] (gc+4): {uint16 glyph, uint16 advance}
+        int assemblyRel = u16(gc);
+        int variantCount = u16(gc + 2);
+        List<MathGlyphVariant> variants = new ArrayList<>(variantCount);
+        for (int i = 0; i < variantCount; i++) {
+            int b = gc + 4 + i * 4;
+            variants.add(new MathGlyphVariant(u16(b), u16(b + 2)));
+        }
+        GlyphAssembly assembly = assemblyRel == 0 ? null : readAssembly(gc + assemblyRel);
+        return new MathGlyphConstruction(variants, assembly);
+    }
+
+    private GlyphAssembly readAssembly(int a) {
+        // GlyphAssembly:
+        //   MathValueRecord italicsCorrection   (a+0)  value at a+0
+        //   uint16 partCount                    (a+4)
+        //   GlyphPartRecord[partCount]          (a+6): five uint16 (10 bytes each)
+        int italics = s16(a);
+        int partCount = u16(a + 4);
+        List<GlyphPart> parts = new ArrayList<>(partCount);
+        for (int i = 0; i < partCount; i++) {
+            int b = a + 6 + i * 10;
+            parts.add(new GlyphPart(u16(b), u16(b + 2), u16(b + 4), u16(b + 6), u16(b + 8)));
+        }
+        return new GlyphAssembly(italics, parts);
+    }
+
+    /** Absolute offset of the {@code MathGlyphInfo} sub-table, or -1 if absent. */
+    private int mathGlyphInfo() {
+        int math = tableOffset.get("MATH");
+        int rel = u16(math + 6);
+        return rel == 0 ? -1 : math + rel;
+    }
+
+    /** Absolute offset of the {@code MathVariants} sub-table, or -1 if absent. */
+    private int mathVariants() {
+        int math = tableOffset.get("MATH");
+        int rel = u16(math + 8);
+        return rel == 0 ? -1 : math + rel;
+    }
+
+    /**
+     * Parses a glyph's outline from {@code loca}/{@code glyf}. Handles both
+     * simple glyphs (quadratic contours) and composite glyphs (components
+     * assembled from other glyphs via affine transforms, recursively).
      */
     public GlyphOutline outline(int glyphId) {
         if (glyphId < 0 || glyphId >= numGlyphs) {
             throw new IndexOutOfBoundsException("glyphId " + glyphId);
         }
+        return outline(glyphId, 0);
+    }
+
+    /** Maximum composite-component nesting depth (guards against cyclic glyphs). */
+    private static final int MAX_COMPOSITE_DEPTH = 8;
+
+    private GlyphOutline outline(int glyphId, int depth) {
         int start = loca[glyphId];
         int end = loca[glyphId + 1];
         int glyf = tableOffset.get("glyf");
@@ -169,10 +379,14 @@ public final class SfntFont {
         int yMin = s16(g + 4);
         int xMax = s16(g + 6);
         int yMax = s16(g + 8);
-        if (numberOfContours < 0) {
-            throw new UnsupportedOperationException(
-                "Composite glyph (glyphId " + glyphId + ") not supported in M0");
-        }
+        List<Contour> contours = numberOfContours >= 0
+            ? readSimpleContours(g, numberOfContours)
+            : readCompositeContours(g, glyphId, depth);
+        return new GlyphOutline(contours, xMin, yMin, xMax, yMax);
+    }
+
+    /** Reads the contours of a simple (non-composite) {@code glyf} glyph. */
+    private List<Contour> readSimpleContours(int g, int numberOfContours) {
         int pos = g + 10;
 
         int[] endPts = new int[numberOfContours];
@@ -240,7 +454,146 @@ public final class SfntFont {
             contours.add(new Contour(pts));
             startPt = endPt + 1;
         }
-        return new GlyphOutline(contours, xMin, yMin, xMax, yMax);
+        return contours;
+    }
+
+    // Composite-glyph component flags (OpenType glyf spec).
+    private static final int ARG_1_AND_2_ARE_WORDS   = 0x0001;
+    private static final int ARGS_ARE_XY_VALUES      = 0x0002;
+    private static final int ROUND_XY_TO_GRID        = 0x0004;
+    private static final int WE_HAVE_A_SCALE         = 0x0008;
+    private static final int MORE_COMPONENTS         = 0x0020;
+    private static final int WE_HAVE_AN_X_AND_Y_SCALE = 0x0040;
+    private static final int WE_HAVE_A_TWO_BY_TWO    = 0x0080;
+    private static final int WE_HAVE_INSTRUCTIONS    = 0x0100;
+    private static final int SCALED_COMPONENT_OFFSET = 0x0800;
+
+    /**
+     * Reads a composite glyph: a chain of component records, each naming another
+     * glyph plus an affine transform (offset + optional scale / 2×2). Component
+     * outlines are fetched recursively and transformed into this glyph's space,
+     * per the OpenType {@code glyf} composite-description spec.
+     */
+    private List<Contour> readCompositeContours(int g, int glyphId, int depth) {
+        if (depth > MAX_COMPOSITE_DEPTH) {
+            throw new IllegalStateException(
+                "Composite glyph nesting too deep at glyphId " + glyphId
+                + " (possible cycle)");
+        }
+        List<Contour> out = new ArrayList<>();
+        int pos = g + 10;
+        boolean more = true;
+        while (more) {
+            int flags = u16(pos);
+            int componentGlyph = u16(pos + 2);
+            pos += 4;
+
+            int arg1;
+            int arg2;
+            if ((flags & ARG_1_AND_2_ARE_WORDS) != 0) {
+                arg1 = s16(pos);
+                arg2 = s16(pos + 2);
+                pos += 4;
+            } else {
+                arg1 = (byte) u8(pos);      // int8 when XY values
+                arg2 = (byte) u8(pos + 1);
+                pos += 2;
+            }
+
+            // 2×2 transform, defaulting to identity. F2Dot14 fixed-point.
+            double a = 1.0;
+            double b = 0.0;
+            double c = 0.0;
+            double d = 1.0;
+            if ((flags & WE_HAVE_A_SCALE) != 0) {
+                a = d = f2dot14(pos);
+                pos += 2;
+            } else if ((flags & WE_HAVE_AN_X_AND_Y_SCALE) != 0) {
+                a = f2dot14(pos);
+                d = f2dot14(pos + 2);
+                pos += 4;
+            } else if ((flags & WE_HAVE_A_TWO_BY_TWO) != 0) {
+                a = f2dot14(pos);
+                b = f2dot14(pos + 2);
+                c = f2dot14(pos + 4);
+                d = f2dot14(pos + 6);
+                pos += 8;
+            }
+
+            double dx = 0.0;
+            double dy = 0.0;
+            if ((flags & ARGS_ARE_XY_VALUES) != 0) {
+                dx = arg1;
+                dy = arg2;
+                // SCALED_COMPONENT_OFFSET: pre-transform the offset by the 2×2.
+                // (Default/UNSCALED, as used by OpenType/MS, leaves it as-is.)
+                if ((flags & SCALED_COMPONENT_OFFSET) != 0) {
+                    double ox = dx;
+                    double oy = dy;
+                    dx = a * ox + c * oy;
+                    dy = b * ox + d * oy;
+                }
+                if ((flags & ROUND_XY_TO_GRID) != 0) {
+                    dx = Math.round(dx);
+                    dy = Math.round(dy);
+                }
+            }
+            // else: args are point-match indices (rare in math fonts); we do not
+            // reposition by matched points, which would need the assembled-so-far
+            // point set — components in STIX Two Math use XY offsets.
+
+            for (Contour ct : outline(componentGlyph, depth + 1).contours()) {
+                List<GlyphPoint> tp = new ArrayList<>(ct.points().size());
+                for (GlyphPoint p : ct.points()) {
+                    double px = p.x();
+                    double py = p.y();
+                    int nx = (int) Math.round(a * px + c * py + dx);
+                    int ny = (int) Math.round(b * px + d * py + dy);
+                    tp.add(new GlyphPoint(nx, ny, p.onCurve()));
+                }
+                out.add(new Contour(tp));
+            }
+            more = (flags & MORE_COMPONENTS) != 0;
+        }
+        return out;
+    }
+
+    /**
+     * The component glyph ids referenced by a composite glyph, in order. Empty
+     * for a simple glyph or a glyph with no outline. Intended for inspection and
+     * tests; {@link #outline(int)} does the actual assembly.
+     */
+    public List<Integer> compositeComponents(int glyphId) {
+        if (glyphId < 0 || glyphId >= numGlyphs) {
+            throw new IndexOutOfBoundsException("glyphId " + glyphId);
+        }
+        int start = loca[glyphId];
+        int end = loca[glyphId + 1];
+        if (end <= start) {
+            return List.of();
+        }
+        int g = tableOffset.get("glyf") + start;
+        if (s16(g) >= 0) {
+            return List.of(); // simple glyph
+        }
+        List<Integer> comps = new ArrayList<>();
+        int pos = g + 10;
+        boolean more = true;
+        while (more) {
+            int flags = u16(pos);
+            comps.add(u16(pos + 2));
+            pos += 4;
+            pos += (flags & ARG_1_AND_2_ARE_WORDS) != 0 ? 4 : 2; // args
+            if ((flags & WE_HAVE_A_SCALE) != 0) {
+                pos += 2;
+            } else if ((flags & WE_HAVE_AN_X_AND_Y_SCALE) != 0) {
+                pos += 4;
+            } else if ((flags & WE_HAVE_A_TWO_BY_TWO) != 0) {
+                pos += 8;
+            }
+            more = (flags & MORE_COMPONENTS) != 0;
+        }
+        return comps;
     }
 
     // -- table parsing helpers ----------------------------------------------
@@ -262,20 +615,81 @@ public final class SfntFont {
 
     private MathConstants readMathConstants() {
         int math = tableOffset.get("MATH");
-        int constRel = u16(math + 4); // header: major(2) minor(2) MathConstants(2) ...
+        int constRel = u16(math + 4); // header: major(2) minor(2) mathConstants(2) ...
         int c = math + constRel;
-        // MathConstants layout (OpenType MATH spec):
-        //   int16  scriptPercentScaleDown              (offset 0)
-        //   int16  scriptScriptPercentScaleDown        (offset 2)
-        //   uint16 delimitedSubFormulaMinHeight        (offset 4)
-        //   uint16 displayOperatorMinHeight            (offset 6)
-        //   then MathValueRecords (4 bytes each): mathLeading, axisHeight,
-        //   accentBaseHeight, flattenedAccentBaseHeight, subscriptShiftDown,
-        //   subscriptTopMax, subscriptBaselineDropMin (7 records = 28 bytes),
-        //   then superscriptShiftUp at offset 8 + 28 = 36 (its int16 value).
-        int scriptPercentScaleDown = s16(c);
-        int superscriptShiftUp = s16(c + 36);
-        return new MathConstants(scriptPercentScaleDown, superscriptShiftUp);
+        // MathConstants layout (OpenType MATH spec). Four leading scalars, then a
+        // run of MathValueRecords (4 bytes each: int16 value + Offset16 device;
+        // we keep only the value), then one trailing int16 percentage.
+        //   c+0  int16  scriptPercentScaleDown
+        //   c+2  int16  scriptScriptPercentScaleDown
+        //   c+4  uint16 delimitedSubFormulaMinHeight
+        //   c+6  uint16 displayOperatorMinHeight
+        //   c+8  MathValueRecord[51]   (value of record i at c+8+i*4)
+        //   c+212 int16 radicalDegreeBottomRaisePercent
+        int mv = c + 8; // base of the MathValueRecord run
+        return new MathConstants(
+            s16(c),          // scriptPercentScaleDown
+            s16(c + 2),      // scriptScriptPercentScaleDown
+            u16(c + 4),      // delimitedSubFormulaMinHeight
+            u16(c + 6),      // displayOperatorMinHeight
+            mvr(mv, 0),      // mathLeading
+            mvr(mv, 1),      // axisHeight
+            mvr(mv, 2),      // accentBaseHeight
+            mvr(mv, 3),      // flattenedAccentBaseHeight
+            mvr(mv, 4),      // subscriptShiftDown
+            mvr(mv, 5),      // subscriptTopMax
+            mvr(mv, 6),      // subscriptBaselineDropMin
+            mvr(mv, 7),      // superscriptShiftUp
+            mvr(mv, 8),      // superscriptShiftUpCramped
+            mvr(mv, 9),      // superscriptBottomMin
+            mvr(mv, 10),     // superscriptBaselineDropMax
+            mvr(mv, 11),     // subSuperscriptGapMin
+            mvr(mv, 12),     // superscriptBottomMaxWithSubscript
+            mvr(mv, 13),     // spaceAfterScript
+            mvr(mv, 14),     // upperLimitGapMin
+            mvr(mv, 15),     // upperLimitBaselineRiseMin
+            mvr(mv, 16),     // lowerLimitGapMin
+            mvr(mv, 17),     // lowerLimitBaselineDropMin
+            mvr(mv, 18),     // stackTopShiftUp
+            mvr(mv, 19),     // stackTopDisplayStyleShiftUp
+            mvr(mv, 20),     // stackBottomShiftDown
+            mvr(mv, 21),     // stackBottomDisplayStyleShiftDown
+            mvr(mv, 22),     // stackGapMin
+            mvr(mv, 23),     // stackDisplayStyleGapMin
+            mvr(mv, 24),     // stretchStackTopShiftUp
+            mvr(mv, 25),     // stretchStackBottomShiftDown
+            mvr(mv, 26),     // stretchStackGapAboveMin
+            mvr(mv, 27),     // stretchStackGapBelowMin
+            mvr(mv, 28),     // fractionNumeratorShiftUp
+            mvr(mv, 29),     // fractionNumeratorDisplayStyleShiftUp
+            mvr(mv, 30),     // fractionDenominatorShiftDown
+            mvr(mv, 31),     // fractionDenominatorDisplayStyleShiftDown
+            mvr(mv, 32),     // fractionNumeratorGapMin
+            mvr(mv, 33),     // fractionNumDisplayStyleGapMin
+            mvr(mv, 34),     // fractionRuleThickness
+            mvr(mv, 35),     // fractionDenominatorGapMin
+            mvr(mv, 36),     // fractionDenomDisplayStyleGapMin
+            mvr(mv, 37),     // skewedFractionHorizontalGap
+            mvr(mv, 38),     // skewedFractionVerticalGap
+            mvr(mv, 39),     // overbarVerticalGap
+            mvr(mv, 40),     // overbarRuleThickness
+            mvr(mv, 41),     // overbarExtraAscender
+            mvr(mv, 42),     // underbarVerticalGap
+            mvr(mv, 43),     // underbarRuleThickness
+            mvr(mv, 44),     // underbarExtraDescender
+            mvr(mv, 45),     // radicalVerticalGap
+            mvr(mv, 46),     // radicalDisplayStyleVerticalGap
+            mvr(mv, 47),     // radicalRuleThickness
+            mvr(mv, 48),     // radicalExtraAscender
+            mvr(mv, 49),     // radicalKernBeforeDegree
+            mvr(mv, 50),     // radicalKernAfterDegree
+            s16(mv + 51 * 4) // radicalDegreeBottomRaisePercent (trailing int16)
+        );
+    }
+
+    /** Value of the {@code i}-th {@code MathValueRecord} in a run based at {@code base}. */
+    private int mvr(int base, int i) {
+        return s16(base + i * 4);
     }
 
     /**
@@ -410,5 +824,10 @@ public final class SfntFont {
 
     private long u32(int p) {
         return ((long) u16(p) << 16) | (u16(p + 2) & 0xFFFFL);
+    }
+
+    /** Reads a 2.14 signed fixed-point number (F2Dot14): value = int16 / 16384. */
+    private double f2dot14(int p) {
+        return s16(p) / 16384.0;
     }
 }
