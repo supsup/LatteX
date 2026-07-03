@@ -4,13 +4,19 @@ LatteX is small, modern, and deliberately opinionated. A few rules are **load-be
 
 ## 1. Clean-room — the license rule (non-negotiable)
 
-LatteX is **Apache-2.0**. To stay that way, we implement **from primary sources only**, never from another renderer's source code:
+LatteX is **Apache-2.0**, and every contribution must keep it that way. Copyright protects **expression** (source code — its structure, sequence, and organization), not **ideas or algorithms**. A GPL derivative **cannot** be relicensed to Apache-2.0, so a single tainted file can compromise the whole project. This rule matters most in the parser and layout engine, where the temptation to "just look at how JLaTeXMath does it" is highest — so hold the line there especially.
 
-- **The layout algorithm** comes from **Knuth's _The TeXbook_ (Appendix G, "Generating Boxes from Formulas")** and _TeX: The Program_. The algorithm is a published method (not copyrightable), and TeX's own source is permissively licensed.
-- **Glyphs + math metrics** come from the **public OpenType / sfnt + OpenType MATH-table specifications** and an **OFL-licensed** math font.
-- **Output** follows the **W3C SVG** spec.
+**DO — implement from these PRIMARY sources, and cite them in the code:**
+- **Layout** → Knuth, *The TeXbook* **Appendix G** ("Generating Boxes from Formulas") + *TeX: The Program* (`mlist_to_hlist`). Non-trivial layout code **must** carry a comment naming the specific rule/section it implements (e.g. `// TeXbook App.G rule 15b`), so provenance is auditable.
+- **Glyphs + math metrics** → the public **OpenType/sfnt + OpenType MATH-table** specs + an **OFL** math font.
+- **Output** → the **W3C SVG** spec.
 
-**Do not read GPL renderers' code (e.g. JLaTeXMath) and reproduce their structure.** You may use them as **black boxes** — compare rendered *output*, never copy *code* (verbatim or paraphrased). Copyright protects expression, and a GPL derivative cannot be relicensed to Apache-2.0. When in doubt, implement from the TeXbook and the specs — the same well every good renderer drew from.
+**DO NOT:**
+- Open a GPL renderer's source (JLaTeXMath, MicroTeX, …) to guide your implementation. They are **black boxes** — you may compare their rendered *output* to ours, never read their *code*.
+- Reproduce another renderer's code structure, class layout, or operation sequence — even paraphrased. The legal test is **not** "byte-identical"; it is "not a derivative / no substantial similarity." Similar *structure* can infringe.
+- **Chinese wall:** if you have read a GPL renderer's implementation of a component, you should **not** be the person who writes LatteX's version of that component.
+
+**Enforcement:** a PR that can't cite a primary source for a non-trivial algorithm — or that mirrors a GPL renderer's structure — gets sent back. When in doubt, go **upstream**: implement from Knuth and the specs, the same well every renderer drew from.
 
 ## 2. Zero runtime dependencies, framework-free
 
