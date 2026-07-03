@@ -6,6 +6,12 @@ import com.lattex.layout.LayoutContext;
 import com.lattex.layout.LayoutEngine;
 import com.lattex.parse.MathNode;
 import com.lattex.parse.MathNode.Atom;
+import com.lattex.parse.MathNode.BigOperator;
+import com.lattex.parse.MathNode.Fenced;
+import com.lattex.parse.MathNode.Fraction;
+import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.Radical;
+import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
 import com.lattex.parse.MathParser;
 import com.lattex.svg.SvgEmitter;
@@ -60,6 +66,21 @@ public final class LatteX {
                     ? base + " squared"
                     : base + " to the power of " + exp;
             }
+            // Exhaustive over the sealed MathNode: these kinds parse today but are
+            // not laid out until S4, so render() never reaches describe() for them
+            // yet. No-default cases force a real aria-label when each becomes
+            // renderable.
+            case MathList list -> throw describeTodo(list);
+            case Fraction frac -> throw describeTodo(frac);
+            case Radical rad -> throw describeTodo(rad);
+            case BigOperator bigOp -> throw describeTodo(bigOp);
+            case Fenced fenced -> throw describeTodo(fenced);
+            case Spacing spacing -> throw describeTodo(spacing);
         };
+    }
+
+    private static UnsupportedOperationException describeTodo(MathNode node) {
+        return new UnsupportedOperationException(
+            "aria-label not yet implemented for " + node.getClass().getSimpleName());
     }
 }
