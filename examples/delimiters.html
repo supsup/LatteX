@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LatteX — delimiters</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; min-height: 100vh;
+           display: grid; place-items: center; background: #f4f6f6; color: #1a1f21; }
+    main { text-align: center; padding: 3rem 1.5rem; }
+    .eyebrow { font-family: ui-monospace, monospace; font-size: .72rem; letter-spacing: .18em;
+               text-transform: uppercase; color: #1f7d72; margin: 0 0 1.5rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem; max-width: 900px; }
+    .card { display: inline-flex; flex-direction: column; align-items: center; gap: 1.25rem;
+            background: #fff; border: 1px solid #e3e8e7; border-radius: 14px;
+            padding: 2rem 2.5rem; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+    .src { font-family: ui-monospace, monospace; font-size: .9rem; color: #3a4749;
+           background: #eef2f1; border: 1px solid #e0e6e4; border-radius: 7px; padding: .4rem .8rem; }
+    .render svg { height: 120px; width: auto; display: block; }
+    figcaption { font-family: ui-monospace, monospace; font-size: .62rem; letter-spacing: .08em;
+                 text-transform: uppercase; color: #8a9896; max-width: 22ch; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">LatteX &middot; S4 layout</p>
+        <figure class="card">
+          <span class="src">\left(\frac{x^2}{y^3}\right)</span>
+          <div class="render">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.92 -60.032 72.62 99.392" width="72.62" height="99.392" role="img" aria-label="open paren the fraction x squared over y to the power of 3 close paren">
+              <g fill="#000000">
+                <path d="M73 270 Q73 469 101 649 Q129 830 178 984 Q228 1139 294 1260 Q360 1382 436 1462 L463 1440 Q392 1341 338 1212 Q284 1084 247 933 Q211 782 192 614 Q174 447 174 270 Q174 93 192 -74 Q211 -242 247 -393 Q284 -544 338 -672 Q392 -801 463 -900 L436 -922 Q360 -842 294 -720 Q228 -599 178 -444 Q129 -290 101 -109 Q73 71 73 270 Z" transform="translate(0 0.48) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(19.92 -25.6) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(39.08 -40) scale(0.028 -0.028)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(19.84 25.6) scale(0.04 -0.04)"/>
+                <path d="M86 498 L63 511 Q120 644 244 644 Q321 644 363 605 Q405 567 405 510 Q405 458 374 426 Q344 394 297 364 L297 361 Q337 349 370 326 Q404 304 424 271 Q444 239 444 194 Q444 126 406 79 Q368 33 306 10 Q244 -13 171 -13 Q126 -13 102 -4 Q78 4 68 16 Q59 29 59 42 Q59 58 69 72 Q79 86 98 86 Q110 86 120 81 Q131 77 157 63 Q189 47 204 42 Q220 37 238 37 Q270 37 298 48 Q326 60 344 87 Q362 115 362 164 Q362 209 337 242 Q312 275 270 293 Q229 312 181 312 L161 312 L161 350 L180 350 Q214 350 246 367 Q278 384 298 415 Q319 446 319 486 Q319 530 291 554 Q264 579 217 579 Q172 579 142 558 Q112 538 86 498 Z" transform="translate(39.16 15.52) scale(0.028 -0.028)"/>
+                <path d="M423 270 Q423 71 395 -109 Q367 -290 317 -444 Q268 -599 202 -720 Q136 -842 60 -922 L33 -900 Q104 -801 158 -672 Q212 -544 248 -393 Q285 -242 303 -74 Q322 93 322 270 Q322 447 303 614 Q285 782 248 933 Q212 1084 158 1212 Q104 1341 33 1440 L60 1462 Q136 1382 202 1260 Q268 1139 317 984 Q367 830 395 649 Q423 469 423 270 Z" transform="translate(54.62 0.48) scale(0.04 -0.04)"/>
+                <rect x="19.84" y="-11.68" width="34.78" height="2.72"/>
+              </g>
+            </svg>
+          </div>
+          <figcaption>scaled \left(..\right) delimiters hugging the fraction</figcaption>
+        </figure>
+  </main>
+</body>
+</html>

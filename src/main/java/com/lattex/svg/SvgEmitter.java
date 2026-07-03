@@ -3,6 +3,7 @@ package com.lattex.svg;
 import com.lattex.font.SfntFont;
 import com.lattex.layout.Layout;
 import com.lattex.layout.PositionedGlyph;
+import com.lattex.layout.Rule;
 import java.util.Locale;
 
 /**
@@ -15,7 +16,8 @@ import java.util.Locale;
  *
  * <p>Each glyph's path data is in font design units; a per-path
  * {@code transform="translate(originX,baselineY) scale(s,-s)"} scales it to the
- * display size and flips the y-axis (font is y-up, SVG is y-down).
+ * display size and flips the y-axis (font is y-up, SVG is y-down). Fraction and
+ * radical bars are emitted as filled {@code <rect>}s (already in user space).
  */
 public final class SvgEmitter {
 
@@ -55,6 +57,12 @@ public final class SvgEmitter {
                 .append(num(g.originX())).append(' ').append(num(g.baselineY()))
                 .append(") scale(").append(num(g.scale())).append(' ').append(num(-g.scale()))
                 .append(")\"/>\n");
+        }
+        for (Rule r : layout.rules()) {
+            svg.append("    <rect x=\"").append(num(r.x())).append("\"")
+                .append(" y=\"").append(num(r.y())).append("\"")
+                .append(" width=\"").append(num(r.width())).append("\"")
+                .append(" height=\"").append(num(r.height())).append("\"/>\n");
         }
         svg.append("  </g>\n");
         svg.append("</svg>");
