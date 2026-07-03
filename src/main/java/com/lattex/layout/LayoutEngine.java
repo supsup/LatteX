@@ -4,6 +4,12 @@ import com.lattex.font.GlyphOutline;
 import com.lattex.font.SfntFont;
 import com.lattex.parse.MathNode;
 import com.lattex.parse.MathNode.Atom;
+import com.lattex.parse.MathNode.BigOperator;
+import com.lattex.parse.MathNode.Fenced;
+import com.lattex.parse.MathNode.Fraction;
+import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.Radical;
+import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +72,22 @@ public final class LayoutEngine {
 
                 yield baseAdvance + italic + supAdvance;
             }
+            // Parseable today, laid out at S4 — explicit no-default cases keep the
+            // sealed MathNode switch exhaustive, so the compiler forces real
+            // placement here the moment each node becomes renderable.
+            case MathList list -> throw notYetLaidOut(list);
+            case Fraction frac -> throw notYetLaidOut(frac);
+            case Radical rad -> throw notYetLaidOut(rad);
+            case BigOperator bigOp -> throw notYetLaidOut(bigOp);
+            case Fenced fenced -> throw notYetLaidOut(fenced);
+            case Spacing spacing -> throw notYetLaidOut(spacing);
         };
+    }
+
+    private static UnsupportedOperationException notYetLaidOut(MathNode node) {
+        return new UnsupportedOperationException(
+            "S4 layout not yet implemented for " + node.getClass().getSimpleName()
+                + " (walking skeleton handles Atom + SupSub)");
     }
 
     private static void accumulate(Bounds b, GlyphOutline outline,
