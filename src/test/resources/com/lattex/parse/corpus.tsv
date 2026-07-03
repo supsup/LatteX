@@ -1,0 +1,127 @@
+# LatteX LaTeX-math test corpus — SINGLE SOURCE OF TRUTH.
+#
+# Both examples/corpus.md and CorpusParseTest.java derive from this file, so the
+# documented tier and the empirically-verified parse outcome cannot drift.
+#
+# Columns are TAB-separated: TIER <tab> GROUP <tab> LATEX <tab> DESCRIPTION
+# Backslashes are literal (this is a data file, not Java source — no escaping).
+#
+# TIER legend (see examples/corpus.md for the full rubric):
+#   PARSES-NOW         parse() returns a tree today (verified by the test).
+#   NEEDS-PARSER-NODE  parse() throws MathSyntaxException today; needs a new
+#                      MathNode / parser feature (the DESCRIPTION names it).
+#   NEEDS-S4-LAYOUT    parse() SUCCEEDS today, but faithful rendering needs new
+#                      2D layout (delimiter sizing to content, eval bars).
+#   NEEDS-FONT-STYLE   parse() throws today; the missing feature is fundamentally
+#                      a font-variant glyph set or emitter color.
+#   PARSER-BUG         parse() throws a NON-MathSyntaxException (NPE / SOE / CCE);
+#                      a robustness bug — the parser should fail cleanly. (none found)
+#
+# ==== scripts / fractions / roots ==================================
+PARSES-NOW	scripts	x^2	single superscript
+PARSES-NOW	scripts	y_1	single subscript
+PARSES-NOW	scripts	k_n^2	sub and sup on the same base
+PARSES-NOW	scripts	x^{1.01}	grouped (multi-token) superscript
+PARSES-NOW	scripts	k_{n+1}=n^2+k_n^2-k_{n-1}	recurrence with grouped scripts
+PARSES-NOW	fractions	\frac{b}{c}	simple fraction
+PARSES-NOW	fractions	\frac{\frac{1}{x}+\frac{1}{y}}{y-z}	nested fraction (braced args) — recursion of core frac layout
+NEEDS-PARSER-NODE	fractions	\frac{\frac1x+\frac1y}{y-z}	nested fraction, terse \frac1x form — needs brace-optional single-token arguments
+PARSES-NOW	roots	\sqrt{x^3+5}	square root
+PARSES-NOW	roots	\sqrt{\frac{a}{b}}	root of a fraction (braced) — recursion of core radical layout
+PARSES-NOW	roots	\sqrt[n]{1+x+x^2+\cdots+x^n}	nth root, with \cdots
+NEEDS-PARSER-NODE	fractions	x=a_0+\cfrac{1}{a_1+\cfrac{1}{a_2+\cfrac{1}{a_3+\cfrac{1}{a_4}}}}	continued fraction — needs \cfrac node (then S4 layout)
+PARSES-NOW	fractions	{}^3/_7	diagonal fraction hack (empty-group scripts around a slash)
+# ==== sums / integrals / big operators =============================
+PARSES-NOW	bigops	\sum_{i=1}^{10} t_i	sum with lower/upper limits
+NEEDS-PARSER-NODE	bigops	\sum_{\substack{0<i<m\\0<j<n}}P(i,j)	multi-line subscript — needs \substack node
+PARSES-NOW	bigops	\int y\,dx	indefinite integral with thin space
+PARSES-NOW	bigops	\int_0^\infty e^{-x}\,dx	definite integral over [0, infinity)
+PARSES-NOW	bigops	\int_b^c	integral with bare bounds
+PARSES-NOW	bigops	\prod_{i=1}^n	product with limits
+NEEDS-PARSER-NODE	bigops	\coprod	coproduct — needs big-operator symbol
+NEEDS-PARSER-NODE	bigops	\bigoplus	direct-sum big operator
+NEEDS-PARSER-NODE	bigops	\bigotimes	tensor-product big operator
+NEEDS-PARSER-NODE	bigops	\bigcap	big intersection
+NEEDS-PARSER-NODE	bigops	\bigcup	big union
+NEEDS-PARSER-NODE	bigops	\bigsqcup	big square union
+NEEDS-PARSER-NODE	bigops	\bigvee	big disjunction
+NEEDS-PARSER-NODE	bigops	\bigwedge	big conjunction
+NEEDS-PARSER-NODE	bigops	\bigodot	big circled dot
+NEEDS-PARSER-NODE	bigops	\biguplus	big multiset union
+NEEDS-PARSER-NODE	bigops	\oint	contour integral
+NEEDS-PARSER-NODE	bigops	\iint	double integral
+NEEDS-PARSER-NODE	bigops	\iiint	triple integral
+NEEDS-PARSER-NODE	bigops	\idotsint	dotted multiple integral
+# ==== delimiters — fixed ===========================================
+PARSES-NOW	delim-fixed	(a)	round parentheses
+PARSES-NOW	delim-fixed	[b]	square brackets
+PARSES-NOW	delim-fixed	\{c\}	escaped curly braces
+PARSES-NOW	delim-fixed	|d|	vertical bars
+PARSES-NOW	delim-fixed	\|e\|	double-bar (note: parses, but \| currently maps to single | glyph)
+NEEDS-PARSER-NODE	delim-fixed	\langle f\rangle	angle brackets as ordinary symbols (outside \left..\right)
+NEEDS-PARSER-NODE	delim-fixed	\lfloor g\rfloor	floor delimiters as ordinary symbols
+NEEDS-PARSER-NODE	delim-fixed	\lceil h\rceil	ceiling delimiters as ordinary symbols
+NEEDS-PARSER-NODE	delim-fixed	\ulcorner i\urcorner	corner delimiters as ordinary symbols
+NEEDS-PARSER-NODE	delim-fixed	/j\backslash	slash and \backslash symbol
+# ==== delimiters — scaled (\left \right) ===========================
+NEEDS-S4-LAYOUT	delim-scaled	\left(\frac{x^2}{y^3}\right)	scaled parens — parses; needs delimiter sizing to content
+NEEDS-S4-LAYOUT	delim-scaled	\left\{\frac{x^2}{y^3}\right\}	scaled braces — parses; needs delimiter sizing
+NEEDS-S4-LAYOUT	delim-scaled	\left.\frac{x^3}{3}\right|_0^1	eval bar (braced) — parses; needs null-left + scaled bar layout
+NEEDS-PARSER-NODE	delim-scaled	\left.\frac{x^3}3\right|_0^1	eval bar, terse \frac denominator — needs brace-optional single-token arguments
+NEEDS-PARSER-NODE	delim-scaled	P\left(A=2\middle|\frac{A^2}{B}>4\right)	mid delimiter — needs \middle node
+NEEDS-PARSER-NODE	delim-scaled	\binom{n}{r}	binomial coefficient — needs \binom node
+NEEDS-PARSER-NODE	delim-scaled	\frac{n!}{r!(n-r)!}=\binom{n}{r}	binomial identity — needs \binom node
+# ==== accents / decorations ========================================
+PARSES-NOW	accents	a'	prime (parses as an ordinary ' atom)
+PARSES-NOW	accents	a''	double prime (two ' atoms)
+PARSES-NOW	accents	a''''	quadruple prime (four ' atoms)
+NEEDS-PARSER-NODE	accents	\hat{a}	hat accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\bar{a}	bar accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\dot{a}	dot accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\ddot{a}	double-dot accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\acute{a}	acute accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\grave{a}	grave accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\check{a}	caron accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\breve{a}	breve accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\tilde{a}	tilde accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\vec{a}	vector arrow accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\mathring{a}	ring accent — needs Accent node
+NEEDS-PARSER-NODE	accents	\aa	the letter a-with-ring (å) — needs symbol
+NEEDS-PARSER-NODE	accents	\widehat{AAA}	wide (stretchy) hat — needs stretchy-Accent node
+NEEDS-PARSER-NODE	accents	\widetilde{AAA}	wide (stretchy) tilde — needs stretchy-Accent node
+NEEDS-PARSER-NODE	accents	\overline{a}	overline — needs Overline node
+NEEDS-PARSER-NODE	accents	\underline{a}	underline — needs Underline node
+# ==== text / spacing / color =======================================
+NEEDS-PARSER-NODE	text	\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2	text runs — needs \text node (upright text mode)
+NEEDS-PARSER-NODE	cases	f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}	piecewise cases — needs cases environment node (then S4 layout)
+NEEDS-FONT-STYLE	color	k={\color{red}x}-2	colored subterm — needs \color node + emitter color
+# ==== matrices / arrays ============================================
+NEEDS-PARSER-NODE	matrix	\begin{matrix}a&b\\c&d\end{matrix}	plain matrix — needs environment + &/\\ node
+NEEDS-PARSER-NODE	matrix	\begin{pmatrix}a&b\\c&d\end{pmatrix}	parenthesized matrix
+NEEDS-PARSER-NODE	matrix	\begin{bmatrix}a&b\\c&d\end{bmatrix}	bracketed matrix
+NEEDS-PARSER-NODE	matrix	\begin{Bmatrix}a&b\\c&d\end{Bmatrix}	brace matrix
+NEEDS-PARSER-NODE	matrix	\begin{vmatrix}a&b\\c&d\end{vmatrix}	determinant (single-bar) matrix
+NEEDS-PARSER-NODE	matrix	A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}	full matrix with \cdots \vdots \ddots
+NEEDS-PARSER-NODE	matrix	\bordermatrix{&1&2\\1&a&b\\2&c&d}	bordered matrix with row/col labels — needs \bordermatrix node
+NEEDS-PARSER-NODE	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with vertical and horizontal rules — needs array node + column spec + \hline
+NEEDS-PARSER-NODE	matrix	\vdots	vertical dots symbol
+NEEDS-PARSER-NODE	matrix	\ddots	diagonal dots symbol
+# ==== named operators / misc =======================================
+NEEDS-PARSER-NODE	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — needs named-operator node (\lim under-limits, \exp)
+NEEDS-PARSER-NODE	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — needs named-operator node
+PARSES-NOW	named-op	\frac{d}{dx}(kg(x))	derivative operator built from primitives
+NEEDS-PARSER-NODE	named-op	x\equiv a\pmod{b}	modulo — needs \pmod node
+NEEDS-FONT-STYLE	named-op	\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)	bold beta vector — needs \boldsymbol (bold-math font variant)
+NEEDS-PARSER-NODE	named-op	\top	top symbol
+NEEDS-PARSER-NODE	named-op	\bot	bottom symbol
+# ==== font / style alphabets =======================================
+NEEDS-FONT-STYLE	font	\mathcal{ABCDEF}	calligraphic alphabet — needs font-variant node + glyphs
+NEEDS-FONT-STYLE	font	\mathbb{ABCDEF}	blackboard-bold alphabet — needs font-variant node + glyphs
+NEEDS-FONT-STYLE	font	\mathfrak{ABCDEF}	fraktur alphabet — needs font-variant node + glyphs
+NEEDS-FONT-STYLE	font	\mathrm{ABCDEF}	upright roman — needs font-variant node
+NEEDS-FONT-STYLE	font	\mathsf{ABCDEF}	sans-serif — needs font-variant node + glyphs
+NEEDS-FONT-STYLE	font	\mathit{ABCDEF}	math italic — needs font-variant node
+NEEDS-FONT-STYLE	font	\mathbf{ABCDEF}	bold — needs font-variant node + glyphs
+NEEDS-FONT-STYLE	font	\boldsymbol{abcdef}	bold symbols — needs bold-math font variant
+PARSES-NOW	greek	\alpha,A,\beta,B,\gamma,\Gamma,\pi,\Pi,\phi,\mu,\Phi	greek upper+lower mixed with latin
+NEEDS-PARSER-NODE	greek	\varphi	variant phi — needs symbol
