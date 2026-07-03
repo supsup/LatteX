@@ -201,6 +201,122 @@ class LayoutS4Test {
             "degree sits to the left of the radicand, over the surd");
     }
 
+    // ---- BigOperator limits ----------------------------------------------
+
+    @Test
+    void sumStacksLimitsAboveAndBelowInDisplayStyle() {
+        Layout l = layout("\\sum_{i=1}^{10} t_i");
+        double baseScale = 40.0 / FONT.unitsPerEm();
+        // The operator is drawn at full (display) scale; limits are shrunk.
+        PositionedGlyph op = l.glyphs().stream()
+            .filter(g -> g.scale() == baseScale && g.originX() < 5.0)
+            .findFirst().orElseThrow(() -> new AssertionError("operator glyph present"));
+        // The display sigma is a larger MATH vertical variant, not the base glyph.
+        assertTrue(op.glyphId() != FONT.glyphId(0x2211), "display style enlarges the operator");
+        // A shrunk limit sits above the baseline (upper) and another below (lower),
+        // both roughly centred over the operator's horizontal span.
+        boolean above = l.glyphs().stream().anyMatch(g -> g.scale() < baseScale && g.baselineY() < -20.0);
+        boolean below = l.glyphs().stream().anyMatch(g -> g.scale() < baseScale && g.baselineY() > 20.0);
+        assertTrue(above, "upper limit stacked above the operator");
+        assertTrue(below, "lower limit stacked below the operator");
+        // Alphabet guard on the operator SVG path. Uses a '='-free variant because
+        // the assertAlphabet heuristic scans attribute *values* too, and an
+        // aria-label like "...i = 1..." would false-match '=' as an attribute.
+        assertAlphabet(LatteX.render("\\sum_{i}^{n} k"));
+    }
+
+    @Test
+    void integralKeepsSideLimitsInDisplayStyle() {
+        // An integral conventionally takes SIDE limits even in display style: the
+        // upper limit sits up-and-to-the-right, the lower down-and-to-the-right —
+        // i.e. both scripts are to the right of the integral sign's left edge, not
+        // centred over it (which is how \sum stacks).
+        Layout l = layout("\\int_0^\\infty");
+        double baseScale = 40.0 / FONT.unitsPerEm();
+        PositionedGlyph intSign = l.glyphs().stream()
+            .filter(g -> g.scale() == baseScale)
+            .min((a, b) -> Double.compare(a.originX(), b.originX()))
+            .orElseThrow();
+        assertTrue(intSign.glyphId() != FONT.glyphId(0x222B), "display style enlarges the integral");
+        // The shrunk limits are offset to the right of the sign's left edge.
+        List<PositionedGlyph> limits = l.glyphs().stream()
+            .filter(g -> g.scale() < baseScale).toList();
+        assertEquals(2, limits.size(), "an upper and a lower limit");
+        for (PositionedGlyph lim : limits) {
+            assertTrue(lim.originX() > intSign.originX(),
+                "integral limit is set beside (right of) the sign, not stacked over it");
+        }
+    }
+
+    @Test
+    void nolimitsForcesSideScriptsOnSum() {
+        // \nolimits overrides the display default: the sum's limits go beside.
+        Layout stacked = layout("\\sum_{i=1}^{10} t_i");
+        Layout beside = layout("\\sum\\nolimits_{i=1}^{10} t_i");
+        // Side scripts are narrower vertically (nothing stacked above/below) so the
+        // overall bbox is shorter than the stacked form.
+        assertTrue((beside.maxY() - beside.minY()) < (stacked.maxY() - stacked.minY()),
+            "\\nolimits sum is vertically shorter than the stacked form");
+    }
+
+    // ---- Fenced delimiters -----------------------------------------------
+
+    @Test
+    void delimitersStretchToSpanTheBody() {
+        Layout l = layout("\\left(\\frac{x^2}{y^3}\\right)");
+        double baseScale = 40.0 / FONT.unitsPerEm();
+        // The two delimiters are the leftmost and rightmost glyphs.
+        PositionedGlyph left = l.glyphs().stream()
+            .min((a, b) -> Double.compare(a.originX(), b.originX())).orElseThrow();
+        PositionedGlyph right = l.glyphs().stream()
+            .max((a, b) -> Double.compare(a.originX(), b.originX())).orElseThrow();
+        // A stretched delimiter is a taller MATH vertical variant, not the base
+        // '(' / ')' glyph drawn at text size.
+        assertTrue(left.glyphId() != FONT.glyphId('('), "left paren is a stretched variant");
+        assertTrue(right.glyphId() != FONT.glyphId(')'), "right paren is a stretched variant");
+        // Delimiters are centred on the math axis: their ink straddles the baseline
+        // both above (negative y) and below (positive y), spanning the tall fraction.
+        assertTrue(-l.minY() > 30.0, "delimiter ink rises above the baseline");
+        assertTrue(l.maxY() > 25.0, "delimiter ink descends below the baseline");
+        assertAlphabet(LatteX.render("\\left(\\frac{x^2}{y^3}\\right)"));
+    }
+
+    @Test
+    void nullDelimiterRendersNothingButBalances() {
+        // \left. renders no glyph; \right| renders a bar. Body 'x' plus one bar.
+        Layout l = layout("\\left. x \\right|");
+        assertEquals(2, l.glyphs().size(), "body glyph + one delimiter (null left renders nothing)");
+        assertTrue(l.glyphs().stream().anyMatch(g -> g.glyphId() == FONT.glyphId('|')),
+            "the right bar is present");
+        assertAlphabet(LatteX.render("\\left. x \\right|"));
+    }
+
+    @Test
+    void braceDelimitersRender() {
+        // A fraction body stretches the braces to a taller MATH vertical variant,
+        // so the delimiter glyph ids are brace *variants*, not the base '{' / '}'.
+        String latex = "\\left\\{ \\frac{a}{b} \\right\\}";
+        Layout l = layout(latex);
+        PositionedGlyph left = l.glyphs().stream()
+            .min((a, b) -> Double.compare(a.originX(), b.originX())).orElseThrow();
+        PositionedGlyph right = l.glyphs().stream()
+            .max((a, b) -> Double.compare(a.originX(), b.originX())).orElseThrow();
+        assertTrue(variantGids('{').contains(left.glyphId()), "left delimiter is a brace");
+        assertTrue(variantGids('}').contains(right.glyphId()), "right delimiter is a brace");
+        assertAlphabet(LatteX.render(latex));
+    }
+
+    /** The glyph ids for a stretchy delimiter: its base glyph plus every vertical variant. */
+    private static Set<Integer> variantGids(int codePoint) {
+        Set<Integer> gids = new java.util.HashSet<>();
+        gids.add(FONT.glyphId(codePoint));
+        var construction = FONT.verticalVariants(FONT.glyphId(codePoint));
+        if (construction != null) {
+            construction.variants().forEach(v -> gids.add(v.glyphId()));
+        }
+        return gids;
+    }
+
     // ---- MathList spacing ------------------------------------------------
 
     private static Layout row(MathNode.Atom... atoms) {

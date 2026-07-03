@@ -27,7 +27,13 @@ class GalleryPageTest {
         new Example("sqrt.html", "\\sqrt{x^2+1}", "LatteX — square root",
             "a radical: surd glyph + over-bar clearing the radicand"),
         new Example("scripts.html", "x_i^2", "LatteX — scripts",
-            "simultaneous subscript and superscript"));
+            "simultaneous subscript and superscript"),
+        new Example("sum.html", "\\sum_{i=1}^{10} t_i", "LatteX — summation",
+            "a big operator: display-size sigma, limits stacked above/below"),
+        new Example("integral.html", "\\int_0^\\infty e^{-x}\\,dx", "LatteX — integral",
+            "an integral: enlarged sign, limits set beside as scripts"),
+        new Example("delimiters.html", "\\left(\\frac{x^2}{y^3}\\right)", "LatteX — delimiters",
+            "scaled \\left(..\\right) delimiters hugging the fraction"));
 
     @Test
     void writesSingleConstructPages() throws IOException {
@@ -53,7 +59,10 @@ class GalleryPageTest {
             "\\sqrt[n]{x+y}",
             "\\frac{\\frac{1}{x}+\\frac{1}{y}}{y-z}",
             "k_n^2 + 1",
-            "a + b = c");
+            "a + b = c",
+            "\\sum_{i=1}^{10} t_i",
+            "\\int_0^\\infty e^{-x}\\,dx",
+            "\\left(\\frac{x^2}{y^3}\\right)");
 
         StringBuilder cards = new StringBuilder();
         for (String latex : latexes) {
@@ -118,7 +127,7 @@ class GalleryPageTest {
             </head>
             <body>
               <main class="gallery">
-                <p class="eyebrow">LatteX &middot; S4 layout &middot; fractions, roots, scripts, spacing</p>
+                <p class="eyebrow">LatteX &middot; S4 layout &middot; fractions, roots, scripts, operators, delimiters</p>
                 <div class="grid">
             %s
                 </div>

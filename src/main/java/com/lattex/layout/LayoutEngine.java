@@ -7,6 +7,7 @@ import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
 import com.lattex.parse.MathNode.Fraction;
+import com.lattex.parse.MathNode.LimitsMode;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.MathList;
 import com.lattex.parse.MathNode.Radical;
@@ -31,15 +32,27 @@ import java.util.List;
  *
  * <p><strong>Rendered:</strong> {@link Atom}, {@link MathList} (with Appendix-G
  * inter-atom spacing), {@link SupSub} (full sub+sup), {@link Fraction},
- * {@link Radical} (with optional degree), {@link Spacing}. <strong>Still
- * stubbed</strong> (next S4 increment): {@link BigOperator} limit-stacking and
- * {@link Fenced} scaled delimiters — kept as throwing cases so the sealed
- * {@code MathNode} switch stays exhaustive without a {@code default}.
+ * {@link Radical} (with optional degree), {@link BigOperator} (display-size
+ * operator glyph with limits stacked above/below or set beside as scripts),
+ * {@link Fenced} (delimiters stretched to span the body and centred on the
+ * axis), and {@link Spacing}. The sealed {@code MathNode} switch is exhaustive
+ * with no {@code default}, so a new node kind is a compile error until handled.
  */
 public final class LayoutEngine {
 
     /** The surd (radical sign) starting glyph, U+221A. */
     private static final int SURD_CODEPOINT = 0x221A;
+
+    /** U+222B INTEGRAL — conventionally takes side limits even in display style. */
+    private static final int INTEGRAL_CODEPOINT = 0x222B;
+
+    /**
+     * Fraction of the axis-symmetric body span a {@code \left..\right} delimiter
+     * must reach (TeXbook Appendix-G / plain TeX {@code \delimiterfactor}=901).
+     * A delimiter need only cover ~90% of the content, so the smallest adequate
+     * pre-drawn variant hugs the body instead of overshooting to the next size.
+     */
+    private static final double DELIMITER_FACTOR = 0.901;
 
     private LayoutEngine() {
     }
@@ -78,11 +91,10 @@ public final class LayoutEngine {
             case Fraction(var num, var den) -> fractionBox(num, den, ctx);
             case Radical(var radicand, var index) -> radicalBox(radicand, index, ctx);
             case Spacing(var muWidth) -> Box.glue(muWidth * ctx.mu());
-            // Next S4 increment — kept as throwing, no-default cases so the sealed
-            // switch stays exhaustive and the compiler flags them the moment they
-            // become renderable.
-            case BigOperator _ -> throw notYetLaidOut(node);
-            case Fenced _ -> throw notYetLaidOut(node);
+            case BigOperator(var op, var lower, var upper, var limitsMode) ->
+                bigOperatorBox(op, lower, upper, limitsMode, ctx);
+            case Fenced(var leftDelim, var body, var rightDelim) ->
+                fencedBox(leftDelim, body, rightDelim, ctx);
         };
     }
 
@@ -239,7 +251,24 @@ public final class LayoutEngine {
             italic = font.italicCorrection(font.glyphId(baseAtom.codePoint())) * baseScale;
         }
 
+        Box supBox = sup == null ? null : layoutBox(sup, ctx.superscript());
+        Box subBox = sub == null ? null : layoutBox(sub, ctx.subscript());
+        return attachScripts(baseBox, simpleChar, italic, supBox, subBox, ctx);
+    }
+
+    /**
+     * Attaches a superscript and/or subscript beside an already-laid-out nucleus
+     * (Appendix G rules 18a–18f). Factored out of {@link #scriptsBox} so a
+     * {@link BigOperator} with side limits ({@code \nolimits}, or an integral in
+     * display style) can reuse the exact sub/sup placement over its enlarged
+     * operator box. {@code simpleChar} selects the rule-18a shortcut (zero
+     * base-derived shift for a bare character); {@code italic} is the nucleus's
+     * italic correction (already scaled), added to the superscript's x-offset.
+     */
+    private static Box attachScripts(Box baseBox, boolean simpleChar, double italic,
+                                     Box supBox, Box subBox, LayoutContext ctx) {
         var c = ctx.constants();
+        double baseScale = ctx.scale();
         // Base-derived tentative shifts (rule 18a): zero for a bare character,
         // else driven off the nucleus box height/depth minus the drop constants.
         double u = simpleChar ? 0.0 : baseBox.height() - c.superscriptBaselineDropMax() * baseScale;
@@ -251,9 +280,6 @@ public final class LayoutEngine {
         double height = baseBox.height();
         double depth = baseBox.depth();
         double scriptsRight = baseBox.width(); // rightmost extent of the script cluster
-
-        Box supBox = sup == null ? null : layoutBox(sup, ctx.superscript());
-        Box subBox = sub == null ? null : layoutBox(sub, ctx.subscript());
 
         double supShift = 0.0;
         double subShift = 0.0;
@@ -377,10 +403,10 @@ public final class LayoutEngine {
         // Pick a *pre-designed* surd sized to the content via the OpenType MATH
         // MathVariants table — NOT a uniformly stretched base glyph (which would
         // thicken the strokes and, for short radicands, dangle a long tail). See
-        // {@link #chooseSurd}. The chosen glyph is generally a little taller than
-        // {@code requiredSpan}; that excess is split evenly below (Rule 11).
+        // {@link #stretchVertical}. The chosen glyph is generally a little taller
+        // than {@code requiredSpan}; that excess is split evenly below (Rule 11).
         int surdGid = font.glyphId(SURD_CODEPOINT);
-        SurdShape surd = chooseSurd(font, surdGid, requiredSpan, scale);
+        StretchyGlyph surd = stretchVertical(font, surdGid, requiredSpan, scale);
         double surdWidth = surd.width();
 
         // Appendix-G Rule 11 excess split: half the surplus surd height raises the
@@ -433,88 +459,253 @@ public final class LayoutEngine {
     }
 
     // ------------------------------------------------------------------
-    // Surd construction — pick a pre-designed vertical variant of U+221A big
-    // enough for the radicand, else assemble one from parts, else (documented
-    // last resort) uniformly scale the base glyph.
+    // BigOperator — a large operator (\sum \int \prod) with limits stacked
+    // above/below (display) or set beside as scripts (text, \nolimits, integrals).
     // ------------------------------------------------------------------
 
-    /**
-     * One drawable piece of a surd: a glyph at {@code scale}, whose ink top lies
-     * {@code topOffset} user units below the surd's overall ink top, and whose
-     * outline reaches {@code yMax} at that top (design units).
-     */
-    private record SurdPiece(int gid, double scale, double topOffset, double yMax) {
+    private static Box bigOperatorBox(Atom op, MathNode lower, MathNode upper,
+                                      LimitsMode mode, LayoutContext ctx) {
+        SfntFont font = ctx.font();
+        var c = ctx.constants();
+        double scale = ctx.scale();
+        boolean display = ctx.style().isDisplay();
+
+        // Display style uses a larger operator glyph (an OpenType MATH vertical
+        // variant at least displayOperatorMinHeight tall, else the largest one).
+        int opGid = font.glyphId(op.codePoint());
+        if (display) {
+            opGid = displayOperatorGlyph(font, opGid, c.displayOperatorMinHeight());
+        }
+
+        // The operator box, centred vertically on the math axis (TeXbook: a large
+        // operator is set so its centre lies on the axis, like a fraction bar).
+        GlyphOutline o = font.outline(opGid);
+        double axis = c.axisHeight() * scale;
+        double opWidth = font.advanceWidth(opGid) * scale;
+        double halfInk = (o.yMax() - o.yMin()) / 2.0 * scale;
+        double opBaseline = (o.yMax() + o.yMin()) / 2.0 * scale - axis; // shift centre onto axis
+        Box opBox = new Box(
+            List.of(new PositionedGlyph(opGid, 0.0, opBaseline, scale)),
+            List.of(), opWidth, halfInk + axis, halfInk - axis);
+
+        // Limit placement: above/below in display style (except integrals, which
+        // conventionally keep side limits), beside as scripts otherwise.
+        boolean sideLimits = switch (mode) {
+            case LIMITS -> false;
+            case NOLIMITS -> true;
+            case DEFAULT -> !display || op.codePoint() == INTEGRAL_CODEPOINT;
+        };
+        Box upperBox = upper == null ? null : layoutBox(upper, ctx.superscript());
+        Box lowerBox = lower == null ? null : layoutBox(lower, ctx.subscript());
+
+        if (sideLimits) {
+            double italic = font.italicCorrection(opGid) * scale;
+            return attachScripts(opBox, false, italic, upperBox, lowerBox, ctx);
+        }
+        return stackLimits(opBox, upperBox, lowerBox, ctx);
     }
 
     /**
-     * A chosen surd rendering: the pieces to draw (top→bottom), the advance
-     * {@code width} used to place the radicand, and the total ink {@code span}
-     * (all user units). Placed by aligning the assembly's ink top to a bar-top y.
+     * Stacks the upper limit above and lower limit below the operator, each
+     * horizontally centred on it, using the OpenType MATH
+     * {@code upperLimit*}/{@code lowerLimit*} constants (TeXbook Appendix-G limit
+     * rules). Limits are already laid out in the shrunk script style.
      */
-    private record SurdShape(List<SurdPiece> pieces, double width, double span) {
-        void placeInto(List<PositionedGlyph> out, double x, double barTopY) {
-            for (SurdPiece p : pieces) {
+    private static Box stackLimits(Box opBox, Box upperBox, Box lowerBox, LayoutContext ctx) {
+        var c = ctx.constants();
+        double scale = ctx.scale();
+
+        double width = opBox.width();
+        if (upperBox != null) {
+            width = Math.max(width, upperBox.width());
+        }
+        if (lowerBox != null) {
+            width = Math.max(width, lowerBox.width());
+        }
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        double opX = (width - opBox.width()) / 2.0;
+        opBox.drawInto(glyphs, rules, opX, 0.0);
+        double height = opBox.height();
+        double depth = opBox.depth();
+
+        if (upperBox != null) {
+            // Baseline of the upper limit above the operator's ink top: clear the
+            // gap (limit depth + gapMin) but at least the baseline-rise minimum.
+            double rise = opBox.height() + Math.max(
+                c.upperLimitGapMin() * scale + upperBox.depth(),
+                c.upperLimitBaselineRiseMin() * scale);
+            upperBox.drawInto(glyphs, rules, (width - upperBox.width()) / 2.0, -rise);
+            height = Math.max(height, rise + upperBox.height());
+        }
+        if (lowerBox != null) {
+            double drop = opBox.depth() + Math.max(
+                c.lowerLimitGapMin() * scale + lowerBox.height(),
+                c.lowerLimitBaselineDropMin() * scale);
+            lowerBox.drawInto(glyphs, rules, (width - lowerBox.width()) / 2.0, drop);
+            depth = Math.max(depth, drop + lowerBox.depth());
+        }
+        return new Box(glyphs, rules, width, height, depth);
+    }
+
+    /** The display-size glyph for an operator: smallest vertical variant at least
+     *  {@code minHeight} design units, else the largest variant, else the base. */
+    private static int displayOperatorGlyph(SfntFont font, int baseGid, int minHeight) {
+        var construction = font.verticalVariants(baseGid);
+        if (construction == null) {
+            return baseGid;
+        }
+        var variant = construction.variantAtLeast(minHeight);
+        if (variant.isPresent()) {
+            return variant.getAsInt();
+        }
+        var variants = construction.variants();
+        return variants.isEmpty() ? baseGid : variants.get(variants.size() - 1).glyphId();
+    }
+
+    // ------------------------------------------------------------------
+    // Fenced — a \left..\right sub-formula whose delimiters are stretched to
+    // span the body and centred on the math axis (reuses the stretchy-glyph
+    // machinery below, exactly as the radical surd does).
+    // ------------------------------------------------------------------
+
+    private static Box fencedBox(int leftDelim, MathNode body, int rightDelim, LayoutContext ctx) {
+        SfntFont font = ctx.font();
+        var c = ctx.constants();
+        double scale = ctx.scale();
+        double axis = c.axisHeight() * scale;
+
+        Box bodyBox = layoutBox(body, ctx);
+
+        // Symmetric target about the axis: cover the taller of (body above axis)
+        // and (body below axis) on both sides, so the pair is balanced on the axis.
+        double aboveAxis = bodyBox.height() - axis;
+        double belowAxis = bodyBox.depth() + axis;
+        double requiredSpan = 2.0 * Math.max(aboveAxis, belowAxis) * DELIMITER_FACTOR;
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        double penX = 0.0;
+        double height = bodyBox.height();
+        double depth = bodyBox.depth();
+
+        if (leftDelim != MathNode.Fenced.NULL_DELIMITER) {
+            double[] hd = placeDelimiter(font, leftDelim, requiredSpan, axis, scale, penX, glyphs);
+            penX = hd[0];
+            height = Math.max(height, hd[1]);
+            depth = Math.max(depth, hd[2]);
+        }
+        bodyBox.drawInto(glyphs, rules, penX, 0.0);
+        penX += bodyBox.width();
+        if (rightDelim != MathNode.Fenced.NULL_DELIMITER) {
+            double[] hd = placeDelimiter(font, rightDelim, requiredSpan, axis, scale, penX, glyphs);
+            penX = hd[0];
+            height = Math.max(height, hd[1]);
+            depth = Math.max(depth, hd[2]);
+        }
+        return new Box(glyphs, rules, penX, height, depth);
+    }
+
+    /**
+     * Sizes a single delimiter to {@code requiredSpan}, centres its ink on the
+     * axis, stamps it at {@code x}, and returns {@code {newPenX, height, depth}}
+     * (the delimiter's contribution to the enclosing box's extents).
+     */
+    private static double[] placeDelimiter(SfntFont font, int delimCp, double requiredSpan,
+                                           double axis, double scale, double x,
+                                           List<PositionedGlyph> glyphs) {
+        StretchyGlyph d = stretchVertical(font, font.glyphId(delimCp), requiredSpan, scale);
+        double inkTop = -axis - d.span() / 2.0; // centre the ink on the axis
+        d.placeInto(glyphs, x, inkTop);
+        return new double[] {x + d.width(), axis + d.span() / 2.0, d.span() / 2.0 - axis};
+    }
+
+    // ------------------------------------------------------------------
+    // Stretchy vertical glyph construction — pick a pre-designed vertical variant
+    // big enough for the content, else assemble one from parts, else (documented
+    // last resort) uniformly scale the base glyph. Shared by the radical surd and
+    // the \left..\right delimiters (a stretchy delimiter is the same problem as a
+    // stretchy surd).
+    // ------------------------------------------------------------------
+
+    /**
+     * One drawable piece of a stretchy glyph: a glyph at {@code scale}, whose ink
+     * top lies {@code topOffset} user units below the glyph's overall ink top, and
+     * whose outline reaches {@code yMax} at that top (design units).
+     */
+    private record StretchyPiece(int gid, double scale, double topOffset, double yMax) {
+    }
+
+    /**
+     * A chosen stretchy rendering: the pieces to draw (top→bottom), the advance
+     * {@code width} used to place adjacent content, and the total ink {@code span}
+     * (all user units). Placed by aligning the assembly's ink top to a given y.
+     */
+    private record StretchyGlyph(List<StretchyPiece> pieces, double width, double span) {
+        void placeInto(List<PositionedGlyph> out, double x, double inkTopY) {
+            for (StretchyPiece p : pieces) {
                 // inkTop = baselineY - scale*yMax  ⇒  baselineY = inkTop + scale*yMax.
-                double baselineY = barTopY + p.topOffset() + p.scale() * p.yMax();
+                double baselineY = inkTopY + p.topOffset() + p.scale() * p.yMax();
                 out.add(new PositionedGlyph(p.gid(), x, baselineY, p.scale()));
             }
         }
     }
 
-    private static SurdShape chooseSurd(SfntFont font, int surdGid,
-                                        double requiredSpan, double scale) {
-        var construction = font.verticalVariants(surdGid);
+    private static StretchyGlyph stretchVertical(SfntFont font, int baseGid,
+                                                 double requiredSpan, double scale) {
+        var construction = font.verticalVariants(baseGid);
         int minSizeDesign = (int) Math.ceil(requiredSpan / scale);
 
         if (construction != null) {
             var variant = construction.variantAtLeast(minSizeDesign);
             if (variant.isPresent()) {
-                return singleGlyphSurd(font, variant.getAsInt(), scale);
+                return singleVariant(font, variant.getAsInt(), scale);
             }
             if (construction.hasAssembly()) {
-                return assembledSurd(font, construction.assembly(),
+                return assembledStack(font, construction.assembly(),
                     font.minConnectorOverlap(), minSizeDesign, scale);
             }
             // Variants exist but none is tall enough and there is no assembly:
             // use the largest pre-drawn variant (best available, undistorted).
             var variants = construction.variants();
             if (!variants.isEmpty()) {
-                return singleGlyphSurd(font, variants.get(variants.size() - 1).glyphId(), scale);
+                return singleVariant(font, variants.get(variants.size() - 1).glyphId(), scale);
             }
         }
 
         // Last resort (documented): no MATH construction at all — uniformly scale
         // the base glyph to span the content. This thickens the strokes, so it is
-        // only reached for fonts lacking a vertical construction for U+221A.
-        GlyphOutline o = font.outline(surdGid);
+        // only reached for fonts lacking a vertical construction for the glyph.
+        GlyphOutline o = font.outline(baseGid);
         double baseSpan = Math.max(1.0, o.yMax() - o.yMin());
-        double surdScale = Math.max(scale, requiredSpan / baseSpan);
-        return new SurdShape(
-            List.of(new SurdPiece(surdGid, surdScale, 0.0, o.yMax())),
-            font.advanceWidth(surdGid) * surdScale,
-            (o.yMax() - o.yMin()) * surdScale);
+        double glyphScale = Math.max(scale, requiredSpan / baseSpan);
+        return new StretchyGlyph(
+            List.of(new StretchyPiece(baseGid, glyphScale, 0.0, o.yMax())),
+            font.advanceWidth(baseGid) * glyphScale,
+            (o.yMax() - o.yMin()) * glyphScale);
     }
 
-    /** A surd rendered from a single pre-drawn glyph at the normal scale. */
-    private static SurdShape singleGlyphSurd(SfntFont font, int gid, double scale) {
+    /** A stretchy glyph rendered from a single pre-drawn variant at normal scale. */
+    private static StretchyGlyph singleVariant(SfntFont font, int gid, double scale) {
         GlyphOutline o = font.outline(gid);
-        return new SurdShape(
-            List.of(new SurdPiece(gid, scale, 0.0, o.yMax())),
+        return new StretchyGlyph(
+            List.of(new StretchyPiece(gid, scale, 0.0, o.yMax())),
             font.advanceWidth(gid) * scale,
             (o.yMax() - o.yMin()) * scale);
     }
 
     /**
-     * Builds a surd from a {@link com.lattex.font.GlyphAssembly}: fixed end parts
-     * plus repeated extenders, adjacent pieces overlapping by
+     * Builds a stretchy glyph from a {@link com.lattex.font.GlyphAssembly}: fixed
+     * end parts plus repeated extenders, adjacent pieces overlapping by
      * {@code minConnectorOverlap} (design units). Parts are stored bottom→top; we
      * repeat the extenders the fewest times needed to reach {@code minSizeDesign}
      * (minimum overlap ⇒ maximum height per repeat), then place the expanded stack
      * top→bottom with each piece's ink top aligned to its tile top. This path is a
-     * completeness fallback for radicands taller than the largest pre-drawn
-     * variant; the small residual overshoot is absorbed by the Rule-11 excess split.
+     * completeness fallback for content taller than the largest pre-drawn variant;
+     * for the surd the small residual overshoot is absorbed by the Rule-11 split.
      */
-    private static SurdShape assembledSurd(SfntFont font,
+    private static StretchyGlyph assembledStack(SfntFont font,
                                            com.lattex.font.GlyphAssembly assembly,
                                            int overlap, int minSizeDesign, double scale) {
         var parts = assembly.parts();
@@ -529,17 +720,17 @@ public final class LayoutEngine {
 
         // Place bottom→top tiling into pieces ordered top→bottom.
         int spanDesign = assemblySpanDesign(stack, overlap);
-        List<SurdPiece> pieces = new ArrayList<>(stack.size());
+        List<StretchyPiece> pieces = new ArrayList<>(stack.size());
         double maxWidth = 0.0;
         double topOffset = 0.0;
         for (int i = stack.size() - 1; i >= 0; i--) { // top part is last in bottom→top order
             com.lattex.font.GlyphPart part = stack.get(i);
             GlyphOutline o = font.outline(part.glyphId());
-            pieces.add(new SurdPiece(part.glyphId(), scale, topOffset, o.yMax()));
+            pieces.add(new StretchyPiece(part.glyphId(), scale, topOffset, o.yMax()));
             maxWidth = Math.max(maxWidth, font.advanceWidth(part.glyphId()) * scale);
             topOffset += (part.fullAdvance() - overlap) * scale;
         }
-        return new SurdShape(pieces, maxWidth, spanDesign * scale);
+        return new StretchyGlyph(pieces, maxWidth, spanDesign * scale);
     }
 
     /** The parts list with each extender repeated {@code rep} times (bottom→top). */
@@ -567,12 +758,6 @@ public final class LayoutEngine {
     // ------------------------------------------------------------------
     // Helpers.
     // ------------------------------------------------------------------
-
-    private static UnsupportedOperationException notYetLaidOut(MathNode node) {
-        return new UnsupportedOperationException(
-            "S4 layout not yet implemented for " + node.getClass().getSimpleName()
-                + " (next increment: BigOperator limits, Fenced delimiters)");
-    }
 
     private static void accumulate(Bounds b, GlyphOutline outline,
                                    double originX, double baselineY, double scale) {

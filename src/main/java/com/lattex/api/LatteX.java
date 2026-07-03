@@ -90,16 +90,47 @@ public final class LatteX {
                 ? "the square root of " + describe(radicand)
                 : "the " + describe(index) + "th root of " + describe(radicand);
             case Spacing _ -> "";
-            // Exhaustive over the sealed MathNode: these kinds parse today but are
-            // not laid out yet, so render() never reaches describe() for them. The
-            // no-default cases force a real aria-label when each becomes renderable.
-            case BigOperator bigOp -> throw describeTodo(bigOp);
-            case Fenced fenced -> throw describeTodo(fenced);
+            case BigOperator(var op, var lower, var upper, _) -> {
+                StringBuilder sb = new StringBuilder(operatorName(op.codePoint()));
+                if (lower != null) {
+                    sb.append(" from ").append(describe(lower));
+                }
+                if (upper != null) {
+                    sb.append(" to ").append(describe(upper));
+                }
+                sb.append(" of");
+                yield sb.toString();
+            }
+            case Fenced(var leftDelim, var body, var rightDelim) -> {
+                String inner = describe(body);
+                String open = leftDelim == Fenced.NULL_DELIMITER ? "" : delimiterName(leftDelim) + " ";
+                String close = rightDelim == Fenced.NULL_DELIMITER ? "" : " " + delimiterName(rightDelim);
+                yield (open + inner + close).strip();
+            }
         };
     }
 
-    private static UnsupportedOperationException describeTodo(MathNode node) {
-        return new UnsupportedOperationException(
-            "aria-label not yet implemented for " + node.getClass().getSimpleName());
+    /** A spoken name for a large-operator code point. */
+    private static String operatorName(int codePoint) {
+        return switch (codePoint) {
+            case 0x2211 -> "the sum";
+            case 0x222B -> "the integral";
+            case 0x220F -> "the product";
+            default -> Character.toString(codePoint);
+        };
+    }
+
+    /** A spoken name for a delimiter code point. */
+    private static String delimiterName(int codePoint) {
+        return switch (codePoint) {
+            case '(' -> "open paren";
+            case ')' -> "close paren";
+            case '[' -> "open bracket";
+            case ']' -> "close bracket";
+            case '{' -> "open brace";
+            case '}' -> "close brace";
+            case '|' -> "vertical bar";
+            default -> Character.toString(codePoint);
+        };
     }
 }
