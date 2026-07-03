@@ -32,7 +32,16 @@ No runtime reflection or dynamic classloading. Any bundled resource (the font) m
 
 ## 5. The emitter ↔ sanitizer minimal-subset invariant
 
-The SVG emitter targets a **named minimal subset**: `<path>` + basic transforms + `<text>`, and **never** `<use>`, `<defs>`, `<symbol>`, `<foreignObject>`, or `<script>`. This subset is a contract with downstream HTML sanitizers (LatteX SVG must pass unchanged). A **two-way containment test** enforces it and must stay green — if you change the emitter's output alphabet, the test (and the downstream allow-list) has to move with it, not around it.
+The SVG emitter targets a **named minimal subset** — and nothing else:
+
+- `svg` [`viewBox`, `width`, `height`, `xmlns`, `role`, `aria-label`]
+- `g` [`transform`, `fill`]
+- `path` [`d`, `fill`, `stroke`, `stroke-width`, `transform`]
+- `rect` [`x`, `y`, `width`, `height`, `fill`]
+
+**Never** `use`, `defs`, `symbol`, `text`, `foreignObject`, `script`, `style`, `image`, or any external `href`. Glyphs are emitted as inline filled `<path>`s — **not** `<text>`, and **not** `<use>`/`<defs>` glyph-references — the smallest possible surface, and already inside the Stafficy sanitizer allow-list, so containment holds day one.
+
+This subset is a contract with downstream HTML sanitizers (LatteX SVG must pass unchanged). A **two-way containment test** (the S8 harness) enforces it and must stay green — if you change the emitter's output alphabet, the test *and* the downstream allow-list move **with** it, not around it. *(Open refinement, to be decided at S4: if every primitive is a filled shape, `stroke`/`stroke-width` may drop for fill-only — smaller still.)*
 
 ## Build & test
 
