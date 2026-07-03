@@ -48,9 +48,9 @@ public sealed interface MathNode {
         BIN,
         /** Relation: {@code = < > \leq \geq \to \in}. */
         REL,
-        /** Opening delimiter: {@code ( [ \{}. */
+        /** Opening delimiter: {@code (}, {@code [}, or a left brace. */
         OPEN,
-        /** Closing delimiter: {@code ) ] \}}. */
+        /** Closing delimiter: {@code )}, {@code ]}, or a right brace. */
         CLOSE,
         /** Punctuation: {@code , ;}. */
         PUNCT,
