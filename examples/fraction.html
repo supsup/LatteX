@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LatteX — fraction</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; min-height: 100vh;
+           display: grid; place-items: center; background: #f4f6f6; color: #1a1f21; }
+    main { text-align: center; padding: 3rem 1.5rem; }
+    .eyebrow { font-family: ui-monospace, monospace; font-size: .72rem; letter-spacing: .18em;
+               text-transform: uppercase; color: #1f7d72; margin: 0 0 1.5rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem; max-width: 900px; }
+    .card { display: inline-flex; flex-direction: column; align-items: center; gap: 1.25rem;
+            background: #fff; border: 1px solid #e3e8e7; border-radius: 14px;
+            padding: 2rem 2.5rem; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+    .src { font-family: ui-monospace, monospace; font-size: .9rem; color: #3a4749;
+           background: #eef2f1; border: 1px solid #e0e6e4; border-radius: 7px; padding: .4rem .8rem; }
+    .render svg { height: 120px; width: auto; display: block; }
+    figcaption { font-family: ui-monospace, monospace; font-size: .62rem; letter-spacing: .08em;
+                 text-transform: uppercase; color: #8a9896; max-width: 22ch; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">LatteX &middot; S4 layout</p>
+        <figure class="card">
+          <span class="src">\frac{a+b}{c}</span>
+          <div class="render">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -55.84 90.6578 83.84" width="90.6578" height="83.84" role="img" aria-label="the fraction a + b over c">
+              <g fill="#000000">
+                <path d="M308 62 L304 62 Q269 31 237 12 Q205 -7 157 -7 Q99 -7 68 25 Q38 57 38 105 Q38 145 56 172 Q75 200 105 219 Q136 238 171 251 Q207 264 241 273 Q275 282 301 290 L301 334 Q301 399 278 426 Q256 454 211 454 Q168 454 156 436 Q144 418 144 373 Q144 327 100 327 Q85 327 71 338 Q58 350 58 375 Q58 403 79 428 Q101 453 140 469 Q180 485 234 485 Q316 485 350 447 Q384 409 384 331 L384 104 Q384 73 391 64 Q398 55 414 55 Q428 55 439 62 Q451 69 461 80 L476 64 Q451 28 428 11 Q406 -5 368 -5 Q335 -5 324 12 Q313 29 308 62 Z M301 92 L301 257 Q256 246 216 231 Q176 216 151 192 Q126 168 126 129 Q126 92 146 70 Q166 48 198 48 Q248 48 301 92 Z" transform="translate(0 -25.6) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(28.0889 -25.6) scale(0.04 -0.04)"/>
+                <path d="M163 706 L163 400 L166 400 Q192 432 231 458 Q270 485 320 485 Q370 485 407 456 Q445 428 466 378 Q487 328 487 263 Q487 174 456 113 Q425 52 371 21 Q317 -10 247 -10 Q183 -10 140 5 Q98 20 80 30 L80 592 Q80 626 72 635 Q65 645 36 645 Q24 645 16 644 Q8 643 8 643 L8 671 L137 706 L163 706 Z M163 356 L163 78 Q177 61 201 46 Q225 31 265 31 Q313 31 341 58 Q370 85 383 130 Q396 176 396 231 Q396 279 386 321 Q376 364 350 390 Q324 417 276 417 Q238 417 207 395 Q177 374 163 356 Z" transform="translate(65.7778 -25.6) scale(0.04 -0.04)"/>
+                <path d="M408 148 L427 134 Q408 94 383 61 Q359 28 323 9 Q287 -10 233 -10 Q171 -10 126 20 Q81 50 57 103 Q33 157 33 226 Q33 344 92 414 Q151 485 259 485 Q330 485 370 454 Q411 423 411 379 Q411 334 369 334 Q347 334 335 345 Q324 357 317 374 Q310 391 302 408 Q295 425 281 436 Q268 448 242 448 Q181 448 146 403 Q112 359 112 273 Q112 182 149 123 Q187 65 264 65 Q313 65 343 85 Q374 105 408 148 Z" transform="translate(34.4089 25.6) scale(0.04 -0.04)"/>
+                <rect x="0" y="-11.68" width="86.6578" height="2.72"/>
+              </g>
+            </svg>
+          </div>
+          <figcaption>a fraction, numerator/denominator centred on the math axis</figcaption>
+        </figure>
+  </main>
+</body>
+</html>

@@ -55,27 +55,46 @@ public final class LatteX {
         return SvgEmitter.emit(layout, font, describe(node));
     }
 
-    /** A plain-language accessibility label for a math tree (M0 subset). */
+    /** A plain-language accessibility label for a math tree. */
     static String describe(MathNode node) {
         return switch (node) {
             case Atom atom -> Character.toString(atom.codePoint());
-            case SupSub sup -> {
-                String base = describe(sup.base());
-                String exp = describe(sup.sup());
-                yield exp.equals("2")
-                    ? base + " squared"
-                    : base + " to the power of " + exp;
+            case MathList(var items) -> {
+                StringBuilder sb = new StringBuilder();
+                for (MathNode item : items) {
+                    String part = describe(item);
+                    if (part.isEmpty()) {
+                        continue;
+                    }
+                    if (sb.length() > 0) {
+                        sb.append(' ');
+                    }
+                    sb.append(part);
+                }
+                yield sb.toString();
             }
+            case SupSub(var base, var sup, var sub) -> {
+                String b = describe(base);
+                if (sub == null) {
+                    String exp = describe(sup);
+                    yield exp.equals("2") ? b + " squared" : b + " to the power of " + exp;
+                }
+                if (sup == null) {
+                    yield b + " sub " + describe(sub);
+                }
+                yield b + " sub " + describe(sub) + " to the power of " + describe(sup);
+            }
+            case Fraction(var num, var den) ->
+                "the fraction " + describe(num) + " over " + describe(den);
+            case Radical(var radicand, var index) -> index == null
+                ? "the square root of " + describe(radicand)
+                : "the " + describe(index) + "th root of " + describe(radicand);
+            case Spacing _ -> "";
             // Exhaustive over the sealed MathNode: these kinds parse today but are
-            // not laid out until S4, so render() never reaches describe() for them
-            // yet. No-default cases force a real aria-label when each becomes
-            // renderable.
-            case MathList list -> throw describeTodo(list);
-            case Fraction frac -> throw describeTodo(frac);
-            case Radical rad -> throw describeTodo(rad);
+            // not laid out yet, so render() never reaches describe() for them. The
+            // no-default cases force a real aria-label when each becomes renderable.
             case BigOperator bigOp -> throw describeTodo(bigOp);
             case Fenced fenced -> throw describeTodo(fenced);
-            case Spacing spacing -> throw describeTodo(spacing);
         };
     }
 

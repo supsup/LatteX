@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LatteX — square root</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; min-height: 100vh;
+           display: grid; place-items: center; background: #f4f6f6; color: #1a1f21; }
+    main { text-align: center; padding: 3rem 1.5rem; }
+    .eyebrow { font-family: ui-monospace, monospace; font-size: .72rem; letter-spacing: .18em;
+               text-transform: uppercase; color: #1f7d72; margin: 0 0 1.5rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem; max-width: 900px; }
+    .card { display: inline-flex; flex-direction: column; align-items: center; gap: 1.25rem;
+            background: #fff; border: 1px solid #e3e8e7; border-radius: 14px;
+            padding: 2rem 2.5rem; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+    .src { font-family: ui-monospace, monospace; font-size: .9rem; color: #3a4749;
+           background: #eef2f1; border: 1px solid #e0e6e4; border-radius: 7px; padding: .4rem .8rem; }
+    .render svg { height: 120px; width: auto; display: block; }
+    figcaption { font-family: ui-monospace, monospace; font-size: .62rem; letter-spacing: .08em;
+                 text-transform: uppercase; color: #8a9896; max-width: 22ch; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">LatteX &middot; S4 layout</p>
+        <figure class="card">
+          <span class="src">\sqrt{x^2+1}</span>
+          <div class="render">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="-1.28 -39.632 136.0378 51.48" width="136.0378" height="51.48" role="img" aria-label="the square root of x squared + 1">
+              <g fill="#000000">
+                <path d="M667 922 L829 922 L829 854 L713 854 L413 -265 L371 -265 L138 319 L34 279 L18 307 L177 417 L197 417 L395 -93 L399 -93 L667 922 Z" transform="translate(0 -0.752) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(31.76 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(50.92 -10.08) scale(0.028 -0.028)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(75.2689 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(112.9578 0) scale(0.04 -0.04)"/>
+                <rect x="31.76" y="-37.632" width="100.9978" height="2.72"/>
+              </g>
+            </svg>
+          </div>
+          <figcaption>a radical: surd glyph + over-bar clearing the radicand</figcaption>
+        </figure>
+  </main>
+</body>
+</html>
