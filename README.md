@@ -5,7 +5,7 @@
 LatteX is a clean-room, pure-**Java 25** library that renders LaTeX math to **SVG** — inline and display, baseline-accurate — with **zero runtime dependencies**. No JavaScript engine, no headless browser, no external `tex` binary. Point it at `\frac{1}{2}` and get back a crisp, scalable, self-contained `<svg>`.
 
 ```java
-String svg = com.lattex.api.LatteX.render("f(x^*) = x^*");
+String svg = com.lattex.api.LatteX.render("\\frac{a+b}{c}");
 ```
 
 ## Why
@@ -15,14 +15,14 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 ## Design
 
 - **Java 25, modern.** The math tree is a `sealed interface` + `record` algebraic data type, laid out with exhaustive pattern-matching switches — no visitor boilerplate.
-- **Zero runtime dependencies, framework-free.** No Spring, no anything. A JPMS module you drop in and call. The glyphs come from a bundled OFL math font (Latin Modern Math), emitted as SVG `<path>`s — so there are no fonts to load in the browser either.
-- **SVG-native, inline-capable.** Output is a minimal, sanitizer-friendly SVG subset (paths + basic transforms + text). The renderer exposes each expression's height and depth so inline math sits correctly on the text baseline.
+- **Zero runtime dependencies, framework-free.** No Spring, no anything. A JPMS module you drop in and call. The glyphs come from a bundled OFL math font (STIX Two Math), emitted as SVG `<path>`s — so there are no fonts to load in the browser either.
+- **SVG-native, inline-capable.** Output is a minimal, sanitizer-friendly SVG subset — only `<svg>`/`<g>`/`<path>`/`<rect>`, with glyphs as inline filled `<path>`s (no `<text>`/`<use>`/`<defs>`/`<script>`). The renderer exposes each expression's height and depth so inline math sits correctly on the text baseline.
 - **Native-image clean.** No reflection; ships GraalVM reachability metadata, and an optional standalone `lattex` native CLI.
 - **Design-for-both, ship SVG.** A layout core + pluggable output backends (mirroring TeX's own `dvisvgm`/`dvipng` driver split): SVG today, an optional raster backend later.
 
 ## Status
 
-Early. This repo is at **S1 (scaffold)**; the parse → layout → SVG pipeline lands across S2–S8. The API surface (`com.lattex.api.LatteX`) is stubbed and will throw `UnsupportedOperationException` until the pipeline is in.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, and delimiters to SVG today. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, `fx` effects, and a click action menu (Copy / Graph) are built too. (These currently live on review branches, merging to the mainline soon.) See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
 ## Build
 
@@ -35,7 +35,7 @@ Requires a Java 25 toolchain (Gradle provisions it via the toolchain spec).
 ## License
 
 - **Code:** [Apache-2.0](LICENSE).
-- **Bundled math font:** SIL Open Font License (OFL) — see `NOTICE` once the font layer (S2) lands.
+- **Bundled math font:** STIX Two Math, under the SIL Open Font License (OFL) — see `NOTICE`.
 
 ## Contributing
 
