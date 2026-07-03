@@ -133,6 +133,74 @@ class LayoutS4Test {
         assertAlphabet(LatteX.render("\\sqrt[n]{x}"));
     }
 
+    @Test
+    void surdUsesProportionalVariantNotUniformStretch() {
+        // The surd must be a pre-designed MATH vertical variant drawn at the normal
+        // glyph scale — NOT the base U+221A uniformly scaled up (which thickens the
+        // strokes and, for short radicands, dangles an oversized tail). For a
+        // content this size STIX's base radical variant already fits, so the surd
+        // is drawn at exactly the base scale.
+        Layout l = layout("\\sqrt{x^2+1}");
+        double baseScale = 40.0 / FONT.unitsPerEm();
+        int surdGid = FONT.glyphId(0x221A);
+        PositionedGlyph surd = l.glyphs().stream()
+            .filter(g -> g.glyphId() == surdGid)
+            .findFirst().orElseThrow(() -> new AssertionError("surd glyph present"));
+        assertEquals(baseScale, surd.scale(), 1e-9,
+            "surd is a proportional variant at the base scale, not a stretched glyph");
+    }
+
+    @Test
+    void surdExcessIsSplitNotAllDangledBelow() {
+        // Appendix-G Rule 11: when the smallest adequate surd is taller than the
+        // content needs, the surplus is split — half raises the bar, half extends
+        // the tail — so the surd does not dangle its whole surplus below the
+        // radicand. A lone 'x' has no depth, yet the surd descends below the
+        // baseline by only about half its total surplus, not the whole of it.
+        Layout l = layout("\\sqrt{x}");
+        double baseScale = 40.0 / FONT.unitsPerEm();
+        int surdGid = FONT.glyphId(0x221A);
+        PositionedGlyph surd = l.glyphs().stream()
+            .filter(g -> g.glyphId() == surdGid)
+            .findFirst().orElseThrow(() -> new AssertionError("surd glyph present"));
+        var o = FONT.outline(surdGid);
+        double surdSpan = (o.yMax() - o.yMin()) * baseScale;
+        double surdTop = surd.baselineY() - baseScale * o.yMax();     // ink top (bar level)
+        double surdBottom = surd.baselineY() - baseScale * o.yMin();  // ink bottom (below baseline)
+        // Bar sits above the baseline; tail below it. With the excess split, the
+        // tail descends less than the full surd span (it would equal the span were
+        // the surd top-aligned with everything dangling below).
+        assertTrue(surdTop < 0, "bar/surd top is above the baseline");
+        assertTrue(surdBottom > 0, "surd tail descends below the baseline");
+        assertTrue(surdBottom < surdSpan,
+            "the surd surplus is split, not all dangled below the radicand");
+    }
+
+    @Test
+    void radicalDegreeSitsInTheUpperLeftCrook() {
+        Layout l = layout("\\sqrt[n]{x+y}");
+        double baseScale = 40.0 / FONT.unitsPerEm();
+        int surdGid = FONT.glyphId(0x221A);
+        PositionedGlyph surd = l.glyphs().stream()
+            .filter(g -> g.glyphId() == surdGid)
+            .findFirst().orElseThrow(() -> new AssertionError("surd glyph present"));
+        // The degree is the shrunk (script-script) glyph.
+        PositionedGlyph deg = l.glyphs().stream()
+            .filter(g -> g.scale() < baseScale)
+            .findFirst().orElseThrow(() -> new AssertionError("degree glyph present"));
+        var o = FONT.outline(surdGid);
+        double surdTop = surd.baselineY() - baseScale * o.yMax();
+        double surdBottom = surd.baselineY() - baseScale * o.yMin();
+        double surdMid = (surdTop + surdBottom) / 2.0;
+        // Upper: the degree baseline is above the surd's vertical midpoint.
+        assertTrue(deg.baselineY() < surdMid,
+            "degree nestles in the UPPER part of the surd, not low");
+        // Left: the degree sits over the surd, left of the radicand body.
+        double surdWidth = FONT.advanceWidth(surdGid) * baseScale;
+        assertTrue(deg.originX() < surd.originX() + surdWidth,
+            "degree sits to the left of the radicand, over the surd");
+    }
+
     // ---- MathList spacing ------------------------------------------------
 
     private static Layout row(MathNode.Atom... atoms) {

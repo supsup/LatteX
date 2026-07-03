@@ -369,36 +369,43 @@ public final class LayoutEngine {
 
         double hr = radBox.height();
         double dr = radBox.depth();
-        // The over-bar's top sits this far above the baseline; its bottom clears
-        // the radicand top by `gap`.
-        double barTopAbove = hr + gap + ruleThick;
 
-        // Surd glyph. True stretch-to-content via MATH glyph variants/assembly is
-        // a follow-up; here we scale the single U+221A glyph uniformly so it spans
-        // the radicand from the bar down past its depth (documented approximation).
+        // Vertical extent the surd must span, from the over-bar's top down to the
+        // radicand's bottom (TeXbook Appendix-G Rule 11: height+depth+gap+rule).
+        double requiredSpan = hr + gap + ruleThick + dr;
+
+        // Pick a *pre-designed* surd sized to the content via the OpenType MATH
+        // MathVariants table — NOT a uniformly stretched base glyph (which would
+        // thicken the strokes and, for short radicands, dangle a long tail). See
+        // {@link #chooseSurd}. The chosen glyph is generally a little taller than
+        // {@code requiredSpan}; that excess is split evenly below (Rule 11).
         int surdGid = font.glyphId(SURD_CODEPOINT);
-        GlyphOutline surd = font.outline(surdGid);
-        double surdSpanFontUnits = Math.max(1.0, surd.yMax() - surd.yMin());
-        double requiredSpan = barTopAbove + dr;
-        double surdScale = Math.max(scale, requiredSpan / surdSpanFontUnits);
-        double surdWidth = font.advanceWidth(surdGid) * surdScale;
-        // Baseline placed so the glyph top aligns with the bar top.
-        double barTopY = -barTopAbove;
-        double surdBaselineY = barTopY + surdScale * surd.yMax();
-        double surdBottomY = surdBaselineY - surdScale * surd.yMin(); // yMin < 0 → below baseline
+        SurdShape surd = chooseSurd(font, surdGid, requiredSpan, scale);
+        double surdWidth = surd.width();
 
-        // Optional degree/index, raised to the upper-left of the surd.
+        // Appendix-G Rule 11 excess split: half the surplus surd height raises the
+        // over-bar (a larger effective gap), half extends the surd tail below the
+        // radicand — so a slightly-too-tall glyph never dangles its whole surplus
+        // beneath the content (the old top-aligned look that read as oversized).
+        double delta = surd.span() - requiredSpan;
+        double effGap = delta > 0.0 ? gap + delta / 2.0 : gap;
+
+        double barTopAbove = hr + effGap + ruleThick;
+        double barTopY = -barTopAbove;
+        double surdBottomY = barTopY + surd.span(); // ink bottom of the surd (below baseline)
+
+        // Optional degree/index, nestled into the surd's upper-left kink and raised
+        // radicalDegreeBottomRaisePercent of the surd's height up from its bottom.
         double leftOffset = 0.0;
         Box degBox = null;
         double degBaselineY = 0.0;
+        double kernBefore = c.radicalKernBeforeDegree() * scale;
         if (index != null) {
             degBox = layoutBox(index, ctx.radicalDegree());
-            double kernBefore = c.radicalKernBeforeDegree() * scale;
             double kernAfter = c.radicalKernAfterDegree() * scale;
-            leftOffset = kernBefore + degBox.width() + kernAfter;
-            double surdTotalHeight = surdBottomY - barTopY; // full surd extent
+            leftOffset = Math.max(0.0, kernBefore + degBox.width() + kernAfter);
             double pct = c.radicalDegreeBottomRaisePercent() / 100.0;
-            double degBottomY = surdBottomY - pct * surdTotalHeight;
+            double degBottomY = surdBottomY - pct * surd.span();
             degBaselineY = degBottomY - degBox.depth();
         }
 
@@ -407,11 +414,12 @@ public final class LayoutEngine {
         double surdX = leftOffset;
         double radX = leftOffset + surdWidth;
 
-        glyphs.add(new PositionedGlyph(surdGid, surdX, surdBaselineY, surdScale));
+        // Materialise the chosen surd (single variant, or stacked assembly parts)
+        // with its ink top aligned to the bar top.
+        surd.placeInto(glyphs, surdX, barTopY);
         radBox.drawInto(glyphs, rules, radX, 0.0);
         rules.add(new Rule(radX, barTopY, radBox.width(), ruleThick));
         if (degBox != null) {
-            double kernBefore = c.radicalKernBeforeDegree() * scale;
             degBox.drawInto(glyphs, rules, kernBefore, degBaselineY);
         }
 
@@ -422,6 +430,138 @@ public final class LayoutEngine {
         }
         double depth = Math.max(dr, surdBottomY);
         return new Box(glyphs, rules, width, height, depth);
+    }
+
+    // ------------------------------------------------------------------
+    // Surd construction — pick a pre-designed vertical variant of U+221A big
+    // enough for the radicand, else assemble one from parts, else (documented
+    // last resort) uniformly scale the base glyph.
+    // ------------------------------------------------------------------
+
+    /**
+     * One drawable piece of a surd: a glyph at {@code scale}, whose ink top lies
+     * {@code topOffset} user units below the surd's overall ink top, and whose
+     * outline reaches {@code yMax} at that top (design units).
+     */
+    private record SurdPiece(int gid, double scale, double topOffset, double yMax) {
+    }
+
+    /**
+     * A chosen surd rendering: the pieces to draw (top→bottom), the advance
+     * {@code width} used to place the radicand, and the total ink {@code span}
+     * (all user units). Placed by aligning the assembly's ink top to a bar-top y.
+     */
+    private record SurdShape(List<SurdPiece> pieces, double width, double span) {
+        void placeInto(List<PositionedGlyph> out, double x, double barTopY) {
+            for (SurdPiece p : pieces) {
+                // inkTop = baselineY - scale*yMax  ⇒  baselineY = inkTop + scale*yMax.
+                double baselineY = barTopY + p.topOffset() + p.scale() * p.yMax();
+                out.add(new PositionedGlyph(p.gid(), x, baselineY, p.scale()));
+            }
+        }
+    }
+
+    private static SurdShape chooseSurd(SfntFont font, int surdGid,
+                                        double requiredSpan, double scale) {
+        var construction = font.verticalVariants(surdGid);
+        int minSizeDesign = (int) Math.ceil(requiredSpan / scale);
+
+        if (construction != null) {
+            var variant = construction.variantAtLeast(minSizeDesign);
+            if (variant.isPresent()) {
+                return singleGlyphSurd(font, variant.getAsInt(), scale);
+            }
+            if (construction.hasAssembly()) {
+                return assembledSurd(font, construction.assembly(),
+                    font.minConnectorOverlap(), minSizeDesign, scale);
+            }
+            // Variants exist but none is tall enough and there is no assembly:
+            // use the largest pre-drawn variant (best available, undistorted).
+            var variants = construction.variants();
+            if (!variants.isEmpty()) {
+                return singleGlyphSurd(font, variants.get(variants.size() - 1).glyphId(), scale);
+            }
+        }
+
+        // Last resort (documented): no MATH construction at all — uniformly scale
+        // the base glyph to span the content. This thickens the strokes, so it is
+        // only reached for fonts lacking a vertical construction for U+221A.
+        GlyphOutline o = font.outline(surdGid);
+        double baseSpan = Math.max(1.0, o.yMax() - o.yMin());
+        double surdScale = Math.max(scale, requiredSpan / baseSpan);
+        return new SurdShape(
+            List.of(new SurdPiece(surdGid, surdScale, 0.0, o.yMax())),
+            font.advanceWidth(surdGid) * surdScale,
+            (o.yMax() - o.yMin()) * surdScale);
+    }
+
+    /** A surd rendered from a single pre-drawn glyph at the normal scale. */
+    private static SurdShape singleGlyphSurd(SfntFont font, int gid, double scale) {
+        GlyphOutline o = font.outline(gid);
+        return new SurdShape(
+            List.of(new SurdPiece(gid, scale, 0.0, o.yMax())),
+            font.advanceWidth(gid) * scale,
+            (o.yMax() - o.yMin()) * scale);
+    }
+
+    /**
+     * Builds a surd from a {@link com.lattex.font.GlyphAssembly}: fixed end parts
+     * plus repeated extenders, adjacent pieces overlapping by
+     * {@code minConnectorOverlap} (design units). Parts are stored bottom→top; we
+     * repeat the extenders the fewest times needed to reach {@code minSizeDesign}
+     * (minimum overlap ⇒ maximum height per repeat), then place the expanded stack
+     * top→bottom with each piece's ink top aligned to its tile top. This path is a
+     * completeness fallback for radicands taller than the largest pre-drawn
+     * variant; the small residual overshoot is absorbed by the Rule-11 excess split.
+     */
+    private static SurdShape assembledSurd(SfntFont font,
+                                           com.lattex.font.GlyphAssembly assembly,
+                                           int overlap, int minSizeDesign, double scale) {
+        var parts = assembly.parts();
+        boolean hasExtender = parts.stream().anyMatch(com.lattex.font.GlyphPart::isExtender);
+
+        // Fewest extender repetitions to reach the target (or 1 if no extenders).
+        int rep = 1;
+        List<com.lattex.font.GlyphPart> stack = expandAssembly(parts, rep);
+        while (hasExtender && assemblySpanDesign(stack, overlap) < minSizeDesign) {
+            stack = expandAssembly(parts, ++rep);
+        }
+
+        // Place bottom→top tiling into pieces ordered top→bottom.
+        int spanDesign = assemblySpanDesign(stack, overlap);
+        List<SurdPiece> pieces = new ArrayList<>(stack.size());
+        double maxWidth = 0.0;
+        double topOffset = 0.0;
+        for (int i = stack.size() - 1; i >= 0; i--) { // top part is last in bottom→top order
+            com.lattex.font.GlyphPart part = stack.get(i);
+            GlyphOutline o = font.outline(part.glyphId());
+            pieces.add(new SurdPiece(part.glyphId(), scale, topOffset, o.yMax()));
+            maxWidth = Math.max(maxWidth, font.advanceWidth(part.glyphId()) * scale);
+            topOffset += (part.fullAdvance() - overlap) * scale;
+        }
+        return new SurdShape(pieces, maxWidth, spanDesign * scale);
+    }
+
+    /** The parts list with each extender repeated {@code rep} times (bottom→top). */
+    private static List<com.lattex.font.GlyphPart> expandAssembly(
+            List<com.lattex.font.GlyphPart> parts, int rep) {
+        List<com.lattex.font.GlyphPart> out = new ArrayList<>();
+        for (com.lattex.font.GlyphPart p : parts) {
+            int times = p.isExtender() ? rep : 1;
+            for (int i = 0; i < times; i++) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
+    /** Total design-unit extent of a stacked assembly at the minimum overlap. */
+    private static int assemblySpanDesign(List<com.lattex.font.GlyphPart> stack, int overlap) {
+        int sum = 0;
+        for (com.lattex.font.GlyphPart p : stack) {
+            sum += p.fullAdvance();
+        }
+        return sum - overlap * Math.max(0, stack.size() - 1);
     }
 
     // ------------------------------------------------------------------
