@@ -15,11 +15,10 @@ The reviewed renderer foundation lands on `main`. It builds green and renders `x
 
 ### Rendering today
 
-`x^2` (the atom + superscript class) renders to SVG. The parser accepts the full MVP grammar; 2-D layout for fractions, roots, big-operator limits, and scaled delimiters lands in **S4** (next).
+**Fractions, roots, full sub/superscripts, big-operator limits, and scaled `\left…\right` delimiters** all render to SVG — S4 landed (a `Box` layout model, math styles, Appendix-G spacing). The parser accepts the full MVP grammar; broader symbol/accent/environment coverage is the next tier (see `LatteX_docs/gap.md`).
 
 ### In review / next
 
-- **S4 — Appendix-G layout** (fractions, roots, full sub/superscripts, big-operator limits, scaled delimiters). In peer review; merges next.
 - **Render options + `\lx` macro** — `render(latex, RenderOptions)` (scale / color / mathstyle) and the self-delimiting `\lx[…]{…}` author syntax (validated, typed, fail-loud). Built; review pending.
 - **Container affordances** — inline em-sizing + baseline alignment, `fx` effects, a click action-menu (Copy LaTeX / contextual Graph), and live graph plotting (`graph.open=single|multi`). Prototyped page-side; the production home is the S8 markdown→HTML docs pipeline. The SVG stays clean — every affordance lives on the container, never in the sanitized SVG.
 - **S7 — native CLI** — a GraalVM `lattex` binary so non-JVM stacks (Node, Python, …) can shell out for SVG. Groundwork in place (reflection-free; font resource-config shipped).
