@@ -1,21 +1,78 @@
 package com.lattex.font;
 
 /**
- * The subset of the OpenType {@code MATH} table's {@code MathConstants} that
- * the walking-skeleton superscript layout needs.
+ * The full OpenType {@code MATH} table {@code MathConstants} sub-table.
  *
- * <p>Fields follow the OpenType MATH spec:
- * <ul>
- *   <li>{@code scriptPercentScaleDown} — percentage the font size is scaled
- *       down for the first script level (a plain {@code int16} percentage).</li>
- *   <li>{@code superscriptShiftUp} — the {@code value} of the
- *       {@code superscriptShiftUp} {@code MathValueRecord}, in font design
- *       units: the standard shift-up of a superscript baseline above the
- *       main baseline.</li>
- * </ul>
+ * <p>Written from the public <em>OpenType MATH table</em> specification
+ * ({@code MathConstants}). Each field is in font design units unless it is a
+ * percentage ({@code *PercentScaleDown} / {@code radicalDegreeBottomRaisePercent},
+ * a plain {@code int16} percentage) or a minimum-height threshold
+ * ({@code delimitedSubFormulaMinHeight} / {@code displayOperatorMinHeight},
+ * a {@code uint16} in design units).
  *
- * <p>Only the two constants required by {@code x^2} are captured; the rest of
- * the table is deliberately left unparsed for M0.
+ * <p>The spec models most of these as {@code MathValueRecord} (an {@code int16}
+ * value plus an optional device-table offset for hinting at specific ppem
+ * sizes). LatteX renders to resolution-independent SVG, so only the {@code value}
+ * is captured; the device table is intentionally dropped.
+ *
+ * <p>Fields appear here in the exact order they are laid out in the table, so
+ * this record doubles as the wire-format map. See {@code SfntFont#readMathConstants}.
  */
-public record MathConstants(int scriptPercentScaleDown, int superscriptShiftUp) {
+public record MathConstants(
+        int scriptPercentScaleDown,
+        int scriptScriptPercentScaleDown,
+        int delimitedSubFormulaMinHeight,
+        int displayOperatorMinHeight,
+        int mathLeading,
+        int axisHeight,
+        int accentBaseHeight,
+        int flattenedAccentBaseHeight,
+        int subscriptShiftDown,
+        int subscriptTopMax,
+        int subscriptBaselineDropMin,
+        int superscriptShiftUp,
+        int superscriptShiftUpCramped,
+        int superscriptBottomMin,
+        int superscriptBaselineDropMax,
+        int subSuperscriptGapMin,
+        int superscriptBottomMaxWithSubscript,
+        int spaceAfterScript,
+        int upperLimitGapMin,
+        int upperLimitBaselineRiseMin,
+        int lowerLimitGapMin,
+        int lowerLimitBaselineDropMin,
+        int stackTopShiftUp,
+        int stackTopDisplayStyleShiftUp,
+        int stackBottomShiftDown,
+        int stackBottomDisplayStyleShiftDown,
+        int stackGapMin,
+        int stackDisplayStyleGapMin,
+        int stretchStackTopShiftUp,
+        int stretchStackBottomShiftDown,
+        int stretchStackGapAboveMin,
+        int stretchStackGapBelowMin,
+        int fractionNumeratorShiftUp,
+        int fractionNumeratorDisplayStyleShiftUp,
+        int fractionDenominatorShiftDown,
+        int fractionDenominatorDisplayStyleShiftDown,
+        int fractionNumeratorGapMin,
+        int fractionNumDisplayStyleGapMin,
+        int fractionRuleThickness,
+        int fractionDenominatorGapMin,
+        int fractionDenomDisplayStyleGapMin,
+        int skewedFractionHorizontalGap,
+        int skewedFractionVerticalGap,
+        int overbarVerticalGap,
+        int overbarRuleThickness,
+        int overbarExtraAscender,
+        int underbarVerticalGap,
+        int underbarRuleThickness,
+        int underbarExtraDescender,
+        int radicalVerticalGap,
+        int radicalDisplayStyleVerticalGap,
+        int radicalRuleThickness,
+        int radicalExtraAscender,
+        int radicalKernBeforeDegree,
+        int radicalKernAfterDegree,
+        int radicalDegreeBottomRaisePercent) {
 }
