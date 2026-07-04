@@ -584,6 +584,13 @@ class EffectsPageTest {
             var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
             var heatTint = (authored && authored.toLowerCase() !== 'currentcolor')
               ? color : '#ffb24d';
+            // Bolts read as LIGHT, not dark ink — a glowing electric strike against the
+            // night. Electric blue-white by default, or the author's glow-color if set;
+            // the halo (shadow) glows too so they blaze rather than draw as black cracks.
+            var boltColor = (authored && authored.toLowerCase() !== 'currentcolor')
+              ? authored : '#eaf3ff';
+            var boltGlow = (authored && authored.toLowerCase() !== 'currentcolor')
+              ? authored : '#8fc2ff';
             function heatFilter(level) {
               var outer = 6 + level * 22;                 // coloured halo: 6 → 28px
               var warm = 4 + level * 16;                  // warm/amber mid layer
@@ -620,7 +627,8 @@ class EffectsPageTest {
               backdrop.style.setProperty('--lx-dark', '0.5');
               el.style.filter = heatFilter(0.3); // gentle steady glow, no pulsing
               requestAnimationFrame(function () { backdrop.style.opacity = '1'; });
-              sctx.globalAlpha = 0.4; sctx.strokeStyle = color; sctx.lineWidth = 2;
+              sctx.globalAlpha = 0.55; sctx.strokeStyle = boltColor;
+              sctx.shadowColor = boltGlow; sctx.shadowBlur = 10; sctx.lineWidth = 2;
               stroke(sctx, jagged(0, vh / 2, cx, cy, 8, 6));
               setTimeout(function () { backdrop.style.opacity = '0'; }, 520);
               setTimeout(cleanup, 950);
@@ -638,7 +646,7 @@ class EffectsPageTest {
               function frame(now) {
                 var p = Math.min(1, (now - t0) / DRAW);
                 sctx.clearRect(0, 0, vw, vh);
-                sctx.strokeStyle = color; sctx.shadowColor = color; sctx.shadowBlur = 14;
+                sctx.strokeStyle = boltColor; sctx.shadowColor = boltGlow; sctx.shadowBlur = 16;
                 sources.forEach(function (s) {
                   for (var k = 0; k < 2; k++) { // 2 forked bolts per source
                     var pts = jagged(s[0], s[1], cx, cy, 12, 18 + k * 10);
