@@ -660,6 +660,10 @@ class GraphPageTest {
           var multiPops = [];
 
           function openGraphMulti(el, latex, fn, a, b) {
+            // Already open for this element? Focus that popup instead of stacking a duplicate.
+            for (var i = 0; i < multiPops.length; i++) {
+              if (multiPops[i].__lxSourceEl === el) { multiPops[i].focus(); return; }
+            }
             var p = document.createElement("div");
             p.className = "lx-graph-popup lx-graph-multi";
             p.setAttribute("role", "dialog");
@@ -671,6 +675,7 @@ class GraphPageTest {
             document.body.appendChild(p);
             fillGraph(p, latex, fn, a, b);
             positionMulti(p, el);
+            p.__lxSourceEl = el;
             multiPops.push(p);
             p.focus();
           }
