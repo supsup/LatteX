@@ -138,40 +138,77 @@ GraalVM (or running the same CLI on any JVM if you'd rather not).
 
 ## 4. Sam — a static-site generator author (Hugo / 11ty / mdBook)
 
-> *"My site is built with a static-site generator. I want a shortcode/filter so
-> writers can drop math into content and have it rendered at build time —
-> baked into the HTML, no client-side JS."*
+> *"My site is built with a static-site generator. I want writers to drop math
+> into content and have it rendered at build time — baked into the HTML, no
+> client-side JS, no runtime."*
 
-**Approach: a build-time filter/shortcode that calls `lattex`.** The shape is
-the same across generators: intercept the math, run `lattex` on it, emit the
-SVG. Here it is concretely as an **11ty** filter (11ty is Node, so it can call
-the binary directly):
+**Approach: a build-time preprocessor that rewrites `$…$`/`$$…$$` into inline SVG
+before the SSG's markdown engine runs.** From the engine's point of view the SVG
+is then just inline HTML that passes straight through. The host differs — an
+**11ty** `beforeMarkdown` transform, a **Hugo** render hook / pre-build step, an
+**mdBook** preprocessor — but the pattern is identical:
+
+```
+markdown source
+  → scan for math markers ($…$ inline, $$…$$ display) — fence + escape aware
+  → render each through LatteX (inline vs display; --batch for many-per-page)
+  → splice the baked SVG in place (malformed → leave the verbatim source)
+  → the SSG bakes markdown → HTML as usual
+  → static page. No browser JS. No runtime. No sanitizer.
+```
+
+Concretely as an **11ty** transform (11ty is Node, so it shells to the binary),
+one `lattex --batch` call per page rather than one process per equation:
 
 ```js
 // .eleventy.js
 const { execFileSync } = require("node:child_process");
 
+function renderAll(exprs, inline) {                       // ONE process for the page
+  const flags = inline ? ["--batch", "--inline", "-0"] : ["--batch", "-0"];
+  const out = execFileSync("lattex", flags,
+    { input: exprs.join("\0"), encoding: "utf8" });
+  return out.split("\0").slice(0, exprs.length);          // NUL-delimited SVGs, in order
+}
+
 module.exports = (eleventyConfig) => {
-  eleventyConfig.addFilter("latex", (expr) =>
-    execFileSync("lattex", [expr], { encoding: "utf8" })
-  );
+  eleventyConfig.addTransform("latex", (content) =>
+    rewriteMarkers(content, renderAll));  // fence/escape-aware scan → renderAll → splice
 };
 ```
 
-```njk
-{# in a template / page #}
-{{ "e^{i\\pi} + 1 = 0" | latex | safe }}
-```
+**The four details that bite** — learned wiring the real seam:
 
-The same idea maps onto other generators: an **mdBook** preprocessor (reads the
-book JSON on stdin, rewrites math spans, writes it back), or a **Hugo**
-pre-build script that expands math in content before `hugo` runs (Hugo templates
-can't execute binaries, so the shell-out lives in a wrapper step — the same
-preprocessor pattern as Scenario 2). In every case the engine underneath is one
-`lattex` invocation per expression.
+- **Inline vs display is not one filter.** `$…$` → `lattex --inline` (text style:
+  smaller fractions, side-set limits — it *sits on the prose line*); `$$…$$` →
+  `lattex` (display: full size, its own block). Render inline math in display mode
+  and full-height fractions shove the line open mid-sentence. One flag, but it's
+  "math in a sentence" reading right versus broken.
+- **Batch, or pay a JVM start per equation.** A `lattex` call *per marker* spawns
+  one process per equation — a 50-equation page pays 50 cold starts. Collect the
+  page's markers and make one `lattex --batch` call (NUL-delimited in and out, one
+  process); splice back by index. See **Scenario 7 (Nadia)** for batch depth. (A
+  JVM-based SSG can call the jar API in-process — no spawn at all.)
+- **Marker detection is fence- and escape-aware.** `$x$` inside a fenced code
+  block or a `code span` is a writer *documenting* the syntax — skip it. `\$` is a
+  literal dollar (a price: `\$5`), never a delimiter. Match `$$` before `$` so a
+  display block isn't mis-split into two empty inlines.
+- **Malformed → verbatim, never fail the build.** If an expression won't render
+  (`lattex` exits nonzero / emits an error record in `--batch`), leave the original
+  `$…$` source in place — don't abort the page bake. A typo degrades to visible
+  source the author can fix; the rest of the site still ships.
 
-**Status: Built via the CLI (S7).** The `lattex` binary is what all of these
-call; dedicated first-party plugins are **future** (see the status legend).
+**Why bake with LatteX at all** — the trust story a browser math renderer can't
+give a static site: LatteX emits **only** `svg`/`g`/`path`/`rect` with geometry +
+fill — never `<script>`, `<foreignObject>`, `<use>`, external refs, or `on*`. So
+the baked SVG is inert static geometry: **no downstream sanitization of the math,
+and no runtime JS** (unlike MathJax/KaTeX in the browser). For a site baking
+*untrusted contributor* markdown, "math in → safe static SVG out, no runtime, no
+sanitize" is the structural win a client-side renderer can't offer.
+
+**Status: Built via the CLI (S7).** The `lattex` binary — `--inline` for the prose
+split, `--batch` to amortize a page's many spans — is what all of these call;
+dedicated first-party SSG plugins are **future** (see the status legend).
 
 ---
 

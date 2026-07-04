@@ -54,6 +54,11 @@ public final class Main {
                                   the batch. Amortizes startup/spawn cost.
             -0, --null            In --batch, split stdin on NUL instead of
                                   newlines (for expressions containing newlines).
+            --inline              Render in INLINE (text) style — smaller fractions
+                                  and scripts, big-operator limits set to the side —
+                                  for math that sits on a line of prose. The default
+                                  is DISPLAY style (full size, its own block). Works
+                                  standalone and in --batch.
             -h, --help            Show this help and exit.
             -V, --version         Print the version and exit.
             --                    Treat all following arguments as the
@@ -63,6 +68,7 @@ public final class Main {
             lattex '\\frac{a}{b}'
             lattex 'x^2 + y^2 = z^2' -o pythagoras.svg
             printf '\\sqrt{2}' | lattex
+            lattex --inline '\\frac{a}{b}'                  # text-size, sits on a line
             printf 'x^2\\n\\frac a b\\n' | lattex --batch   # 2 NUL-delimited SVGs
 
         EXIT STATUS:
@@ -113,6 +119,7 @@ public final class Main {
         boolean optionsEnded = false;
         boolean batch = false;
         boolean nullDelim = false;
+        boolean inline = false;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -135,6 +142,7 @@ public final class Main {
                     }
                     case "--batch" -> batch = true;
                     case "-0", "--null" -> nullDelim = true;
+                    case "--inline" -> inline = true;
                     case "--" -> optionsEnded = true;
                     default -> {
                         err.println("lattex: error: unknown option '" + arg + "'");
@@ -153,7 +161,7 @@ public final class Main {
         }
 
         if (batch) {
-            return runBatch(in, out, err, outputFile, sawExpr, nullDelim);
+            return runBatch(in, out, err, outputFile, sawExpr, nullDelim, inline);
         }
 
         String latex;
@@ -176,7 +184,7 @@ public final class Main {
 
         String svg;
         try {
-            svg = LatteX.render(latex);
+            svg = inline ? LatteX.renderInline(latex) : LatteX.render(latex);
         } catch (MathSyntaxException e) {
             err.println("lattex: error: invalid LaTeX: " + e.getMessage());
             return 1;
@@ -208,7 +216,8 @@ public final class Main {
      * the exit code is 1 if any record failed, else 0. Blank records are skipped.
      */
     private static int runBatch(InputStream in, PrintStream out, PrintStream err,
-                                Path outputFile, boolean sawExpr, boolean nullDelim) {
+                                Path outputFile, boolean sawExpr, boolean nullDelim,
+                                boolean inline) {
         if (outputFile != null) {
             err.println("lattex: error: -o/--output cannot be combined with --batch"
                 + " (batch writes NUL-delimited records to stdout)");
@@ -238,7 +247,7 @@ public final class Main {
             }
             String record;
             try {
-                record = LatteX.render(latex);
+                record = inline ? LatteX.renderInline(latex) : LatteX.render(latex);
             } catch (MathSyntaxException e) {
                 record = "lattex: error: invalid LaTeX: " + e.getMessage();
                 anyFailed = true;
