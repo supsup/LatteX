@@ -10,6 +10,10 @@ target that drives the S3→S8 build-out and will feed the S8 render gallery.
 asserts the declared tier matches what the parser actually does today, so this
 document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 
+> **Generated file — do not edit by hand.** `CorpusDocTest` regenerates this
+> document from `corpus.tsv` on every build and fails if the committed copy is
+> stale. Edit the tsv (and rerun the build), never this file.
+
 ## Coverage tiers
 
 | Tier | Meaning | `parse()` today |
@@ -20,18 +24,14 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> Empirical result over **99 entries**: `PARSES-NOW` **34**, `NEEDS-S4-LAYOUT`
-> **3**, `NEEDS-PARSER-NODE` **60**, `NEEDS-FONT-STYLE` **2**, `PARSER-BUG`
-> **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire
-> not-yet frontier — no crashes. (Tier-2 font-variant alphabets now parse: the 8
-> `\mathX` family entries below moved from `NEEDS-FONT-STYLE` to `PARSES-NOW`.)
+> **Empirical frontier** over **132 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **119**, `NEEDS-S4-LAYOUT` **4**, `NEEDS-PARSER-NODE` **8**, `NEEDS-FONT-STYLE` **1**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
 capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
-`\frac`/`\sqrt`/scripts already establish. Constructs that don't even parse yet
-(matrices, cases, `\cfrac`) are tiered by their *current* frontier —
-`NEEDS-PARSER-NODE` — with a note that S4 layout follows once the node exists.
+`\frac`/`\sqrt`/scripts already establish. Constructs that don't parse yet are
+tiered by their current frontier (see **Not-yet frontier** below), with S4 layout
+following once the node exists.
 
 ---
 
@@ -45,42 +45,38 @@ capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
 | `x^{1.01}` | grouped (multi-token) superscript | `PARSES-NOW` |
 | `k_{n+1}=n^2+k_n^2-k_{n-1}` | recurrence with grouped scripts | `PARSES-NOW` |
 | `\frac{b}{c}` | simple fraction | `PARSES-NOW` |
-| `\frac{\frac{1}{x}+\frac{1}{y}}{y-z}` | nested fraction (braced args) — recursion of core `\frac` layout | `PARSES-NOW` |
-| `\frac{\frac1x+\frac1y}{y-z}` | nested fraction, terse `\frac1x` form — brace-optional single-token `\frac` arguments | `PARSES-NOW` |
+| `\frac{\frac{1}{x}+\frac{1}{y}}{y-z}` | nested fraction (braced args) — recursion of core frac layout | `PARSES-NOW` |
+| `\frac{\frac1x+\frac1y}{y-z}` | nested fraction, terse \\frac1x form — brace-optional single-token \\frac arguments | `PARSES-NOW` |
 | `\sqrt{x^3+5}` | square root | `PARSES-NOW` |
 | `\sqrt{\frac{a}{b}}` | root of a fraction (braced) — recursion of core radical layout | `PARSES-NOW` |
-| `\sqrt[n]{1+x+x^2+\cdots+x^n}` | nth root, with `\cdots` | `PARSES-NOW` |
-| `x=a_0+\cfrac{1}{a_1+\cfrac{1}{a_2+\cfrac{1}{a_3+\cfrac{1}{a_4}}}}` | continued fraction — **`\cfrac`** node (display-style fraction) | `PARSES-NOW` |
-| `{}^3/_7` | diagonal-fraction hack (empty-group scripts around a slash) | `PARSES-NOW` |
+| `\sqrt[n]{1+x+x^2+\cdots+x^n}` | nth root, with \\cdots | `PARSES-NOW` |
+| `x=a_0+\cfrac{1}{a_1+\cfrac{1}{a_2+\cfrac{1}{a_3+\cfrac{1}{a_4}}}}` | continued fraction — \\cfrac node (display-style fraction) | `PARSES-NOW` |
+| `{}^3/_7` | diagonal fraction hack (empty-group scripts around a slash) | `PARSES-NOW` |
 
 ## Sums / integrals / big operators
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
 | `\sum_{i=1}^{10} t_i` | sum with lower/upper limits | `PARSES-NOW` |
-| `\sum_{\substack{0<i<m\\0<j<n}}P(i,j)` | multi-line subscript — needs **`\substack`** node | `NEEDS-PARSER-NODE` |
+| `\sum_{\substack{0<i<m\\0<j<n}}P(i,j)` | multi-line subscript — needs \\substack node | `NEEDS-PARSER-NODE` |
 | `\int y\,dx` | indefinite integral with thin space | `PARSES-NOW` |
-| `\int_0^\infty e^{-x}\,dx` | definite integral over [0, ∞) | `PARSES-NOW` |
+| `\int_0^\infty e^{-x}\,dx` | definite integral over [0, infinity) | `PARSES-NOW` |
 | `\int_b^c` | integral with bare bounds | `PARSES-NOW` |
 | `\prod_{i=1}^n` | product with limits | `PARSES-NOW` |
-| `\coprod` | coproduct — needs **big-operator symbol** | `NEEDS-PARSER-NODE` |
-| `\bigoplus` | direct-sum big operator | `NEEDS-PARSER-NODE` |
-| `\bigotimes` | tensor-product big operator | `NEEDS-PARSER-NODE` |
-| `\bigcap` | big intersection | `NEEDS-PARSER-NODE` |
-| `\bigcup` | big union | `NEEDS-PARSER-NODE` |
-| `\bigsqcup` | big square union | `NEEDS-PARSER-NODE` |
-| `\bigvee` | big disjunction | `NEEDS-PARSER-NODE` |
-| `\bigwedge` | big conjunction | `NEEDS-PARSER-NODE` |
-| `\bigodot` | big circled dot | `NEEDS-PARSER-NODE` |
-| `\biguplus` | big multiset union | `NEEDS-PARSER-NODE` |
-| `\oint` | contour integral | `NEEDS-PARSER-NODE` |
+| `\coprod` | coproduct big operator | `PARSES-NOW` |
+| `\bigoplus` | direct-sum big operator | `PARSES-NOW` |
+| `\bigotimes` | tensor-product big operator | `PARSES-NOW` |
+| `\bigcap` | big intersection | `PARSES-NOW` |
+| `\bigcup` | big union | `PARSES-NOW` |
+| `\bigsqcup` | big square union | `PARSES-NOW` |
+| `\bigvee` | big disjunction | `PARSES-NOW` |
+| `\bigwedge` | big conjunction | `PARSES-NOW` |
+| `\bigodot` | big circled dot | `PARSES-NOW` |
+| `\biguplus` | big multiset union | `PARSES-NOW` |
+| `\oint` | contour integral | `PARSES-NOW` |
 | `\iint` | double integral | `NEEDS-PARSER-NODE` |
 | `\iiint` | triple integral | `NEEDS-PARSER-NODE` |
 | `\idotsint` | dotted multiple integral | `NEEDS-PARSER-NODE` |
-
-> All of `\coprod … \idotsint` share one feature: **extend the `BIG_OPERATORS`
-> table** (they already flow through the existing `BigOperator` node + limits
-> machinery once the symbol is registered).
 
 ## Delimiters — fixed
 
@@ -89,147 +85,173 @@ capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
 | `(a)` | round parentheses | `PARSES-NOW` |
 | `[b]` | square brackets | `PARSES-NOW` |
 | `\{c\}` | escaped curly braces | `PARSES-NOW` |
-| `|d|` | vertical bars | `PARSES-NOW` |
-| `\|e\|` | double-bar — parses, but `\|` currently maps to the single `|` glyph (fidelity gap, not a crash) | `PARSES-NOW` |
-| `\langle f\rangle` | angle brackets **as ordinary symbols** (outside `\left..\right`) | `NEEDS-PARSER-NODE` |
-| `\lfloor g\rfloor` | floor delimiters as ordinary symbols | `NEEDS-PARSER-NODE` |
-| `\lceil h\rceil` | ceiling delimiters as ordinary symbols | `NEEDS-PARSER-NODE` |
-| `\ulcorner i\urcorner` | corner delimiters as ordinary symbols | `NEEDS-PARSER-NODE` |
-| `/j\backslash` | slash and `\backslash` symbol | `NEEDS-PARSER-NODE` |
+| `\|d\|` | vertical bars | `PARSES-NOW` |
+| `\\|e\\|` | double-bar (note: parses, but \\\| currently maps to single \| glyph) | `PARSES-NOW` |
+| `\langle f\rangle` | angle brackets as ordinary symbols (outside \\left..\\right) | `PARSES-NOW` |
+| `\lfloor g\rfloor` | floor delimiters as ordinary symbols | `PARSES-NOW` |
+| `\lceil h\rceil` | ceiling delimiters as ordinary symbols | `PARSES-NOW` |
+| `\ulcorner i\urcorner` | corner delimiters as ordinary symbols | `PARSES-NOW` |
+| `/j\backslash` | slash and \\backslash symbol | `PARSES-NOW` |
 
-> The delimiter code points (`\langle \lfloor \lceil …`) are already known to
-> `readDelimiter` inside `\left..\right`; the gap is registering them in the
-> ordinary `SYMBOLS` table so they work as bare atoms too.
-
-## Delimiters — scaled (`\left \right`)
+## Delimiters — scaled (\left \right)
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
 | `\left(\frac{x^2}{y^3}\right)` | scaled parens — parses; needs delimiter sizing to content | `NEEDS-S4-LAYOUT` |
 | `\left\{\frac{x^2}{y^3}\right\}` | scaled braces — parses; needs delimiter sizing | `NEEDS-S4-LAYOUT` |
-| `\left.\frac{x^3}{3}\right|_0^1` | eval bar (braced) — parses; needs null-left + scaled-bar layout | `NEEDS-S4-LAYOUT` |
-| `\left.\frac{x^3}3\right|_0^1` | eval bar, terse `\frac` denominator — parses (single-token `\frac` arg); needs null-left + scaled-bar layout | `NEEDS-S4-LAYOUT` |
-| `P\left(A=2\middle|\frac{A^2}{B}>4\right)` | mid delimiter — needs **`\middle`** node | `NEEDS-PARSER-NODE` |
-| `\binom{n}{r}` | binomial coefficient — **`\binom`** node (rule-less paren-fenced stack) | `PARSES-NOW` |
-| `\frac{n!}{r!(n-r)!}=\binom{n}{r}` | binomial identity — **`\binom`** node (rule-less paren-fenced stack) | `PARSES-NOW` |
+| `\left.\frac{x^3}{3}\right\|_0^1` | eval bar (braced) — parses; needs null-left + scaled bar layout | `NEEDS-S4-LAYOUT` |
+| `\left.\frac{x^3}3\right\|_0^1` | eval bar, terse \\frac denominator — parses (single-token \\frac arg); needs null-left + scaled bar layout | `NEEDS-S4-LAYOUT` |
+| `P\left(A=2\middle\|\frac{A^2}{B}>4\right)` | mid delimiter — needs \\middle node | `NEEDS-PARSER-NODE` |
+| `\binom{n}{r}` | binomial coefficient — \\binom node (rule-less paren-fenced stack) | `PARSES-NOW` |
+| `\frac{n!}{r!(n-r)!}=\binom{n}{r}` | binomial identity — \\binom node (rule-less paren-fenced stack) | `PARSES-NOW` |
 
 ## Accents / decorations
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `a'` | prime (parses as an ordinary `'` atom) | `PARSES-NOW` |
-| `a''` | double prime (two `'` atoms) | `PARSES-NOW` |
-| `a''''` | quadruple prime (four `'` atoms) | `PARSES-NOW` |
-| `\hat{a}` | hat accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\bar{a}` | bar accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\dot{a}` | dot accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\ddot{a}` | double-dot accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\acute{a}` | acute accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\grave{a}` | grave accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\check{a}` | caron accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\breve{a}` | breve accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\tilde{a}` | tilde accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\vec{a}` | vector-arrow accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\mathring{a}` | ring accent — needs **Accent** node | `NEEDS-PARSER-NODE` |
-| `\aa` | the letter å (a-with-ring) — needs symbol | `NEEDS-PARSER-NODE` |
-| `\widehat{AAA}` | wide (stretchy) hat — needs **stretchy-Accent** node | `NEEDS-PARSER-NODE` |
-| `\widetilde{AAA}` | wide (stretchy) tilde — needs **stretchy-Accent** node | `NEEDS-PARSER-NODE` |
-| `\overline{a}` | overline — needs **Overline** node | `NEEDS-PARSER-NODE` |
-| `\underline{a}` | underline — needs **Underline** node | `NEEDS-PARSER-NODE` |
+| `a'` | prime (parses as an ordinary ' atom) | `PARSES-NOW` |
+| `a''` | double prime (two ' atoms) | `PARSES-NOW` |
+| `a''''` | quadruple prime (four ' atoms) | `PARSES-NOW` |
+| `\hat{a}` | hat accent (glyph over base) | `PARSES-NOW` |
+| `\bar{a}` | bar accent (macron over base) | `PARSES-NOW` |
+| `\dot{a}` | dot accent (dot over base) | `PARSES-NOW` |
+| `\ddot{a}` | double-dot accent (diaeresis over base) | `PARSES-NOW` |
+| `\acute{a}` | acute accent (over base) | `PARSES-NOW` |
+| `\grave{a}` | grave accent (over base) | `PARSES-NOW` |
+| `\check{a}` | caron accent (over base) | `PARSES-NOW` |
+| `\breve{a}` | breve accent (over base) | `PARSES-NOW` |
+| `\tilde{a}` | tilde accent (over base) | `PARSES-NOW` |
+| `\vec{a}` | vector arrow accent (over base) | `PARSES-NOW` |
+| `\mathring{a}` | ring accent (over base) | `PARSES-NOW` |
+| `\aa` | the letter a-with-ring (å) — needs symbol | `NEEDS-PARSER-NODE` |
+| `\widehat{AAA}` | wide (stretchy) hat sized to the base | `PARSES-NOW` |
+| `\widetilde{AAA}` | wide (stretchy) tilde sized to the base | `PARSES-NOW` |
+| `\overline{a}` | overline (rule over base) | `PARSES-NOW` |
+| `\underline{a}` | underline (rule under base) | `PARSES-NOW` |
 
 ## Text / spacing / color
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2` | text runs — needs **`\text`** node (upright text mode) | `NEEDS-PARSER-NODE` |
-| `f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}` | piecewise cases — needs **cases environment** node (then S4 layout) | `NEEDS-PARSER-NODE` |
-| `k={\color{red}x}-2` | colored subterm — needs **`\color`** node + emitter color | `NEEDS-FONT-STYLE` |
+| `a\,b\:c\;d` | thin / medium / thick fixed spaces (3mu / 4mu / 5mu) | `PARSES-NOW` |
+| `a\thinspace b\medspace c\thickspace d` | named fixed spaces (aliases of \\, \\: \\;) | `PARSES-NOW` |
+| `a\!b\negthinspace c\negmedspace d\negthickspace e` | negative fixed spaces (-3mu / -4mu / -5mu) | `PARSES-NOW` |
+| `x\quad y\qquad z` | quad (18mu) and qquad (36mu) | `PARSES-NOW` |
+| `a\enspace b\ c\>d~e` | enspace (.5em), control space, \\> (=\\:), and tie ~ | `PARSES-NOW` |
+| `\phantom{M}x\hphantom{yy}z\vphantom{(}w` | phantom / hphantom / vphantom reserve space with no ink | `PARSES-NOW` |
+| `\sqrt{x}+\mathstrut y` | mathstrut — a zero-width strut sizing the row | `PARSES-NOW` |
+| `\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2` | text runs — needs \\text node (upright text mode) | `PARSES-NOW` |
+| `f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}` | piecewise cases — cases environment (left brace over two left-aligned columns) | `PARSES-NOW` |
+| `k={\color{red}x}-2` | colored subterm — needs \\color node + emitter color | `NEEDS-FONT-STYLE` |
 
 ## Matrices / arrays
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `\begin{matrix}a&b\\c&d\end{matrix}` | plain matrix — **environment + `&`/`\\`** grid node | `PARSES-NOW` |
+| `\begin{matrix}a&b\\c&d\end{matrix}` | plain matrix — environment with &/\\\\ grid node | `PARSES-NOW` |
 | `\begin{pmatrix}a&b\\c&d\end{pmatrix}` | parenthesized matrix | `PARSES-NOW` |
 | `\begin{bmatrix}a&b\\c&d\end{bmatrix}` | bracketed matrix | `PARSES-NOW` |
 | `\begin{Bmatrix}a&b\\c&d\end{Bmatrix}` | brace matrix | `PARSES-NOW` |
 | `\begin{vmatrix}a&b\\c&d\end{vmatrix}` | determinant (single-bar) matrix | `PARSES-NOW` |
 | `\begin{Vmatrix}a&b\\c&d\end{Vmatrix}` | double-bar (norm) matrix | `PARSES-NOW` |
 | `\begin{smallmatrix}a&b\\c&d\end{smallmatrix}` | inline small matrix (script style) | `PARSES-NOW` |
-| `A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}` | full matrix with `\cdots \vdots \ddots` | `PARSES-NOW` |
-| `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs **`\bordermatrix`** node | `NEEDS-PARSER-NODE` |
-| `\begin{array}{c|c}1&2\\\hline 3&4\end{array}` | array with vertical+horizontal rules — **array node + column spec + `\hline`** | `PARSES-NOW` |
-| `\vdots` | vertical-dots symbol | `PARSES-NOW` |
-| `\ddots` | diagonal-dots symbol | `PARSES-NOW` |
+| `A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}` | full matrix with \\cdots \\vdots \\ddots | `PARSES-NOW` |
+| `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs \\bordermatrix node | `NEEDS-PARSER-NODE` |
+| `\begin{array}{c\|c}1&2\\\hline 3&4\end{array}` | array with vertical and horizontal rules — array node + column spec + \\hline | `PARSES-NOW` |
+| `\vdots` | vertical dots symbol | `PARSES-NOW` |
+| `\ddots` | diagonal dots symbol | `PARSES-NOW` |
 
 ## Named operators / misc
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `\lim_{x\to\infty}\exp(-x)=0` | limit and exp — needs **named-operator** node (`\lim` under-limits, `\exp`) | `NEEDS-PARSER-NODE` |
-| `\cos(2\theta)=\cos^2\theta-\sin^2\theta` | cos and sin — needs **named-operator** node | `NEEDS-PARSER-NODE` |
+| `\lim_{x\to\infty}\exp(-x)=0` | limit and exp — \\lim (under-limits in display) + roman \\exp | `PARSES-NOW` |
+| `\cos(2\theta)=\cos^2\theta-\sin^2\theta` | cos and sin — roman named operators with beside scripts | `PARSES-NOW` |
 | `\frac{d}{dx}(kg(x))` | derivative operator built from primitives | `PARSES-NOW` |
-| `x\equiv a\pmod{b}` | modulo — needs **`\pmod`** node | `NEEDS-PARSER-NODE` |
-| `\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)` | bold beta vector — **`\boldsymbol`** remaps to the bold math-alphanumeric run (incl. Greek) | `PARSES-NOW` |
-| `\top` | top symbol | `NEEDS-PARSER-NODE` |
-| `\bot` | bottom symbol | `NEEDS-PARSER-NODE` |
+| `x\equiv a\pmod{b}` | modulo — needs \\pmod node | `NEEDS-PARSER-NODE` |
+| `\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)` | bold beta vector — \\boldsymbol remaps to bold math-alphanumeric (incl. Greek) | `PARSES-NOW` |
+| `\top` | top symbol | `PARSES-NOW` |
+| `\bot` | bottom symbol | `PARSES-NOW` |
 
 ## Font / style alphabets
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `\mathcal{ABCDEF}` | calligraphic/script alphabet — remaps to the `U+1D49C` run (+ Letterlike exceptions) | `PARSES-NOW` |
-| `\mathbb{ABCDEF}` | blackboard-bold alphabet — remaps to `U+1D538` (C/H/N/P/Q/R/Z via Letterlike) | `PARSES-NOW` |
-| `\mathfrak{ABCDEF}` | fraktur alphabet — remaps to `U+1D504` (C/H/I/R/Z via Letterlike) | `PARSES-NOW` |
-| `\mathrm{ABCDEF}` | upright roman — needs **font-variant** node | `NEEDS-FONT-STYLE` |
-| `\mathsf{ABCDEF}` | sans-serif — remaps to the `U+1D5A0` run | `PARSES-NOW` |
-| `\mathit{ABCDEF}` | math italic — remaps to the `U+1D434` run (`h` via Letterlike) | `PARSES-NOW` |
-| `\mathbf{ABCDEF}` | bold — remaps to the `U+1D400` run | `PARSES-NOW` |
-| `\boldsymbol{abcdef}` | bold symbols — remaps to the bold math-alphanumeric run | `PARSES-NOW` |
+| `\mathcal{ABCDEF}` | calligraphic/script alphabet — remaps to U+1D49C run (+ Letterlike exceptions) | `PARSES-NOW` |
+| `\mathbb{ABCDEF}` | blackboard-bold alphabet — remaps to U+1D538 run (C/H/N/P/Q/R/Z via Letterlike) | `PARSES-NOW` |
+| `\mathfrak{ABCDEF}` | fraktur alphabet — remaps to U+1D504 run (C/H/I/R/Z via Letterlike) | `PARSES-NOW` |
+| `\mathrm{ABCDEF}` | upright roman — needs font-variant node | `PARSES-NOW` |
+| `\mathsf{ABCDEF}` | sans-serif — remaps to U+1D5A0 run | `PARSES-NOW` |
+| `\mathit{ABCDEF}` | math italic — remaps to U+1D434 run (h via Letterlike) | `PARSES-NOW` |
+| `\mathbf{ABCDEF}` | bold — remaps to U+1D400 run | `PARSES-NOW` |
+| `\boldsymbol{abcdef}` | bold symbols — remaps to bold math-alphanumeric run | `PARSES-NOW` |
 | `\alpha,A,\beta,B,\gamma,\Gamma,\pi,\Pi,\phi,\mu,\Phi` | greek upper+lower mixed with latin | `PARSES-NOW` |
-| `\varphi` | variant phi — needs symbol | `NEEDS-PARSER-NODE` |
+| `\varphi` | variant phi | `PARSES-NOW` |
 
----
-
-## `\lx` macro / affordances
-
-The `\lx[options]{body}` author macro — styling, effects, graphs, semantics. `style.*` applies to the SVG (scale / color / math-style); `fx.*`, semantics (`intent` / `concept` / `a11y.label` / `data.*`), and `graph.*` ride the `.lx-math` **container** as `data-lx-*`, never the SVG.
+## Tier-1a symbol breadth (relations / binops / arrows / negations)
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `\lx[style.color=#cc0000]{\frac{a+b}{c}}` | inline color styling | `PARSES-NOW` |
-| `\lx[style.scale=lg]{x^2}` | scale bucket | `PARSES-NOW` |
-| `\lx[style.mathstyle=display]{\sum_{i=1}^{n} i}` | math-style override | `PARSES-NOW` |
-| `\lx[fx.enter=boom]{E=mc^2}` | enter effect | `PARSES-NOW` |
-| `\lx[fx.hover=pulse,fx.click=glow,fx.duration=400ms]{x^2}` | hover / click effects + duration | `PARSES-NOW` |
-| `\lx[intent=ratio,concept=normalized_score]{\frac{a+b}{c}}` | semantic intent / concept | `PARSES-NOW` |
-| `\lx[a11y.label="normalized score"]{\frac{a}{b}}` | accessibility label | `PARSES-NOW` |
-| `\lx[data.source=calc_12]{x^2}` | data attribute | `PARSES-NOW` |
-| `\lx[style.color=#333,fx.enter=fade,intent=ratio,a11y.label="a ratio"]{\frac{a}{b}}` | combined options | `PARSES-NOW` |
-| `\lx[graph.domain=-3..3]{x^2-3}` | graphable domain (`graph.*` option) | `PARSES-NOW` |
-| `\lx[graph.open=multi]{\frac{1}{x}}` | multi-open graph (`graph.*` option) | `PARSES-NOW` |
+| `a\leq b\geq c\equiv d\sim e\simeq f\cong g` | core relations | `PARSES-NOW` |
+| `x\prec y\succ z\ll w\gg v\subseteq u\supseteq t` | ordering + set relations | `PARSES-NOW` |
+| `a\parallel b\perp c\models d\vdash e\propto f\approx g` | logical + geometric relations | `PARSES-NOW` |
+| `a\pm b\mp c\times d\div e\cdot f\ast g\star h` | arithmetic binary operators | `PARSES-NOW` |
+| `a\oplus b\ominus c\otimes d\oslash e\odot f` | circled binary operators | `PARSES-NOW` |
+| `a\cap b\cup c\sqcap d\sqcup e\wedge f\vee g\setminus h` | set + lattice binary operators | `PARSES-NOW` |
+| `a\to b\gets c\mapsto d\leftrightarrow e` | basic arrows | `PARSES-NOW` |
+| `a\Leftarrow b\Rightarrow c\Leftrightarrow d\longrightarrow e` | double + long arrows | `PARSES-NOW` |
+| `a\hookrightarrow b\rightleftharpoons c\leadsto d` | harpoon + hook + squiggle arrows | `PARSES-NOW` |
+| `\infty\partial\nabla\hbar\ell\Re\Im\aleph\forall\exists` | miscellaneous ordinary symbols | `PARSES-NOW` |
+| `a\nleq b\ngeq c\nmid d\notin e\neq f` | explicit precomposed negations | `PARSES-NOW` |
+| `a\not= b,\ x\not\in S,\ A\not\subset B` | \\not prefix over precomposed relations | `PARSES-NOW` |
+| `\varepsilon\vartheta\varpi\varrho\varsigma\varphi\digamma` | greek variant letters | `PARSES-NOW` |
 
-## Ranked frontier — what the gallery demands most
+## Lx macro / affordances (styling · effects · graphs · semantics)
 
-New parser features ordered by how many corpus entries each unblocks:
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\lx[style.color=#cc0000]{\frac{a+b}{c}}` | lx macro — inline color styling | `PARSES-NOW` |
+| `\lx[style.scale=lg]{x^2}` | lx macro — scale bucket | `PARSES-NOW` |
+| `\lx[style.mathstyle=display]{\sum_{i=1}^{n} i}` | lx macro — math-style override | `PARSES-NOW` |
+| `\lx[fx.enter=boom]{E=mc^2}` | lx macro — enter effect | `PARSES-NOW` |
+| `\lx[fx.hover=pulse,fx.click=glow,fx.duration=400ms]{x^2}` | lx macro — hover/click effects + duration | `PARSES-NOW` |
+| `\lx[graph.domain=-3..3]{x^2-3}` | lx macro — graphable domain (graph.* option) | `PARSES-NOW` |
+| `\lx[graph.open=multi]{\frac{1}{x}}` | lx macro — multi-open graph (graph.* option) | `PARSES-NOW` |
+| `\lx[intent=ratio,concept=normalized_score]{\frac{a+b}{c}}` | lx macro — semantic intent/concept | `PARSES-NOW` |
+| `\lx[a11y.label="normalized score"]{\frac{a}{b}}` | lx macro — accessibility label | `PARSES-NOW` |
+| `\lx[data.source=calc_12]{x^2}` | lx macro — data attribute | `PARSES-NOW` |
+| `\lx[style.color=#333,fx.enter=fade,intent=ratio,a11y.label="a ratio"]{\frac{a}{b}}` | lx macro — combined options | `PARSES-NOW` |
 
-1. **Accent node** (incl. stretchy + over/underline) — ~15 entries:
-   `\hat \bar \dot \ddot \acute \grave \check \breve \tilde \vec \mathring`,
-   plus `\widehat \widetilde` (stretchy) and `\overline \underline`.
-2. **Extend the `BIG_OPERATORS` symbol table** — ~14 entries:
-   `\coprod \bigoplus \bigotimes \bigcap \bigcup \bigsqcup \bigvee \bigwedge
-   \bigodot \biguplus \oint \iint \iiint \idotsint` (reuse the existing
-   `BigOperator` node).
-3. **Extend the ordinary `SYMBOLS` table** — ~11 entries: delimiter symbols as
-   bare atoms (`\langle \rangle \lfloor \rfloor \lceil \rceil \ulcorner
-   \urcorner \backslash`) + misc (`\vdots \ddots \top \bot \varphi \aa`).
-4. **Font-variant / `Styled` node** — 10 entries: `\mathcal \mathbb \mathfrak
-   \mathrm \mathsf \mathit \mathbf \boldsymbol` (+ `NEEDS-FONT-STYLE` glyph sets).
-5. **Environment / alignment node** (`\begin..\end`, `&`, `\\`) — ~9 entries:
-   the five matrix flavors + full matrix + `array` (+ `\hline`, column spec) +
-   `cases` (+ `\bordermatrix` as a variant). Also unblocks S4 grid layout.
-6. **Named-operator node** — 3 entries: `\lim \exp \cos \sin` (and `\pmod`).
-7. **Brace-optional single-token arguments** (`\frac1x`, `\sqrt2`) — 2 entries.
-8. **`\binom` node** — 2 entries.
-9. Singletons: **`\cfrac`**, **`\middle`**, **`\substack`**, **`\text`**,
-   **`\color`**, **`\pmod`** — 1 entry each (but `\text` recurs inside `cases`).
+---
+
+## Not-yet frontier
+
+Every row that does **not** yet parse into a tree — i.e. everything outside `PARSES-NOW` — grouped by tier, generated straight from `corpus.tsv` so it can never list an already-shipped feature as still-needed.
+
+### `NEEDS-S4-LAYOUT` — parses today; faithful rendering needs *new* 2D layout (delimiter sizing to content, eval bars) (4)
+
+| LaTeX | Description |
+| --- | --- |
+| `\left(\frac{x^2}{y^3}\right)` | scaled parens — parses; needs delimiter sizing to content |
+| `\left\{\frac{x^2}{y^3}\right\}` | scaled braces — parses; needs delimiter sizing |
+| `\left.\frac{x^3}{3}\right\|_0^1` | eval bar (braced) — parses; needs null-left + scaled bar layout |
+| `\left.\frac{x^3}3\right\|_0^1` | eval bar, terse \\frac denominator — parses (single-token \\frac arg); needs null-left + scaled bar layout |
+
+### `NEEDS-PARSER-NODE` — needs a new `MathNode` / parser feature (named in the row) (8)
+
+| LaTeX | Description |
+| --- | --- |
+| `\sum_{\substack{0<i<m\\0<j<n}}P(i,j)` | multi-line subscript — needs \\substack node |
+| `\iint` | double integral |
+| `\iiint` | triple integral |
+| `\idotsint` | dotted multiple integral |
+| `P\left(A=2\middle\|\frac{A^2}{B}>4\right)` | mid delimiter — needs \\middle node |
+| `\aa` | the letter a-with-ring (å) — needs symbol |
+| `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs \\bordermatrix node |
+| `x\equiv a\pmod{b}` | modulo — needs \\pmod node |
+
+### `NEEDS-FONT-STYLE` — the missing feature is fundamentally a font-variant glyph set or emitter color (1)
+
+| LaTeX | Description |
+| --- | --- |
+| `k={\color{red}x}-2` | colored subterm — needs \\color node + emitter color |
