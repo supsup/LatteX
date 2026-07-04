@@ -54,10 +54,17 @@ RenderOptions opts = RenderOptions.defaults()   // scale 1.0, currentColor, DISP
 String svg = LatteX.render("\\frac{a+b}{c}", opts);
 ```
 
-> Math renders in **display** style by default. Selecting **inline** (text)
-> style from the public API is on the way (a `RenderOptions.inline()/.display()`
-> convenience); today the `mathStyle` field's type lives in a non-exported
-> package, so it is not settable by an external caller.
+> Math renders in **display** style by default. For math set in a line of prose,
+> use **inline** (text) style — smaller fractions and scripts, big-operator limits
+> set beside rather than stacked, so it sits on the text line:
+>
+> ```java
+> String inline = LatteX.renderInline("\\frac{a}{b}");                  // convenience
+> String same   = LatteX.render("\\frac{a}{b}", RenderOptions.defaults().inline());
+> ```
+>
+> `RenderOptions.defaults().inline()` / `.display()` are api-only selectors, so you
+> never have to name the (non-exported) style type.
 
 - **`scale`** — output size multiplier (default `1.0`), folded into the effective
   font size so the whole geometry scales as crisp vector output, not a CSS zoom.

@@ -108,6 +108,21 @@ public final class LatteX {
     }
 
     /**
+     * Render <em>inline</em> math — for a formula embedded in a line of running prose
+     * ({@code $…$}). Same as {@link #render(String)} but in text (inline) math style:
+     * smaller fractions and scripts, big-operator limits set beside rather than stacked,
+     * so the math sits comfortably on a text line instead of pushing it open. Equivalent
+     * to {@code render(latex, RenderOptions.defaults().inline())}. The SVG stays inside the
+     * same minimal {@code svg/g/path/rect} alphabet.
+     *
+     * @param latex the LaTeX math source
+     * @return a self-contained inline-styled SVG document
+     */
+    public static String renderInline(String latex) {
+        return render(latex, RenderOptions.defaults().inline());
+    }
+
+    /**
      * Render an {@code \lx}-annotated formula to an HTML fragment: the styled inner
      * {@code <svg>} wrapped in a trusted {@code <span class="lx-math">} container
      * that carries the macro's effect and semantic annotations as {@code data-lx-*}

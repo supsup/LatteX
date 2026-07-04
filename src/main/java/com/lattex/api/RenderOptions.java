@@ -68,6 +68,24 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle) {
         return new RenderOptions(scale, color, newStyle);
     }
 
+    /**
+     * A copy in <em>inline</em> (text) math style — smaller fractions and scripts, big-operator
+     * limits set to the side rather than stacked. This is the right style for math embedded in a
+     * line of running prose ({@code $…$}). An api-only selector so a caller need not name the
+     * (non-exported) style type.
+     */
+    public RenderOptions inline() {
+        return withMathStyle(MathStyle.TEXT);
+    }
+
+    /**
+     * A copy in <em>display</em> math style (the default) — full-size fractions and stacked
+     * big-operator limits, for a standalone displayed equation ({@code $$…$$} / {@code \[…\]}).
+     */
+    public RenderOptions display() {
+        return withMathStyle(MathStyle.DISPLAY);
+    }
+
     // ---- string parsers (the typed boundary for the markdown/CLI layer) ----
 
     /**
