@@ -54,11 +54,34 @@ public final class LatteX {
      * @return the SVG document
      */
     public static String render(String latex) {
+        return render(latex, RenderOptions.defaults());
+    }
+
+    /**
+     * Render a LaTeX math expression to a self-contained SVG document, applying
+     * the given styling options.
+     *
+     * <p>The three knobs thread through the pipeline without touching geometry:
+     * <ul>
+     *   <li>{@link RenderOptions#scale()} folds into the effective font size, so
+     *       the whole formula scales proportionally as crisp vector output;</li>
+     *   <li>{@link RenderOptions#mathStyle()} seeds the top-level layout style;</li>
+     *   <li>{@link RenderOptions#color()} becomes the emitter's {@code fill}
+     *       value (a value, never a new element/attribute).</li>
+     * </ul>
+     *
+     * @param latex the LaTeX math source (without surrounding {@code $} delimiters)
+     * @param opts  the styling options (never {@code null})
+     * @return the SVG document
+     */
+    public static String render(String latex, RenderOptions opts) {
+        java.util.Objects.requireNonNull(opts, "opts");
         MathNode node = MathParser.parse(latex);
         SfntFont font = FontHolder.FONT;
-        LayoutContext ctx = new LayoutContext(font, font.mathConstants(), DISPLAY_FONT_SIZE);
+        LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+            DISPLAY_FONT_SIZE * opts.scale(), opts.mathStyle(), false);
         Layout layout = LayoutEngine.layout(node, ctx);
-        return SvgEmitter.emit(layout, font, describe(node));
+        return SvgEmitter.emit(layout, font, describe(node), opts.color().svgValue());
     }
 
     /** A plain-language accessibility label for a math tree. */
