@@ -24,13 +24,27 @@ public final class SvgEmitter {
     private static final String SVG_NS = "http://www.w3.org/2000/svg";
     /** Small margin (user units) so glyph ink is not flush against the edge. */
     private static final double MARGIN = 2.0;
+    /** The default glyph fill — opaque black. */
     private static final String GLYPH_FILL = "#000000";
 
     private SvgEmitter() {
     }
 
-    /** Emits the SVG document for a laid-out formula. */
+    /** Emits the SVG document for a laid-out formula using the default black fill. */
     public static String emit(Layout layout, SfntFont font, String ariaLabel) {
+        return emit(layout, font, ariaLabel, GLYPH_FILL);
+    }
+
+    /**
+     * Emits the SVG document for a laid-out formula with an explicit fill value.
+     *
+     * @param fill the SVG {@code fill} value — MUST already be an allow-listed
+     *             literal ({@code currentColor} or a {@code #rrggbb} hex), i.e. a
+     *             {@link com.lattex.api.Color#svgValue()}. This is a fill VALUE
+     *             only; it never introduces a new element or attribute, so the
+     *             minimal-alphabet contract is preserved.
+     */
+    public static String emit(Layout layout, SfntFont font, String ariaLabel, String fill) {
         double vbX = layout.minX() - MARGIN;
         double vbY = layout.minY() - MARGIN;
         double vbW = layout.width() + 2 * MARGIN;
@@ -46,7 +60,7 @@ public final class SvgEmitter {
             .append(" role=\"img\"")
             .append(" aria-label=\"").append(escape(ariaLabel)).append("\">\n");
 
-        svg.append("  <g fill=\"").append(GLYPH_FILL).append("\">\n");
+        svg.append("  <g fill=\"").append(fill).append("\">\n");
         for (PositionedGlyph g : layout.glyphs()) {
             String d = GlyphPath.toPathData(font.outline(g.glyphId()));
             if (d.isEmpty()) {
