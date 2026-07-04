@@ -1,10 +1,15 @@
 plugins {
     `java-library`
     application
+    `maven-publish`
 }
 
 group = "com.lattex"
-version = "0.1.0-SNAPSHOT"
+// A real, immutable release version — NOT a rolling SNAPSHOT. Consumers (Stafficy
+// /docs) pin this exact version; a LatteX change requires an explicit version bump +
+// republish, so a pinned consumer can never silently go stale (plan 38cf48e4). Bump on
+// each release that downstream should pick up.
+version = "0.1.0"
 
 java {
     toolchain {
@@ -46,6 +51,33 @@ tasks.jar {
             "Implementation-Title" to "LatteX",
             "Implementation-Version" to project.version.toString(),
         )
+    }
+}
+
+// ---- Publishing (plan 38cf48e4) -------------------------------------------------
+//
+// A versioned, immutable Maven artifact so downstream (Stafficy /docs) resolves
+// `com.lattex:lattex:<version>` by coordinate instead of a hand-vendored SNAPSHOT
+// jar that goes stale in hours. `./gradlew publishToMavenLocal` installs it into
+// ~/.m2 (resolvable on-host); a real remote (GitHub Packages / internal) can be
+// added later as a repositories{} entry without touching the publication.
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            // The `java` component carries the main jar plus the sources & javadoc
+            // jars (withSourcesJar()/withJavadocJar() above).
+            from(components["java"])
+            pom {
+                name = "LatteX"
+                description = "Clean-room, pure-Java LaTeX-math to SVG renderer; zero runtime dependencies."
+                licenses {
+                    license {
+                        name = "Apache-2.0"
+                        url = "https://www.apache.org/licenses/LICENSE-2.0"
+                    }
+                }
+            }
+        }
     }
 }
 
