@@ -20,10 +20,11 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> Empirical result over **99 entries**: `PARSES-NOW` **26**, `NEEDS-S4-LAYOUT`
-> **3**, `NEEDS-PARSER-NODE` **60**, `NEEDS-FONT-STYLE` **10**, `PARSER-BUG`
+> Empirical result over **99 entries**: `PARSES-NOW` **34**, `NEEDS-S4-LAYOUT`
+> **3**, `NEEDS-PARSER-NODE` **60**, `NEEDS-FONT-STYLE` **2**, `PARSER-BUG`
 > **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire
-> not-yet frontier — no crashes.
+> not-yet frontier — no crashes. (Tier-2 font-variant alphabets now parse: the 8
+> `\mathX` family entries below moved from `NEEDS-FONT-STYLE` to `PARSES-NOW`.)
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -167,7 +168,7 @@ capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
 | `\cos(2\theta)=\cos^2\theta-\sin^2\theta` | cos and sin — needs **named-operator** node | `NEEDS-PARSER-NODE` |
 | `\frac{d}{dx}(kg(x))` | derivative operator built from primitives | `PARSES-NOW` |
 | `x\equiv a\pmod{b}` | modulo — needs **`\pmod`** node | `NEEDS-PARSER-NODE` |
-| `\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)` | bold beta vector — needs **`\boldsymbol`** (bold-math variant) | `NEEDS-FONT-STYLE` |
+| `\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)` | bold beta vector — **`\boldsymbol`** remaps to the bold math-alphanumeric run (incl. Greek) | `PARSES-NOW` |
 | `\top` | top symbol | `NEEDS-PARSER-NODE` |
 | `\bot` | bottom symbol | `NEEDS-PARSER-NODE` |
 
@@ -175,14 +176,14 @@ capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `\mathcal{ABCDEF}` | calligraphic alphabet — needs **font-variant** node + glyphs | `NEEDS-FONT-STYLE` |
-| `\mathbb{ABCDEF}` | blackboard-bold alphabet — needs **font-variant** node + glyphs | `NEEDS-FONT-STYLE` |
-| `\mathfrak{ABCDEF}` | fraktur alphabet — needs **font-variant** node + glyphs | `NEEDS-FONT-STYLE` |
+| `\mathcal{ABCDEF}` | calligraphic/script alphabet — remaps to the `U+1D49C` run (+ Letterlike exceptions) | `PARSES-NOW` |
+| `\mathbb{ABCDEF}` | blackboard-bold alphabet — remaps to `U+1D538` (C/H/N/P/Q/R/Z via Letterlike) | `PARSES-NOW` |
+| `\mathfrak{ABCDEF}` | fraktur alphabet — remaps to `U+1D504` (C/H/I/R/Z via Letterlike) | `PARSES-NOW` |
 | `\mathrm{ABCDEF}` | upright roman — needs **font-variant** node | `NEEDS-FONT-STYLE` |
-| `\mathsf{ABCDEF}` | sans-serif — needs **font-variant** node + glyphs | `NEEDS-FONT-STYLE` |
-| `\mathit{ABCDEF}` | math italic — needs **font-variant** node | `NEEDS-FONT-STYLE` |
-| `\mathbf{ABCDEF}` | bold — needs **font-variant** node + glyphs | `NEEDS-FONT-STYLE` |
-| `\boldsymbol{abcdef}` | bold symbols — needs **bold-math** variant | `NEEDS-FONT-STYLE` |
+| `\mathsf{ABCDEF}` | sans-serif — remaps to the `U+1D5A0` run | `PARSES-NOW` |
+| `\mathit{ABCDEF}` | math italic — remaps to the `U+1D434` run (`h` via Letterlike) | `PARSES-NOW` |
+| `\mathbf{ABCDEF}` | bold — remaps to the `U+1D400` run | `PARSES-NOW` |
+| `\boldsymbol{abcdef}` | bold symbols — remaps to the bold math-alphanumeric run | `PARSES-NOW` |
 | `\alpha,A,\beta,B,\gamma,\Gamma,\pi,\Pi,\phi,\mu,\Phi` | greek upper+lower mixed with latin | `PARSES-NOW` |
 | `\varphi` | variant phi — needs symbol | `NEEDS-PARSER-NODE` |
 

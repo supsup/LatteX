@@ -197,6 +197,26 @@ public final class MathParser {
         Map.entry(0x21D0, 0x21CD), // ⇐  -> ⇍
         Map.entry(0x21D4, 0x21CE)); // ⇔ -> ⇎
 
+    /**
+     * Font-variant alphabet commands -> the {@link MathVariant.Style} they apply.
+     * {@code \mathX{content}} rewrites the enclosed atoms to the variant's
+     * Mathematical-Alphanumeric-Symbols code points (see {@link MathVariant}); it
+     * adds no MathNode kind. {@code \mathcal} and {@code \mathscr} share the single
+     * bundled STIX script alphabet; {@code \boldsymbol}/{@code \bm} additionally
+     * bold Greek (which {@code \mathbf} leaves upright, matching LaTeX).
+     */
+    private static final Map<String, MathVariant.Style> FONT_VARIANTS = Map.ofEntries(
+        Map.entry("mathbb", MathVariant.Style.BLACKBOARD),
+        Map.entry("mathcal", MathVariant.Style.SCRIPT),
+        Map.entry("mathscr", MathVariant.Style.SCRIPT),
+        Map.entry("mathfrak", MathVariant.Style.FRAKTUR),
+        Map.entry("mathbf", MathVariant.Style.BOLD),
+        Map.entry("mathsf", MathVariant.Style.SANS),
+        Map.entry("mathit", MathVariant.Style.ITALIC),
+        Map.entry("mathtt", MathVariant.Style.MONO),
+        Map.entry("boldsymbol", MathVariant.Style.BOLDSYMBOL),
+        Map.entry("bm", MathVariant.Style.BOLDSYMBOL));
+
     private static Map<String, Sym> buildSymbols() {
         Map<String, Sym> m = new java.util.HashMap<>();
 
@@ -826,6 +846,22 @@ public final class MathParser {
         return parseNucleus();
     }
 
+    /**
+     * The argument of a font-variant command ({@code \mathbb{ABC}},
+     * {@code \mathbf x}): a single nucleus, so {@code '{'} opens a group and a bare
+     * token/command is taken as-is (matching LaTeX's brace-optional single-token
+     * argument, e.g. {@code \mathbb R}).
+     */
+    private MathNode parseFontArg(String command) {
+        Kind k = peek().kind();
+        if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
+                || isCommand(peek(), "right")) {
+            throw new MathSyntaxException(
+                "\\" + command + " needs an argument, but found " + describe(peek()));
+        }
+        return parseNucleus();
+    }
+
     /** A single nucleus (no trailing scripts). */
     private MathNode parseNucleus() {
         Token t = peek();
@@ -920,6 +956,14 @@ public final class MathParser {
                 return new OperatorName(opText, withLimits);
             }
             default -> {
+                // Font-variant alphabet (\mathbb \mathcal \mathbf \boldsymbol …)?
+                // Rewrites the enclosed atoms to math-alphanumeric code points —
+                // no new node kind (see MathVariant).
+                MathVariant.Style variant = FONT_VARIANTS.get(name);
+                if (variant != null) {
+                    MathNode arg = parseFontArg(name);
+                    return MathVariant.apply(variant, arg);
+                }
                 // Predefined named operator (\sin \cos \lim \max \operatorname*…)?
                 OpSpec op = NAMED_OPS.get(name);
                 if (op != null) {
