@@ -1,6 +1,7 @@
 package com.lattex.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -42,6 +43,17 @@ final class MainTest {
         Result r = invoke("x^2", "+", "y^2");
         assertEquals(0, r.code(), () -> "stderr: " + r.err());
         assertTrue(r.out().startsWith("<svg"));
+    }
+
+    @Test
+    void inlineFlagRendersTextStyleDifferentFromDisplay() {
+        Result display = invoke("\\frac{a}{b}");
+        Result inline = invoke("--inline", "\\frac{a}{b}");
+        assertEquals(0, inline.code(), () -> "stderr: " + inline.err());
+        assertTrue(inline.out().startsWith("<svg"), "inline still emits an SVG");
+        assertTrue(inline.out().contains("<path"), "inline fraction still has glyph paths");
+        assertNotEquals(display.out(), inline.out(),
+            "--inline (text style) should differ from the default display render");
     }
 
     @Test

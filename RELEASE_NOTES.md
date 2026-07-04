@@ -23,8 +23,8 @@ Double, triple, and multi-integral operators.
 > `\iint_D f\,dA` &nbsp;·&nbsp; `\iiint_V \rho\,dV`
 
 ### Inline vs display sizing
-Math for a line of running prose can now be set in **inline** (text) style — smaller fractions and scripts, big-operator limits beside rather than stacked — via `LatteX.renderInline(latex)` or `RenderOptions.defaults().inline()` (`.display()` picks the default). API-only, so callers never name the internal style type.
-> `LatteX.renderInline("\\frac{a}{b}")`
+Math for a line of running prose can now be set in **inline** (text) style — smaller fractions and scripts, big-operator limits beside rather than stacked — via `LatteX.renderInline(latex)` / `RenderOptions.defaults().inline()`, or the **`lattex --inline`** CLI flag (works standalone and in `--batch`). No flag / `.display()` picks the default full-size block. The split is what lets a static-site build bake `$…$` that sits on the line vs `$$…$$` as its own block (see SLOWSTART Scenario 4).
+> `LatteX.renderInline("\\frac{a}{b}")` &nbsp;·&nbsp; `lattex --inline '\frac{a}{b}'`
 
 **Browse it all:** `examples/effects.html` and `examples/graph.html` show the `\lx` effects and graph popups live; the corpus (`examples/corpus.md`) lists every supported expression with its status.
 
