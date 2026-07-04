@@ -199,6 +199,10 @@ class S8LeftContainmentTest {
         b.add("\\lx[intent=ratio, concept=normalized_score, fx.enter=boom, fx.hover=pulse, "
             + "fx.click=glow, fx.duration=250ms, a11y.label=\"the ratio a plus b over c\", "
             + "data.role=header, data.group=scores]{ \\frac{a+b}{c} }");
+        // graph.* plotting annotations ride the trusted container (data-lx-graph-*),
+        // NEVER the SVG — render() drops them, so the emitter alphabet is unchanged.
+        b.add("\\lx[graph.domain=-3..3, graph.open=multi]{ x^2 - 3 }");
+        b.add("\\lx[graph.domain=-10..10, graph.open=single]{ y = \\frac{1}{x} }");
 
         return b;
     }
