@@ -192,8 +192,9 @@ public final class LatteX {
                 }
                 yield b + " sub " + describe(sub) + " to the power of " + describe(sup);
             }
-            case Fraction(var num, var den) ->
-                "the fraction " + describe(num) + " over " + describe(den);
+            case Fraction f -> f.hasRule()
+                ? "the fraction " + describe(f.numerator()) + " over " + describe(f.denominator())
+                : describe(f.numerator()) + " choose " + describe(f.denominator());
             case Radical(var radicand, var index) -> index == null
                 ? "the square root of " + describe(radicand)
                 : "the " + describe(index) + "th root of " + describe(radicand);

@@ -1269,6 +1269,41 @@ public final class MathParser {
         return parseNucleus();
     }
 
+    /**
+     * A required brace-optional argument of a command that takes a math unit —
+     * {@code \frac}, {@code \cfrac}, {@code \sqrt}, {@code \binom}. A {@code '{'}
+     * opens a group; otherwise the single next token (a char or a {@code \command})
+     * is consumed, so {@code \frac1x} ≡ {@code \frac{1}{x}}, {@code \sqrt2} ≡
+     * {@code \sqrt{2}} and {@code \frac{x^3}3} all read — matching LaTeX's
+     * single-token argument rule. Fails cleanly when nothing follows.
+     */
+    private MathNode parseArgument(String context) {
+        Kind k = peek().kind();
+        if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
+                || isCommand(peek(), "right")) {
+            throw new MathSyntaxException(
+                context + " expects an argument, but found " + describe(peek()));
+        }
+        return parseNucleus();
+    }
+
+    /**
+     * A binomial coefficient {@code \binom{n}{r}} (and {@code \dbinom} /
+     * {@code \tbinom}): an upper-over-lower stack with <em>no</em> fraction rule,
+     * wrapped in parentheses. Clean-room from the TeXbook — {@code \binom} is
+     * {@code \genfrac(){0pt}{}}, i.e. a rule-less fraction fenced by {@code (} and
+     * {@code )}. The parens are the ordinary {@link Fenced} pair, so they stretch
+     * to the stack via the existing delimiter machinery; the {@code style} forces
+     * the stack's math style ({@code \dbinom} display, {@code \tbinom} text,
+     * {@code \binom} inherited).
+     */
+    private MathNode binom(MathNode.FractionStyle style) {
+        MathNode upper = parseArgument("\\binom upper argument");
+        MathNode lower = parseArgument("\\binom lower argument");
+        Fraction stack = new Fraction(upper, lower, false, style);
+        return new Fenced('(', stack, ')');
+    }
+
     /** A single nucleus (no trailing scripts). */
     private MathNode parseNucleus() {
         Token t = peek();
@@ -1303,9 +1338,26 @@ public final class MathParser {
 
         switch (name) {
             case "frac" -> {
-                MathNode num = parseGroup();
-                MathNode den = parseGroup();
+                MathNode num = parseArgument("\\frac numerator");
+                MathNode den = parseArgument("\\frac denominator");
                 return new Fraction(num, den);
+            }
+            case "cfrac" -> {
+                // Continued fraction: an ordinary ruled fraction forced to display
+                // style (TeXbook: \cfrac sets its parts in \displaystyle), so the
+                // nested a_0+\cfrac{1}{a_1+…} form stays full-size.
+                MathNode num = parseArgument("\\cfrac numerator");
+                MathNode den = parseArgument("\\cfrac denominator");
+                return new Fraction(num, den, true, MathNode.FractionStyle.DISPLAY);
+            }
+            case "binom" -> {
+                return binom(MathNode.FractionStyle.INHERIT);
+            }
+            case "dbinom" -> {
+                return binom(MathNode.FractionStyle.DISPLAY);
+            }
+            case "tbinom" -> {
+                return binom(MathNode.FractionStyle.TEXT);
             }
             case "sqrt" -> {
                 MathNode index = null;
@@ -1313,7 +1365,7 @@ public final class MathParser {
                     next(); // consume '['
                     index = parseUntilRBracket();
                 }
-                MathNode radicand = parseGroup();
+                MathNode radicand = parseArgument("\\sqrt argument");
                 return new Radical(radicand, index);
             }
             case "phantom" -> {

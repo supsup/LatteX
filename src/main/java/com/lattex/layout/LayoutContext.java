@@ -76,6 +76,16 @@ public record LayoutContext(SfntFont font, MathConstants constants, double fontS
         return with(style.fractionChildStyle(), true);
     }
 
+    /** Context forcing display style ({@code \cfrac}, {@code \dbinom}), cramping inherited. */
+    public LayoutContext displayStyle() {
+        return with(MathStyle.DISPLAY, cramped);
+    }
+
+    /** Context forcing text style ({@code \tbinom}), cramping inherited. */
+    public LayoutContext textStyle() {
+        return with(MathStyle.TEXT, cramped);
+    }
+
     /** Context for a radicand: same style, cramped. */
     public LayoutContext cramp() {
         return with(style, true);
