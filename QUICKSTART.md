@@ -199,6 +199,35 @@ API merges to the mainline — the CLI's arg parser has the seam ready.
 java -jar build/libs/lattex-0.1.0-SNAPSHOT.jar "x^2"   # via the runnable jar
 ```
 
+### Performance — native binary vs. `java -jar` vs. `./gradlew run`
+
+The three launch modes render **byte-identical SVG**; what differs is **startup cost**, which dominates a single render (the render itself is sub-millisecond):
+
+| Mode | What it pays per run | Best for |
+|---|---|---|
+| **native binary** (`lattex`) | ~nothing — no JVM to start | shelling out per expression, CI, non-JVM stacks |
+| **`java -jar`** | one JVM cold start | a JVM app already warm, or a one-off without building native |
+| **`./gradlew run`** | JVM + Gradle task graph | the dev loop only — never ship this |
+
+**What we measured** — 50 runs each of `\sum_{i=1}^{n} i = \frac{n(n+1)}{2}` (all producing identical output), on an Apple-Silicon Mac, JDK 25 / GraalVM CE 25:
+
+| Mode | avg / run |
+|---|---:|
+| native binary | ~5 ms |
+| `java -jar` | ~50 ms |
+| `./gradlew run` | ~330 ms |
+
+> ⚠️ **These are illustrative only — absolute numbers depend heavily on your machine** (CPU, disk, JVM/GraalVM version, warm vs. cold caches), and you have to build the native binary yourself first. The stable takeaway is the **ratio**: the native binary is roughly an order of magnitude faster *per invocation* than `java -jar` (no JVM to start), and `./gradlew run` carries dev-loop overhead you'd never ship. **For anything that shells out to LatteX repeatedly, use the native binary.**
+
+**Measure it on your own machine:**
+
+```bash
+tools/bench.sh                          # 50 runs of each mode → avg ms/run
+tools/bench.sh 100 '\int_0^1 x^2\,dx'   # custom run count + expression
+```
+
+The native row is included when a GraalVM for JDK 25 is on `GRAALVM_HOME` (e.g. `export GRAALVM_HOME="$HOME/.sdkman/candidates/java/25-graalce"`) or `native-image` is on `PATH`; otherwise it times just the JVM modes.
+
 ### HTTP service — *planned / optional*
 
 > **Planned / optional.**
