@@ -77,17 +77,21 @@ public enum Effect {
      */
     BLUEPRINT,
     /**
-     * Grab-and-fling jelly: armed on its trigger, any glyph can be dragged — it stretches like
-     * taffy and springs home with a jelly overshoot, immediate neighbours following. Page-side
-     * JS routine: it toggles {@code style.transform} on the existing inner-{@code <svg>} paths
-     * (with body-level pointer capture); it adds no element to the {@code <svg>}.
+     * WOBBLE: on its trigger the glyphs jiggle like jelly — each does an autonomous damped
+     * wobble (a springy rotate + bob decaying over ~1.5s), staggered left-to-right so it
+     * ripples across the equation. Page-side JS routine: it toggles {@code style.transform}
+     * on the existing inner-{@code <svg>} paths while animating, cleared at rest; it adds no
+     * element to the inner {@code <svg>}.
      */
     WOBBLE,
     /**
-     * A GRAVWELL: click a glyph and it becomes a gravity source — neighbouring glyphs lean,
-     * stretch and spaghettify TOWARD it with a {@code 1/r²} falloff, then snap back elastically.
-     * Page-side JS routine: it wires click handlers onto the existing paths and toggles their
-     * {@code transform}; it adds no element to the inner {@code <svg>}.
+     * A GRAVWELL: click a glyph and it becomes a gravity well — neighbouring glyphs SPIRAL in
+     * toward it (radius collapsing as the angle sweeps) and SHRINK as they fall, with a
+     * {@code 1/r²} reach; once they've fallen in, the source glyph collapses into an
+     * eclipse-like orb (a dark disc with a glowing corona), then everything unwinds back out.
+     * Page-side JS routine: it wires click handlers onto the existing paths, rAF-drives their
+     * {@code transform}, and parks a body-level orb overlay; it adds no element to the inner
+     * {@code <svg>}.
      */
     GRAVWELL,
     /** Explicitly no effect. */

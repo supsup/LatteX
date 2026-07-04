@@ -695,111 +695,55 @@
     setTimeout(function () { guide.remove(); }, total + 120);
   }
 
-  // WOBBLE. Armed on enter: attach pointerdown to each glyph path so the user can
-  // grab + fling it — taffy stretch on drag, an underdamped spring home with
-  // overshoot on release, neighbours following. Only style.transform on the existing
-  // paths (+ body pointer capture); no element into the inner <svg>.
+  // WOBBLE. On its trigger the glyphs jiggle like jelly: each glyph does an
+  // AUTONOMOUS damped wobble — a springy rotate + bob decaying over ~1.5s —
+  // staggered left-to-right so it ripples across the equation. No interaction
+  // needed (visible on load). transform-box/origin are set only WHILE wobbling and
+  // cleared at rest (setting them on a resting glyph mispositions it); it toggles
+  // style.transform on the existing paths only — nothing touches the inner <svg>.
   function wobble(el) {
     if (reduced) { return; }
     var svg = el.querySelector('svg');
     if (!svg) { return; }
     var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
-    if (!paths.length || el.__lxWobble) { return; }
-    el.__lxWobble = true;
-    var vb = svg.viewBox && svg.viewBox.baseVal;
-    var box = svg.getBoundingClientRect();
-    var unit = (vb && vb.width && box.width) ? vb.width / box.width : 1;
-    var NEIGH = (vb && vb.width ? vb.width : 100) * 0.28;
-    var STIFF = 240, DAMP = 19, REST = 0.05;
-    var states = paths.map(function (p) {
-      // transform-box/origin are set lazily in render() (only while a transform is
-      // applied) and cleared at rest — setting them on a RESTING glyph mispositions
-      // it (the glyph vanishes on load). Keep resting glyphs pristine.
-      p.style.cursor = 'grab';
-      p.style.touchAction = 'none';
-      var b; try { b = p.getBBox(); } catch (e) { b = { x:0, y:0, width:0, height:0 }; }
-      return { p: p, cx: b.x + b.width/2, cy: b.y + b.height/2,
-               x:0, y:0, vx:0, vy:0, tx:0, ty:0, held:false };
+    if (!paths.length) { return; }
+    paths.sort(function (a, b) {          // left-to-right so the ripple reads
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
     });
-    function render(s) {
-      var sp = Math.sqrt(s.vx*s.vx + s.vy*s.vy) / unit;
-      var stretch = Math.min(0.55, sp / 3200);
-      var ang = sp > 0.01 ? Math.atan2(s.vy, s.vx) : 0;
-      var sx = 1 + stretch, sy = 1 - stretch * 0.6;
-      s.p.style.transformBox = 'fill-box';   // pivot the stretch on the glyph's
-      s.p.style.transformOrigin = 'center';  // own centre, only while transforming
-      s.p.style.transform =
-        'translate(' + s.x.toFixed(2) + 'px,' + s.y.toFixed(2) + 'px) '
-        + 'rotate(' + ang.toFixed(3) + 'rad) scale(' + sx.toFixed(3) + ',' + sy.toFixed(3) + ') '
-        + 'rotate(' + (-ang).toFixed(3) + 'rad)';
-    }
-    var raf = 0, last = 0;
-    function loop(now) {
-      var dt = last ? Math.min(0.032, (now - last) / 1000) : 0.016;
-      last = now;
-      var moving = false;
-      states.forEach(function (s) {
-        if (!s.held) {
-          var ax = -STIFF * (s.x - s.tx) - DAMP * s.vx;
-          var ay = -STIFF * (s.y - s.ty) - DAMP * s.vy;
-          s.vx += ax * dt; s.vy += ay * dt;
-          s.x += s.vx * dt; s.y += s.vy * dt;
+    var DUR = 1500; // ms of wobble per glyph
+    paths.forEach(function (p, i) {
+      setTimeout(function () {                     // stagger → the ripple
+        var wobbleAmp = 13 + Math.random() * 6;    // peak degrees of swing
+        var freq = 6 + Math.random() * 3;          // oscillations over the life
+        var t0 = performance.now();
+        p.style.transformBox = 'fill-box';
+        p.style.transformOrigin = 'center';
+        function step(now) {
+          var t = (now - t0) / DUR;                // 0..1
+          if (t >= 1) {                            // done → pristine at rest
+            p.style.transform = '';
+            p.style.transformBox = '';
+            p.style.transformOrigin = '';
+            return;
+          }
+          var env = (1 - t) * (1 - t);             // ease-out decay envelope
+          var ph = t * freq * Math.PI * 2;
+          var ang = Math.sin(ph) * wobbleAmp * env;
+          var ty = Math.cos(ph * 1.05) * wobbleAmp * 0.32 * env;
+          p.style.transform = 'translateY(' + ty.toFixed(2) + 'px) rotate('
+            + ang.toFixed(2) + 'deg)';
+          requestAnimationFrame(step);
         }
-        if (s.held || Math.abs(s.x - s.tx) > REST || Math.abs(s.y - s.ty) > REST
-            || Math.abs(s.vx) > REST || Math.abs(s.vy) > REST) {
-          moving = true; render(s);
-        } else if (s.x || s.y || s.vx || s.vy) {
-          s.x = s.y = s.vx = s.vy = 0;
-          s.p.style.transform = '';
-          s.p.style.transformBox = '';      // back to pristine at rest
-          s.p.style.transformOrigin = '';
-        }
-      });
-      raf = moving ? requestAnimationFrame(loop) : 0;
-      if (!moving) { last = 0; }
-    }
-    function kick() { if (!raf) { last = 0; raf = requestAnimationFrame(loop); } }
-    states.forEach(function (s) {
-      s.p.addEventListener('pointerdown', function (ev) {
-        ev.preventDefault();
-        try { s.p.setPointerCapture(ev.pointerId); } catch (e) {}
-        s.held = true; s.p.style.cursor = 'grabbing';
-        var sx0 = ev.clientX, sy0 = ev.clientY, ox = s.x, oy = s.y, pt = performance.now();
-        function move(e) {
-          var now = performance.now(), d = Math.max(8, now - pt) / 1000;
-          var nx = ox + (e.clientX - sx0) * unit, ny = oy + (e.clientY - sy0) * unit;
-          s.vx = (nx - s.x) / d; s.vy = (ny - s.y) / d;
-          s.x = nx; s.y = ny; pt = now;
-          states.forEach(function (o) {
-            if (o === s) { return; }
-            var dist = Math.hypot(o.cx - s.cx, o.cy - s.cy) || 1;
-            var wt = Math.max(0, 1 - dist / NEIGH) * 0.35;
-            o.tx = s.x * wt; o.ty = s.y * wt;
-          });
-          render(s); kick();
-        }
-        function up(e) {
-          s.held = false; s.p.style.cursor = 'grab';
-          try { s.p.releasePointerCapture(e.pointerId); } catch (ex) {}
-          s.p.removeEventListener('pointermove', move);
-          s.p.removeEventListener('pointerup', up);
-          s.p.removeEventListener('pointercancel', up);
-          s.tx = 0; s.ty = 0;
-          states.forEach(function (o) { if (o !== s) { o.tx = 0; o.ty = 0; } });
-          kick();
-        }
-        s.p.addEventListener('pointermove', move);
-        s.p.addEventListener('pointerup', up);
-        s.p.addEventListener('pointercancel', up);
-        kick();
-      });
+        requestAnimationFrame(step);
+      }, i * 55);
     });
   }
 
   // GRAVWELL. Armed on enter: wire a click listener onto each glyph path. On click,
-  // the source glyph becomes a gravity well — every other glyph is pulled toward it
-  // with a clamped 1/r² falloff + radial stretch, then snaps back elastically. Only
-  // toggles transform/transition on the existing paths; no element into the inner <svg>.
+  // the source glyph becomes a gravity well — every other glyph SPIRALS in toward it
+  // (radius collapsing as the angle sweeps) and SHRINKS + spins as it falls, then
+  // unwinds back out. rAF-driven; only toggles transform on the existing paths (set
+  // while animating, cleared at rest); no element into the inner <svg>.
   function gravwell(el) {
     var svg = el.querySelector('svg');
     if (!svg || reduced) { return; }
@@ -812,54 +756,97 @@
       try { b = p.getBBox(); } catch (e) { return null; }
       return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     }
-    var R0 = 26;
-    var MAXSHIFT = 10;
-    var STRETCH = 0.9;
-    var SQUASH = 0.28;
-    var timers = [];
+    var R0 = 46;       // reach: glyphs within ~this radius feel the well
+    var SWIRL = 3.4;   // radians of spiral swept on the way in
+    var SHRINK = 0.82; // how small a fully-pulled glyph gets
+    var IN = 640, HOLD = 130, BACK = 560;
+    var raf = 0;
     paths.forEach(function (src) {
-      // transform-box/origin are set lazily per pulled glyph in the click handler
-      // (only while a transform is applied) and cleared at rest — setting them on a
-      // RESTING glyph mispositions it (the glyph vanishes on load).
       src.style.cursor = 'pointer';
       src.addEventListener('click', function () {
         var s = centre(src);
         if (!s) { return; }
-        timers.forEach(clearTimeout); timers.length = 0;
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
+        // Capture each non-source glyph's start polar coords about the well.
+        var movers = [];
         paths.forEach(function (p) {
           if (p === src) { return; }
           var g = centre(p); if (!g) { return; }
-          var dx = s.x - g.x, dy = s.y - g.y;
-          var r2 = dx * dx + dy * dy; if (r2 < 1e-3) { return; }
-          var r = Math.sqrt(r2);
-          var falloff = Math.min(1, (R0 * R0) / r2);
-          var pull = MAXSHIFT * falloff;
-          var ux = dx / r, uy = dy / r;
-          var ang = Math.atan2(uy, ux) * 180 / Math.PI;
-          var sx = (1 + STRETCH * falloff).toFixed(3);
-          var sy = (1 - SQUASH * falloff).toFixed(3);
-          p.style.transformBox = 'fill-box';   // pivot the stretch on the glyph's
-          p.style.transformOrigin = 'center';  // own centre, only while transforming
-          p.style.transition = 'transform 220ms cubic-bezier(.22,.61,.36,1)';
-          p.style.transform = 'translate(' + (ux * pull).toFixed(2) + 'px,'
-            + (uy * pull).toFixed(2) + 'px) rotate(' + ang.toFixed(2)
-            + 'deg) scale(' + sx + ',' + sy + ') rotate(' + (-ang).toFixed(2) + 'deg)';
+          var dx = g.x - s.x, dy = g.y - s.y;          // well → glyph
+          var r0 = Math.sqrt(dx * dx + dy * dy); if (r0 < 1e-3) { return; }
+          var fall = Math.min(1, (R0 * R0) / (r0 * r0));
+          if (fall < 0.03) { return; }                 // too far to matter
+          p.style.transformBox = 'fill-box';
+          p.style.transformOrigin = 'center';
+          p.style.transition = '';                     // rAF drives it, no CSS tween
+          movers.push({ p: p, gx: g.x, gy: g.y, r0: r0,
+            th0: Math.atan2(dy, dx), fall: fall });
         });
-        timers.push(setTimeout(function () {
-          paths.forEach(function (p) {
-            if (p === src) { return; }
-            p.style.transition = 'transform 620ms cubic-bezier(.34,1.56,.64,1)';
-            p.style.transform = '';
+        if (!movers.length) { return; }
+        // Once the glyphs have fallen in, the SOURCE collapses into an eclipse orb —
+        // a dark disc with a glowing corona — parked over the source glyph (a body-
+        // level overlay; the source path is dimmed beneath it), released on unwind.
+        var sr = src.getBoundingClientRect();
+        var osz = Math.max(15, Math.max(sr.width, sr.height) * 1.15);
+        function makeOrb() {
+          if (el.__lxOrb) { return; }
+          var o = document.createElement('div');
+          o.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;'
+            + 'border-radius:50%;left:' + (sr.left + sr.width / 2 - osz / 2) + 'px;'
+            + 'top:' + (sr.top + sr.height / 2 - osz / 2) + 'px;'
+            + 'width:' + osz + 'px;height:' + osz + 'px;opacity:0;transform:scale(.2);'
+            + 'background:radial-gradient(circle,#000 54%,rgba(0,0,0,.35) 66%,transparent 73%);'
+            + 'box-shadow:0 0 14px 3px rgba(255,238,190,.95),0 0 36px 11px rgba(255,175,80,.5);'
+            + 'transition:opacity 200ms ease,transform 280ms cubic-bezier(.2,1.35,.4,1);';
+          document.body.appendChild(o);
+          el.__lxOrb = o;
+          src.style.transition = 'opacity 200ms ease';
+          src.style.opacity = '0.06';                  // the glyph collapses into the orb
+          requestAnimationFrame(function () {
+            if (el.__lxOrb === o) { o.style.opacity = '1'; o.style.transform = 'scale(1)'; }
           });
-          timers.push(setTimeout(function () {
-            paths.forEach(function (p) {
-              p.style.transition = '';
-              p.style.transform = '';
-              p.style.transformBox = '';      // back to pristine at rest
-              p.style.transformOrigin = '';
-            });
-          }, 660));
-        }, 300));
+        }
+        function killOrb() {
+          var o = el.__lxOrb;
+          if (!o) { return; }
+          el.__lxOrb = null;
+          o.style.opacity = '0'; o.style.transform = 'scale(.2)';
+          src.style.opacity = '';                      // the source glyph returns
+          setTimeout(function () { if (o.parentNode) { o.parentNode.removeChild(o); } }, 300);
+        }
+        killOrb();                                     // clear any lingering orb on re-click
+        var t0 = performance.now();
+        function frame(now) {
+          var e = now - t0, k;
+          if (e < IN) { var u = e / IN; k = u * u * (3 - 2 * u); }   // ease in to 1
+          else if (e < IN + HOLD) { k = 1; makeOrb(); }             // eclipse orb forms
+          else {
+            var d = (e - IN - HOLD) / BACK;
+            killOrb();                                 // release: the orb dissolves
+            if (d >= 1) {                              // done → pristine at rest
+              movers.forEach(function (m) {
+                m.p.style.transform = '';
+                m.p.style.transformBox = '';
+                m.p.style.transformOrigin = '';
+              });
+              raf = 0; return;
+            }
+            k = 1 - d * d * (3 - 2 * d);               // unwind back out
+          }
+          movers.forEach(function (m) {
+            var pull = m.fall * k;                     // 0..1 depth into the well
+            var r = m.r0 * (1 - 0.92 * pull);          // radius collapses inward
+            var th = m.th0 + SWIRL * pull;             // angle sweeps → the spiral
+            var tx = (s.x + r * Math.cos(th)) - m.gx;  // offset from the glyph's rest
+            var ty = (s.y + r * Math.sin(th)) - m.gy;
+            var sc = 1 - SHRINK * pull;                // shrinks as it spirals in
+            var spin = SWIRL * pull * 57.2958;         // the glyph spins with the swirl
+            m.p.style.transform = 'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2)
+              + 'px) rotate(' + spin.toFixed(1) + 'deg) scale(' + sc.toFixed(3) + ')';
+          });
+          raf = requestAnimationFrame(frame);
+        }
+        raf = requestAnimationFrame(frame);
       });
     });
   }
@@ -1232,9 +1219,9 @@
             </svg></span>
           </div>
           <figcaption>
-            <span class="cap">fx.enter=wobble — grab any glyph and fling it; it springs back like jelly</span>
+            <span class="cap">fx.enter=wobble — the glyphs jiggle like jelly, rippling left to right</span>
             <code class="src">\lx[fx.enter=wobble]{ x^2 + y^2 = r^2 }</code>
-            <span class="hint">drag a glyph · fling it · watch it jiggle home</span>
+            <span class="hint">load — watch it wobble</span>
           </figcaption>
         </figure>
         <figure class="card">
