@@ -47,6 +47,49 @@ public enum Effect {
      * new element to the inner {@code <svg>}.
      */
     HANDSCRIBE,
+    /**
+     * A cyan wireframe HOLOGRAM: rolling scanlines, an RGB-split jitter, a slow parallax
+     * tilt and occasional flicker dropouts, then a subtle idle loop. Page-side JS routine
+     * (NOT a CSS keyframe): it tints/filters/transforms the container and drives a
+     * pointer-events-none scanline body overlay; it adds no element to the inner {@code <svg>}.
+     */
+    HOLOGRAM,
+    /**
+     * A NEON SIGN buzzing to life: a couple of failed, stuttering ignitions, then a steady
+     * glowing hum — with one unlucky glyph left flickering forever. Page-side JS routine: it
+     * drives a layered drop-shadow bloom + opacity on the container and toggles opacity on one
+     * existing inner-{@code <svg>} {@code <path>}; it adds no element to the {@code <svg>}.
+     */
+    NEONSIGN,
+    /**
+     * The equation CRYSTALLIZEs: a frost front creeps across it, an icy blue-white tint fits
+     * over the glyphs, and a few sparkles pop at the end. Page-side JS routine: it animates a
+     * filter/clip-path on the container and builds separate body overlays (a frost pane +
+     * sparkle motes); it adds no element to the inner {@code <svg>}.
+     */
+    CRYSTALLIZE,
+    /**
+     * The equation drafts itself as an engineer's BLUEPRINT: white construction linework
+     * (stroke-draw) on a deep-cyan drafting field, with transient guide marks that fade as the
+     * glyphs resolve. Page-side JS routine: it flips a container class, stroke-draws the
+     * existing paths in white, and fades a body-level guide overlay; it adds no element to the
+     * inner {@code <svg>}.
+     */
+    BLUEPRINT,
+    /**
+     * Grab-and-fling jelly: armed on its trigger, any glyph can be dragged — it stretches like
+     * taffy and springs home with a jelly overshoot, immediate neighbours following. Page-side
+     * JS routine: it toggles {@code style.transform} on the existing inner-{@code <svg>} paths
+     * (with body-level pointer capture); it adds no element to the {@code <svg>}.
+     */
+    WOBBLE,
+    /**
+     * A GRAVWELL: click a glyph and it becomes a gravity source — neighbouring glyphs lean,
+     * stretch and spaghettify TOWARD it with a {@code 1/r²} falloff, then snap back elastically.
+     * Page-side JS routine: it wires click handlers onto the existing paths and toggles their
+     * {@code transform}; it adds no element to the inner {@code <svg>}.
+     */
+    GRAVWELL,
     /** Explicitly no effect. */
     NONE;
 
@@ -70,10 +113,17 @@ public enum Effect {
             case "lightning" -> LIGHTNING;
             case "storm" -> STORM;
             case "handscribe" -> HANDSCRIBE;
+            case "hologram" -> HOLOGRAM;
+            case "neonsign" -> NEONSIGN;
+            case "crystallize" -> CRYSTALLIZE;
+            case "blueprint" -> BLUEPRINT;
+            case "wobble" -> WOBBLE;
+            case "gravwell" -> GRAVWELL;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
-                    + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe|none)");
+                    + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
+                    + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell|none)");
         };
     }
 

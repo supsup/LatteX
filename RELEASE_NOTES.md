@@ -15,7 +15,7 @@ Multi-line equations that line up where you want them: `align` / `aligned` line 
 > `\begin{aligned}(a+b)^2 &= (a+b)(a+b)\\ &= a^2+2ab+b^2\end{aligned}` &nbsp;·&nbsp; `\begin{gather}a=b\\x+y=z\end{gather}` &nbsp;·&nbsp; `\begin{multline}a+b\\+c+d\\+e\end{multline}`
 
 ### The `\lx[…]{…}` author syntax
-Wrap any math to style, animate, or tag it — inline, with no separate config. `style.*` (scale, color, math style), `fx.*` (hover/click effects like glow and lightning), `graph.*` (function-plot popups), and semantic / accessibility tags. Math inherits the page's text color by default (`currentColor`), so it's dark-mode-native out of the box.
+Wrap any math to style, animate, or tag it — inline, with no separate config. `style.*` (scale, color, math style), `fx.*` (enter/hover/click effects — `glow`, `pulse`, `fade`, `boom`, `lightning`, `storm`, plus `handscribe` write-on, `hologram`, `neonsign`, `crystallize` frost, `blueprint`, `wobble` grab-and-fling, and `gravwell`), `graph.*` (function-plot popups), and semantic / accessibility tags. Math inherits the page's text color by default (`currentColor`), so it's dark-mode-native out of the box.
 > `\lx[style.color=#c0392b, style.scale=1.4]{\frac{a+b}{c}}` &nbsp;·&nbsp; `\lx[fx.hover=glow]{E=mc^2}`
 
 ### Multiple integrals

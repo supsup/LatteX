@@ -148,6 +148,28 @@
     .lx-math { animation: none !important; }
     .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
   }
+
+  /* blueprint: the container becomes an engineer's drafting field — a deep
+     cyan-blue ground under a faint white grid. The JS then stroke-draws the
+     glyphs in white + fades transient guide marks; under reduced motion this
+     static look is all that shows. */
+  .lx-math.lx-blueprint {
+    color: #eaf3ff;
+    padding: .5rem .7rem;
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px rgba(226, 238, 255, .18);
+    background:
+      repeating-linear-gradient(0deg,  rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
+      repeating-linear-gradient(90deg, rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
+      linear-gradient(180deg, #0b3a66, #08294a);
+  }
+
+  /* hologram: scrolls the scanline body-overlay's gradient (3px period → 6px
+     loop). Rides the overlay, never the element — hologram itself is JS-driven. */
+  @keyframes lx-holo-scan {
+    0%   { background-position: 0 0; }
+    100% { background-position: 0 6px; }
+  }
 </style>
   <script>
 (function () {
@@ -450,13 +472,401 @@
     });
   }
 
-  // Play a trigger's effect. lightning/storm/handscribe → their JS routines;
+  // HOLOGRAM. Flickers in as a cyan wireframe: scanlines, RGB-split jitter,
+  // parallax tilt, flicker dropouts, then a subtle idle loop. Tints/filters/
+  // transforms the container el and drives a pointer-events-none scanline body
+  // overlay; nothing reaches the inner <svg>.
+  function hologram(el) {
+    if (el._lxHolo) { return; }
+    el._lxHolo = true;
+    var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+    var tint = (authored && authored.toLowerCase() !== 'currentcolor')
+      ? authored : '#5fe8ff';
+    el.style.color = tint;
+    function aberr(px) {
+      return 'drop-shadow(' + px + 'px 0 0 rgba(255,44,120,.5))'
+        + ' drop-shadow(' + (-px) + 'px 0 0 rgba(60,220,255,.55))'
+        + ' drop-shadow(0 0 7px ' + tint + ')';
+    }
+    el.style.filter = aberr(1.2);
+    var scan = document.createElement('div');
+    scan.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;'
+      + 'mix-blend-mode:screen;background:repeating-linear-gradient(0deg,'
+      + ' rgba(95,232,255,.14) 0px, rgba(95,232,255,.14) 1px,'
+      + ' transparent 1px, transparent 3px);';
+    document.body.appendChild(scan);
+    el._lxHolo = scan;
+    function place() {
+      var r = el.getBoundingClientRect();
+      scan.style.left = r.left + 'px'; scan.style.top = r.top + 'px';
+      scan.style.width = r.width + 'px'; scan.style.height = r.height + 'px';
+    }
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    if (reduced) { return; }
+    scan.style.animation = 'lx-holo-scan 1.1s linear infinite';
+    el.style.transition = 'transform 1400ms ease-in-out, opacity 90ms linear';
+    var seq = ['0', '1', '.2', '1', '.5', '1'], j = 0;
+    (function boot() {
+      if (j < seq.length) { el.style.opacity = seq[j++]; setTimeout(boot, 55); return; }
+      var dir = 1;
+      setInterval(function () {
+        place();
+        dir = -dir;
+        el.style.transform = 'perspective(440px) rotateY(' + (dir * 6) + 'deg)';
+        if (Math.random() < 0.5) {
+          el.style.filter = aberr(3 + Math.random() * 3);
+          setTimeout(function () { el.style.filter = aberr(1.2); }, 90);
+        }
+        if (Math.random() < 0.28) {
+          el.style.opacity = '.4';
+          setTimeout(function () { el.style.opacity = '1'; }, 70);
+        }
+      }, 900);
+    })();
+  }
+
+  // NEON SIGN. Buzzes to life: failed stuttering ignitions, then a steady hum —
+  // one glyph left flickering forever. Drives a drop-shadow bloom + opacity on the
+  // container and toggles opacity on ONE existing inner-<svg> path; no <svg> edits.
+  function neonsign(el) {
+    var color = resolveColor(el);
+    function glow(on) {
+      var core = 2 + on * 1;
+      var near = 4 + on * 5;
+      var halo = 6 + on * 13;
+      return 'drop-shadow(0 0 ' + core + 'px rgba(255,255,255,'
+          + (0.3 + on * 0.5).toFixed(3) + '))'
+        + ' drop-shadow(0 0 ' + near + 'px rgba(255,255,255,'
+          + (on * 0.35).toFixed(3) + '))'
+        + ' drop-shadow(0 0 ' + halo + 'px ' + color + ')';
+    }
+    if (reduced) { el.style.filter = glow(1); return; }
+    el.style.transition = 'filter 40ms linear, opacity 40ms linear';
+    var seq = [
+      [0,   0.35, 1],
+      [70,  0,    0.25],
+      [150, 0.8,  1],
+      [210, 0,    0.25],
+      [340, 0.5,  1],
+      [430, 1,    1]
+    ];
+    seq.forEach(function (s) {
+      setTimeout(function () {
+        el.style.opacity = String(s[2]);
+        el.style.filter = glow(s[1]);
+      }, s[0]);
+    });
+    var paths = el.querySelectorAll('svg path');
+    if (!paths.length) { return; }
+    var broken = paths[Math.floor(paths.length / 2)];
+    broken.style.transition = 'opacity 60ms linear';
+    function flicker() {
+      var dropout = Math.random() < 0.35;
+      broken.style.opacity = dropout
+        ? (Math.random() < 0.5 ? '0.15' : '0.6') : '1';
+      var next = dropout ? 40 + Math.random() * 90 : 300 + Math.random() * 1500;
+      setTimeout(flicker, next);
+    }
+    setTimeout(flicker, 600);
+  }
+
+  // CRYSTALLIZE. A frost front sweeps across (a body-level frost pane, clip-swept),
+  // an icy blue-white tint fits over the glyphs (filter on el), then sparkle motes
+  // pop. Filter/clip on el + separate body overlays; no element into the inner <svg>.
+  function crystallize(el) {
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var gleam = resolveColor(el);
+    var icy = 'brightness(1.14) saturate(0.6) sepia(0.18) hue-rotate(165deg)';
+    var trans0 = el.style.transition;
+    if (reduced) {
+      el.style.filter = icy + ' drop-shadow(0 0 4px #cfeaff)';
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    var pane = document.createElement('div');
+    pane.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;'
+      + 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;'
+      + 'height:' + r.height + 'px;opacity:0.85;mix-blend-mode:screen;'
+      + 'clip-path:inset(0 100% 0 0);transition:clip-path 900ms ease;'
+      + 'background:linear-gradient(115deg, rgba(207,234,255,0.55) 0%,'
+      + ' rgba(255,255,255,0.35) 45%, rgba(160,205,245,0.5) 100%),'
+      + ' repeating-linear-gradient(60deg, rgba(255,255,255,0.12) 0 6px,'
+      + ' rgba(255,255,255,0) 6px 13px);';
+    document.body.appendChild(pane);
+    el.style.transition = 'filter 900ms ease';
+    el.style.filter = icy + ' blur(1.4px) drop-shadow(0 0 5px ' + gleam + ')';
+    requestAnimationFrame(function () {
+      pane.style.clipPath = 'inset(0 0 0 0)';
+      el.style.filter = icy + ' blur(0px) drop-shadow(0 0 6px #d6f0ff)';
+    });
+    var motes = [];
+    for (var i = 0; i < 7; i++) {
+      (function (i) {
+        var s = document.createElement('div');
+        var sz = 3 + Math.random() * 3;
+        var px = r.left + Math.random() * r.width;
+        var py = r.top + Math.random() * r.height;
+        s.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
+          + 'left:' + px + 'px;top:' + py + 'px;width:' + sz + 'px;height:' + sz
+          + 'px;margin:' + (-sz / 2) + 'px 0 0 ' + (-sz / 2) + 'px;border-radius:50%;'
+          + 'background:#fff;box-shadow:0 0 6px 2px #cfeaff;opacity:0;'
+          + 'transform:scale(0.2);transition:transform 260ms ease, opacity 260ms ease;';
+        document.body.appendChild(s);
+        motes.push(s);
+        setTimeout(function () {
+          s.style.opacity = '1'; s.style.transform = 'scale(1.3)';
+          setTimeout(function () {
+            s.style.opacity = '0'; s.style.transform = 'scale(0.4)';
+          }, 200);
+        }, 620 + i * 55);
+      })(i);
+    }
+    setTimeout(function () {
+      pane.remove();
+      motes.forEach(function (m) { m.remove(); });
+      el.style.transition = 'filter 500ms ease';
+      el.style.filter = 'brightness(1.05) saturate(0.85) drop-shadow(0 0 3px #cfeaff)';
+      setTimeout(function () { el.style.transition = trans0; }, 520);
+    }, 1300);
+  }
+
+  // BLUEPRINT. The container flips to a cyan drafting field (.lx-blueprint), the
+  // glyphs stroke-draw in white linework, and a body-level guide overlay (frame,
+  // tangent circles, centre lines) fades as they resolve. Toggles presentation on
+  // the existing paths + a separate body overlay; no element into the inner <svg>.
+  function blueprint(el) {
+    el.classList.add('lx-blueprint');
+    var svg = el.querySelector('svg');
+    var paths = svg
+      ? Array.prototype.slice.call(svg.querySelectorAll('path'))
+      : [];
+    var WHITE = '#eaf3ff';
+    if (reduced) {
+      paths.forEach(function (p) { p.style.fill = WHITE; });
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    var w = r.width, h = r.height, cx = w / 2, cy = h / 2;
+    var rad = Math.min(w, h) / 2;
+    var guide = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    guide.setAttribute('width', w); guide.setAttribute('height', h);
+    guide.setAttribute('fill', 'none');
+    guide.setAttribute('stroke', 'rgba(226,238,255,0.55)');
+    guide.setAttribute('stroke-width', '1');
+    guide.style.cssText = 'position:fixed;pointer-events:none;overflow:visible;'
+      + 'z-index:2147483647;opacity:0;transition:opacity 300ms ease;'
+      + 'left:' + r.left + 'px;top:' + r.top + 'px;'
+      + 'width:' + w + 'px;height:' + h + 'px;';
+    guide.innerHTML =
+      '<rect x="1" y="1" width="' + (w - 2) + '" height="' + (h - 2)
+        + '" stroke-dasharray="4 4"/>'
+      + '<circle cx="' + cx + '" cy="' + cy + '" r="' + rad + '"/>'
+      + '<circle cx="' + cx + '" cy="' + cy + '" r="' + (rad * 0.62) + '"/>'
+      + '<line x1="0" y1="' + cy + '" x2="' + w + '" y2="' + cy + '"/>'
+      + '<line x1="' + cx + '" y1="0" x2="' + cx + '" y2="' + h + '"/>';
+    document.body.appendChild(guide);
+    requestAnimationFrame(function () { guide.style.opacity = '1'; });
+    var DRAW = 620, STAGGER = 60, last = 0;
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    paths.forEach(function (p, i) {
+      var len;
+      try { len = p.getTotalLength() || 100; } catch (e) { len = 100; }
+      var delay = i * STAGGER;
+      if (delay > last) { last = delay; }
+      p.style.stroke = WHITE;
+      p.style.strokeWidth = '1.2';
+      p.style.fill = 'none';
+      p.style.strokeDasharray = len;
+      p.style.strokeDashoffset = len;
+      setTimeout(function () {
+        p.style.transition = 'stroke-dashoffset ' + DRAW
+          + 'ms ease, fill 300ms ease ' + DRAW + 'ms';
+        p.style.strokeDashoffset = '0';
+        p.style.fill = WHITE;
+      }, delay);
+    });
+    var total = last + DRAW + 300;
+    setTimeout(function () { guide.style.opacity = '0'; }, Math.max(0, total - 260));
+    setTimeout(function () { guide.remove(); }, total + 120);
+  }
+
+  // WOBBLE. Armed on enter: attach pointerdown to each glyph path so the user can
+  // grab + fling it — taffy stretch on drag, an underdamped spring home with
+  // overshoot on release, neighbours following. Only style.transform on the existing
+  // paths (+ body pointer capture); no element into the inner <svg>.
+  function wobble(el) {
+    if (reduced) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || el.__lxWobble) { return; }
+    el.__lxWobble = true;
+    var vb = svg.viewBox && svg.viewBox.baseVal;
+    var box = svg.getBoundingClientRect();
+    var unit = (vb && vb.width && box.width) ? vb.width / box.width : 1;
+    var NEIGH = (vb && vb.width ? vb.width : 100) * 0.28;
+    var STIFF = 240, DAMP = 19, REST = 0.05;
+    var states = paths.map(function (p) {
+      p.style.transformBox = 'fill-box';
+      p.style.transformOrigin = 'center';
+      p.style.cursor = 'grab';
+      p.style.touchAction = 'none';
+      var b; try { b = p.getBBox(); } catch (e) { b = { x:0, y:0, width:0, height:0 }; }
+      return { p: p, cx: b.x + b.width/2, cy: b.y + b.height/2,
+               x:0, y:0, vx:0, vy:0, tx:0, ty:0, held:false };
+    });
+    function render(s) {
+      var sp = Math.sqrt(s.vx*s.vx + s.vy*s.vy) / unit;
+      var stretch = Math.min(0.55, sp / 3200);
+      var ang = sp > 0.01 ? Math.atan2(s.vy, s.vx) : 0;
+      var sx = 1 + stretch, sy = 1 - stretch * 0.6;
+      s.p.style.transform =
+        'translate(' + s.x.toFixed(2) + 'px,' + s.y.toFixed(2) + 'px) '
+        + 'rotate(' + ang.toFixed(3) + 'rad) scale(' + sx.toFixed(3) + ',' + sy.toFixed(3) + ') '
+        + 'rotate(' + (-ang).toFixed(3) + 'rad)';
+    }
+    var raf = 0, last = 0;
+    function loop(now) {
+      var dt = last ? Math.min(0.032, (now - last) / 1000) : 0.016;
+      last = now;
+      var moving = false;
+      states.forEach(function (s) {
+        if (!s.held) {
+          var ax = -STIFF * (s.x - s.tx) - DAMP * s.vx;
+          var ay = -STIFF * (s.y - s.ty) - DAMP * s.vy;
+          s.vx += ax * dt; s.vy += ay * dt;
+          s.x += s.vx * dt; s.y += s.vy * dt;
+        }
+        if (s.held || Math.abs(s.x - s.tx) > REST || Math.abs(s.y - s.ty) > REST
+            || Math.abs(s.vx) > REST || Math.abs(s.vy) > REST) {
+          moving = true; render(s);
+        } else if (s.x || s.y || s.vx || s.vy) {
+          s.x = s.y = s.vx = s.vy = 0; s.p.style.transform = '';
+        }
+      });
+      raf = moving ? requestAnimationFrame(loop) : 0;
+      if (!moving) { last = 0; }
+    }
+    function kick() { if (!raf) { last = 0; raf = requestAnimationFrame(loop); } }
+    states.forEach(function (s) {
+      s.p.addEventListener('pointerdown', function (ev) {
+        ev.preventDefault();
+        try { s.p.setPointerCapture(ev.pointerId); } catch (e) {}
+        s.held = true; s.p.style.cursor = 'grabbing';
+        var sx0 = ev.clientX, sy0 = ev.clientY, ox = s.x, oy = s.y, pt = performance.now();
+        function move(e) {
+          var now = performance.now(), d = Math.max(8, now - pt) / 1000;
+          var nx = ox + (e.clientX - sx0) * unit, ny = oy + (e.clientY - sy0) * unit;
+          s.vx = (nx - s.x) / d; s.vy = (ny - s.y) / d;
+          s.x = nx; s.y = ny; pt = now;
+          states.forEach(function (o) {
+            if (o === s) { return; }
+            var dist = Math.hypot(o.cx - s.cx, o.cy - s.cy) || 1;
+            var wt = Math.max(0, 1 - dist / NEIGH) * 0.35;
+            o.tx = s.x * wt; o.ty = s.y * wt;
+          });
+          render(s); kick();
+        }
+        function up(e) {
+          s.held = false; s.p.style.cursor = 'grab';
+          try { s.p.releasePointerCapture(e.pointerId); } catch (ex) {}
+          s.p.removeEventListener('pointermove', move);
+          s.p.removeEventListener('pointerup', up);
+          s.p.removeEventListener('pointercancel', up);
+          s.tx = 0; s.ty = 0;
+          states.forEach(function (o) { if (o !== s) { o.tx = 0; o.ty = 0; } });
+          kick();
+        }
+        s.p.addEventListener('pointermove', move);
+        s.p.addEventListener('pointerup', up);
+        s.p.addEventListener('pointercancel', up);
+        kick();
+      });
+    });
+  }
+
+  // GRAVWELL. Armed on enter: wire a click listener onto each glyph path. On click,
+  // the source glyph becomes a gravity well — every other glyph is pulled toward it
+  // with a clamped 1/r² falloff + radial stretch, then snaps back elastically. Only
+  // toggles transform/transition on the existing paths; no element into the inner <svg>.
+  function gravwell(el) {
+    var svg = el.querySelector('svg');
+    if (!svg || reduced) { return; }
+    if (el.__lxWellArmed) { return; }
+    el.__lxWellArmed = true;
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (paths.length < 2) { return; }
+    function centre(p) {
+      var b;
+      try { b = p.getBBox(); } catch (e) { return null; }
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }
+    var R0 = 26;
+    var MAXSHIFT = 10;
+    var STRETCH = 0.9;
+    var SQUASH = 0.28;
+    var timers = [];
+    paths.forEach(function (src) {
+      src.style.transformBox = 'fill-box';
+      src.style.transformOrigin = 'center';
+      src.style.cursor = 'pointer';
+      src.addEventListener('click', function () {
+        var s = centre(src);
+        if (!s) { return; }
+        timers.forEach(clearTimeout); timers.length = 0;
+        paths.forEach(function (p) {
+          if (p === src) { return; }
+          var g = centre(p); if (!g) { return; }
+          var dx = s.x - g.x, dy = s.y - g.y;
+          var r2 = dx * dx + dy * dy; if (r2 < 1e-3) { return; }
+          var r = Math.sqrt(r2);
+          var falloff = Math.min(1, (R0 * R0) / r2);
+          var pull = MAXSHIFT * falloff;
+          var ux = dx / r, uy = dy / r;
+          var ang = Math.atan2(uy, ux) * 180 / Math.PI;
+          var sx = (1 + STRETCH * falloff).toFixed(3);
+          var sy = (1 - SQUASH * falloff).toFixed(3);
+          p.style.transition = 'transform 220ms cubic-bezier(.22,.61,.36,1)';
+          p.style.transform = 'translate(' + (ux * pull).toFixed(2) + 'px,'
+            + (uy * pull).toFixed(2) + 'px) rotate(' + ang.toFixed(2)
+            + 'deg) scale(' + sx + ',' + sy + ') rotate(' + (-ang).toFixed(2) + 'deg)';
+        });
+        timers.push(setTimeout(function () {
+          paths.forEach(function (p) {
+            if (p === src) { return; }
+            p.style.transition = 'transform 620ms cubic-bezier(.34,1.56,.64,1)';
+            p.style.transform = '';
+          });
+          timers.push(setTimeout(function () {
+            paths.forEach(function (p) {
+              p.style.transition = '';
+              p.style.transform = '';
+            });
+          }, 660));
+        }, 300));
+      });
+    });
+  }
+
+  // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
+  // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
   // on re-trigger).
   function play(el, name, dur) {
     if (name === 'lightning') { lightning(el); return; }
     if (name === 'storm') { storm(el); return; }
     if (name === 'handscribe') { handscribe(el); return; }
+    if (name === 'hologram') { hologram(el); return; }
+    if (name === 'neonsign') { neonsign(el); return; }
+    if (name === 'crystallize') { crystallize(el); return; }
+    if (name === 'blueprint') { blueprint(el); return; }
+    if (name === 'wobble') { wobble(el); return; }
+    if (name === 'gravwell') { gravwell(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -718,6 +1128,124 @@
             <span class="cap">fx.enter=handscribe — the equation writes itself, stroke by stroke</span>
             <code class="src">\lx[fx.enter=handscribe]{ e^{i\pi} + 1 = 0 }</code>
             <span class="hint">load — watch it ink in</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="hologram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.64 -35.244 127.9902 37.644" width="127.9902" height="37.644" role="img" aria-label="e to the power of i π = - 1">
+              <g fill="currentColor">
+                <path d="M415 143 L434 129 Q416 91 392 59 Q368 28 333 9 Q299 -10 247 -10 Q187 -10 138 18 Q90 47 62 102 Q34 158 34 238 Q34 322 62 376 Q91 431 139 458 Q187 485 245 485 Q327 485 377 428 Q427 371 431 266 L115 266 Q115 197 137 152 Q160 108 195 86 Q231 65 271 65 Q312 65 337 76 Q363 87 381 104 Q399 122 415 143 Z M114 303 L337 303 Q336 340 324 372 Q312 405 289 425 Q266 445 230 445 Q126 445 114 303 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M257 28 L257 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 380 Q102 412 91 419 Q80 427 58 427 Q48 427 40 426 Q33 425 33 425 L33 454 L159 482 L185 482 L185 101 Q185 72 189 56 Q193 40 208 34 Q224 28 257 28 Z M145 673 Q171 673 186 656 Q202 640 202 617 Q202 594 186 577 Q171 560 145 560 Q120 560 104 577 Q88 594 88 617 Q88 640 103 656 Q119 673 145 673 Z" transform="translate(18.56 -14.4) scale(0.028 -0.028)"/>
+                <path d="M571 455 L558 391 L438 391 Q435 373 430 335 Q426 298 422 255 Q419 212 419 175 Q419 122 432 91 Q446 61 477 61 Q504 61 518 69 Q532 78 542 88 L558 74 Q538 36 511 13 Q484 -9 438 -9 Q393 -9 372 24 Q352 57 352 106 Q352 147 359 196 Q366 245 376 295 Q387 346 395 391 L247 391 Q245 352 236 296 Q227 240 214 182 Q201 124 187 75 Q174 26 163 0 L69 0 L66 15 Q85 47 95 66 Q106 85 116 105 Q126 125 142 159 Q163 203 175 239 Q188 275 196 311 Q204 348 209 391 Q151 391 119 388 Q88 386 71 374 Q54 363 38 336 L18 346 Q38 415 87 443 Q136 471 214 471 L571 471 L571 455 Z" transform="translate(26.54 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(55.7991 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(95.7102 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(108.3102 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=hologram — flickers in as a cyan wireframe hologram</span>
+            <code class="src">\lx[fx.enter=hologram]{ e^{i\pi} = -1 }</code>
+            <span class="hint">load — scanlines + chromatic jitter</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="neonsign" data-lx-fx-glow-color="#ff3b6b"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0.04 -28.76 107.88 31.24" width="107.88" height="31.24" role="img" aria-label="OPEN">
+              <g fill="currentColor">
+                <path d="M688 338 Q688 233 649 154 Q611 76 540 32 Q469 -12 370 -12 Q271 -12 199 29 Q128 70 89 146 Q51 223 51 329 Q51 431 89 507 Q128 584 199 626 Q271 669 370 669 Q470 669 541 627 Q612 586 650 511 Q688 437 688 338 Z M583 335 Q583 425 556 490 Q529 556 480 591 Q432 627 367 627 Q270 627 213 549 Q156 472 156 335 Q156 194 209 112 Q263 30 371 30 Q478 30 530 107 Q583 184 583 335 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M48 657 L297 657 Q345 657 389 649 Q434 642 468 624 Q503 606 523 573 Q544 541 544 491 Q544 433 522 393 Q500 354 462 330 Q425 306 378 296 Q331 286 282 286 Q267 286 250 288 Q233 290 225 294 L225 123 Q225 82 233 62 Q242 42 264 36 Q286 30 326 30 L326 0 L44 0 L44 30 Q83 30 102 37 Q121 44 127 64 Q133 85 133 127 L133 557 Q133 601 114 614 Q96 627 48 627 L48 657 Z M225 614 L225 331 Q233 330 248 328 Q264 327 279 327 Q360 327 402 358 Q445 390 445 477 Q445 545 405 581 Q366 618 285 618 Q270 618 255 617 Q241 616 225 614 Z" transform="translate(29.52 0) scale(0.04 -0.04)"/>
+                <path d="M598 186 L570 0 L36 0 L36 30 Q77 30 97 35 Q118 41 125 60 Q133 79 133 118 L133 535 Q133 573 125 593 Q118 613 97 620 Q77 627 36 627 L36 657 L561 657 L567 493 L535 493 Q528 543 513 568 Q499 594 466 603 Q434 612 372 612 L225 612 L225 358 L342 358 Q388 358 412 366 Q436 374 445 396 Q454 418 454 458 L486 458 L486 226 L454 226 Q454 267 445 287 Q436 307 412 313 Q388 319 342 319 L225 319 L225 44 L354 44 Q412 44 447 49 Q483 55 503 70 Q524 85 537 113 Q551 141 566 186 L598 186 Z" transform="translate(52.28 0) scale(0.04 -0.04)"/>
+                <path d="M715 657 L715 627 Q688 627 674 622 Q661 618 650 607 Q638 597 631 572 Q624 547 624 493 L624 -8 L591 -8 L177 527 L172 527 L172 149 Q172 99 179 73 Q186 48 206 39 Q226 30 263 30 L263 0 L29 0 L29 30 Q69 30 89 38 Q109 47 116 73 Q123 99 123 149 L123 576 Q99 607 81 617 Q63 627 29 627 L29 657 L199 657 L569 174 L574 174 L574 498 Q574 543 570 566 Q566 589 555 602 Q543 616 527 621 Q511 627 479 627 L479 657 L715 657 Z" transform="translate(77.32 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=neonsign — buzzes to life, one glyph flickers forever</span>
+            <code class="src">\lx[fx.enter=neonsign, fx.glow-color=#ff3b6b]{ \text{OPEN} }</code>
+            <span class="hint">load — stutters on, then a broken tube keeps flickering</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="crystallize"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0.56 -34.432 141.3622 45.112" width="141.3622" height="45.112" role="img" aria-label="∇ squared ψ = 0">
+              <g fill="currentColor">
+                <path d="M683 678 L388 -13 L367 -13 L64 678 L683 678 Z M618 636 L190 636 L403 130 L618 636 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(29.92 -14.4) scale(0.028 -0.028)"/>
+                <path d="M71 409 Q48 409 32 395 Q17 382 6 366 L-12 375 Q4 416 30 448 Q57 480 105 480 Q178 480 178 403 Q178 370 167 331 Q157 293 146 254 Q136 216 136 182 Q136 130 173 102 Q211 74 284 74 L293 505 L285 693 L376 695 L356 500 L342 79 Q407 88 443 117 Q479 146 493 186 Q508 226 508 269 Q508 330 495 369 Q483 409 467 432 Q451 456 438 469 L446 482 Q471 477 501 453 Q531 429 553 380 Q575 331 575 252 Q575 192 552 136 Q530 81 479 42 Q428 4 343 -7 L356 -191 L285 -217 L260 -214 L277 -11 Q183 -11 135 42 Q87 95 87 177 Q87 225 94 275 Q101 325 101 357 Q101 379 95 394 Q89 409 71 409 Z" transform="translate(45.38 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(81.2911 0) scale(0.04 -0.04)"/>
+                <path d="M468 317 Q468 253 455 194 Q443 135 416 89 Q390 43 348 16 Q306 -11 247 -11 Q187 -11 145 15 Q103 42 77 88 Q51 134 39 194 Q27 254 27 320 Q27 415 52 487 Q78 560 127 601 Q177 642 249 642 Q314 642 363 603 Q412 565 440 492 Q468 420 468 317 Z M371 311 Q371 463 339 535 Q308 608 246 608 Q187 608 155 536 Q123 464 123 315 Q123 170 155 97 Q187 25 247 25 Q306 25 338 96 Q371 167 371 311 Z" transform="translate(121.2022 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=crystallize — a frost front freezes the equation in, then sparkles</span>
+            <code class="src">\lx[fx.enter=crystallize]{ \nabla^2 \psi = 0 }</code>
+            <span class="hint">load — watch it freeze over</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="blueprint"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.48 -34.432 201.912 38.032" width="201.912" height="38.032" role="img" aria-label="a squared + b squared = c squared">
+              <g fill="currentColor">
+                <path d="M308 62 L304 62 Q269 31 237 12 Q205 -7 157 -7 Q99 -7 68 25 Q38 57 38 105 Q38 145 56 172 Q75 200 105 219 Q136 238 171 251 Q207 264 241 273 Q275 282 301 290 L301 334 Q301 399 278 426 Q256 454 211 454 Q168 454 156 436 Q144 418 144 373 Q144 327 100 327 Q85 327 71 338 Q58 350 58 375 Q58 403 79 428 Q101 453 140 469 Q180 485 234 485 Q316 485 350 447 Q384 409 384 331 L384 104 Q384 73 391 64 Q398 55 414 55 Q428 55 439 62 Q451 69 461 80 L476 64 Q451 28 428 11 Q406 -5 368 -5 Q335 -5 324 12 Q313 29 308 62 Z M301 92 L301 257 Q256 246 216 231 Q176 216 151 192 Q126 168 126 129 Q126 92 146 70 Q166 48 198 48 Q248 48 301 92 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(19.2 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(43.5489 0) scale(0.04 -0.04)"/>
+                <path d="M163 706 L163 400 L166 400 Q192 432 231 458 Q270 485 320 485 Q370 485 407 456 Q445 428 466 378 Q487 328 487 263 Q487 174 456 113 Q425 52 371 21 Q317 -10 247 -10 Q183 -10 140 5 Q98 20 80 30 L80 592 Q80 626 72 635 Q65 645 36 645 Q24 645 16 644 Q8 643 8 643 L8 671 L137 706 L163 706 Z M163 356 L163 78 Q177 61 201 46 Q225 31 265 31 Q313 31 341 58 Q370 85 383 130 Q396 176 396 231 Q396 279 386 321 Q376 364 350 390 Q324 417 276 417 Q238 417 207 395 Q177 374 163 356 Z" transform="translate(81.2378 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(102.1178 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(128.6889 0) scale(0.04 -0.04)"/>
+                <path d="M408 148 L427 134 Q408 94 383 61 Q359 28 323 9 Q287 -10 233 -10 Q171 -10 126 20 Q81 50 57 103 Q33 157 33 226 Q33 344 92 414 Q151 485 259 485 Q330 485 370 454 Q411 423 411 379 Q411 334 369 334 Q347 334 335 345 Q324 357 317 374 Q310 391 302 408 Q295 425 281 436 Q268 448 242 448 Q181 448 146 403 Q112 359 112 273 Q112 182 149 123 Q187 65 264 65 Q313 65 343 85 Q374 105 408 148 Z" transform="translate(168.6 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(186.44 -14.4) scale(0.028 -0.028)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=blueprint — drafts itself in white linework on a blueprint field</span>
+            <code class="src">\lx[fx.enter=blueprint]{ a^2 + b^2 = c^2 }</code>
+            <span class="hint">load — watch it draft in</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="wobble"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.08 -34.432 199.272 45.832" width="199.272" height="45.832" role="img" aria-label="x squared + y squared = r squared">
+              <g fill="currentColor">
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(19.16 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(43.5089 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(81.1978 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(100.5178 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(127.0889 0) scale(0.04 -0.04)"/>
+                <path d="M183 482 L183 379 L186 379 Q224 435 251 461 Q279 488 315 488 Q344 488 358 473 Q373 458 373 432 Q373 404 359 391 Q346 378 329 378 Q313 378 300 386 Q288 395 279 403 Q270 412 264 412 Q247 412 225 386 Q203 360 185 330 L185 102 Q185 71 193 55 Q201 39 221 34 Q242 29 279 29 L279 0 L29 0 L29 29 Q62 29 77 34 Q93 40 97 54 Q102 69 102 97 L102 372 Q102 399 97 412 Q93 426 66 426 Q51 426 43 425 Q35 424 35 424 L35 452 L159 482 L183 482 Z" transform="translate(167 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(182.2 -14.4) scale(0.028 -0.028)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=wobble — grab any glyph and fling it; it springs back like jelly</span>
+            <code class="src">\lx[fx.enter=wobble]{ x^2 + y^2 = r^2 }</code>
+            <span class="hint">drag a glyph · fling it · watch it jiggle home</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="gravwell"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1.272 -64.4 129.3627 109.688" width="129.3627" height="109.688" role="img" aria-label="the sum from k = 0 to n of a sub k x to the power of k">
+              <g fill="currentColor">
+                <path d="M1047 0 L968 -406 L15 -406 L15 -380 L526 280 L29 888 L29 919 L990 919 L1004 596 L959 596 Q949 682 929 733 Q909 785 875 811 Q842 838 791 847 Q740 856 666 856 L224 856 L224 851 L639 336 L639 316 L183 -278 L183 -284 L754 -284 Q811 -284 848 -266 Q886 -249 912 -214 Q938 -179 957 -125 Q977 -72 998 0 L1047 0 Z" transform="translate(2.358 -0.06) scale(0.04 -0.04)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(16.534 -48.82) scale(0.028 -0.028)"/>
+                <path d="M539 0 L318 0 L318 29 Q340 29 348 31 Q357 34 357 41 Q357 48 353 54 Q350 61 346 65 L189 243 L183 243 L183 91 Q183 53 196 41 Q210 29 257 29 L257 0 L30 0 L30 29 Q75 29 87 41 Q100 54 100 95 L100 595 Q100 627 92 636 Q85 646 60 646 Q50 646 38 645 Q26 644 26 644 L26 671 L156 706 L183 706 L183 265 L189 265 L318 393 Q321 396 328 404 Q336 413 336 425 Q336 435 326 439 Q316 443 287 443 L287 473 L503 473 L503 443 Q479 443 460 438 Q442 434 423 421 Q404 409 376 386 Q349 363 307 326 L257 285 L433 87 Q457 60 472 47 Q488 35 503 32 Q518 29 539 29 L539 0 Z" transform="translate(0 42.98) scale(0.028 -0.028)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(15.176 42.98) scale(0.028 -0.028)"/>
+                <path d="M468 317 Q468 253 455 194 Q443 135 416 89 Q390 43 348 16 Q306 -11 247 -11 Q187 -11 145 15 Q103 42 77 88 Q51 134 39 194 Q27 254 27 320 Q27 415 52 487 Q78 560 127 601 Q177 642 249 642 Q314 642 363 603 Q412 565 440 492 Q468 420 468 317 Z M371 311 Q371 463 339 535 Q308 608 246 608 Q187 608 155 536 Q123 464 123 315 Q123 170 155 97 Q187 25 247 25 Q306 25 338 96 Q371 167 371 311 Z" transform="translate(35.336 42.98) scale(0.028 -0.028)"/>
+                <path d="M308 62 L304 62 Q269 31 237 12 Q205 -7 157 -7 Q99 -7 68 25 Q38 57 38 105 Q38 145 56 172 Q75 200 105 219 Q136 238 171 251 Q207 264 241 273 Q275 282 301 290 L301 334 Q301 399 278 426 Q256 454 211 454 Q168 454 156 436 Q144 418 144 373 Q144 327 100 327 Q85 327 71 338 Q58 350 58 375 Q58 403 79 428 Q101 453 140 469 Q180 485 234 485 Q316 485 350 447 Q384 409 384 331 L384 104 Q384 73 391 64 Q398 55 414 55 Q428 55 439 62 Q451 69 461 80 L476 64 Q451 28 428 11 Q406 -5 368 -5 Q335 -5 324 12 Q313 29 308 62 Z M301 92 L301 257 Q256 246 216 231 Q176 216 151 192 Q126 168 126 129 Q126 92 146 70 Q166 48 198 48 Q248 48 301 92 Z" transform="translate(55.8627 0) scale(0.04 -0.04)"/>
+                <path d="M539 0 L318 0 L318 29 Q340 29 348 31 Q357 34 357 41 Q357 48 353 54 Q350 61 346 65 L189 243 L183 243 L183 91 Q183 53 196 41 Q210 29 257 29 L257 0 L30 0 L30 29 Q75 29 87 41 Q100 54 100 95 L100 595 Q100 627 92 636 Q85 646 60 646 Q50 646 38 645 Q26 644 26 644 L26 671 L156 706 L183 706 L183 265 L189 265 L318 393 Q321 396 328 404 Q336 413 336 425 Q336 435 326 439 Q316 443 287 443 L287 473 L503 473 L503 443 Q479 443 460 438 Q442 434 423 421 Q404 409 376 386 Q349 363 307 326 L257 285 L433 87 Q457 60 472 47 Q488 35 503 32 Q518 29 539 29 L539 0 Z" transform="translate(75.0627 8.4) scale(0.028 -0.028)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(91.8387 0) scale(0.04 -0.04)"/>
+                <path d="M539 0 L318 0 L318 29 Q340 29 348 31 Q357 34 357 41 Q357 48 353 54 Q350 61 346 65 L189 243 L183 243 L183 91 Q183 53 196 41 Q210 29 257 29 L257 0 L30 0 L30 29 Q75 29 87 41 Q100 54 100 95 L100 595 Q100 627 92 636 Q85 646 60 646 Q50 646 38 645 Q26 644 26 644 L26 671 L156 706 L183 706 L183 265 L189 265 L318 393 Q321 396 328 404 Q336 413 336 425 Q336 435 326 439 Q316 443 287 443 L287 473 L503 473 L503 443 Q479 443 460 438 Q442 434 423 421 Q404 409 376 386 Q349 363 307 326 L257 285 L433 87 Q457 60 472 47 Q488 35 503 32 Q518 29 539 29 L539 0 Z" transform="translate(110.9987 -14.4) scale(0.028 -0.028)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=gravwell — click a glyph; its neighbours fall toward it, then snap back</span>
+            <code class="src">\lx[fx.enter=gravwell]{ \sum_{k=0}^{n} a_k x^k }</code>
+            <span class="hint">click any glyph — it becomes a gravity well</span>
           </figcaption>
         </figure>
         <figure class="card">
