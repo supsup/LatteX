@@ -85,6 +85,24 @@ class EffectsPageTest {
         new Fx("\\lx[fx.enter=handscribe]{ e^{i\\pi} + 1 = 0 }",
             "fx.enter=handscribe — the equation writes itself, stroke by stroke",
             "load — watch it ink in"),
+        new Fx("\\lx[fx.enter=hologram]{ e^{i\\pi} = -1 }",
+            "fx.enter=hologram — flickers in as a cyan wireframe hologram",
+            "load — scanlines + chromatic jitter"),
+        new Fx("\\lx[fx.enter=neonsign, fx.glow-color=#ff3b6b]{ \\text{OPEN} }",
+            "fx.enter=neonsign — buzzes to life, one glyph flickers forever",
+            "load — stutters on, then a broken tube keeps flickering"),
+        new Fx("\\lx[fx.enter=crystallize]{ \\nabla^2 \\psi = 0 }",
+            "fx.enter=crystallize — a frost front freezes the equation in, then sparkles",
+            "load — watch it freeze over"),
+        new Fx("\\lx[fx.enter=blueprint]{ a^2 + b^2 = c^2 }",
+            "fx.enter=blueprint — drafts itself in white linework on a blueprint field",
+            "load — watch it draft in"),
+        new Fx("\\lx[fx.enter=wobble]{ x^2 + y^2 = r^2 }",
+            "fx.enter=wobble — grab any glyph and fling it; it springs back like jelly",
+            "drag a glyph · fling it · watch it jiggle home"),
+        new Fx("\\lx[fx.enter=gravwell]{ \\sum_{k=0}^{n} a_k x^k }",
+            "fx.enter=gravwell — click a glyph; its neighbours fall toward it, then snap back",
+            "click any glyph — it becomes a gravity well"),
         new Fx("\\lx[fx.enter=fade, fx.hover=pulse, fx.click=boom, fx.duration=400ms]"
             + "{ \\int_0^\\infty e^{-x}\\,dx }",
             "all three — fade in, pulse on hover, boom on click", "load · hover · click"));
@@ -170,6 +188,45 @@ class EffectsPageTest {
         assertTrue(written.contains("function handscribe"), "handscribe routine embedded");
         assertTrue(written.contains("strokeDashoffset"),
             "handscribe inks glyphs in via stroke-dashoffset");
+        // The 6-effect batch (hologram/neonsign/crystallize/blueprint/wobble/gravwell):
+        // each is a page-side JS routine (NOT a keyframe on the element), stamped like any
+        // effect, touching only the container + existing paths (+ body overlays).
+        assertTrue(written.contains("data-lx-fx-enter=\"hologram\""), "hologram stamped");
+        assertFalse(written.contains("@keyframes lx-hologram"),
+            "hologram is a JS routine, not a keyframe on the element");
+        assertTrue(written.contains("function hologram"), "hologram routine embedded");
+        assertTrue(written.contains("repeating-linear-gradient(0deg"),
+            "hologram lays cyan scanlines via a body overlay");
+        assertTrue(written.contains("data-lx-fx-enter=\"neonsign\""), "neonsign stamped");
+        assertFalse(written.contains("@keyframes lx-neonsign"),
+            "neonsign is a JS glow/flicker routine, not a keyframe");
+        assertTrue(written.contains("function neonsign"), "neonsign routine embedded");
+        assertTrue(written.contains("broken.style.opacity"),
+            "neonsign flickers one existing path (the broken tube)");
+        assertTrue(written.contains("data-lx-fx-enter=\"crystallize\""), "crystallize stamped");
+        assertFalse(written.contains("@keyframes lx-crystallize"),
+            "crystallize is a JS freeze routine, not a keyframe");
+        assertTrue(written.contains("function crystallize"), "crystallize routine embedded");
+        assertTrue(written.contains("mix-blend-mode:screen"),
+            "crystallize sweeps a frosted body-level pane");
+        assertTrue(written.contains("data-lx-fx-enter=\"blueprint\""), "blueprint stamped");
+        assertFalse(written.contains("@keyframes lx-blueprint"),
+            "blueprint is a JS stroke-draw, not a keyframe");
+        assertTrue(written.contains("function blueprint"), "blueprint routine embedded");
+        assertTrue(written.contains("lx-blueprint"),
+            "blueprint flips the container to the .lx-blueprint drafting field");
+        assertTrue(written.contains("data-lx-fx-enter=\"wobble\""), "wobble stamped");
+        assertFalse(written.contains("@keyframes lx-wobble"),
+            "wobble is a JS drag-spring, not a keyframe");
+        assertTrue(written.contains("function wobble"), "wobble routine embedded");
+        assertTrue(written.contains("setPointerCapture"),
+            "wobble captures the pointer for a smooth off-glyph drag");
+        assertTrue(written.contains("data-lx-fx-enter=\"gravwell\""), "gravwell stamped");
+        assertFalse(written.contains("@keyframes lx-gravwell"),
+            "gravwell is a JS click routine, not a keyframe");
+        assertTrue(written.contains("function gravwell"), "gravwell routine embedded");
+        assertTrue(written.contains("__lxWellArmed"),
+            "gravwell arms click handlers on the glyph paths");
         assertTrue(written.contains("prefers-reduced-motion"), "respects reduced motion");
         // Whole-page containment: the ONLY <script>/<style>/data-*/on* live in the
         // trusted <head> runtime — never inside any rendered <svg>. Re-scan each SVG.
@@ -429,6 +486,28 @@ class EffectsPageTest {
             /* Soften: no motion. Held-visible states must still be legible. */
             .lx-math { animation: none !important; }
             .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
+          }
+
+          /* blueprint: the container becomes an engineer's drafting field — a deep
+             cyan-blue ground under a faint white grid. The JS then stroke-draws the
+             glyphs in white + fades transient guide marks; under reduced motion this
+             static look is all that shows. */
+          .lx-math.lx-blueprint {
+            color: #eaf3ff;
+            padding: .5rem .7rem;
+            border-radius: 6px;
+            box-shadow: inset 0 0 0 1px rgba(226, 238, 255, .18);
+            background:
+              repeating-linear-gradient(0deg,  rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
+              repeating-linear-gradient(90deg, rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
+              linear-gradient(180deg, #0b3a66, #08294a);
+          }
+
+          /* hologram: scrolls the scanline body-overlay's gradient (3px period → 6px
+             loop). Rides the overlay, never the element — hologram itself is JS-driven. */
+          @keyframes lx-holo-scan {
+            0%   { background-position: 0 0; }
+            100% { background-position: 0 6px; }
           }
         </style>""";
 
@@ -739,13 +818,401 @@ class EffectsPageTest {
             });
           }
 
-          // Play a trigger's effect. lightning/storm/handscribe → their JS routines;
+          // HOLOGRAM. Flickers in as a cyan wireframe: scanlines, RGB-split jitter,
+          // parallax tilt, flicker dropouts, then a subtle idle loop. Tints/filters/
+          // transforms the container el and drives a pointer-events-none scanline body
+          // overlay; nothing reaches the inner <svg>.
+          function hologram(el) {
+            if (el._lxHolo) { return; }
+            el._lxHolo = true;
+            var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+            var tint = (authored && authored.toLowerCase() !== 'currentcolor')
+              ? authored : '#5fe8ff';
+            el.style.color = tint;
+            function aberr(px) {
+              return 'drop-shadow(' + px + 'px 0 0 rgba(255,44,120,.5))'
+                + ' drop-shadow(' + (-px) + 'px 0 0 rgba(60,220,255,.55))'
+                + ' drop-shadow(0 0 7px ' + tint + ')';
+            }
+            el.style.filter = aberr(1.2);
+            var scan = document.createElement('div');
+            scan.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;'
+              + 'mix-blend-mode:screen;background:repeating-linear-gradient(0deg,'
+              + ' rgba(95,232,255,.14) 0px, rgba(95,232,255,.14) 1px,'
+              + ' transparent 1px, transparent 3px);';
+            document.body.appendChild(scan);
+            el._lxHolo = scan;
+            function place() {
+              var r = el.getBoundingClientRect();
+              scan.style.left = r.left + 'px'; scan.style.top = r.top + 'px';
+              scan.style.width = r.width + 'px'; scan.style.height = r.height + 'px';
+            }
+            place();
+            window.addEventListener('scroll', place, true);
+            window.addEventListener('resize', place);
+            if (reduced) { return; }
+            scan.style.animation = 'lx-holo-scan 1.1s linear infinite';
+            el.style.transition = 'transform 1400ms ease-in-out, opacity 90ms linear';
+            var seq = ['0', '1', '.2', '1', '.5', '1'], j = 0;
+            (function boot() {
+              if (j < seq.length) { el.style.opacity = seq[j++]; setTimeout(boot, 55); return; }
+              var dir = 1;
+              setInterval(function () {
+                place();
+                dir = -dir;
+                el.style.transform = 'perspective(440px) rotateY(' + (dir * 6) + 'deg)';
+                if (Math.random() < 0.5) {
+                  el.style.filter = aberr(3 + Math.random() * 3);
+                  setTimeout(function () { el.style.filter = aberr(1.2); }, 90);
+                }
+                if (Math.random() < 0.28) {
+                  el.style.opacity = '.4';
+                  setTimeout(function () { el.style.opacity = '1'; }, 70);
+                }
+              }, 900);
+            })();
+          }
+
+          // NEON SIGN. Buzzes to life: failed stuttering ignitions, then a steady hum —
+          // one glyph left flickering forever. Drives a drop-shadow bloom + opacity on the
+          // container and toggles opacity on ONE existing inner-<svg> path; no <svg> edits.
+          function neonsign(el) {
+            var color = resolveColor(el);
+            function glow(on) {
+              var core = 2 + on * 1;
+              var near = 4 + on * 5;
+              var halo = 6 + on * 13;
+              return 'drop-shadow(0 0 ' + core + 'px rgba(255,255,255,'
+                  + (0.3 + on * 0.5).toFixed(3) + '))'
+                + ' drop-shadow(0 0 ' + near + 'px rgba(255,255,255,'
+                  + (on * 0.35).toFixed(3) + '))'
+                + ' drop-shadow(0 0 ' + halo + 'px ' + color + ')';
+            }
+            if (reduced) { el.style.filter = glow(1); return; }
+            el.style.transition = 'filter 40ms linear, opacity 40ms linear';
+            var seq = [
+              [0,   0.35, 1],
+              [70,  0,    0.25],
+              [150, 0.8,  1],
+              [210, 0,    0.25],
+              [340, 0.5,  1],
+              [430, 1,    1]
+            ];
+            seq.forEach(function (s) {
+              setTimeout(function () {
+                el.style.opacity = String(s[2]);
+                el.style.filter = glow(s[1]);
+              }, s[0]);
+            });
+            var paths = el.querySelectorAll('svg path');
+            if (!paths.length) { return; }
+            var broken = paths[Math.floor(paths.length / 2)];
+            broken.style.transition = 'opacity 60ms linear';
+            function flicker() {
+              var dropout = Math.random() < 0.35;
+              broken.style.opacity = dropout
+                ? (Math.random() < 0.5 ? '0.15' : '0.6') : '1';
+              var next = dropout ? 40 + Math.random() * 90 : 300 + Math.random() * 1500;
+              setTimeout(flicker, next);
+            }
+            setTimeout(flicker, 600);
+          }
+
+          // CRYSTALLIZE. A frost front sweeps across (a body-level frost pane, clip-swept),
+          // an icy blue-white tint fits over the glyphs (filter on el), then sparkle motes
+          // pop. Filter/clip on el + separate body overlays; no element into the inner <svg>.
+          function crystallize(el) {
+            var svg = el.querySelector('svg');
+            if (!svg) { return; }
+            var gleam = resolveColor(el);
+            var icy = 'brightness(1.14) saturate(0.6) sepia(0.18) hue-rotate(165deg)';
+            var trans0 = el.style.transition;
+            if (reduced) {
+              el.style.filter = icy + ' drop-shadow(0 0 4px #cfeaff)';
+              return;
+            }
+            var r = el.getBoundingClientRect();
+            var pane = document.createElement('div');
+            pane.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;'
+              + 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;'
+              + 'height:' + r.height + 'px;opacity:0.85;mix-blend-mode:screen;'
+              + 'clip-path:inset(0 100% 0 0);transition:clip-path 900ms ease;'
+              + 'background:linear-gradient(115deg, rgba(207,234,255,0.55) 0%,'
+              + ' rgba(255,255,255,0.35) 45%, rgba(160,205,245,0.5) 100%),'
+              + ' repeating-linear-gradient(60deg, rgba(255,255,255,0.12) 0 6px,'
+              + ' rgba(255,255,255,0) 6px 13px);';
+            document.body.appendChild(pane);
+            el.style.transition = 'filter 900ms ease';
+            el.style.filter = icy + ' blur(1.4px) drop-shadow(0 0 5px ' + gleam + ')';
+            requestAnimationFrame(function () {
+              pane.style.clipPath = 'inset(0 0 0 0)';
+              el.style.filter = icy + ' blur(0px) drop-shadow(0 0 6px #d6f0ff)';
+            });
+            var motes = [];
+            for (var i = 0; i < 7; i++) {
+              (function (i) {
+                var s = document.createElement('div');
+                var sz = 3 + Math.random() * 3;
+                var px = r.left + Math.random() * r.width;
+                var py = r.top + Math.random() * r.height;
+                s.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
+                  + 'left:' + px + 'px;top:' + py + 'px;width:' + sz + 'px;height:' + sz
+                  + 'px;margin:' + (-sz / 2) + 'px 0 0 ' + (-sz / 2) + 'px;border-radius:50%;'
+                  + 'background:#fff;box-shadow:0 0 6px 2px #cfeaff;opacity:0;'
+                  + 'transform:scale(0.2);transition:transform 260ms ease, opacity 260ms ease;';
+                document.body.appendChild(s);
+                motes.push(s);
+                setTimeout(function () {
+                  s.style.opacity = '1'; s.style.transform = 'scale(1.3)';
+                  setTimeout(function () {
+                    s.style.opacity = '0'; s.style.transform = 'scale(0.4)';
+                  }, 200);
+                }, 620 + i * 55);
+              })(i);
+            }
+            setTimeout(function () {
+              pane.remove();
+              motes.forEach(function (m) { m.remove(); });
+              el.style.transition = 'filter 500ms ease';
+              el.style.filter = 'brightness(1.05) saturate(0.85) drop-shadow(0 0 3px #cfeaff)';
+              setTimeout(function () { el.style.transition = trans0; }, 520);
+            }, 1300);
+          }
+
+          // BLUEPRINT. The container flips to a cyan drafting field (.lx-blueprint), the
+          // glyphs stroke-draw in white linework, and a body-level guide overlay (frame,
+          // tangent circles, centre lines) fades as they resolve. Toggles presentation on
+          // the existing paths + a separate body overlay; no element into the inner <svg>.
+          function blueprint(el) {
+            el.classList.add('lx-blueprint');
+            var svg = el.querySelector('svg');
+            var paths = svg
+              ? Array.prototype.slice.call(svg.querySelectorAll('path'))
+              : [];
+            var WHITE = '#eaf3ff';
+            if (reduced) {
+              paths.forEach(function (p) { p.style.fill = WHITE; });
+              return;
+            }
+            var r = el.getBoundingClientRect();
+            var w = r.width, h = r.height, cx = w / 2, cy = h / 2;
+            var rad = Math.min(w, h) / 2;
+            var guide = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            guide.setAttribute('width', w); guide.setAttribute('height', h);
+            guide.setAttribute('fill', 'none');
+            guide.setAttribute('stroke', 'rgba(226,238,255,0.55)');
+            guide.setAttribute('stroke-width', '1');
+            guide.style.cssText = 'position:fixed;pointer-events:none;overflow:visible;'
+              + 'z-index:2147483647;opacity:0;transition:opacity 300ms ease;'
+              + 'left:' + r.left + 'px;top:' + r.top + 'px;'
+              + 'width:' + w + 'px;height:' + h + 'px;';
+            guide.innerHTML =
+              '<rect x="1" y="1" width="' + (w - 2) + '" height="' + (h - 2)
+                + '" stroke-dasharray="4 4"/>'
+              + '<circle cx="' + cx + '" cy="' + cy + '" r="' + rad + '"/>'
+              + '<circle cx="' + cx + '" cy="' + cy + '" r="' + (rad * 0.62) + '"/>'
+              + '<line x1="0" y1="' + cy + '" x2="' + w + '" y2="' + cy + '"/>'
+              + '<line x1="' + cx + '" y1="0" x2="' + cx + '" y2="' + h + '"/>';
+            document.body.appendChild(guide);
+            requestAnimationFrame(function () { guide.style.opacity = '1'; });
+            var DRAW = 620, STAGGER = 60, last = 0;
+            paths.sort(function (a, b) {
+              try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+            });
+            paths.forEach(function (p, i) {
+              var len;
+              try { len = p.getTotalLength() || 100; } catch (e) { len = 100; }
+              var delay = i * STAGGER;
+              if (delay > last) { last = delay; }
+              p.style.stroke = WHITE;
+              p.style.strokeWidth = '1.2';
+              p.style.fill = 'none';
+              p.style.strokeDasharray = len;
+              p.style.strokeDashoffset = len;
+              setTimeout(function () {
+                p.style.transition = 'stroke-dashoffset ' + DRAW
+                  + 'ms ease, fill 300ms ease ' + DRAW + 'ms';
+                p.style.strokeDashoffset = '0';
+                p.style.fill = WHITE;
+              }, delay);
+            });
+            var total = last + DRAW + 300;
+            setTimeout(function () { guide.style.opacity = '0'; }, Math.max(0, total - 260));
+            setTimeout(function () { guide.remove(); }, total + 120);
+          }
+
+          // WOBBLE. Armed on enter: attach pointerdown to each glyph path so the user can
+          // grab + fling it — taffy stretch on drag, an underdamped spring home with
+          // overshoot on release, neighbours following. Only style.transform on the existing
+          // paths (+ body pointer capture); no element into the inner <svg>.
+          function wobble(el) {
+            if (reduced) { return; }
+            var svg = el.querySelector('svg');
+            if (!svg) { return; }
+            var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+            if (!paths.length || el.__lxWobble) { return; }
+            el.__lxWobble = true;
+            var vb = svg.viewBox && svg.viewBox.baseVal;
+            var box = svg.getBoundingClientRect();
+            var unit = (vb && vb.width && box.width) ? vb.width / box.width : 1;
+            var NEIGH = (vb && vb.width ? vb.width : 100) * 0.28;
+            var STIFF = 240, DAMP = 19, REST = 0.05;
+            var states = paths.map(function (p) {
+              p.style.transformBox = 'fill-box';
+              p.style.transformOrigin = 'center';
+              p.style.cursor = 'grab';
+              p.style.touchAction = 'none';
+              var b; try { b = p.getBBox(); } catch (e) { b = { x:0, y:0, width:0, height:0 }; }
+              return { p: p, cx: b.x + b.width/2, cy: b.y + b.height/2,
+                       x:0, y:0, vx:0, vy:0, tx:0, ty:0, held:false };
+            });
+            function render(s) {
+              var sp = Math.sqrt(s.vx*s.vx + s.vy*s.vy) / unit;
+              var stretch = Math.min(0.55, sp / 3200);
+              var ang = sp > 0.01 ? Math.atan2(s.vy, s.vx) : 0;
+              var sx = 1 + stretch, sy = 1 - stretch * 0.6;
+              s.p.style.transform =
+                'translate(' + s.x.toFixed(2) + 'px,' + s.y.toFixed(2) + 'px) '
+                + 'rotate(' + ang.toFixed(3) + 'rad) scale(' + sx.toFixed(3) + ',' + sy.toFixed(3) + ') '
+                + 'rotate(' + (-ang).toFixed(3) + 'rad)';
+            }
+            var raf = 0, last = 0;
+            function loop(now) {
+              var dt = last ? Math.min(0.032, (now - last) / 1000) : 0.016;
+              last = now;
+              var moving = false;
+              states.forEach(function (s) {
+                if (!s.held) {
+                  var ax = -STIFF * (s.x - s.tx) - DAMP * s.vx;
+                  var ay = -STIFF * (s.y - s.ty) - DAMP * s.vy;
+                  s.vx += ax * dt; s.vy += ay * dt;
+                  s.x += s.vx * dt; s.y += s.vy * dt;
+                }
+                if (s.held || Math.abs(s.x - s.tx) > REST || Math.abs(s.y - s.ty) > REST
+                    || Math.abs(s.vx) > REST || Math.abs(s.vy) > REST) {
+                  moving = true; render(s);
+                } else if (s.x || s.y || s.vx || s.vy) {
+                  s.x = s.y = s.vx = s.vy = 0; s.p.style.transform = '';
+                }
+              });
+              raf = moving ? requestAnimationFrame(loop) : 0;
+              if (!moving) { last = 0; }
+            }
+            function kick() { if (!raf) { last = 0; raf = requestAnimationFrame(loop); } }
+            states.forEach(function (s) {
+              s.p.addEventListener('pointerdown', function (ev) {
+                ev.preventDefault();
+                try { s.p.setPointerCapture(ev.pointerId); } catch (e) {}
+                s.held = true; s.p.style.cursor = 'grabbing';
+                var sx0 = ev.clientX, sy0 = ev.clientY, ox = s.x, oy = s.y, pt = performance.now();
+                function move(e) {
+                  var now = performance.now(), d = Math.max(8, now - pt) / 1000;
+                  var nx = ox + (e.clientX - sx0) * unit, ny = oy + (e.clientY - sy0) * unit;
+                  s.vx = (nx - s.x) / d; s.vy = (ny - s.y) / d;
+                  s.x = nx; s.y = ny; pt = now;
+                  states.forEach(function (o) {
+                    if (o === s) { return; }
+                    var dist = Math.hypot(o.cx - s.cx, o.cy - s.cy) || 1;
+                    var wt = Math.max(0, 1 - dist / NEIGH) * 0.35;
+                    o.tx = s.x * wt; o.ty = s.y * wt;
+                  });
+                  render(s); kick();
+                }
+                function up(e) {
+                  s.held = false; s.p.style.cursor = 'grab';
+                  try { s.p.releasePointerCapture(e.pointerId); } catch (ex) {}
+                  s.p.removeEventListener('pointermove', move);
+                  s.p.removeEventListener('pointerup', up);
+                  s.p.removeEventListener('pointercancel', up);
+                  s.tx = 0; s.ty = 0;
+                  states.forEach(function (o) { if (o !== s) { o.tx = 0; o.ty = 0; } });
+                  kick();
+                }
+                s.p.addEventListener('pointermove', move);
+                s.p.addEventListener('pointerup', up);
+                s.p.addEventListener('pointercancel', up);
+                kick();
+              });
+            });
+          }
+
+          // GRAVWELL. Armed on enter: wire a click listener onto each glyph path. On click,
+          // the source glyph becomes a gravity well — every other glyph is pulled toward it
+          // with a clamped 1/r² falloff + radial stretch, then snaps back elastically. Only
+          // toggles transform/transition on the existing paths; no element into the inner <svg>.
+          function gravwell(el) {
+            var svg = el.querySelector('svg');
+            if (!svg || reduced) { return; }
+            if (el.__lxWellArmed) { return; }
+            el.__lxWellArmed = true;
+            var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+            if (paths.length < 2) { return; }
+            function centre(p) {
+              var b;
+              try { b = p.getBBox(); } catch (e) { return null; }
+              return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+            }
+            var R0 = 26;
+            var MAXSHIFT = 10;
+            var STRETCH = 0.9;
+            var SQUASH = 0.28;
+            var timers = [];
+            paths.forEach(function (src) {
+              src.style.transformBox = 'fill-box';
+              src.style.transformOrigin = 'center';
+              src.style.cursor = 'pointer';
+              src.addEventListener('click', function () {
+                var s = centre(src);
+                if (!s) { return; }
+                timers.forEach(clearTimeout); timers.length = 0;
+                paths.forEach(function (p) {
+                  if (p === src) { return; }
+                  var g = centre(p); if (!g) { return; }
+                  var dx = s.x - g.x, dy = s.y - g.y;
+                  var r2 = dx * dx + dy * dy; if (r2 < 1e-3) { return; }
+                  var r = Math.sqrt(r2);
+                  var falloff = Math.min(1, (R0 * R0) / r2);
+                  var pull = MAXSHIFT * falloff;
+                  var ux = dx / r, uy = dy / r;
+                  var ang = Math.atan2(uy, ux) * 180 / Math.PI;
+                  var sx = (1 + STRETCH * falloff).toFixed(3);
+                  var sy = (1 - SQUASH * falloff).toFixed(3);
+                  p.style.transition = 'transform 220ms cubic-bezier(.22,.61,.36,1)';
+                  p.style.transform = 'translate(' + (ux * pull).toFixed(2) + 'px,'
+                    + (uy * pull).toFixed(2) + 'px) rotate(' + ang.toFixed(2)
+                    + 'deg) scale(' + sx + ',' + sy + ') rotate(' + (-ang).toFixed(2) + 'deg)';
+                });
+                timers.push(setTimeout(function () {
+                  paths.forEach(function (p) {
+                    if (p === src) { return; }
+                    p.style.transition = 'transform 620ms cubic-bezier(.34,1.56,.64,1)';
+                    p.style.transform = '';
+                  });
+                  timers.push(setTimeout(function () {
+                    paths.forEach(function (p) {
+                      p.style.transition = '';
+                      p.style.transform = '';
+                    });
+                  }, 660));
+                }, 300));
+              });
+            });
+          }
+
+          // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
+          // crystallize/blueprint/wobble/gravwell) → their JS routines;
           // everything else is a one-shot CSS keyframe (reset first so it can replay
           // on re-trigger).
           function play(el, name, dur) {
             if (name === 'lightning') { lightning(el); return; }
             if (name === 'storm') { storm(el); return; }
             if (name === 'handscribe') { handscribe(el); return; }
+            if (name === 'hologram') { hologram(el); return; }
+            if (name === 'neonsign') { neonsign(el); return; }
+            if (name === 'crystallize') { crystallize(el); return; }
+            if (name === 'blueprint') { blueprint(el); return; }
+            if (name === 'wobble') { wobble(el); return; }
+            if (name === 'gravwell') { gravwell(el); return; }
             if (!VOCAB[name] || name === 'none') { return; }
             if (reduced) { return; }
             el.style.animation = 'none';
