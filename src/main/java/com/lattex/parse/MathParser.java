@@ -1204,6 +1204,113 @@ public final class MathParser {
         };
     }
 
+    // ------------------------------------------------------------------
+    // Read-only command enumeration (the drift-free "every supported
+    // command" index). This exposes the internal command tables as a flat,
+    // categorised list so a generator can render every command LatteX
+    // accepts. It adds NO parsing/layout/emit behaviour — it only reads the
+    // static tables built above, so the index can never drift from what the
+    // parser actually supports: add a command to a table and it appears here.
+    // ------------------------------------------------------------------
+
+    /**
+     * The command family a {@link SupportedCommand} belongs to. The
+     * {@link #title()} is a human-readable group heading; enum order is the
+     * natural display order for a categorised index.
+     */
+    public enum Category {
+        GREEK("Greek letters"),
+        RELATION("Relations"),
+        BINARY_OPERATOR("Binary operators"),
+        ARROW("Arrows"),
+        ORDINARY("Ordinary symbols"),
+        BIG_OPERATOR("Big operators"),
+        NAMED_OPERATOR("Named operators"),
+        ACCENT("Accents & decorations"),
+        FONT_VARIANT("Font variants"),
+        SPACING("Spacing");
+
+        private final String title;
+
+        Category(String title) {
+            this.title = title;
+        }
+
+        /** A human-readable heading for this category. */
+        public String title() {
+            return title;
+        }
+    }
+
+    /**
+     * One parser-supported command paired with a LaTeX snippet that exercises
+     * it sensibly for its category (e.g. a bare symbol {@code \leq}, an accent
+     * over a base {@code \hat{x}}, spacing between visible marks {@code a\quad b}).
+     *
+     * @param command       the {@code \}-prefixed command name (e.g. {@code \leq})
+     * @param category      the family it belongs to
+     * @param renderTemplate a self-contained LaTeX math snippet exercising it
+     */
+    public record SupportedCommand(String command, Category category, String renderTemplate) {
+    }
+
+    /**
+     * Enumerates every command in the parser's static command tables (symbols,
+     * big operators, named operators, accents, font variants, spacing) into a
+     * flat list, each paired with a category and a render template. READ-ONLY:
+     * this reflects exactly what {@link #parse} accepts today and updates
+     * automatically when a table gains an entry.
+     */
+    public static List<SupportedCommand> supportedCommands() {
+        List<SupportedCommand> out = new ArrayList<>();
+        SYMBOLS.forEach((name, sym) ->
+            out.add(new SupportedCommand("\\" + name, categorize(sym), "\\" + name)));
+        BIG_OPERATORS.forEach((name, sym) ->
+            out.add(new SupportedCommand("\\" + name, Category.BIG_OPERATOR,
+                "\\" + name + "_{i=1}^{n}")));
+        NAMED_OPS.forEach((name, op) ->
+            out.add(new SupportedCommand("\\" + name, Category.NAMED_OPERATOR,
+                op.takesLimits() ? "\\" + name + "_{x\\to0}" : "\\" + name + " x")));
+        ACCENTS.forEach((name, acc) ->
+            out.add(new SupportedCommand("\\" + name, Category.ACCENT,
+                "\\" + name + accentBase(acc))));
+        FONT_VARIANTS.forEach((name, style) ->
+            out.add(new SupportedCommand("\\" + name, Category.FONT_VARIANT,
+                (name.equals("boldsymbol") || name.equals("bm"))
+                    ? "\\" + name + "{\\alpha\\beta\\gamma}"
+                    : "\\" + name + "{RQZ}")));
+        SPACES.forEach((name, mu) ->
+            out.add(new SupportedCommand("\\" + name, Category.SPACING,
+                "a\\" + name + " b")));
+        return List.copyOf(out);
+    }
+
+    /** Categorises a symbol-table entry by its code-point range and math class. */
+    private static Category categorize(Sym sym) {
+        int cp = sym.codePoint();
+        // Greek + Coptic block covers every Greek letter and \var* / digamma form.
+        if (cp >= 0x0370 && cp <= 0x03FF) {
+            return Category.GREEK;
+        }
+        // Arrows block + Supplemental Arrows-A (the long arrows \longleftarrow …).
+        if ((cp >= 0x2190 && cp <= 0x21FF) || (cp >= 0x27F0 && cp <= 0x27FF)) {
+            return Category.ARROW;
+        }
+        return switch (sym.mathClass()) {
+            case REL -> Category.RELATION;
+            case BIN -> Category.BINARY_OPERATOR;
+            default -> Category.ORDINARY; // ORD, INNER, OPEN, CLOSE, PUNCT
+        };
+    }
+
+    /** A base to place under an accent: wide accents & rules get a run, others a single letter. */
+    private static String accentBase(AccentSpec acc) {
+        if (acc.codePoint() == Accent.RULE) {
+            return "{a+b}"; // overline / underline rule over a short expression
+        }
+        return acc.stretchy() ? "{abc}" : "{x}";
+    }
+
     /**
      * Every {@code \command -> code point} this parser can emit as a glyph
      * (symbol table + large operators), keyed by the {@code \}-prefixed command.
