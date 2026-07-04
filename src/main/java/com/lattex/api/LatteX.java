@@ -11,6 +11,7 @@ import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
 import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
@@ -91,6 +92,7 @@ public final class LatteX {
                 ? "the square root of " + describe(radicand)
                 : "the " + describe(index) + "th root of " + describe(radicand);
             case Spacing _ -> "";
+            case Phantom _ -> ""; // invisible: reserves space, reads as nothing
             case BigOperator(var op, var lower, var upper, _) -> {
                 StringBuilder sb = new StringBuilder(operatorName(op.codePoint()));
                 if (lower != null) {

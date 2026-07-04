@@ -317,4 +317,37 @@ public sealed interface MathNode {
             return accentCodePoint == RULE;
         }
     }
+
+    /**
+     * A phantom box — its {@code content} is laid out to obtain metrics but emits
+     * <em>no ink</em> (no glyphs, no rules). It reserves space so surrounding
+     * material aligns as if the content were present. Covers the TeX/LaTeX family:
+     *
+     * <ul>
+     *   <li>{@code \phantom{x}} — keep width <em>and</em> vertical extent
+     *       ({@code keepWidth} &amp; {@code keepVertical} both true).</li>
+     *   <li>{@code \hphantom{x}} — keep width only (zero height/depth).</li>
+     *   <li>{@code \vphantom{x}} — keep vertical extent only (zero width); also how
+     *       {@code \mathstrut} is realised, as {@code \vphantom{(}}.</li>
+     * </ul>
+     *
+     * <p>The phantom has an implied Ord class (it behaves like the box it mimics).
+     * Being ink-free it stays trivially within the minimal SVG alphabet.
+     *
+     * @param content      the sub-formula whose metrics are borrowed
+     * @param keepWidth    whether the phantom advances by the content's width
+     * @param keepVertical whether the phantom keeps the content's height and depth
+     */
+    record Phantom(MathNode content, boolean keepWidth, boolean keepVertical)
+            implements MathNode {
+        public Phantom {
+            if (content == null) {
+                throw new IllegalArgumentException("Phantom content must not be null");
+            }
+            if (!keepWidth && !keepVertical) {
+                throw new IllegalArgumentException(
+                    "Phantom must preserve width and/or vertical extent");
+            }
+        }
+    }
 }

@@ -371,6 +371,70 @@ class LayoutS4Test {
         assertTrue(with.width() > without.width(), "\\, adds width");
     }
 
+    @Test
+    void spacingCommandAdvancesMatchMuWidths() {
+        // The gap between the two glyphs is exactly its mu-width. Since 18mu = 1em
+        // and mu = fontSize/18 (unitsPerEm cancels), the row-width difference
+        // between two spaces equals (Δmu)·(fontSize/18) user units.
+        double mu = 40.0 / 18.0;
+        double thin = layout("a\\,b").width();
+        double thick = layout("a\\;b").width();
+        double quad = layout("a\\quad b").width();
+        double qquad = layout("a\\qquad b").width();
+
+        // \; (5mu) is 2mu wider than \, (3mu).
+        assertEquals(2.0 * mu, thick - thin, 1e-6, "\\; is 2mu wider than \\,");
+        // \quad (18mu) is 15mu wider than \, (3mu).
+        assertEquals(15.0 * mu, quad - thin, 1e-6, "\\quad is 15mu wider than \\,");
+        // \qquad (36mu) is exactly 18mu wider than \quad (18mu).
+        assertEquals(18.0 * mu, qquad - quad, 1e-6, "\\qquad is 18mu wider than \\quad");
+    }
+
+    @Test
+    void negativeThinSpaceNarrowsRow() {
+        // \! is -3mu: it pulls the glyphs closer than no space at all.
+        Layout negative = layout("a\\!b");
+        Layout plain = layout("ab");
+        assertTrue(negative.width() < plain.width(), "\\! narrows the row");
+        assertEquals(-3.0 * (40.0 / 18.0), negative.width() - plain.width(), 1e-6,
+            "\\! removes 3mu of width");
+    }
+
+    @Test
+    void phantomOccupiesSpaceButEmitsNoInk() {
+        // A bare phantom draws nothing at all.
+        Layout ph = layout("\\phantom{M}");
+        assertTrue(ph.glyphs().isEmpty(), "phantom emits no glyphs");
+        assertTrue(ph.rules().isEmpty(), "phantom emits no rules");
+
+        // ...but it reserves the full width of its content.
+        Layout withPhantom = layout("a\\phantom{M}b");
+        Layout tight = layout("ab");
+        Layout real = layout("aMb");
+        assertTrue(withPhantom.width() > tight.width(), "\\phantom reserves width");
+        assertEquals(real.width(), withPhantom.width(), 0.5,
+            "\\phantom{M} reserves the same advance as a real M");
+        // The phantom row draws only 'a' and 'b' — the M leaves no ink.
+        assertEquals(2, withPhantom.glyphs().size(), "only 'a' and 'b' are inked");
+    }
+
+    @Test
+    void hphantomKeepsWidthVphantomKeepsNone() {
+        Layout tight = layout("ab");
+        // \hphantom keeps width -> wider than "ab".
+        assertTrue(layout("a\\hphantom{M}b").width() > tight.width(),
+            "\\hphantom reserves width");
+        // \vphantom keeps zero width -> same advance as "ab".
+        assertEquals(tight.width(), layout("a\\vphantom{M}b").width(), 1e-6,
+            "\\vphantom reserves no width");
+    }
+
+    @Test
+    void spacingAndPhantomsStayInAlphabet() {
+        assertAlphabet(LatteX.render("a\\quad b\\;c\\,d\\!e"));
+        assertAlphabet(LatteX.render("\\phantom{M}x\\hphantom{y}\\vphantom{Z}\\mathstrut"));
+    }
+
     // ---- alphabet guard --------------------------------------------------
 
     private static final Set<String> ALLOWED_ELEMENTS = Set.of("svg", "g", "path", "rect");

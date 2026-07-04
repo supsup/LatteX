@@ -8,6 +8,7 @@ import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.LimitsMode;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
@@ -69,15 +70,27 @@ public final class MathParser {
         Map.entry("bigoplus", new Sym(0x2A01, MathClass.OP)), // ⨁
         Map.entry("biguplus", new Sym(0x2A04, MathClass.OP))); // ⨄
 
-    // Explicit spacing commands -> width in math units (18mu = 1em).
-    private static final Map<String, Double> SPACES = Map.of(
-        ",", 3.0,    // thin space  \,
-        ":", 4.0,    // medium space \:
-        ";", 5.0,    // thick space  \;
-        "!", -3.0,   // negative thin \!
-        " ", 6.0,    // control space \(space)
-        "quad", 18.0,
-        "qquad", 36.0);
+    // Explicit spacing commands -> width in math units (18mu = 1em). Widths are
+    // clean-room from Knuth's TeXbook (Ch.18 / Appendix G): \, = 3mu, \: = 4mu,
+    // \; = 5mu, and the negatives mirror them; \quad = 18mu (1em), \qquad = 36mu;
+    // \enspace = 0.5em = 9mu; the control space \(space) and ~ (tie) are an
+    // interword space, approximated here as 6mu.
+    private static final Map<String, Double> SPACES = Map.ofEntries(
+        Map.entry(",", 3.0),             // thin space   \,
+        Map.entry("thinspace", 3.0),     // \thinspace == \,
+        Map.entry(":", 4.0),             // medium space \:
+        Map.entry(">", 4.0),             // \> == \:
+        Map.entry("medspace", 4.0),      // \medspace == \:
+        Map.entry(";", 5.0),             // thick space  \;
+        Map.entry("thickspace", 5.0),    // \thickspace == \;
+        Map.entry("!", -3.0),            // negative thin \!
+        Map.entry("negthinspace", -3.0), // \negthinspace == \!
+        Map.entry("negmedspace", -4.0),  // negative medium
+        Map.entry("negthickspace", -5.0),// negative thick
+        Map.entry(" ", 6.0),             // control space \(space)
+        Map.entry("quad", 18.0),         // 1em
+        Map.entry("qquad", 36.0),        // 2em
+        Map.entry("enspace", 9.0));      // 0.5em
 
     /**
      * Accent commands -> the accent glyph and how it is applied. Code points are
@@ -780,6 +793,11 @@ public final class MathParser {
             case LBRACE -> parseGroup();
             case CHAR -> {
                 next();
+                // A tie '~' is an interword (non-breaking) space, not an atom
+                // (TeXbook Ch.7); approximate it as the control-space width.
+                if (t.codePoint() == '~') {
+                    yield new Spacing(6.0);
+                }
                 yield charAtom(t.codePoint());
             }
             case COMMAND -> parseCommand();
@@ -810,6 +828,22 @@ public final class MathParser {
                 }
                 MathNode radicand = parseGroup();
                 return new Radical(radicand, index);
+            }
+            case "phantom" -> {
+                // Occupies the content's full box (width + height + depth), no ink.
+                return new Phantom(parseGroup(), true, true);
+            }
+            case "hphantom" -> {
+                // Occupies the content's width only (zero height/depth).
+                return new Phantom(parseGroup(), true, false);
+            }
+            case "vphantom" -> {
+                // Occupies the content's height/depth only (zero width).
+                return new Phantom(parseGroup(), false, true);
+            }
+            case "mathstrut" -> {
+                // A zero-width strut with the height/depth of '(' — i.e. \vphantom{(}.
+                return new Phantom(new Atom('(', MathClass.OPEN), false, true);
             }
             case "left" -> {
                 int leftDelim = readDelimiter("\\left");

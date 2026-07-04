@@ -92,6 +92,13 @@ PARSES-NOW	accents	\widetilde{AAA}	wide (stretchy) tilde sized to the base
 PARSES-NOW	accents	\overline{a}	overline (rule over base)
 PARSES-NOW	accents	\underline{a}	underline (rule under base)
 # ==== text / spacing / color =======================================
+PARSES-NOW	spacing	a\,b\:c\;d	thin / medium / thick fixed spaces (3mu / 4mu / 5mu)
+PARSES-NOW	spacing	a\thinspace b\medspace c\thickspace d	named fixed spaces (aliases of \, \: \;)
+PARSES-NOW	spacing	a\!b\negthinspace c\negmedspace d\negthickspace e	negative fixed spaces (-3mu / -4mu / -5mu)
+PARSES-NOW	spacing	x\quad y\qquad z	quad (18mu) and qquad (36mu)
+PARSES-NOW	spacing	a\enspace b\ c\>d~e	enspace (.5em), control space, \> (=\:), and tie ~
+PARSES-NOW	spacing	\phantom{M}x\hphantom{yy}z\vphantom{(}w	phantom / hphantom / vphantom reserve space with no ink
+PARSES-NOW	spacing	\sqrt{x}+\mathstrut y	mathstrut — a zero-width strut sizing the row
 NEEDS-PARSER-NODE	text	\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2	text runs — needs \text node (upright text mode)
 NEEDS-PARSER-NODE	cases	f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}	piecewise cases — needs cases environment node (then S4 layout)
 NEEDS-FONT-STYLE	color	k={\color{red}x}-2	colored subterm — needs \color node + emitter color
