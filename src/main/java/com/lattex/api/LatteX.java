@@ -15,10 +15,16 @@ import com.lattex.parse.MathNode.OperatorName;
 import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
+import com.lattex.parse.MathNode.StyledMath;
 import com.lattex.parse.MathNode.SupSub;
 import com.lattex.parse.MathNode.TextRun;
+import com.lattex.parse.EffectSpec;
 import com.lattex.parse.MathParser;
+import com.lattex.parse.Semantics;
+import com.lattex.parse.Trigger;
 import com.lattex.svg.SvgEmitter;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * LatteX — render LaTeX math to SVG.
@@ -77,11 +83,84 @@ public final class LatteX {
     public static String render(String latex, RenderOptions opts) {
         java.util.Objects.requireNonNull(opts, "opts");
         MathNode node = MathParser.parse(latex);
+
+        // A top-level \lx wrapper carries its own validated RenderOptions in the
+        // source; that style is what we apply (it overrides `opts`), and we render
+        // the wrapped body under a context seeded from it.
+        //
+        // The wrapper's fx.* (effects) and semantics (intent / concept / a11y.label
+        // / data.*) are validated and stored on the node but are DELIBERATELY NOT
+        // emitted into the SVG here — they ride the trusted container built by
+        // renderStyledHtml, which keeps the emitter's SVG alphabet unchanged.
+        RenderOptions style = opts;
+        MathNode body = node;
+        if (node instanceof StyledMath sm) {
+            style = sm.style();
+            body = sm.body();
+        }
+
         SfntFont font = FontHolder.FONT;
         LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-            DISPLAY_FONT_SIZE * opts.scale(), opts.mathStyle(), false);
-        Layout layout = LayoutEngine.layout(node, ctx);
-        return SvgEmitter.emit(layout, font, describe(node), opts.color().svgValue());
+            DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+        Layout layout = LayoutEngine.layout(body, ctx);
+        return SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+    }
+
+    /**
+     * Render an {@code \lx}-annotated formula to an HTML fragment: the styled inner
+     * {@code <svg>} wrapped in a trusted {@code <span class="lx-math">} container
+     * that carries the macro's effect and semantic annotations as {@code data-lx-*}
+     * (and {@code aria-label}) attributes.
+     *
+     * <p><strong>Containment contract.</strong> All interactivity/semantics/effect
+     * metadata rides the CONTAINER, never the {@code <svg>}. The inner SVG stays
+     * within the minimal, affordance-free alphabet exactly as {@link #render(String)}
+     * produces it — this method injects nothing into it. Only the visual
+     * {@code style.*} knobs (scale/color/mathStyle) reach the SVG, through the same
+     * L1 render path (fill value / font size / layout style); they add no new
+     * element or attribute.
+     *
+     * <p>For a plain (non-{@code \lx}) expression the result is the SVG wrapped in a
+     * bare {@code <span class="lx-math">} with no data attributes.
+     *
+     * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
+     * @return an HTML fragment: {@code <span class="lx-math" …>…<svg>…</svg></span>}
+     */
+    public static String renderStyledHtml(String latex) {
+        MathNode node = MathParser.parse(latex);
+        EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+        Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
+        // render() re-parses and applies a top-level \lx style to the inner SVG.
+        String svg = render(latex);
+        return openTag(fx, sem) + svg + "</span>";
+    }
+
+    /**
+     * Builds the opening {@code <span class="lx-math" data-lx-…>} tag. Every stamped
+     * value was validated + reduced at parse time (intent/concept/data.* are
+     * {@code [a-z][a-z0-9_]*} identifiers, effects are a closed enum vocabulary,
+     * duration matches {@code \d{1,5}ms}, the a11y label is HTML-escaped), so no raw
+     * author string reaches the attribute unescaped.
+     */
+    private static String openTag(EffectSpec fx, Semantics sem) {
+        StringBuilder sb = new StringBuilder("<span class=\"lx-math\"");
+        sem.intentValue().ifPresent(v -> sb.append(" data-lx-intent=\"").append(v).append('"'));
+        sem.conceptValue().ifPresent(v -> sb.append(" data-lx-concept=\"").append(v).append('"'));
+        // fx triggers, in a stable enter/hover/click order.
+        for (Trigger t : Trigger.values()) {
+            fx.effect(t).ifPresent(e ->
+                sb.append(" data-lx-fx-").append(t.name().toLowerCase(Locale.ROOT))
+                    .append("=\"").append(e.token()).append('"'));
+        }
+        fx.durationValue().ifPresent(v ->
+            sb.append(" data-lx-fx-duration=\"").append(v).append('"'));
+        // data.* attributes (keys already identifier-validated).
+        for (Map.Entry<String, String> e : sem.data().entrySet()) {
+            sb.append(" data-lx-").append(e.getKey()).append("=\"").append(e.getValue()).append('"');
+        }
+        // a11y label (already HTML-escaped by the parser).
+        sem.a11yLabelValue().ifPresent(v -> sb.append(" aria-label=\"").append(v).append('"'));
+        return sb.append('>').toString();
     }
 
     /** A plain-language accessibility label for a math tree. */
@@ -141,6 +220,7 @@ public final class LatteX {
                 accentName(command) + " " + describe(base);
             case OperatorName(var name, _) -> name;
             case TextRun(var text, _) -> text;
+            case StyledMath sm -> describe(sm.body()); // the wrapper is transparent to a11y
         };
     }
 

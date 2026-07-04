@@ -10,6 +10,7 @@ import com.lattex.parse.MathNode.OperatorName;
 import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
+import com.lattex.parse.MathNode.StyledMath;
 import com.lattex.parse.MathNode.SupSub;
 import com.lattex.parse.MathNode.TextRun;
 import java.util.ArrayList;
@@ -252,6 +253,10 @@ public final class MathVariant {
             case Spacing s -> s;
             case OperatorName o -> o;
             case TextRun t -> t;
+            // A \lx wrapper is top-level-only (nested \lx is rejected by the parser),
+            // so this arm is unreachable in practice; restyle the body for totality.
+            case StyledMath sm -> new StyledMath(
+                apply(style, sm.body()), sm.style(), sm.fx(), sm.sem());
         };
     }
 }

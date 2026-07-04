@@ -189,6 +189,17 @@ class S8LeftContainmentTest {
         b.add("\\sum_{i=1}^{n} \\frac{\\sqrt{\\alpha_i^2 + \\beta_i^2}}{\\gamma}"
             + " \\leq \\left( \\int_0^\\infty e^{-x}\\,dx \\right)");
 
+        // \lx styled-math macro: style.* affects only the SVG fill VALUE / font size
+        // / layout style (no new element/attr), and fx.*/semantics are NEVER emitted
+        // into the SVG (they ride the trusted container, not LatteX.render's output).
+        // Every rendered SVG here must stay ⊆ the minimal alphabet.
+        b.add("\\lx{ x^2 }");
+        b.add("\\lx[style.color=#c0392b, style.scale=lg]{ \\frac{a+b}{c} }");
+        b.add("\\lx[style.color=currentColor, style.mathstyle=text]{ \\sum_{i=1}^{n} i }");
+        b.add("\\lx[intent=ratio, concept=normalized_score, fx.enter=boom, fx.hover=pulse, "
+            + "fx.click=glow, fx.duration=250ms, a11y.label=\"the ratio a plus b over c\", "
+            + "data.role=header, data.group=scores]{ \\frac{a+b}{c} }");
+
         return b;
     }
 

@@ -84,6 +84,7 @@ class MathParserTest {
                 "Op(" + name + (takesLimits ? ",lim" : "") + ")";
             case MathNode.TextRun(var text, var style) ->
                 "Txt[" + style + "](" + text + ")";
+            case MathNode.StyledMath sm -> "Lx(" + pp(sm.body()) + ")";
         };
     }
 

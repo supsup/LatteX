@@ -11,11 +11,17 @@ import com.lattex.parse.MathNode.MathList;
 import com.lattex.parse.MathNode.OperatorName;
 import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
+import com.lattex.api.Color;
+import com.lattex.api.RenderOptions;
+import com.lattex.layout.MathStyle;
 import com.lattex.parse.MathNode.Spacing;
+import com.lattex.parse.MathNode.StyledMath;
 import com.lattex.parse.MathNode.SupSub;
 import com.lattex.parse.MathNode.TextRun;
 import com.lattex.parse.MathNode.TextStyle;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -763,11 +769,28 @@ public final class MathParser {
     // Public entry point
     // ------------------------------------------------------------------
 
-    /** Parses a LaTeX math source string into a {@link MathNode}. */
+    /**
+     * Parses a LaTeX math source string into a {@link MathNode}.
+     *
+     * <p>If the whole (trimmed) input is the author's {@code \lx[options]{body}}
+     * macro, it is parsed into a {@link StyledMath} wrapper — every option
+     * validated and reduced to a typed value here (see {@link #parseLx}). Otherwise
+     * the input is ordinary LaTeX math ({@link #parseMath}). A {@code \lx} that is
+     * <em>not</em> the whole top-level expression surfaces through
+     * {@link #parseCommand} as a clear "nested" error (top-level-only for the MVP).
+     */
     public static MathNode parse(String latex) {
         if (latex == null) {
             throw new MathSyntaxException("input must not be null");
         }
+        if (looksLikeTopLevelLx(latex)) {
+            return parseLx(latex.strip());
+        }
+        return parseMath(latex);
+    }
+
+    /** Parses ordinary LaTeX math (no top-level {@code \lx}). */
+    private static MathNode parseMath(String latex) {
         MathParser parser = new MathParser(latex);
         MathNode node = parser.parseTopLevel();
         if (parser.peek().kind() != Kind.EOF) {
@@ -775,6 +798,272 @@ public final class MathParser {
                 "Unexpected trailing input near token " + parser.p + " in: " + latex);
         }
         return node;
+    }
+
+    // ------------------------------------------------------------------
+    // \lx[options]{body} — the author's styled-math macro.
+    //
+    // The options block has its own mini-syntax (whitespace insignificant
+    // outside quotes; #hex and "quoted strings" as values), so it is parsed
+    // from the RAW string here, BEFORE the math lexer would mangle it. The
+    // {…} body is then handed to the ordinary math parser via parseMath, so a
+    // nested \lx inside the body surfaces as parseCommand's "nested" error.
+    //
+    // Options are validated + reduced to typed values (an L1 RenderOptions plus
+    // an EffectSpec / Semantics) at parse time — never carried as raw strings.
+    // ------------------------------------------------------------------
+
+    /** Whether the trimmed input begins with {@code \lx} as a complete control word. */
+    private static boolean looksLikeTopLevelLx(String latex) {
+        String s = latex.strip();
+        if (!s.startsWith("\\lx")) {
+            return false;
+        }
+        // "\lx" must be a whole control word — not the prefix of e.g. "\lxfoo".
+        return s.length() == 3 || !isAsciiLetter(s.charAt(3));
+    }
+
+    /** Parses a whole-string {@code \lx[options]{body}} into a {@link StyledMath}. */
+    private static MathNode parseLx(String s) {
+        int n = s.length();
+        int pos = skipWs(s, 3); // past "\lx"
+
+        String optionsRaw = "";
+        if (pos < n && s.charAt(pos) == '[') {
+            int close = findClose(s, pos, '[', ']', "\\lx [ options ]");
+            optionsRaw = s.substring(pos + 1, close);
+            pos = skipWs(s, close + 1);
+        }
+
+        if (pos >= n || s.charAt(pos) != '{') {
+            throw new MathSyntaxException(
+                "\\lx requires a { body }: expected '{' after the \\lx options");
+        }
+        int bodyClose = findClose(s, pos, '{', '}', "\\lx { body }");
+        String body = s.substring(pos + 1, bodyClose);
+        pos = skipWs(s, bodyClose + 1);
+        if (pos != n) {
+            throw new MathSyntaxException(
+                "\\lx must be the whole top-level expression; unexpected trailing content: \""
+                    + s.substring(pos) + "\"");
+        }
+
+        LxOptions opts = parseLxOptions(optionsRaw);
+        MathNode bodyNode = parseMath(body);
+        return new StyledMath(bodyNode, opts.style(), opts.fx(), opts.sem());
+    }
+
+    /**
+     * Finds the closer matching the opener at {@code open}, scanning past
+     * {@code "quoted"} spans and {@code \}-escaped chars (so a {@code ]} in a
+     * quoted value or a {@code \}} in the LaTeX body does not close early).
+     * Handles one level of {@code open}/{@code close} nesting for the body braces.
+     */
+    private static int findClose(String s, int open, char opener, char closer, String what) {
+        int depth = 0;
+        boolean inQuote = false;
+        for (int i = open; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\' && i + 1 < s.length()) {
+                i++; // skip the escaped char (e.g. \{ \} \" in the body)
+                continue;
+            }
+            if (c == '"') {
+                inQuote = !inQuote;
+                continue;
+            }
+            if (inQuote) {
+                continue;
+            }
+            if (c == opener) {
+                depth++;
+            } else if (c == closer) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        throw new MathSyntaxException("unterminated " + what + ": missing '" + closer + "'");
+    }
+
+    /** Skips ASCII whitespace in {@code s} starting at {@code i}. */
+    private static int skipWs(String s, int i) {
+        while (i < s.length() && isWhitespace(s.charAt(i))) {
+            i++;
+        }
+        return i;
+    }
+
+    /** The validated typed reduction of an {@code \lx} options block. */
+    private record LxOptions(RenderOptions style, EffectSpec fx, Semantics sem) {
+    }
+
+    /**
+     * Parses a comma-separated {@code key=value} options block into the typed
+     * {@link LxOptions}. Whitespace is insignificant outside quoted values; values
+     * are bare tokens or {@code "quoted strings"}. Every value is validated and
+     * reduced to a typed field. Unknown top-level keys fail loud.
+     *
+     * <p>The {@code \lx} colour default is {@link Color#CURRENT} (not L1's
+     * {@link RenderOptions#defaults()} black): the author macro is meant to be
+     * embedded in prose, so unstyled math inherits the surrounding text colour
+     * (dark-mode friendly).
+     */
+    private static LxOptions parseLxOptions(String raw) {
+        double scale = 1.0;
+        Color color = Color.CURRENT;
+        MathStyle mathStyle = MathStyle.DISPLAY;
+        Map<Trigger, Effect> effects = new EnumMap<>(Trigger.class);
+        String duration = null;
+        String intent = null;
+        String concept = null;
+        String a11yLabel = null;
+        Map<String, String> data = new LinkedHashMap<>();
+
+        int i = 0;
+        int n = raw.length();
+        while (true) {
+            i = skipWs(raw, i);
+            if (i >= n) {
+                break;
+            }
+            // key
+            int ks = i;
+            while (i < n && isKeyChar(raw.charAt(i))) {
+                i++;
+            }
+            String key = raw.substring(ks, i);
+            if (key.isEmpty()) {
+                throw new MathSyntaxException(
+                    "malformed \\lx option near: \"" + raw.substring(i) + "\"");
+            }
+            i = skipWs(raw, i);
+            if (i >= n || raw.charAt(i) != '=') {
+                throw new MathSyntaxException("\\lx option \"" + key + "\" must be key=value");
+            }
+            i = skipWs(raw, i + 1); // past '='
+            // value: quoted or bare
+            String value;
+            if (i < n && raw.charAt(i) == '"') {
+                int vs = ++i;
+                while (i < n && raw.charAt(i) != '"') {
+                    i++;
+                }
+                if (i >= n) {
+                    throw new MathSyntaxException(
+                        "unterminated quoted value for \\lx option \"" + key + "\"");
+                }
+                value = raw.substring(vs, i);
+                i++; // past closing quote
+            } else {
+                int vs = i;
+                while (i < n && raw.charAt(i) != ',' && !isWhitespace(raw.charAt(i))) {
+                    i++;
+                }
+                value = raw.substring(vs, i);
+            }
+            i = skipWs(raw, i);
+            if (i < n) {
+                if (raw.charAt(i) == ',') {
+                    i++;
+                } else {
+                    throw new MathSyntaxException(
+                        "expected ',' between \\lx options near: \"" + raw.substring(i) + "\"");
+                }
+            }
+
+            // dispatch on the top-level namespace (part before the first '.').
+            int dot = key.indexOf('.');
+            String ns = dot < 0 ? key : key.substring(0, dot);
+            switch (ns) {
+                case "style" -> {
+                    // The Layer-1 validators throw a plain IllegalArgumentException;
+                    // wrap it so an invalid \lx value fails loud naming the key.
+                    try {
+                        switch (key) {
+                            case "style.scale" -> scale = RenderOptions.parseScale(value);
+                            case "style.color" -> color = Color.parse(value);
+                            case "style.mathstyle" -> mathStyle = RenderOptions.parseMathStyle(value);
+                            default -> throw unknownKey(key);
+                        }
+                    } catch (MathSyntaxException e) {
+                        throw e;
+                    } catch (IllegalArgumentException e) {
+                        throw new MathSyntaxException(
+                            "invalid \\lx option \"" + key + "\": " + e.getMessage());
+                    }
+                }
+                case "fx" -> {
+                    switch (key) {
+                        case "fx.enter" -> effects.put(Trigger.ENTER, Effect.parse(value));
+                        case "fx.hover" -> effects.put(Trigger.HOVER, Effect.parse(value));
+                        case "fx.click" -> effects.put(Trigger.CLICK, Effect.parse(value));
+                        case "fx.duration" -> duration = value; // validated in EffectSpec
+                        default -> throw unknownKey(key);
+                    }
+                }
+                case "intent" -> {
+                    if (!key.equals("intent")) {
+                        throw unknownKey(key);
+                    }
+                    intent = value; // validated in Semantics
+                }
+                case "concept" -> {
+                    if (!key.equals("concept")) {
+                        throw unknownKey(key);
+                    }
+                    concept = value; // validated in Semantics
+                }
+                case "a11y" -> {
+                    if (!key.equals("a11y.label")) {
+                        throw unknownKey(key);
+                    }
+                    a11yLabel = htmlEscape(value);
+                }
+                case "data" -> {
+                    if (dot < 0 || key.length() <= 5) {
+                        throw unknownKey(key);
+                    }
+                    String dataKey = key.substring(5); // past "data."
+                    if (!Semantics.IDENTIFIER.matcher(dataKey).matches()) {
+                        throw new MathSyntaxException(
+                            "invalid data.* key: \"" + key + "\" (expected an identifier suffix)");
+                    }
+                    if (!Semantics.IDENTIFIER.matcher(value).matches()) {
+                        throw new MathSyntaxException(
+                            "invalid data.* value for \"" + key + "\": \"" + value
+                                + "\" (expected an identifier)");
+                    }
+                    data.put(dataKey, value);
+                }
+                default -> throw unknownKey(key);
+            }
+        }
+
+        return new LxOptions(
+            new RenderOptions(scale, color, mathStyle),
+            new EffectSpec(effects, duration),
+            new Semantics(intent, concept, a11yLabel, data));
+    }
+
+    private static boolean isKeyChar(char c) {
+        return isAsciiLetter(c) || (c >= '0' && c <= '9') || c == '.' || c == '_';
+    }
+
+    private static MathSyntaxException unknownKey(String key) {
+        return new MathSyntaxException(
+            "unknown \\lx option key: \"" + key
+                + "\" (known top-level keys: style, fx, intent, concept, a11y, data)");
+    }
+
+    /** HTML-escapes an accessibility label so it is safe to stamp on the container. */
+    private static String htmlEscape(String s) {
+        return s.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#39;");
     }
 
     // ------------------------------------------------------------------
@@ -1025,6 +1314,9 @@ public final class MathParser {
                     "\\not has no precomposed negation for the following symbol");
             }
             case "right" -> throw new MathSyntaxException("\\right without matching \\left");
+            case "lx" -> throw new MathSyntaxException(
+                "nested \\lx not supported: \\lx must be the whole top-level expression "
+                    + "(a future refinement may allow nesting)");
             case "limits", "nolimits" ->
                 throw new MathSyntaxException("\\" + name + " must directly follow a large operator");
             case "operatorname" -> {
