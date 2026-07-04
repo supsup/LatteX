@@ -25,11 +25,11 @@ PARSES-NOW	scripts	x^{1.01}	grouped (multi-token) superscript
 PARSES-NOW	scripts	k_{n+1}=n^2+k_n^2-k_{n-1}	recurrence with grouped scripts
 PARSES-NOW	fractions	\frac{b}{c}	simple fraction
 PARSES-NOW	fractions	\frac{\frac{1}{x}+\frac{1}{y}}{y-z}	nested fraction (braced args) — recursion of core frac layout
-NEEDS-PARSER-NODE	fractions	\frac{\frac1x+\frac1y}{y-z}	nested fraction, terse \frac1x form — needs brace-optional single-token arguments
+PARSES-NOW	fractions	\frac{\frac1x+\frac1y}{y-z}	nested fraction, terse \frac1x form — brace-optional single-token \frac arguments
 PARSES-NOW	roots	\sqrt{x^3+5}	square root
 PARSES-NOW	roots	\sqrt{\frac{a}{b}}	root of a fraction (braced) — recursion of core radical layout
 PARSES-NOW	roots	\sqrt[n]{1+x+x^2+\cdots+x^n}	nth root, with \cdots
-NEEDS-PARSER-NODE	fractions	x=a_0+\cfrac{1}{a_1+\cfrac{1}{a_2+\cfrac{1}{a_3+\cfrac{1}{a_4}}}}	continued fraction — needs \cfrac node (then S4 layout)
+PARSES-NOW	fractions	x=a_0+\cfrac{1}{a_1+\cfrac{1}{a_2+\cfrac{1}{a_3+\cfrac{1}{a_4}}}}	continued fraction — \cfrac node (display-style fraction)
 PARSES-NOW	fractions	{}^3/_7	diagonal fraction hack (empty-group scripts around a slash)
 # ==== sums / integrals / big operators =============================
 PARSES-NOW	bigops	\sum_{i=1}^{10} t_i	sum with lower/upper limits
@@ -67,10 +67,10 @@ PARSES-NOW	delim-fixed	/j\backslash	slash and \backslash symbol
 NEEDS-S4-LAYOUT	delim-scaled	\left(\frac{x^2}{y^3}\right)	scaled parens — parses; needs delimiter sizing to content
 NEEDS-S4-LAYOUT	delim-scaled	\left\{\frac{x^2}{y^3}\right\}	scaled braces — parses; needs delimiter sizing
 NEEDS-S4-LAYOUT	delim-scaled	\left.\frac{x^3}{3}\right|_0^1	eval bar (braced) — parses; needs null-left + scaled bar layout
-NEEDS-PARSER-NODE	delim-scaled	\left.\frac{x^3}3\right|_0^1	eval bar, terse \frac denominator — needs brace-optional single-token arguments
+NEEDS-S4-LAYOUT	delim-scaled	\left.\frac{x^3}3\right|_0^1	eval bar, terse \frac denominator — parses (single-token \frac arg); needs null-left + scaled bar layout
 NEEDS-PARSER-NODE	delim-scaled	P\left(A=2\middle|\frac{A^2}{B}>4\right)	mid delimiter — needs \middle node
-NEEDS-PARSER-NODE	delim-scaled	\binom{n}{r}	binomial coefficient — needs \binom node
-NEEDS-PARSER-NODE	delim-scaled	\frac{n!}{r!(n-r)!}=\binom{n}{r}	binomial identity — needs \binom node
+PARSES-NOW	delim-scaled	\binom{n}{r}	binomial coefficient — \binom node (rule-less paren-fenced stack)
+PARSES-NOW	delim-scaled	\frac{n!}{r!(n-r)!}=\binom{n}{r}	binomial identity — \binom node (rule-less paren-fenced stack)
 # ==== accents / decorations ========================================
 PARSES-NOW	accents	a'	prime (parses as an ordinary ' atom)
 PARSES-NOW	accents	a''	double prime (two ' atoms)

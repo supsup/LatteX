@@ -152,16 +152,50 @@ public sealed interface MathNode {
     }
 
     /**
-     * A fraction {@code \frac{num}{den}}.
-     *
-     * @param numerator   the numerator sub-formula
-     * @param denominator the denominator sub-formula
+     * The math-style a {@link Fraction} is set in, from the TeXbook's
+     * {@code \genfrac} style argument. {@link #INHERIT} sets the fraction in the
+     * surrounding context's style (the ordinary {@code \frac}, {@code \binom});
+     * {@link #DISPLAY} forces display style (the larger {@code \cfrac} /
+     * {@code \dbinom} form); {@link #TEXT} forces text style ({@code \tbinom}).
      */
-    record Fraction(MathNode numerator, MathNode denominator) implements MathNode {
+    enum FractionStyle {
+        /** Set in the surrounding style ({@code \frac}, {@code \binom}). */
+        INHERIT,
+        /** Force display style ({@code \cfrac}, {@code \dbinom}). */
+        DISPLAY,
+        /** Force text style ({@code \tbinom}). */
+        TEXT
+    }
+
+    /**
+     * A generalized fraction — the numerator/denominator stack shared by
+     * {@code \frac}, {@code \cfrac} (display style) and {@code \binom} (no rule,
+     * wrapped by a paren {@link Fenced} at parse time). Clean-room from Knuth's
+     * TeXbook {@code \genfrac}: the fraction bar is optional ({@link #hasRule}
+     * false for {@code \binom}) and the whole stack may force a math style
+     * ({@link #fractionStyle}).
+     *
+     * @param numerator     the numerator sub-formula
+     * @param denominator   the denominator sub-formula
+     * @param hasRule       whether the fraction bar (rule) is drawn — {@code true}
+     *                      for {@code \frac}/{@code \cfrac}, {@code false} for the
+     *                      {@code \binom} family
+     * @param fractionStyle the math-style override for the stack
+     */
+    record Fraction(MathNode numerator, MathNode denominator, boolean hasRule,
+                    FractionStyle fractionStyle) implements MathNode {
         public Fraction {
             if (numerator == null || denominator == null) {
                 throw new IllegalArgumentException("Fraction parts must not be null");
             }
+            if (fractionStyle == null) {
+                throw new IllegalArgumentException("Fraction fractionStyle must not be null");
+            }
+        }
+
+        /** An ordinary ruled fraction ({@code \frac}) set in the inherited style. */
+        public Fraction(MathNode numerator, MathNode denominator) {
+            this(numerator, denominator, true, FractionStyle.INHERIT);
         }
     }
 

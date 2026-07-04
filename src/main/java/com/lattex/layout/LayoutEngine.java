@@ -94,7 +94,7 @@ public final class LayoutEngine {
             case Atom atom -> atomBox(atom, ctx);
             case MathList(var items) -> rowBox(items, ctx);
             case SupSub(var base, var sup, var sub) -> scriptsBox(base, sup, sub, ctx);
-            case Fraction(var num, var den) -> fractionBox(num, den, ctx);
+            case Fraction frac -> fractionBox(frac, ctx);
             case Radical(var radicand, var index) -> radicalBox(radicand, index, ctx);
             case Spacing(var muWidth) -> Box.glue(muWidth * ctx.mu());
             case Phantom(var content, var keepW, var keepV) ->
@@ -525,16 +525,25 @@ public final class LayoutEngine {
     // Fraction — numerator/denominator stacked on the math axis.
     // ------------------------------------------------------------------
 
-    private static Box fractionBox(MathNode num, MathNode den, LayoutContext ctx) {
+    private static Box fractionBox(Fraction frac, LayoutContext ctx0) {
+        // \cfrac / \dbinom force display style, \tbinom forces text; \frac / \binom
+        // inherit the surrounding style (TeXbook \genfrac style argument).
+        LayoutContext ctx = switch (frac.fractionStyle()) {
+            case INHERIT -> ctx0;
+            case DISPLAY -> ctx0.displayStyle();
+            case TEXT -> ctx0.textStyle();
+        };
         var c = ctx.constants();
         double scale = ctx.scale();
         boolean display = ctx.style().isDisplay();
 
-        Box numBox = layoutBox(num, ctx.numerator());
-        Box denBox = layoutBox(den, ctx.denominator());
+        Box numBox = layoutBox(frac.numerator(), ctx.numerator());
+        Box denBox = layoutBox(frac.denominator(), ctx.denominator());
 
         double axis = c.axisHeight() * scale;
-        double thickness = c.fractionRuleThickness() * scale;
+        // A rule-less fraction (\binom) has zero bar thickness, so the numerator and
+        // denominator close up around the (undrawn) bar into a tight binomial stack.
+        double thickness = frac.hasRule() ? c.fractionRuleThickness() * scale : 0.0;
         double numShiftUp = (display
             ? c.fractionNumeratorDisplayStyleShiftUp() : c.fractionNumeratorShiftUp()) * scale;
         double denShiftDown = (display
@@ -558,7 +567,9 @@ public final class LayoutEngine {
         List<Rule> rules = new ArrayList<>();
         numBox.drawInto(glyphs, rules, numX, -numShiftUp);
         denBox.drawInto(glyphs, rules, denX, denShiftDown);
-        rules.add(new Rule(0.0, -axis - ruleHalf, width, thickness));
+        if (frac.hasRule()) {
+            rules.add(new Rule(0.0, -axis - ruleHalf, width, thickness));
+        }
 
         double height = numShiftUp + numBox.height();
         double depth = denShiftDown + denBox.depth();

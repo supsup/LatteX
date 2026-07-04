@@ -233,7 +233,8 @@ public final class MathVariant {
                 s.sup() == null ? null : apply(style, s.sup()),
                 s.sub() == null ? null : apply(style, s.sub()));
             case Fraction f -> new Fraction(
-                apply(style, f.numerator()), apply(style, f.denominator()));
+                apply(style, f.numerator()), apply(style, f.denominator()),
+                f.hasRule(), f.fractionStyle());
             case Radical r -> new Radical(
                 apply(style, r.radicand()),
                 r.index() == null ? null : apply(style, r.index()));

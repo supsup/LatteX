@@ -46,11 +46,11 @@ capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
 | `k_{n+1}=n^2+k_n^2-k_{n-1}` | recurrence with grouped scripts | `PARSES-NOW` |
 | `\frac{b}{c}` | simple fraction | `PARSES-NOW` |
 | `\frac{\frac{1}{x}+\frac{1}{y}}{y-z}` | nested fraction (braced args) — recursion of core `\frac` layout | `PARSES-NOW` |
-| `\frac{\frac1x+\frac1y}{y-z}` | nested fraction, terse `\frac1x` form — needs **brace-optional single-token arguments** | `NEEDS-PARSER-NODE` |
+| `\frac{\frac1x+\frac1y}{y-z}` | nested fraction, terse `\frac1x` form — brace-optional single-token `\frac` arguments | `PARSES-NOW` |
 | `\sqrt{x^3+5}` | square root | `PARSES-NOW` |
 | `\sqrt{\frac{a}{b}}` | root of a fraction (braced) — recursion of core radical layout | `PARSES-NOW` |
 | `\sqrt[n]{1+x+x^2+\cdots+x^n}` | nth root, with `\cdots` | `PARSES-NOW` |
-| `x=a_0+\cfrac{1}{a_1+\cfrac{1}{a_2+\cfrac{1}{a_3+\cfrac{1}{a_4}}}}` | continued fraction — needs **`\cfrac`** node (then S4 layout) | `NEEDS-PARSER-NODE` |
+| `x=a_0+\cfrac{1}{a_1+\cfrac{1}{a_2+\cfrac{1}{a_3+\cfrac{1}{a_4}}}}` | continued fraction — **`\cfrac`** node (display-style fraction) | `PARSES-NOW` |
 | `{}^3/_7` | diagonal-fraction hack (empty-group scripts around a slash) | `PARSES-NOW` |
 
 ## Sums / integrals / big operators
@@ -108,10 +108,10 @@ capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
 | `\left(\frac{x^2}{y^3}\right)` | scaled parens — parses; needs delimiter sizing to content | `NEEDS-S4-LAYOUT` |
 | `\left\{\frac{x^2}{y^3}\right\}` | scaled braces — parses; needs delimiter sizing | `NEEDS-S4-LAYOUT` |
 | `\left.\frac{x^3}{3}\right|_0^1` | eval bar (braced) — parses; needs null-left + scaled-bar layout | `NEEDS-S4-LAYOUT` |
-| `\left.\frac{x^3}3\right|_0^1` | eval bar, terse `\frac` denominator — needs **brace-optional single-token arguments** | `NEEDS-PARSER-NODE` |
+| `\left.\frac{x^3}3\right|_0^1` | eval bar, terse `\frac` denominator — parses (single-token `\frac` arg); needs null-left + scaled-bar layout | `NEEDS-S4-LAYOUT` |
 | `P\left(A=2\middle|\frac{A^2}{B}>4\right)` | mid delimiter — needs **`\middle`** node | `NEEDS-PARSER-NODE` |
-| `\binom{n}{r}` | binomial coefficient — needs **`\binom`** node | `NEEDS-PARSER-NODE` |
-| `\frac{n!}{r!(n-r)!}=\binom{n}{r}` | binomial identity — needs **`\binom`** node | `NEEDS-PARSER-NODE` |
+| `\binom{n}{r}` | binomial coefficient — **`\binom`** node (rule-less paren-fenced stack) | `PARSES-NOW` |
+| `\frac{n!}{r!(n-r)!}=\binom{n}{r}` | binomial identity — **`\binom`** node (rule-less paren-fenced stack) | `PARSES-NOW` |
 
 ## Accents / decorations
 

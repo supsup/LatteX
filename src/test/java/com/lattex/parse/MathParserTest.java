@@ -54,7 +54,12 @@ class MathParserTest {
                 }
                 yield sb.append(')').toString();
             }
-            case Fraction(var num, var den) -> "Frac(" + pp(num) + "," + pp(den) + ")";
+            case Fraction f -> {
+                String tag = f.hasRule() ? "Frac" : "Binom";
+                String sty = f.fractionStyle() == MathNode.FractionStyle.INHERIT
+                    ? "" : "[" + f.fractionStyle() + "]";
+                yield tag + sty + "(" + pp(f.numerator()) + "," + pp(f.denominator()) + ")";
+            }
             case Radical(var rad, var idx) -> {
                 String prefix = idx == null ? "Sqrt({" : "Sqrt([" + pp(idx) + "]{";
                 yield prefix + pp(rad) + "})";
@@ -183,6 +188,51 @@ class MathParserTest {
     void fencedFraction() {
         assertEquals("Fen(( Frac(A(a,ORD),A(b,ORD)) ))",
             pp(MathParser.parse("\\left(\\frac{a}{b}\\right)")));
+    }
+
+    @Test
+    void singleTokenFracAndSqrtArguments() {
+        // \frac1x ≡ \frac{1}{x}, and a single \command token is one argument too.
+        assertEquals("Frac(A(1,ORD),A(x,ORD))", pp(MathParser.parse("\\frac1x")));
+        assertEquals("Frac(A(1,ORD),A(x,ORD))", pp(MathParser.parse("\\frac{1}{x}")));
+        assertEquals("Frac(A(U+03B1,ORD),A(U+03B2,ORD))",
+            pp(MathParser.parse("\\frac\\alpha\\beta")));
+        // A braced first argument mixes with a single-token second: \frac{x^3}3.
+        assertEquals("Frac(SS(A(x,ORD),^A(3,ORD)),A(3,ORD))",
+            pp(MathParser.parse("\\frac{x^3}3")));
+        // \sqrt2 ≡ \sqrt{2}; the optional [index] still reads its single token.
+        assertEquals("Sqrt({A(2,ORD)})", pp(MathParser.parse("\\sqrt2")));
+        assertEquals("Sqrt([A(3,ORD)]{A(8,ORD)})", pp(MathParser.parse("\\sqrt[3]8")));
+    }
+
+    @Test
+    void binomIsRulelessFencedStack() {
+        // \binom{n}{r}: a rule-less n-over-r stack wrapped in parentheses.
+        MathNode n = MathParser.parse("\\binom{n}{r}");
+        Fenced fen = assertInstanceOf(Fenced.class, n);
+        assertEquals('(', fen.leftDelim());
+        assertEquals(')', fen.rightDelim());
+        Fraction stack = assertInstanceOf(Fraction.class, fen.body());
+        assertTrue(!stack.hasRule(), "\\binom has no fraction rule");
+        assertEquals(MathNode.FractionStyle.INHERIT, stack.fractionStyle());
+        assertEquals("Fen(( Binom(A(n,ORD),A(r,ORD)) ))", pp(n));
+        // \dbinom / \tbinom force the display / text math style.
+        assertEquals("Fen(( Binom[DISPLAY](A(n,ORD),A(r,ORD)) ))",
+            pp(MathParser.parse("\\dbinom{n}{r}")));
+        assertEquals("Fen(( Binom[TEXT](A(n,ORD),A(r,ORD)) ))",
+            pp(MathParser.parse("\\tbinom{n}{r}")));
+        // Single-token binom arguments read too: \binom nr.
+        assertEquals("Fen(( Binom(A(n,ORD),A(r,ORD)) ))", pp(MathParser.parse("\\binom nr")));
+    }
+
+    @Test
+    void cfracForcesDisplayStyle() {
+        Fraction f = assertInstanceOf(Fraction.class, MathParser.parse("\\cfrac{1}{x}"));
+        assertTrue(f.hasRule(), "\\cfrac keeps the fraction rule");
+        assertEquals(MathNode.FractionStyle.DISPLAY, f.fractionStyle());
+        assertEquals("Frac[DISPLAY](A(1,ORD),A(x,ORD))", pp(f));
+        // The nested continued-fraction form parses (recursion of the \cfrac node).
+        assertInstanceOf(MathList.class, MathParser.parse("x=a_0+\\cfrac{1}{a_1+\\cfrac{1}{a_2}}"));
     }
 
     @Test
