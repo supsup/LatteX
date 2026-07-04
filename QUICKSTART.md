@@ -4,8 +4,8 @@ Render LaTeX math to SVG, then drop it straight into your HTML.
 
 > **Status note.** LatteX is early. The render core, `\lx` syntax, inline/em
 > sizing, `fx` effects, and the action menu described below are **built** (living
-> on review branches, merging soon). The native CLI, HTTP service, WASM build, and
-> editor/markdown plugins are **planned** — each is flagged inline and summarised in
+> on review branches, merging soon). The native CLI (S7) is **built**; the HTTP
+> service, WASM build, and editor/markdown plugins are **planned** — each is flagged inline and summarised in
 > the [status legend](#7-status-legend). Accuracy over hype: if it isn't built, this
 > doc says so.
 
@@ -156,28 +156,48 @@ String svg = com.lattex.api.LatteX.render("\\frac{a}{b}");
 
 Zero runtime dependencies, so it drops into any JVM app with no transitive baggage.
 
-### Any other stack — Node, Python, Ruby, Go, static-site generators — *planned (S7)*
-
-> **Planned — slice S7. Not shipping yet.**
+### Any other stack — Node, Python, Ruby, Go, static-site generators — *available (S7)*
 
 A self-contained **native CLI**, `lattex`, built with GraalVM native-image — **no JVM
-required on the host**. Read LaTeX, write SVG on stdout, so any language can shell out:
+required on the host**. It reads LaTeX from an argument or stdin and writes SVG to
+stdout (or a file), so any language can shell out:
 
 ```bash
-# PLANNED (S7)
-lattex "\frac{a}{b}" > fraction.svg
+lattex "\frac{a}{b}" > fraction.svg     # expression as an argument
+echo '\frac{a}{b}' | lattex             # …or piped on stdin
+lattex "x^2 + y^2 = z^2" -o pythagoras.svg
+lattex --help
 ```
 
 ```python
-# PLANNED (S7) — shell out from Python
+# Shell out from Python — same for Node, Ruby, Go, a Makefile, …
 import subprocess
 svg = subprocess.run(["lattex", r"\frac{a}{b}"],
                      capture_output=True, text=True).stdout
 ```
 
-(The library already targets native-image cleanliness — no reflection, GraalVM
-reachability metadata for the bundled font — so the CLI is the packaging step, not a
-rewrite.)
+Flags: `-o/--output <file>`, `-h/--help`, `-V/--version`, and `--` to end option
+parsing. Exit status is `0` on success, `1` on a render/IO error (with the parser's
+message on stderr for invalid LaTeX), `2` on a usage error. The CLI is a thin wrapper
+over the JVM `LatteX.render` — same core, byte-identical SVG.
+
+**Build it** (GraalVM CE for JDK 25 must be on `PATH` — e.g. `sdk use java 25-graalce`):
+
+```bash
+./gradlew nativeImage          # → build/native/lattex (standalone binary)
+```
+
+The binary is fully self-contained: the STIX Two Math font is baked into the image via
+the GraalVM reachability metadata the library already ships (no reflection, no external
+files). Styling flags (`--scale`/`--color`/`--display`) land once the `RenderOptions`
+API merges to the mainline — the CLI's arg parser has the seam ready.
+
+**No GraalVM?** The same CLI runs on any JVM, no native build required:
+
+```bash
+./gradlew run --args="\frac{a}{b}"                 # via Gradle
+java -jar build/libs/lattex-0.1.0-SNAPSHOT.jar "x^2"   # via the runnable jar
+```
 
 ### HTTP service — *planned / optional*
 
@@ -205,7 +225,7 @@ directly into the generated HTML with no post-processing.
   hooks the markdown parse and calls `LatteX.render*` per match. This is Stafficy's
   S8 path.
 - **On other stacks** — a preprocessor that shells out to the `lattex` CLI once per
-  expression (see §5; **planned, S7**).
+  expression (see §5; **available, S7**).
 - **Reference plugins** — remark/rehype for the JS ecosystem, and a Python
   markdown/Pandoc filter — are **future**.
 
@@ -222,7 +242,7 @@ inline math is em-sized and baseline-seated while display math renders full size
 | Inline math — em-sizing + baseline alignment (`renderInline`) | Built* |
 | `fx.*` effects on the container (`renderStyledHtml`) | Built* |
 | Click action menu — Copy LaTeX / contextual Graph (`renderMenu*`) | Built* |
-| Native CLI (`lattex`, GraalVM) | Planned — S7 |
+| Native CLI (`lattex`, GraalVM) — argv/stdin → SVG, `-o`/`--help`/`--version` | Built (S7) |
 | HTTP service wrapper | Planned / optional |
 | Browser / JS (WASM) build | Future |
 | Reference markdown plugins (remark/rehype, Python filter) | Future |
