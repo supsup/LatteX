@@ -141,6 +141,20 @@ class S8LeftContainmentTest {
         b.add("\\{ x \\}");
         b.add("| x |");
 
+        // Accents: narrow glyph accents, wide/stretchy accents, and rules.
+        for (String acc : List.of("hat", "bar", "vec", "dot", "ddot", "tilde",
+                "check", "breve", "acute", "grave", "mathring")) {
+            b.add("\\" + acc + "{a}");
+        }
+        b.add("\\widehat{AAA}");
+        b.add("\\widetilde{AAA}");
+        b.add("\\overrightarrow{AB}");
+        b.add("\\overleftarrow{AB}");
+        b.add("\\overleftrightarrow{AB}");
+        b.add("\\overline{a+b}");
+        b.add("\\underline{x}");
+        b.add("\\hat{a}^2 + \\vec{v}");
+
         // Spacing commands (produce inkless spacing, never elements/attrs).
         b.add("a \\, b \\: c \\; d \\! e \\quad f \\qquad g");
 

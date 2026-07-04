@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.lattex.parse.MathNode.Accent;
 import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
@@ -70,6 +71,10 @@ class MathParserTest {
             case Fenced(int left, var body, int right) ->
                 "Fen(" + delim(left) + " " + pp(body) + " " + delim(right) + ")";
             case Spacing(double mu) -> "Sp(" + mu + ")";
+            case Accent(var cmd, var base, var cp, var stretchy, var under) -> {
+                String kind = cp == Accent.RULE ? (under ? "under" : "over") : sym(cp);
+                yield "Acc(" + cmd + "[" + kind + (stretchy ? ",wide" : "") + "]," + pp(base) + ")";
+            }
         };
     }
 
@@ -120,6 +125,33 @@ class MathParserTest {
     @Test
     void sqrtWithIndex() {
         assertEquals("Sqrt([A(3,ORD)]{A(x,ORD)})", pp(MathParser.parse("\\sqrt[3]{x}")));
+    }
+
+    @Test
+    void narrowAccent() {
+        assertEquals("Acc(hat[U+0302],A(a,ORD))", pp(MathParser.parse("\\hat{a}")));
+        // Brace-optional single-token argument, like LaTeX.
+        assertEquals("Acc(vec[U+20D7],A(v,ORD))", pp(MathParser.parse("\\vec v")));
+    }
+
+    @Test
+    void wideAndRuleAccents() {
+        assertEquals("Acc(widehat[U+0302,wide],L(A(A,ORD) A(B,ORD)))",
+            pp(MathParser.parse("\\widehat{AB}")));
+        assertEquals("Acc(overline[over],A(a,ORD))", pp(MathParser.parse("\\overline{a}")));
+        assertEquals("Acc(underline[under],A(a,ORD))", pp(MathParser.parse("\\underline{a}")));
+    }
+
+    @Test
+    void accentTakesScripts() {
+        // An accented nucleus can still carry a superscript.
+        assertEquals("SS(Acc(hat[U+0302],A(a,ORD)),^A(2,ORD))",
+            pp(MathParser.parse("\\hat{a}^2")));
+    }
+
+    @Test
+    void danglingAccentFailsCleanly() {
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\hat"));
     }
 
     @Test

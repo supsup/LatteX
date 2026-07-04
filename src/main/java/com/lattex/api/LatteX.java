@@ -5,6 +5,7 @@ import com.lattex.layout.Layout;
 import com.lattex.layout.LayoutContext;
 import com.lattex.layout.LayoutEngine;
 import com.lattex.parse.MathNode;
+import com.lattex.parse.MathNode.Accent;
 import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
@@ -107,6 +108,30 @@ public final class LatteX {
                 String close = rightDelim == Fenced.NULL_DELIMITER ? "" : " " + delimiterName(rightDelim);
                 yield (open + inner + close).strip();
             }
+            case Accent(var command, var base, _, _, _) ->
+                accentName(command) + " " + describe(base);
+        };
+    }
+
+    /** A spoken name for an accent/decoration command. */
+    private static String accentName(String command) {
+        return switch (command) {
+            case "hat", "widehat" -> "hat over";
+            case "bar" -> "bar over";
+            case "vec", "overrightarrow" -> "vector";
+            case "overleftarrow" -> "left arrow over";
+            case "overleftrightarrow" -> "left-right arrow over";
+            case "dot" -> "dot over";
+            case "ddot" -> "double dot over";
+            case "tilde", "widetilde" -> "tilde over";
+            case "check" -> "check over";
+            case "breve" -> "breve over";
+            case "acute" -> "acute over";
+            case "grave" -> "grave over";
+            case "mathring" -> "ring over";
+            case "overline" -> "line over";
+            case "underline" -> "line under";
+            default -> command + " over";
         };
     }
 
