@@ -3,6 +3,7 @@ package com.lattex.cli;
 import com.lattex.api.LatteX;
 import com.lattex.parse.MathSyntaxException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -45,6 +46,14 @@ public final class Main {
 
         OPTIONS:
             -o, --output <FILE>   Write the SVG to FILE instead of stdout.
+            --batch               Render MANY expressions in one process: read
+                                  them from stdin (one per line) and write one
+                                  NUL-terminated SVG record per input to stdout,
+                                  in order. A bad expression yields a
+                                  'lattex: error: …' record and does not abort
+                                  the batch. Amortizes startup/spawn cost.
+            -0, --null            In --batch, split stdin on NUL instead of
+                                  newlines (for expressions containing newlines).
             -h, --help            Show this help and exit.
             -V, --version         Print the version and exit.
             --                    Treat all following arguments as the
@@ -54,10 +63,12 @@ public final class Main {
             lattex '\\frac{a}{b}'
             lattex 'x^2 + y^2 = z^2' -o pythagoras.svg
             printf '\\sqrt{2}' | lattex
+            printf 'x^2\\n\\frac a b\\n' | lattex --batch   # 2 NUL-delimited SVGs
 
         EXIT STATUS:
             0  success
-            1  render/IO error (invalid LaTeX, unwritable output, …)
+            1  render/IO error (invalid LaTeX, unwritable output, …); in --batch,
+               at least one record failed (all records are still emitted)
             2  usage error (unknown flag, missing argument, …)
         """.formatted(VERSION);
 
@@ -66,7 +77,7 @@ public final class Main {
 
     /** Process entry point; delegates to {@link #run} and maps the result to an exit code. */
     public static void main(String[] args) {
-        int code = run(args, System.out, System.err);
+        int code = run(args, System.in, System.out, System.err);
         if (code != 0) {
             System.exit(code);
         }
@@ -81,10 +92,27 @@ public final class Main {
      * @return the process exit code (0 ok, 1 render/IO error, 2 usage error)
      */
     public static int run(String[] args, PrintStream out, PrintStream err) {
+        return run(args, System.in, out, err);
+    }
+
+    /**
+     * Runs the CLI with explicit input + output streams (testable). Never calls
+     * {@link System#exit}. In {@code --batch} mode, reads many expressions from
+     * {@code in} and writes one NUL-delimited SVG (or error) record per input.
+     *
+     * @param args the raw command-line arguments
+     * @param in   the input stream read when no positional expression is given / in batch mode
+     * @param out  the stream for SVG output / help / version
+     * @param err  the stream for diagnostics
+     * @return the process exit code (0 ok, 1 render/IO error, 2 usage error)
+     */
+    public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
         Path outputFile = null;
         StringBuilder expr = new StringBuilder();
         boolean sawExpr = false;
         boolean optionsEnded = false;
+        boolean batch = false;
+        boolean nullDelim = false;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -105,6 +133,8 @@ public final class Main {
                         }
                         outputFile = Path.of(args[++i]);
                     }
+                    case "--batch" -> batch = true;
+                    case "-0", "--null" -> nullDelim = true;
                     case "--" -> optionsEnded = true;
                     default -> {
                         err.println("lattex: error: unknown option '" + arg + "'");
@@ -122,13 +152,17 @@ public final class Main {
             }
         }
 
+        if (batch) {
+            return runBatch(in, out, err, outputFile, sawExpr, nullDelim);
+        }
+
         String latex;
         if (sawExpr) {
             latex = expr.toString();
         } else {
             // No expression on the command line — read it from stdin.
             try {
-                latex = new String(System.in.readAllBytes(), StandardCharsets.UTF_8).strip();
+                latex = new String(in.readAllBytes(), StandardCharsets.UTF_8).strip();
             } catch (IOException e) {
                 err.println("lattex: error: failed to read stdin: " + e.getMessage());
                 return 1;
@@ -162,5 +196,65 @@ public final class Main {
             }
         }
         return 0;
+    }
+
+    /**
+     * Batch mode: render many expressions in ONE process (amortizing JVM/native startup and
+     * process-spawn cost — the point of a jar-vs-binary comparison and of rendering a page's many
+     * math spans efficiently). Reads {@code in} split into records — one expression per line, or
+     * NUL-separated when {@code nullDelim} — and writes one NUL-TERMINATED record per input to
+     * {@code out}, IN ORDER: the SVG on success, or a {@code lattex: error: …} line on failure.
+     * A single bad expression is isolated (its error record is emitted) and never aborts the batch;
+     * the exit code is 1 if any record failed, else 0. Blank records are skipped.
+     */
+    private static int runBatch(InputStream in, PrintStream out, PrintStream err,
+                                Path outputFile, boolean sawExpr, boolean nullDelim) {
+        if (outputFile != null) {
+            err.println("lattex: error: -o/--output cannot be combined with --batch"
+                + " (batch writes NUL-delimited records to stdout)");
+            return 2;
+        }
+        if (sawExpr) {
+            err.println("lattex: error: --batch reads expressions from stdin;"
+                + " do not also pass an expression argument");
+            return 2;
+        }
+        String input;
+        try {
+            input = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            err.println("lattex: error: failed to read stdin: " + e.getMessage());
+            return 1;
+        }
+        // -1 limit keeps trailing empties; blank records are skipped below (so a trailing
+        // newline / separator does not produce a phantom render).
+        String[] records = input.split(nullDelim ? "\0" : "\n", -1);
+        boolean anyFailed = false;
+        boolean anyEmitted = false;
+        for (String rec : records) {
+            String latex = rec.strip();
+            if (latex.isEmpty()) {
+                continue;
+            }
+            String record;
+            try {
+                record = LatteX.render(latex);
+            } catch (MathSyntaxException e) {
+                record = "lattex: error: invalid LaTeX: " + e.getMessage();
+                anyFailed = true;
+            } catch (RuntimeException e) {
+                record = "lattex: error: could not render expression: " + e.getMessage();
+                anyFailed = true;
+            }
+            out.print(record);
+            out.write(0); // NUL record terminator (SVGs never contain NUL)
+            anyEmitted = true;
+        }
+        out.flush();
+        if (!anyEmitted) {
+            err.println("lattex: error: --batch got no expressions on stdin");
+            return 2;
+        }
+        return anyFailed ? 1 : 0;
     }
 }
