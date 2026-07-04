@@ -189,6 +189,24 @@ capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
 
 ---
 
+## `\lx` macro / affordances
+
+The `\lx[options]{body}` author macro — styling, effects, graphs, semantics. `style.*` applies to the SVG (scale / color / math-style); `fx.*`, semantics (`intent` / `concept` / `a11y.label` / `data.*`), and `graph.*` ride the `.lx-math` **container** as `data-lx-*`, never the SVG.
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\lx[style.color=#cc0000]{\frac{a+b}{c}}` | inline color styling | `PARSES-NOW` |
+| `\lx[style.scale=lg]{x^2}` | scale bucket | `PARSES-NOW` |
+| `\lx[style.mathstyle=display]{\sum_{i=1}^{n} i}` | math-style override | `PARSES-NOW` |
+| `\lx[fx.enter=boom]{E=mc^2}` | enter effect | `PARSES-NOW` |
+| `\lx[fx.hover=pulse,fx.click=glow,fx.duration=400ms]{x^2}` | hover / click effects + duration | `PARSES-NOW` |
+| `\lx[intent=ratio,concept=normalized_score]{\frac{a+b}{c}}` | semantic intent / concept | `PARSES-NOW` |
+| `\lx[a11y.label="normalized score"]{\frac{a}{b}}` | accessibility label | `PARSES-NOW` |
+| `\lx[data.source=calc_12]{x^2}` | data attribute | `PARSES-NOW` |
+| `\lx[style.color=#333,fx.enter=fade,intent=ratio,a11y.label="a ratio"]{\frac{a}{b}}` | combined options | `PARSES-NOW` |
+| `\lx[graph.domain=-3..3]{x^2-3}` | needs **`graph.*`** support in the `\lx` parser | `NEEDS-PARSER-NODE` |
+| `\lx[graph.open=multi]{\frac{1}{x}}` | needs **`graph.*`** support in the `\lx` parser | `NEEDS-PARSER-NODE` |
+
 ## Ranked frontier — what the gallery demands most
 
 New parser features ordered by how many corpus entries each unblocks:
