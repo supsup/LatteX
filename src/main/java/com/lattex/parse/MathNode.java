@@ -1,6 +1,8 @@
 package com.lattex.parse;
 
+import com.lattex.api.RenderOptions;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -434,6 +436,50 @@ public sealed interface MathNode {
             if (style == null) {
                 throw new IllegalArgumentException("TextRun style must not be null");
             }
+        }
+    }
+
+    /**
+     * The author's {@code \lx[options]{body}} styled-math wrapper — a body
+     * sub-tree annotated with a validated visual {@link #style()}, an
+     * {@link #fx() effect spec}, and {@link #sem() semantics}. Produced only by the
+     * {@code \lx} macro (see {@link MathParser}); every option is validated and
+     * reduced to a typed value at parse time.
+     *
+     * <p><strong>Where each field goes.</strong>
+     * <ul>
+     *   <li>{@link #style()} — an L1 {@link RenderOptions} (scale / color /
+     *       mathStyle). Applied to the rendered {@code <svg>} through L1's existing
+     *       threading: scale folds into the font size, mathStyle seeds the layout
+     *       context, color becomes the emitter's {@code fill} <em>value</em>. It
+     *       introduces no new SVG element/attribute.</li>
+     *   <li>{@link #fx()} — an {@link EffectSpec} (enter/hover/click effect +
+     *       duration). Validated and stored, but <strong>NEVER emitted into the
+     *       {@code <svg>}</strong>; it rides the trusted wrapping container
+     *       ({@code <span class="lx-math" data-lx-fx-*>}) instead.</li>
+     *   <li>{@link #sem()} — {@link Semantics} (intent / concept / a11y label /
+     *       data-*). Likewise validated, stored, and <strong>NEVER emitted into the
+     *       {@code <svg>}</strong>; it rides the container as {@code data-lx-*} /
+     *       {@code aria-label}. Keeping fx and semantics off the render path is why
+     *       the emitter's SVG alphabet is unchanged.</li>
+     * </ul>
+     *
+     * <p>{@code \lx} is top-level-only for the MVP (it styles the whole
+     * expression); a nested {@code \lx} is rejected by the parser with a clear
+     * message rather than silently misrendered.
+     *
+     * @param body  the wrapped math tree (the {@code {…}} LaTeX body)
+     * @param style the validated visual style (applied on render)
+     * @param fx    the validated effect spec (stored, rides the container)
+     * @param sem   the validated semantics (stored, rides the container)
+     */
+    record StyledMath(MathNode body, RenderOptions style, EffectSpec fx, Semantics sem)
+            implements MathNode {
+        public StyledMath {
+            Objects.requireNonNull(body, "body");
+            Objects.requireNonNull(style, "style");
+            Objects.requireNonNull(fx, "fx");
+            Objects.requireNonNull(sem, "sem");
         }
     }
 }

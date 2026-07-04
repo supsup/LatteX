@@ -15,6 +15,7 @@ import com.lattex.parse.MathNode.OperatorName;
 import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
+import com.lattex.parse.MathNode.StyledMath;
 import com.lattex.parse.MathNode.SupSub;
 import com.lattex.parse.MathNode.TextRun;
 import com.lattex.parse.MathNode.TextStyle;
@@ -105,6 +106,12 @@ public final class LayoutEngine {
             case Accent accent -> accentBox(accent, ctx);
             case OperatorName opName -> operatorNameBox(opName, ctx);
             case TextRun textRun -> textRunBox(textRun, ctx);
+            // A top-level \lx wrapper: its RenderOptions (scale / mathStyle / color)
+            // are applied at the render entry by seeding the LayoutContext + the
+            // emitter fill, so here we simply lay out the wrapped body. (\lx is
+            // top-level-only for the MVP, so this arm is effectively the render-entry
+            // unwrap; it also keeps the sealed switch exhaustive without a default.)
+            case StyledMath sm -> layoutBox(sm.body(), ctx);
         };
     }
 
@@ -399,6 +406,7 @@ public final class LayoutEngine {
             case OperatorName _ -> MathClass.OP; // a named operator is class Op
             case TextRun _ -> MathClass.ORD;   // a text run behaves as an Ord atom
             case Spacing _ -> null;           // classless glue (handled by caller)
+            case StyledMath sm -> classOf(sm.body()); // wrapper is transparent to spacing
         };
     }
 
