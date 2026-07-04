@@ -39,21 +39,25 @@ That SVG is complete and standalone — write it to a `.svg` file, or paste it i
 into a page.
 
 **With styling.** `render(String, RenderOptions)` takes a typed, validated
-`{scale, color, mathStyle}` triple:
+options object — the two knobs reachable from the public `com.lattex.api`
+package are `scale` and `color`:
 
 ```java
 import com.lattex.api.LatteX;
 import com.lattex.api.RenderOptions;
-import com.lattex.style.Color;
-import com.lattex.style.MathStyle;
+import com.lattex.api.Color;
 
 RenderOptions opts = RenderOptions.defaults()   // scale 1.0, currentColor, DISPLAY
     .withScale(1.5)
-    .withColor(Color.parse("#c0392b"))
-    .withMathStyle(MathStyle.TEXT);
+    .withColor(Color.parse("#c0392b"));
 
 String svg = LatteX.render("\\frac{a+b}{c}", opts);
 ```
+
+> Math renders in **display** style by default. Selecting **inline** (text)
+> style from the public API is on the way (a `RenderOptions.inline()/.display()`
+> convenience); today the `mathStyle` field's type lives in a non-exported
+> package, so it is not settable by an external caller.
 
 - **`scale`** — output size multiplier (default `1.0`), folded into the effective
   font size so the whole geometry scales as crisp vector output, not a CSS zoom.
@@ -147,8 +151,8 @@ Everything wraps the one core: `render(latex, options) → SVG string`.
 
 ### JVM — Java / Kotlin / Scala — *available*
 
-Depend on the JAR (module `com.lattex`, exporting `com.lattex.api` and
-`com.lattex.style`) and call the API directly:
+Depend on the JAR (module `com.lattex`, exporting `com.lattex.api`) and call
+the API directly:
 
 ```java
 String svg = com.lattex.api.LatteX.render("\\frac{a}{b}");
