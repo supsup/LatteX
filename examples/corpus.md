@@ -204,8 +204,8 @@ The `\lx[options]{body}` author macro — styling, effects, graphs, semantics. `
 | `\lx[a11y.label="normalized score"]{\frac{a}{b}}` | accessibility label | `PARSES-NOW` |
 | `\lx[data.source=calc_12]{x^2}` | data attribute | `PARSES-NOW` |
 | `\lx[style.color=#333,fx.enter=fade,intent=ratio,a11y.label="a ratio"]{\frac{a}{b}}` | combined options | `PARSES-NOW` |
-| `\lx[graph.domain=-3..3]{x^2-3}` | needs **`graph.*`** support in the `\lx` parser | `NEEDS-PARSER-NODE` |
-| `\lx[graph.open=multi]{\frac{1}{x}}` | needs **`graph.*`** support in the `\lx` parser | `NEEDS-PARSER-NODE` |
+| `\lx[graph.domain=-3..3]{x^2-3}` | graphable domain (`graph.*` option) | `PARSES-NOW` |
+| `\lx[graph.open=multi]{\frac{1}{x}}` | multi-open graph (`graph.*` option) | `PARSES-NOW` |
 
 ## Ranked frontier — what the gallery demands most
 

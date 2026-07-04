@@ -153,8 +153,8 @@ PARSES-NOW	lx	\lx[style.scale=lg]{x^2}	lx macro — scale bucket
 PARSES-NOW	lx	\lx[style.mathstyle=display]{\sum_{i=1}^{n} i}	lx macro — math-style override
 PARSES-NOW	lx	\lx[fx.enter=boom]{E=mc^2}	lx macro — enter effect
 PARSES-NOW	lx	\lx[fx.hover=pulse,fx.click=glow,fx.duration=400ms]{x^2}	lx macro — hover/click effects + duration
-NEEDS-PARSER-NODE	lx	\lx[graph.domain=-3..3]{x^2-3}	\lx graph.* option — needs graph.domain in the \lx parser
-NEEDS-PARSER-NODE	lx	\lx[graph.open=multi]{\frac{1}{x}}	\lx graph.* option — needs graph.open in the \lx parser
+PARSES-NOW	lx	\lx[graph.domain=-3..3]{x^2-3}	lx macro — graphable domain (graph.* option)
+PARSES-NOW	lx	\lx[graph.open=multi]{\frac{1}{x}}	lx macro — multi-open graph (graph.* option)
 PARSES-NOW	lx	\lx[intent=ratio,concept=normalized_score]{\frac{a+b}{c}}	lx macro — semantic intent/concept
 PARSES-NOW	lx	\lx[a11y.label="normalized score"]{\frac{a}{b}}	lx macro — accessibility label
 PARSES-NOW	lx	\lx[data.source=calc_12]{x^2}	lx macro — data attribute
