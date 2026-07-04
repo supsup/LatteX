@@ -1,39 +1,72 @@
 # LatteX — Release Notes
 
-Notable changes to `main`. LatteX is a clean-room, pure-**Java 25**, zero-runtime-dependency **LaTeX → SVG** math renderer (Apache-2.0; bundles STIX Two Math). See [`QUICKSTART.md`](QUICKSTART.md) for usage and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the clean-room rules + the SVG minimal-subset invariant.
+LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero dependencies, safe to drop straight into a web page. New to it? See **[QUICKSTART.md](QUICKSTART.md)** to get going and **[SLOWSTART.md](SLOWSTART.md)** for use-case walkthroughs.
 
-## Foundation — 2026-07-03
+---
 
-The reviewed renderer foundation lands on `main`. It builds green and renders `x^2` end-to-end; the full parser and font layer are in place, with 2-D layout (fractions, roots, …) landing next in S4.
+## What LatteX renders
 
-### Added
+Hand it a LaTeX math string, get back crisp, scalable SVG. Here's what works today, with an example of each.
 
-- **M0 — walking skeleton.** `LatteX.render("x^2")` drives the whole pipeline end-to-end: OpenType font → parse → layout → SVG. The emitter targets a deliberately **minimal, sanitizer-safe SVG alphabet** — only `<svg>`/`<g>`/`<path>`/`<rect>`, glyphs as inline filled `<path>`s (no `<text>`/`<use>`/`<defs>`/`<script>`, no `href`, no `data:`) — so output is safe to inline directly in HTML. Bundles **STIX Two Math** (the TTF/glyf variant, ratified over the OTF for simpler zero-dependency outline parsing). A real allow-list containment test fails the build on any drift.
-- **S2 — OpenType MATH font layer.** Full `SfntFont`: simple **and composite** glyph outlines, advances + left-side-bearings, the complete `MathConstants` table, italic-correction + top-accent attachment, per-glyph `MathKern`, and `MathVariants` (vertical/horizontal glyph construction + assembly) for stretchy glyphs.
-- **S3 — math model + parser.** A sealed `MathNode` ADT (`Atom`, `MathList`, `SupSub`, `Fraction`, `Radical`, `BigOperator`, `Fenced`, `Spacing`) + a parser covering `^`/`_`, `\frac`, `\sqrt[]{}`, `\sum`/`\int`/`\prod` with limits, `\left…\right` delimiters, greek, and an MVP symbol set. Malformed input **fails cleanly** with a named `MathSyntaxException` (0 crashes across the 99-entry corpus). Layout consumers use **default-free exhaustive switches** — the compiler enforces node coverage; nodes not yet laid out throw explicit stubs until S4.
-- **Test corpus.** A 99-entry tiered LaTeX corpus (`examples/corpus.md`) driven by a drift-proof `CorpusParseTest` (single TSV source of truth) that asserts each entry's declared coverage tier matches actual parser behavior.
+### Fractions & roots
+Stacked fractions (centered on the math axis) and square / nth roots.
+> `\frac{a+b}{c}` &nbsp;·&nbsp; `\sqrt{2}` &nbsp;·&nbsp; `\sqrt[3]{x}`
 
-### Rendering today
+### Superscripts & subscripts
+Full script placement, alone or combined.
+> `x^2` &nbsp;·&nbsp; `a_i` &nbsp;·&nbsp; `x_i^{2}` &nbsp;·&nbsp; `e^{i\pi}`
 
-**Fractions, roots, full sub/superscripts, big-operator limits, and scaled `\left…\right` delimiters** all render to SVG — S4 landed (a `Box` layout model, math styles, Appendix-G spacing). The parser accepts the full MVP grammar; broader symbol/accent/environment coverage is the next tier (see `LatteX_docs/gap.md`).
+### Sums, integrals & products
+Big operators with limits placed the way TeX does it — stacked above/below for sums and products, to the side for integrals.
+> `\sum_{i=1}^{n} i` &nbsp;·&nbsp; `\int_0^\infty e^{-x}\,dx` &nbsp;·&nbsp; `\prod_{k=1}^{n} k`
 
-## Coverage & tooling — 2026-07-03 (later)
+### Auto-sizing delimiters
+Parentheses, brackets, and braces that grow to hug whatever's inside.
+> `\left(\frac{x^2}{y^3}\right)` &nbsp;·&nbsp; `\left[ \sum_i a_i \right]`
 
-A broad coverage + tooling wave, each slice self-verified and green, the emitter/minimal-alphabet invariant intact throughout.
+### Accents
+Hats, vectors, bars, tildes — plus wide/stretchy versions that span their base.
+> `\hat{x}` &nbsp;·&nbsp; `\vec{v}` &nbsp;·&nbsp; `\overline{a+b}` &nbsp;·&nbsp; `\widehat{ABC}` &nbsp;·&nbsp; `\overrightarrow{AB}`
 
-### Added
+### Named operators
+Trig, log, and friends — set upright (not italic), with limits where they belong.
+> `\sin x` &nbsp;·&nbsp; `\cos^2\theta` &nbsp;·&nbsp; `\lim_{x\to\infty}` &nbsp;·&nbsp; `\log_2 n` &nbsp;·&nbsp; `\det(A)` &nbsp;·&nbsp; `\operatorname{lcm}(a,b)`
 
-- **KaTeX-gap Tier-1 (complete) — general-math breadth.** 250+ **symbols** (relations, binary operators, arrows, greek variants, negations, `\not` prefix); **accents** (`\hat \vec \widehat \overline …` — new `Accent` node, MATH top-accent positioning, stretchy via glyph variants); **named operators** (`\sin \cos \lim \det \operatorname` — upright roman with limit placement); **`\text{…}` mode** (upright, spaces preserved — `\text \textbf \textit \texttt \mathrm`, new `TextRun` node); **spacing** (`\, \quad \! …` + the `\phantom` family). Parser coverage jumped **26 → 94** of the (now 119-entry) corpus.
-- **KaTeX-gap Tier-2 — font-variant alphabets.** `\mathbb \mathcal \mathfrak \mathbf \mathsf \mathscr \mathit \mathtt \boldsymbol` via the Unicode Mathematical Alphanumeric Symbols block — a codepoint remap (**no new fonts**; STIX covers the block), including the Letterlike-Symbols exceptions (ℝ ℒ ℨ …).
-- **S7 — native CLI.** A GraalVM `lattex` binary (~14.7 MB, reflection-free, font baked in): `echo '\frac{a}{b}' | lattex` → SVG. Plus a JVM `./gradlew run` fallback.
-- **S8 — left-containment test + specimen gallery.** A build-failing test asserting emitter output stays ⊆ the minimal alphabet (full deny-list, teeth-verified), and a live-rendered gallery (`examples/gallery-specimen.html`).
-- **Showcase page** (`examples/showcase.html`) — a polished, theme-aware landing page with 99 live-rendered SVGs.
+### Text inside math
+Real words in a formula, upright and correctly spaced.
+> `\text{if } n \text{ is even}` &nbsp;·&nbsp; `\mathrm{d}x` &nbsp;·&nbsp; `\textbf{note}`
 
-### Next
+### Greek & 250+ symbols
+The full Greek alphabet, plus relations, binary operators, arrows, set/logic symbols, dots, and more.
+> `\alpha` &nbsp;·&nbsp; `\leq` &nbsp;·&nbsp; `\Rightarrow` &nbsp;·&nbsp; `\in` &nbsp;·&nbsp; `\subseteq` &nbsp;·&nbsp; `\pm` &nbsp;·&nbsp; `\cdots` &nbsp;·&nbsp; `\infty` &nbsp;·&nbsp; `\nabla`
 
-- **`\lx` macro + render options** (`RenderOptions`: scale/color/mathstyle; the `\lx[…]{…}` author syntax) and the **container affordances** (`fx` effects, click action-menu, live graph plotting) — built on earlier branches; need **rebasing onto the now-much-evolved `main`** before review/merge.
-- **Tier-3 — environments** (matrices, `align`, `cases`, `array`) — the big remaining structural gap.
-- **MathML output backend** — a second emitter target for accessibility.
-- **S8 docs pipeline** — markdown `$…$` → LaTeX → SVG (`MathMarkerConverter`) for `stafficy_docs/LatteX`.
+### Math font styles
+Blackboard-bold, calligraphic, fraktur, bold, sans-serif, italic, monospace.
+> `\mathbb{R}` &nbsp;·&nbsp; `\mathcal{L}` &nbsp;·&nbsp; `\mathfrak{g}` &nbsp;·&nbsp; `\mathbf{x}` &nbsp;·&nbsp; `\mathsf{ABC}`
 
-See `LatteX_docs/gap.md` for the full competitive picture and `LatteX_docs/ideas.md` for exploration ideas.
+### Spacing
+Fine spacing control, plus invisible "phantoms" for alignment.
+> `a \quad b` &nbsp;·&nbsp; `x \, dx` &nbsp;·&nbsp; `\phantom{x}`
+
+### Styling
+Render at a custom scale, color, or math style.
+> `LatteX.render(latex, RenderOptions.defaults().withScale(1.4))`
+
+**Browse it all:** open `examples/symbol-index.html` (every supported command, live-rendered) or `examples/showcase.html` (a designed tour).
+
+---
+
+## Why it's safe and portable
+
+- **Safe to inline anywhere.** The SVG uses only `<svg>`/`<g>`/`<path>`/`<rect>`, with glyphs drawn as filled paths — no `<script>`, no `<text>`, no external references or links. That means you can render even reader-submitted math with no cross-site-scripting risk. (A build-time test enforces this, so it can't regress.)
+- **Zero dependencies, pure Java.** No JavaScript engine, no headless browser, no external `tex` install. The math font (STIX Two Math) is bundled and its glyphs are baked into the output.
+- **Runs from anywhere.** Call it from Java/Kotlin/Scala, or use the standalone **`lattex`** command-line binary from any language — Node, Python, a shell script, a CI step. See QUICKSTART.
+
+---
+
+## What's next
+
+- **Matrices, aligned equations, and cases** — `\begin{pmatrix}…\end{pmatrix}`, `align`, `cases`.
+- **The `\lx[…]{…}` author syntax** — inline styling, effects, and semantic tags (searchable, accessible, interactive math).
+- **A MathML output option** — for screen readers and assistive tech.
+- **Markdown integration** — a drop-in step that renders `$…$` math inside a Markdown → HTML pipeline.
