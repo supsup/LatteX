@@ -4,9 +4,9 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## What LatteX renders
+## 2026-07-03 — first release
 
-Hand it a LaTeX math string, get back crisp, scalable SVG. Here's what works today, with an example of each.
+Everything below shipped today, in the initial release. *(Future updates will each get their own dated section here.)* Hand LatteX a LaTeX math string and get back crisp, scalable SVG — here's what works, with an example of each.
 
 ### Fractions & roots
 Stacked fractions (centered on the math axis) and square / nth roots.
