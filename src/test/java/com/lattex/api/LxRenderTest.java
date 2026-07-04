@@ -93,6 +93,22 @@ class LxRenderTest {
     }
 
     @Test
+    void graphAnnotationsRideTheContainerNotTheSvg() {
+        String html = LatteX.renderStyledHtml(
+            "\\lx[graph.domain=-3..3, graph.open=multi]{x^2 - 3}");
+        assertTrue(html.contains("data-lx-graph-domain=\"-3..3\""), "domain on the container");
+        assertTrue(html.contains("data-lx-graph-open=\"multi\""), "open-mode on the container");
+        assertTrue(html.contains("data-lx-graph-expr=\"x^2 - 3\""), "plottable expr on the container");
+        // None of it reaches the inner SVG.
+        String svg = innerSvg(html);
+        for (String leak : new String[] {"graph", "data-", "-3..3", "multi"}) {
+            assertFalse(svg.toLowerCase(Locale.ROOT).contains(leak.toLowerCase(Locale.ROOT)),
+                "graph annotation must not reach the SVG: " + leak);
+        }
+        assertAlphabetContained(svg);
+    }
+
+    @Test
     void innerSvgStaysAffordanceFree() {
         String html = LatteX.renderStyledHtml(
             "\\lx[intent=ratio, fx.click=glow, fx.duration=300ms, "

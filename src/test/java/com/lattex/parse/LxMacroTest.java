@@ -104,6 +104,42 @@ class LxMacroTest {
         assertEquals("scores", sm.sem().data().get("group"));
     }
 
+    // ---- graph.* marks a plottable expression (rides the container) ----
+
+    @Test
+    void parsesGraphDomainAndOpen() {
+        StyledMath sm = lx("\\lx[graph.domain=-3..3, graph.open=multi]{x^2-3}");
+        assertEquals("-3..3", sm.sem().data().get("graph-domain"));
+        assertEquals("multi", sm.sem().data().get("graph-open"));
+        // The body's raw LaTeX rides along so the runtime knows what to plot.
+        assertEquals("x^2-3", sm.sem().data().get("graph-expr"));
+    }
+
+    @Test
+    void graphDefaultsDomainAndOpen() {
+        StyledMath sm = lx("\\lx[graph.open=single]{2x - 1}");
+        assertEquals("-10..10", sm.sem().data().get("graph-domain"), "domain defaults to -10..10");
+        assertEquals("single", sm.sem().data().get("graph-open"));
+        assertEquals("2x - 1", sm.sem().data().get("graph-expr"), "expr trimmed from the body");
+    }
+
+    @Test
+    void graphExprIsHtmlEscaped() {
+        // A body with '<' (a relation) is HTML-escaped for the attribute value.
+        StyledMath sm = lx("\\lx[graph.domain=-2..2]{a < b}");
+        assertEquals("a &lt; b", sm.sem().data().get("graph-expr"));
+    }
+
+    @Test
+    void invalidGraphValuesFailLoud() {
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\lx[graph.domain=lots]{ x }"));
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\lx[graph.open=both]{ x }"));
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\lx[graph.bogus=1]{ x }"));
+    }
+
     // ---- unknown keys / invalid values fail loud ----
 
     @Test

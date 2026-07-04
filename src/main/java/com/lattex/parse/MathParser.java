@@ -848,7 +848,7 @@ public final class MathParser {
                     + s.substring(pos) + "\"");
         }
 
-        LxOptions opts = parseLxOptions(optionsRaw);
+        LxOptions opts = parseLxOptions(optionsRaw, body);
         MathNode bodyNode = parseMath(body);
         return new StyledMath(bodyNode, opts.style(), opts.fx(), opts.sem());
     }
@@ -910,7 +910,7 @@ public final class MathParser {
      * embedded in prose, so unstyled math inherits the surrounding text colour
      * (dark-mode friendly).
      */
-    private static LxOptions parseLxOptions(String raw) {
+    private static LxOptions parseLxOptions(String raw, String body) {
         double scale = 1.0;
         Color color = Color.CURRENT;
         MathStyle mathStyle = MathStyle.DISPLAY;
@@ -920,6 +920,9 @@ public final class MathParser {
         String concept = null;
         String a11yLabel = null;
         Map<String, String> data = new LinkedHashMap<>();
+        String graphDomain = null;
+        String graphOpen = null;
+        boolean graphRequested = false;
 
         int i = 0;
         int n = raw.length();
@@ -1037,8 +1040,45 @@ public final class MathParser {
                     }
                     data.put(dataKey, value);
                 }
+                case "graph" -> {
+                    switch (key) {
+                        case "graph.domain" -> {
+                            graphDomain = value;
+                            graphRequested = true;
+                        }
+                        case "graph.open" -> {
+                            graphOpen = value;
+                            graphRequested = true;
+                        }
+                        default -> throw unknownKey(key);
+                    }
+                }
                 default -> throw unknownKey(key);
             }
+        }
+
+        // graph.* marks a plottable expression. The annotations ride the trusted
+        // container as data-lx-graph-* (via the Semantics data map) for the page-side
+        // plotting runtime; they are NEVER emitted into the <svg> (render() drops all
+        // StyledMath annotations), so the emitter alphabet is unchanged. The body's raw
+        // LaTeX is carried as data-lx-graph-expr (HTML-escaped) so the runtime knows
+        // what to plot without re-reading the SVG.
+        if (graphRequested) {
+            if (graphDomain == null) {
+                graphDomain = "-10..10";
+            } else if (!graphDomain.matches("-?\\d+(\\.\\d+)?\\.\\.-?\\d+(\\.\\d+)?")) {
+                throw new MathSyntaxException(
+                    "invalid graph.domain: \"" + graphDomain + "\" (expected a..b like -3..3)");
+            }
+            if (graphOpen == null) {
+                graphOpen = "single";
+            } else if (!graphOpen.equals("single") && !graphOpen.equals("multi")) {
+                throw new MathSyntaxException(
+                    "invalid graph.open: \"" + graphOpen + "\" (expected single or multi)");
+            }
+            data.put("graph-expr", htmlEscape(body.strip()));
+            data.put("graph-domain", graphDomain);
+            data.put("graph-open", graphOpen);
         }
 
         return new LxOptions(
@@ -1054,7 +1094,7 @@ public final class MathParser {
     private static MathSyntaxException unknownKey(String key) {
         return new MathSyntaxException(
             "unknown \\lx option key: \"" + key
-                + "\" (known top-level keys: style, fx, intent, concept, a11y, data)");
+                + "\" (known top-level keys: style, fx, intent, concept, a11y, data, graph)");
     }
 
     /** HTML-escapes an accessibility label so it is safe to stamp on the container. */

@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LatteX — graph-plot demo</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg:#eceef1; --bg-2:#e3e6ea; --panel:#ffffff; --ink:#171a1f;
+    --muted:#5b6570; --faint:#8a939d; --line:#d8dce1;
+    --accent:#1f7d72; --accent-2:#2aa596; --chip:#f1f3f5; --chip-line:#e0e4e8;
+    --shadow:0 1px 2px rgba(20,24,30,.04), 0 8px 30px rgba(20,24,30,.06);
+    --plot-bg:#fbfdfc; --plot-line:#eef2f1; --plot-grid:#e9efed;
+    --plot-axis:#9fb3ae; --plot-curve:#1f7d72;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0e1116; --bg-2:#0a0d11; --panel:#161a20; --ink:#e9ecf1;
+      --muted:#97a1ad; --faint:#6b7480; --line:#262c34;
+      --accent:#2aa596; --accent-2:#3fc4b3; --chip:#1b2027; --chip-line:#2a313a;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 34px rgba(0,0,0,.45);
+      --plot-bg:#10151a; --plot-line:#232b33; --plot-grid:#20272f;
+      --plot-axis:#4a5b62; --plot-curve:#3fc4b3;
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg:#eceef1; --bg-2:#e3e6ea; --panel:#ffffff; --ink:#171a1f;
+    --muted:#5b6570; --faint:#8a939d; --line:#d8dce1;
+    --accent:#1f7d72; --accent-2:#2aa596; --chip:#f1f3f5; --chip-line:#e0e4e8;
+    --shadow:0 1px 2px rgba(20,24,30,.04), 0 8px 30px rgba(20,24,30,.06);
+    --plot-bg:#fbfdfc; --plot-line:#eef2f1; --plot-grid:#e9efed;
+    --plot-axis:#9fb3ae; --plot-curve:#1f7d72;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:#0e1116; --bg-2:#0a0d11; --panel:#161a20; --ink:#e9ecf1;
+    --muted:#97a1ad; --faint:#6b7480; --line:#262c34;
+    --accent:#2aa596; --accent-2:#3fc4b3; --chip:#1b2027; --chip-line:#2a313a;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 34px rgba(0,0,0,.45);
+    --plot-bg:#10151a; --plot-line:#232b33; --plot-grid:#20272f;
+    --plot-axis:#4a5b62; --plot-curve:#3fc4b3;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin:0; color:var(--ink);
+    background:radial-gradient(1200px 620px at 50% -8%, var(--bg) 0%, var(--bg-2) 62%);
+    font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  main { max-width:1080px; margin:0 auto; padding:0 1.5rem 6rem; overflow-x:hidden; }
+  code, kbd { font-family:ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  kbd { font-size:.82em; background:var(--chip); border:1px solid var(--chip-line);
+        border-radius:5px; padding:.02em .35em; }
+
+  .render { display:flex; align-items:center; justify-content:center; width:100%;
+            color:var(--ink); overflow-x:auto; }
+  .render svg { display:block; width:auto; height:auto; max-width:100%; max-height:96px; }
+
+  .hero { text-align:center; padding:4.5rem 0 2rem; }
+  .eyebrow { font-family:ui-monospace, monospace; font-size:.72rem; letter-spacing:.22em;
+             text-transform:uppercase; color:var(--accent); margin:0 0 1.2rem; }
+  .wordmark { font-size:clamp(2.4rem,7vw,3.8rem); font-weight:800; letter-spacing:-.04em;
+              line-height:1; margin:0; }
+  .wordmark .x { background:linear-gradient(160deg, var(--accent-2), var(--accent));
+                 -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .tagline { max-width:56ch; margin:1.1rem auto 0; color:var(--muted);
+             font-size:clamp(1rem,2vw,1.15rem); }
+  .note { max-width:64ch; margin:1.2rem auto 0; color:var(--muted); font-size:.92rem; }
+  .times { color:var(--accent); font-weight:700; }
+
+  .band { margin-top:3.5rem; }
+  .band-head { max-width:60ch; margin:0 0 1.4rem; }
+  .band-head h2 { font-size:1.4rem; letter-spacing:-.02em; margin:0 0 .35rem;
+                  font-family:ui-monospace, monospace; }
+  .band-head p { margin:0; color:var(--muted); font-size:.98rem; }
+
+  .grid { display:grid; gap:1rem; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); }
+  .card { margin:0; display:flex; flex-direction:column; gap:1.1rem;
+          background:var(--panel); border:1px solid var(--line); border-radius:14px;
+          padding:1.6rem 1.25rem 1.05rem; box-shadow:var(--shadow);
+          transition:border-color .16s ease, transform .16s ease; }
+  .card:hover { border-color:var(--accent); transform:translateY(-2px); }
+  .card .render { flex:1; min-height:92px; }
+  .card figcaption { display:flex; flex-direction:column; gap:.5rem; align-items:flex-start; }
+  .card .cap { font-size:.88rem; font-weight:600; color:var(--ink); }
+  .card .src { font-size:.7rem; color:var(--muted); background:var(--chip);
+               border:1px solid var(--chip-line); border-radius:6px; padding:.28rem .5rem;
+               max-width:100%; overflow-x:auto; white-space:nowrap; }
+
+  .prose { font-size:1.08rem; line-height:2.1; color:var(--ink); max-width:64ch; }
+
+  /* A graphable expression advertises itself as clickable. */
+  .lx-math { display:inline-block; border-radius:5px; padding:0 .12em;
+             transition:background .12s ease, box-shadow .12s ease; vertical-align:middle; }
+  .lx-math[data-lx-graph-expr] { cursor:pointer; }
+  .lx-math[data-lx-graph-expr]:hover,
+  .lx-math[data-lx-graph-expr]:focus-visible {
+    background:color-mix(in srgb, var(--accent) 14%, transparent); outline:none; }
+  .lx-math[data-lx-graph-expr]:focus-visible {
+    box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+
+  /* The floating plot popup — a page element, NEVER inside the math SVG. */
+  .lx-graph-popup { position:fixed; z-index:1050; background:var(--panel);
+    border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,.28);
+    padding:.6rem; width:300px; color:var(--ink);
+    opacity:0; transform:translateY(2px); transition:opacity .12s ease, transform .12s ease; }
+  .lx-graph-popup:not([hidden]) { opacity:1; transform:none; }
+  .lx-graph-popup[hidden] { display:none; }
+  .lx-graph-multi { border-top:3px solid var(--accent); }
+  .lx-graph-head { display:flex; align-items:center; justify-content:space-between;
+    gap:.5rem; margin:0 0 .4rem; }
+  .lx-graph-eq { font-family:ui-monospace, monospace; font-size:.72rem; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lx-graph-close { border:none; background:transparent; cursor:pointer; color:var(--muted);
+    font-size:1.15rem; line-height:1; padding:.05rem .35rem; border-radius:6px; }
+  .lx-graph-close:hover { background:var(--chip); color:var(--ink); }
+  .lx-graph-close:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .lx-graph-popup canvas { display:block; border-radius:8px; background:var(--plot-bg);
+    border:1px solid var(--plot-line); }
+  .lx-graph-dom { font-family:ui-monospace, monospace; font-size:.6rem; color:var(--faint);
+    margin:.35rem 0 0; text-align:right; }
+
+  .lx-toast { position:fixed; left:50%; bottom:2rem; transform:translateX(-50%) translateY(8px);
+    background:#171a1f; color:#fff; padding:.6rem 1rem; border-radius:9px; font-size:.85rem;
+    box-shadow:0 8px 28px rgba(0,0,0,.24); opacity:0; z-index:1100; pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease; }
+  .lx-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .foot { margin-top:4.5rem; padding-top:2rem; border-top:1px solid var(--line); text-align:center; }
+  .foot-mark { font-weight:800; font-size:1.3rem; letter-spacing:-.03em; margin:0 0 .6rem; }
+  .foot-mark .x { background:linear-gradient(160deg, var(--accent-2), var(--accent));
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .foot-fine { margin:0; color:var(--faint); font-size:.74rem;
+    font-family:ui-monospace, monospace; letter-spacing:.03em; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lx-math, .lx-graph-popup, .lx-toast, .card { transition:none !important; }
+  }
+</style>
+
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p class="eyebrow">clean-room · pure Java 25 · zero dependencies</p>
+      <h1 class="wordmark">Latte<span class="x">X</span> · graph plots</h1>
+      <p class="tagline">Click a graphable expression to plot it. The math stays a
+        sanitizer-safe <code>&lt;svg&gt;</code>; the plot is a separate page-side popup.</p>
+      <p class="note"><strong>single</strong> opens one transient popup (click away or
+        press <kbd>Esc</kbd> to dismiss). <strong>multi</strong> opens a persistent popup
+        with a close <span class="times">&times;</span>; several stack so you can compare —
+        click-away leaves them open. Open DevTools for <code>[lx-graph]</code> logs.</p>
+    </section>
+
+    <section class="band">
+      <header class="band-head">
+        <h2>graph.open=single</h2>
+        <p>One reused popup that dismisses on click-away / <kbd>Esc</kbd>.</p>
+      </header>
+      <div class="grid">
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-graph-open="single" data-lx-graph-expr="f(x) = x^2 - 3" data-lx-graph-domain="-10..10"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1.28 -34.432 197.06 44.272" width="197.06" height="44.272" role="img" aria-label="f ( x ) = x squared - 3">
+              <g fill="currentColor">
+                <path d="M26 468 L102 468 Q102 529 108 567 Q115 606 134 640 Q154 675 184 694 Q215 713 267 713 Q316 713 347 695 Q379 677 379 643 Q379 621 367 610 Q355 600 338 600 Q319 600 307 611 Q295 623 285 638 Q276 653 264 664 Q252 676 233 676 Q205 676 195 650 Q185 625 185 562 L185 468 L307 468 L307 426 L185 426 L185 119 Q185 80 193 61 Q201 42 223 35 Q245 29 287 29 L287 0 L18 0 L18 29 Q55 29 72 35 Q90 42 96 61 Q102 80 102 119 L102 426 L26 426 L26 468 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(12.28 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(26.56 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(45.72 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(71.1111 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(111.0222 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(130.1822 -14.4) scale(0.028 -0.028)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(154.5311 0) scale(0.04 -0.04)"/>
+                <path d="M86 498 L63 511 Q120 644 244 644 Q321 644 363 605 Q405 567 405 510 Q405 458 374 426 Q344 394 297 364 L297 361 Q337 349 370 326 Q404 304 424 271 Q444 239 444 194 Q444 126 406 79 Q368 33 306 10 Q244 -13 171 -13 Q126 -13 102 -4 Q78 4 68 16 Q59 29 59 42 Q59 58 69 72 Q79 86 98 86 Q110 86 120 81 Q131 77 157 63 Q189 47 204 42 Q220 37 238 37 Q270 37 298 48 Q326 60 344 87 Q362 115 362 164 Q362 209 337 242 Q312 275 270 293 Q229 312 181 312 L161 312 L161 350 L180 350 Q214 350 246 367 Q278 384 298 415 Q319 446 319 486 Q319 530 291 554 Q264 579 217 579 Q172 579 142 558 Q112 538 86 498 Z" transform="translate(176.02 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">A parabola crossing the axis — click it, the popup floats beside the math</span>
+            <code class="src">\lx[graph.domain=-10..10, graph.open=single]{f(x) = x^2 - 3}</code>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-graph-open="single" data-lx-graph-expr="\sin{x}" data-lx-graph-domain="-6..6"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.44 -28.92 78.6267 31.36" width="78.6267" height="31.36" role="img" aria-label="sin x">
+              <g fill="currentColor">
+                <path d="M39 164 L65 164 Q81 87 112 56 Q143 26 198 26 Q236 26 260 41 Q284 57 284 92 Q284 116 275 132 Q267 148 243 164 Q219 181 172 204 Q104 239 72 271 Q40 304 40 359 Q40 421 84 453 Q129 485 193 485 Q231 485 255 476 Q279 468 298 459 L299 459 L316 480 L336 480 L339 327 L312 327 Q296 398 267 424 Q238 451 192 451 Q158 451 134 435 Q111 419 111 385 Q111 356 138 333 Q165 310 228 278 Q296 242 332 208 Q368 175 368 119 Q368 72 345 43 Q322 15 283 2 Q245 -11 200 -11 Q157 -11 131 -2 Q106 7 86 15 L84 15 L63 -8 L42 -8 L39 164 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M257 28 L257 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 380 Q102 412 91 419 Q80 427 58 427 Q48 427 40 426 Q33 425 33 425 L33 454 L159 482 L185 482 L185 101 Q185 72 189 56 Q193 40 208 34 Q224 28 257 28 Z M145 673 Q171 673 186 656 Q202 640 202 617 Q202 594 186 577 Q171 560 145 560 Q120 560 104 577 Q88 594 88 617 Q88 640 103 656 Q119 673 145 673 Z" transform="translate(15.8 0) scale(0.04 -0.04)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(27.2 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(56.9067 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">\sin over a custom window; click away (or Esc) to dismiss</span>
+            <code class="src">\lx[graph.domain=-6..6, graph.open=single]{\sin{x}}</code>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-graph-open="single" data-lx-graph-expr="2x - 1" data-lx-graph-domain="-4..4"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.48 -27.76 88.8578 29.76" width="88.8578" height="29.76" role="img" aria-label="2 x - 1">
+              <g fill="currentColor">
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(19.8 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(47.8489 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(69.3378 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">A line — the single popup is reused, never stacked</span>
+            <code class="src">\lx[graph.domain=-4..4, graph.open=single]{2x - 1}</code>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="band">
+      <header class="band-head">
+        <h2>graph.open=multi</h2>
+        <p>Persistent, stackable popups — open several and compare the curves.</p>
+      </header>
+      <div class="grid">
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-graph-open="multi" data-lx-graph-expr="y = \frac{1}{x}" data-lx-graph-domain="-10..10"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.48 -53.16 94.6222 80.76" width="94.6222" height="80.76" role="img" aria-label="y = the fraction 1 over x">
+              <g fill="currentColor">
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(30.4311 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(70.3422 -25.6) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(70.6622 25.6) scale(0.04 -0.04)"/>
+                <rect x="70.3422" y="-11.68" width="19.8" height="2.72"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">A hyperbola — the asymptote is a gap, not a spike; open it several times</span>
+            <code class="src">\lx[graph.domain=-10..10, graph.open=multi]{y = \frac{1}{x}}</code>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-graph-open="multi" data-lx-graph-expr="x^3 - 3x" data-lx-graph-domain="-3..3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.08 -34.432 108.1578 36.952" width="108.1578" height="36.952" role="img" aria-label="x to the power of 3 - 3 x">
+              <g fill="currentColor">
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M86 498 L63 511 Q120 644 244 644 Q321 644 363 605 Q405 567 405 510 Q405 458 374 426 Q344 394 297 364 L297 361 Q337 349 370 326 Q404 304 424 271 Q444 239 444 194 Q444 126 406 79 Q368 33 306 10 Q244 -13 171 -13 Q126 -13 102 -4 Q78 4 68 16 Q59 29 59 42 Q59 58 69 72 Q79 86 98 86 Q110 86 120 81 Q131 77 157 63 Q189 47 204 42 Q220 37 238 37 Q270 37 298 48 Q326 60 344 87 Q362 115 362 164 Q362 209 337 242 Q312 275 270 293 Q229 312 181 312 L161 312 L161 350 L180 350 Q214 350 246 367 Q278 384 298 415 Q319 446 319 486 Q319 530 291 554 Q264 579 217 579 Q172 579 142 558 Q112 538 86 498 Z" transform="translate(19.16 -14.4) scale(0.028 -0.028)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(43.5089 0) scale(0.04 -0.04)"/>
+                <path d="M86 498 L63 511 Q120 644 244 644 Q321 644 363 605 Q405 567 405 510 Q405 458 374 426 Q344 394 297 364 L297 361 Q337 349 370 326 Q404 304 424 271 Q444 239 444 194 Q444 126 406 79 Q368 33 306 10 Q244 -13 171 -13 Q126 -13 102 -4 Q78 4 68 16 Q59 29 59 42 Q59 58 69 72 Q79 86 98 86 Q110 86 120 81 Q131 77 157 63 Q189 47 204 42 Q220 37 238 37 Q270 37 298 48 Q326 60 344 87 Q362 115 362 164 Q362 209 337 242 Q312 275 270 293 Q229 312 181 312 L161 312 L161 350 L180 350 Q214 350 246 367 Q278 384 298 415 Q319 446 319 486 Q319 530 291 554 Q264 579 217 579 Q172 579 142 558 Q112 538 86 498 Z" transform="translate(64.9978 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(84.7978 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">A cubic on a tight window — open it alongside the hyperbola; they stack + stay</span>
+            <code class="src">\lx[graph.domain=-3..3, graph.open=multi]{x^3 - 3x}</code>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-graph-open="multi" data-lx-graph-expr="\frac{x^2}{2} - x" data-lx-graph-domain="-2..4"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.08 -60.032 88.3578 87.632" width="88.3578" height="87.632" role="img" aria-label="the fraction x squared over 2 - x">
+              <g fill="currentColor">
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(0 -25.6) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(19.16 -40) scale(0.028 -0.028)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(7.41 25.6) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(43.5089 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(64.9978 0) scale(0.04 -0.04)"/>
+                <rect x="0" y="-11.68" width="34.62" height="2.72"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">Another parabola — persistent popups let you compare curves side by side</span>
+            <code class="src">\lx[graph.domain=-2..4, graph.open=multi]{\frac{x^2}{2} - x}</code>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="band">
+      <header class="band-head">
+        <h2>Not everything plots</h2>
+        <p>A plain <code>\lx</code> with no <code>graph.*</code> options is just math —
+          clicking it does nothing.</p>
+      </header>
+      <div class="grid">
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -55.84 90.6578 83.84" width="90.6578" height="83.84" role="img" aria-label="the fraction a + b over c">
+              <g fill="currentColor">
+                <path d="M308 62 L304 62 Q269 31 237 12 Q205 -7 157 -7 Q99 -7 68 25 Q38 57 38 105 Q38 145 56 172 Q75 200 105 219 Q136 238 171 251 Q207 264 241 273 Q275 282 301 290 L301 334 Q301 399 278 426 Q256 454 211 454 Q168 454 156 436 Q144 418 144 373 Q144 327 100 327 Q85 327 71 338 Q58 350 58 375 Q58 403 79 428 Q101 453 140 469 Q180 485 234 485 Q316 485 350 447 Q384 409 384 331 L384 104 Q384 73 391 64 Q398 55 414 55 Q428 55 439 62 Q451 69 461 80 L476 64 Q451 28 428 11 Q406 -5 368 -5 Q335 -5 324 12 Q313 29 308 62 Z M301 92 L301 257 Q256 246 216 231 Q176 216 151 192 Q126 168 126 129 Q126 92 146 70 Q166 48 198 48 Q248 48 301 92 Z" transform="translate(0 -25.6) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(28.0889 -25.6) scale(0.04 -0.04)"/>
+                <path d="M163 706 L163 400 L166 400 Q192 432 231 458 Q270 485 320 485 Q370 485 407 456 Q445 428 466 378 Q487 328 487 263 Q487 174 456 113 Q425 52 371 21 Q317 -10 247 -10 Q183 -10 140 5 Q98 20 80 30 L80 592 Q80 626 72 635 Q65 645 36 645 Q24 645 16 644 Q8 643 8 643 L8 671 L137 706 L163 706 Z M163 356 L163 78 Q177 61 201 46 Q225 31 265 31 Q313 31 341 58 Q370 85 383 130 Q396 176 396 231 Q396 279 386 321 Q376 364 350 390 Q324 417 276 417 Q238 417 207 395 Q177 374 163 356 Z" transform="translate(65.7778 -25.6) scale(0.04 -0.04)"/>
+                <path d="M408 148 L427 134 Q408 94 383 61 Q359 28 323 9 Q287 -10 233 -10 Q171 -10 126 20 Q81 50 57 103 Q33 157 33 226 Q33 344 92 414 Q151 485 259 485 Q330 485 370 454 Q411 423 411 379 Q411 334 369 334 Q347 334 335 345 Q324 357 317 374 Q310 391 302 408 Q295 425 281 436 Q268 448 242 448 Q181 448 146 403 Q112 359 112 273 Q112 182 149 123 Q187 65 264 65 Q313 65 343 85 Q374 105 408 148 Z" transform="translate(34.4089 25.6) scale(0.04 -0.04)"/>
+                <rect x="0" y="-11.68" width="86.6578" height="2.72"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">Plain \lx math — no graph.* options, so it does not plot</span>
+            <code class="src">\lx{ \frac{a+b}{c} }</code>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="band">
+      <header class="band-head"><h2>Inline, in prose</h2></header>
+      <p class="prose">The renderer plots inline snippets too: the quadratic
+        <span class="lx-math" data-lx-graph-open="multi" data-lx-graph-expr="x^2 - 2x - 1" data-lx-graph-domain="-5..5"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.08 -34.432 155.4556 36.432" width="155.4556" height="36.432" role="img" aria-label="x squared - 2 x - 1">
+  <g fill="currentColor">
+    <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+    <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(19.16 -14.4) scale(0.028 -0.028)"/>
+    <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(43.5089 0) scale(0.04 -0.04)"/>
+    <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(64.9978 0) scale(0.04 -0.04)"/>
+    <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(84.7978 0) scale(0.04 -0.04)"/>
+    <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(112.8467 0) scale(0.04 -0.04)"/>
+    <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(134.3356 0) scale(0.04 -0.04)"/>
+  </g>
+</svg></span> plots on click, and its popup floats beside the
+        snippet — never squeezed to the line's width. It is a
+        <code>graph.open=multi</code> expression, so it stacks with the others above.</p>
+    </section>
+
+    <footer class="foot">
+      <p class="foot-mark">Latte<span class="x">X</span></p>
+      <p class="foot-fine">Math rendered live from LaTeX · STIX Two Math (OFL) ·
+        plotting runtime is vanilla JS over <code>data-lx-graph-*</code> container attributes</p>
+    </footer>
+  </main>
+<script>
+(function () {
+  "use strict";
+
+  var BS = String.fromCharCode(92); // a single backslash, no source escapes
+  var TAB = String.fromCharCode(9);
+
+  function isDigit(c) { return c >= "0" && c <= "9"; }
+  function isAlpha(c) { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"); }
+
+  var FUNCS = { sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, ln: Math.log };
+  var KNOWN = { frac: 1, sqrt: 1, pi: 1, sin: 1, cos: 1, tan: 1, exp: 1, ln: 1 };
+
+  // Turn a demo-scope LaTeX expression into a numeric f(x). Uses the RHS after
+  // the first "=" (or the whole thing). Recursive descent over the raw chars;
+  // every node is a hand-built numeric closure — a string is NEVER evaluated as
+  // code. Anything outside the grammar throws, and the caller toasts.
+  function makeEvaluator(latexRaw) {
+    var eq = latexRaw.indexOf("=");
+    var s = (eq >= 0 ? latexRaw.slice(eq + 1) : latexRaw);
+    var n = s.length, pos = 0;
+
+    function ws() { while (pos < n && (s[pos] === " " || s[pos] === TAB)) { pos++; } }
+    function peek() { ws(); return pos < n ? s[pos] : ""; }
+    function readCmd() { pos++; var st = pos; while (pos < n && isAlpha(s[pos])) { pos++; } return s.slice(st, pos); }
+    function peekCmd() {
+      ws();
+      if (pos < n && s[pos] === BS) {
+        var p = pos + 1, st = p;
+        while (p < n && isAlpha(s[p])) { p++; }
+        return s.slice(st, p);
+      }
+      return "";
+    }
+    function expect(ch) { ws(); if (pos < n && s[pos] === ch) { pos++; return; } throw new Error("expected " + ch); }
+    function atFactorStart() {
+      var c = peek();
+      if (c === "") { return false; }
+      if (isDigit(c) || c === "." || c === "(" || c === "{") { return true; }
+      if (c === "x" || c === "e") { return true; }
+      if (c === BS) { return !!KNOWN[peekCmd()]; }
+      return false;
+    }
+
+    function add(a, b) { return function (x) { return a(x) + b(x); }; }
+    function sub(a, b) { return function (x) { return a(x) - b(x); }; }
+    function mul(a, b) { return function (x) { return a(x) * b(x); }; }
+    function div(a, b) { return function (x) { return a(x) / b(x); }; }
+    function pw(a, b)  { return function (x) { return Math.pow(a(x), b(x)); }; }
+
+    function parseExpr() {
+      var node = parseTerm();
+      while (true) {
+        var c = peek();
+        if (c === "+") { pos++; node = add(node, parseTerm()); }
+        else if (c === "-") { pos++; node = sub(node, parseTerm()); }
+        else { break; }
+      }
+      return node;
+    }
+    function parseTerm() {
+      var node = parsePower();
+      while (true) {
+        var c = peek();
+        if (c === "*") { pos++; node = mul(node, parsePower()); continue; }
+        if (c === "/") { pos++; node = div(node, parsePower()); continue; }
+        if (c === BS) {
+          var cmd = peekCmd();
+          if (cmd === "cdot" || cmd === "times") { readCmd(); node = mul(node, parsePower()); continue; }
+        }
+        if (atFactorStart()) { node = mul(node, parsePower()); continue; }
+        break;
+      }
+      return node;
+    }
+    function parsePower() {
+      var base = parseUnary();
+      ws();
+      if (pos < n && s[pos] === "^") { pos++; return pw(base, parsePower()); }
+      return base;
+    }
+    function parseUnary() {
+      var c = peek();
+      if (c === "+") { pos++; return parseUnary(); }
+      if (c === "-") { pos++; var u = parseUnary(); return function (x) { return -u(x); }; }
+      return parseAtom();
+    }
+    function number() {
+      var st = pos;
+      while (pos < n && isDigit(s[pos])) { pos++; }
+      if (pos < n && s[pos] === ".") { pos++; while (pos < n && isDigit(s[pos])) { pos++; } }
+      var v = parseFloat(s.slice(st, pos));
+      return function () { return v; };
+    }
+    function parseArg() {
+      ws();
+      if (pos < n && s[pos] === "{") { pos++; var e = parseExpr(); expect("}"); return e; }
+      return parseAtom();
+    }
+    function parseCommandAtom() {
+      var cmd = readCmd();
+      if (cmd === "frac") { var a = parseArg(); var b = parseArg(); return div(a, b); }
+      if (cmd === "sqrt") {
+        ws();
+        if (pos < n && s[pos] === "[") { throw new Error("n-th root not supported"); }
+        var g = parseArg();
+        return function (x) { return Math.sqrt(g(x)); };
+      }
+      if (cmd === "pi") { return function () { return Math.PI; }; }
+      var F = FUNCS[cmd];
+      if (F) { var arg = parseArg(); return function (x) { return F(arg(x)); }; }
+      throw new Error("unsupported command: " + cmd);
+    }
+    function parseAtom() {
+      ws();
+      var c = pos < n ? s[pos] : "";
+      if (c === "") { throw new Error("unexpected end"); }
+      if (c === "(") { pos++; var e = parseExpr(); expect(")"); return e; }
+      if (c === "{") { pos++; var g = parseExpr(); expect("}"); return g; }
+      if (isDigit(c) || c === ".") { return number(); }
+      if (c === "x") { pos++; return function (x) { return x; }; }
+      if (c === "e") { pos++; return function () { return Math.E; }; }
+      if (c === BS) { return parseCommandAtom(); }
+      throw new Error("unexpected " + c);
+    }
+
+    var fn = parseExpr();
+    ws();
+    if (pos < n) { throw new Error("trailing: " + s.slice(pos)); }
+    if (typeof fn(1) !== "number") { throw new Error("non-numeric result"); }
+    return fn;
+  }
+
+  function parseDomain(str) {
+    var def = [-10, 10];
+    if (!str) { return def; }
+    var k = str.indexOf("..");
+    if (k < 0) { return def; }
+    var a = parseFloat(str.slice(0, k));
+    var b = parseFloat(str.slice(k + 2));
+    if (!isFinite(a) || !isFinite(b) || a === b) { return def; }
+    return a < b ? [a, b] : [b, a];
+  }
+
+  function pct(sorted, p) {
+    if (!sorted.length) { return 0; }
+    var idx = Math.round((p / 100) * (sorted.length - 1));
+    idx = Math.min(sorted.length - 1, Math.max(0, idx));
+    return sorted[idx];
+  }
+
+  function cssVar(el, name, fallback) {
+    var v = getComputedStyle(el).getPropertyValue(name);
+    return (v && v.trim()) || fallback;
+  }
+
+  // Sample f across [a,b], percentile-trim the Y window (so 1/x near 0 does not
+  // blow up), draw grid + axes + curve. The line breaks at any non-finite or
+  // out-of-view sample, so an asymptote is a gap, not a spike. Colors come from
+  // theme-aware CSS vars, so the plot tracks light/dark.
+  function drawPlot(canvas, fn, a, b) {
+    var dpr = window.devicePixelRatio || 1;
+    var W = 280, H = 200;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    var ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    var padL = 6, padR = 6, padT = 8, padB = 6;
+    var N = 480, i, x, y;
+    var xs = [], ys = [], finite = [];
+    for (i = 0; i <= N; i++) {
+      x = a + (b - a) * i / N;
+      y = fn(x);
+      xs.push(x); ys.push(y);
+      if (isFinite(y)) { finite.push(y); }
+    }
+    finite.sort(function (p, q) { return p - q; });
+    var lo, hi;
+    if (!finite.length) { lo = -1; hi = 1; }
+    else { lo = pct(finite, 2); hi = pct(finite, 98); }
+    if (lo === hi) { lo -= 1; hi += 1; }
+    if (lo > 0) { lo = 0; }
+    if (hi < 0) { hi = 0; }
+    var padY = (hi - lo) * 0.08 || 1;
+    var y0 = lo - padY, y1 = hi + padY;
+
+    function PX(xx) { return padL + (xx - a) / (b - a) * (W - padL - padR); }
+    function PY(yy) { return H - padB - (yy - y0) / (y1 - y0) * (H - padT - padB); }
+
+    var VN = 8, HN = 6, g;
+    ctx.strokeStyle = cssVar(canvas, "--plot-grid", "#e9efed"); ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (g = 0; g <= VN; g++) { var gx = padL + (W - padL - padR) * g / VN; ctx.moveTo(gx, padT); ctx.lineTo(gx, H - padB); }
+    for (g = 0; g <= HN; g++) { var gy = padT + (H - padT - padB) * g / HN; ctx.moveTo(padL, gy); ctx.lineTo(W - padR, gy); }
+    ctx.stroke();
+
+    ctx.strokeStyle = cssVar(canvas, "--plot-axis", "#9fb3ae"); ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    if (a < 0 && b > 0) { ctx.moveTo(PX(0), padT); ctx.lineTo(PX(0), H - padB); }
+    if (y0 < 0 && y1 > 0) { ctx.moveTo(padL, PY(0)); ctx.lineTo(W - padR, PY(0)); }
+    ctx.stroke();
+
+    ctx.strokeStyle = cssVar(canvas, "--plot-curve", "#1f7d72"); ctx.lineWidth = 2; ctx.lineJoin = "round";
+    ctx.beginPath();
+    var penUp = true;
+    for (i = 0; i < xs.length; i++) {
+      y = ys[i];
+      var inView = isFinite(y) && y >= y0 && y <= y1;
+      if (inView) {
+        var Xp = PX(xs[i]), Yp = PY(y);
+        if (penUp) { ctx.moveTo(Xp, Yp); penUp = false; } else { ctx.lineTo(Xp, Yp); }
+      } else { penUp = true; }
+    }
+    ctx.stroke();
+  }
+
+  function graphMarkup() {
+    return "<div class=\"lx-graph-head\"><span class=\"lx-graph-eq\"></span>"
+      + "<button type=\"button\" class=\"lx-graph-close\" aria-label=\"Close graph\">&#215;</button></div>"
+      + "<canvas></canvas><p class=\"lx-graph-dom\"></p>";
+  }
+
+  function fillGraph(p, latex, fn, a, b) {
+    p.querySelector(".lx-graph-eq").textContent = latex;
+    p.querySelector(".lx-graph-dom").textContent = "x in [" + a + ", " + b + "]";
+    drawPlot(p.querySelector("canvas"), fn, a, b);
+  }
+
+  function clampInto(left, top, pw, ph) {
+    var margin = 8;
+    left = Math.max(margin, Math.min(left, window.innerWidth - pw - margin));
+    top = Math.max(margin, Math.min(top, window.innerHeight - ph - margin));
+    return [left, top];
+  }
+
+  // ---- single mode: one transient popup, reused and repositioned ----
+  var gpop = null, gActiveEl = null;
+
+  function ensureGraph() {
+    if (gpop) { return gpop; }
+    gpop = document.createElement("div");
+    gpop.className = "lx-graph-popup";
+    gpop.hidden = true;
+    gpop.setAttribute("role", "dialog");
+    gpop.setAttribute("aria-label", "Equation graph");
+    gpop.setAttribute("tabindex", "-1");
+    gpop.innerHTML = graphMarkup();
+    gpop.addEventListener("click", function (ev) { ev.stopPropagation(); });
+    gpop.querySelector(".lx-graph-close").addEventListener("click", function () { closeGraph(true); });
+    document.body.appendChild(gpop);
+    return gpop;
+  }
+
+  function positionGraph(el) {
+    var r = el.getBoundingClientRect();
+    var pw = gpop.offsetWidth, ph = gpop.offsetHeight, gap = 10;
+    var left = r.left + r.width / 2 - pw / 2;
+    var top = r.bottom + gap;
+    if (top + ph > window.innerHeight - 8) {
+      var above = r.top - ph - gap;
+      top = (above >= 8) ? above : Math.max(8, window.innerHeight - ph - 8);
+    }
+    var xy = clampInto(left, top, pw, ph);
+    gpop.style.left = Math.round(xy[0]) + "px";
+    gpop.style.top = Math.round(xy[1]) + "px";
+  }
+
+  function openGraph(el, latex, fn, a, b) {
+    ensureGraph();
+    gActiveEl = el;
+    gpop.hidden = false;
+    fillGraph(gpop, latex, fn, a, b);
+    positionGraph(el);
+    gpop.focus();
+  }
+
+  function closeGraph(restore) {
+    if (!gpop || gpop.hidden) { return; }
+    gpop.hidden = true;
+    var el = gActiveEl; gActiveEl = null;
+    if (restore && el) { el.focus(); }
+  }
+
+  // ---- multi mode: independent, persistent, cascading popups ----
+  var multiPops = [];
+
+  function openGraphMulti(el, latex, fn, a, b) {
+    var p = document.createElement("div");
+    p.className = "lx-graph-popup lx-graph-multi";
+    p.setAttribute("role", "dialog");
+    p.setAttribute("aria-label", "Equation graph");
+    p.setAttribute("tabindex", "-1");
+    p.innerHTML = graphMarkup();
+    p.addEventListener("click", function (ev) { ev.stopPropagation(); });
+    p.querySelector(".lx-graph-close").addEventListener("click", function () { closeMulti(p, true); });
+    document.body.appendChild(p);
+    fillGraph(p, latex, fn, a, b);
+    positionMulti(p, el);
+    multiPops.push(p);
+    p.focus();
+  }
+
+  function positionMulti(p, el) {
+    var r = el.getBoundingClientRect();
+    var pw = p.offsetWidth, ph = p.offsetHeight, gap = 10;
+    var step = 24 * multiPops.length;
+    var xy = clampInto(r.left + r.width / 2 - pw / 2 + step, r.bottom + gap + step, pw, ph);
+    p.style.left = Math.round(xy[0]) + "px";
+    p.style.top = Math.round(xy[1]) + "px";
+  }
+
+  function closeMulti(p, restore) {
+    var idx = multiPops.indexOf(p);
+    if (idx >= 0) { multiPops.splice(idx, 1); }
+    if (p.parentNode) { p.parentNode.removeChild(p); }
+    if (restore) {
+      var top = multiPops[multiPops.length - 1];
+      if (top) { top.focus(); }
+    }
+  }
+
+  function focusedMulti() {
+    var active = document.activeElement;
+    for (var i = multiPops.length - 1; i >= 0; i--) {
+      if (multiPops[i].contains(active)) { return multiPops[i]; }
+    }
+    return null;
+  }
+
+  function toast(msg) {
+    var t = document.createElement("div");
+    t.className = "lx-toast"; t.textContent = msg;
+    document.body.appendChild(t);
+    requestAnimationFrame(function () { t.classList.add("show"); });
+    setTimeout(function () {
+      t.classList.remove("show");
+      setTimeout(function () { if (t.parentNode) { t.parentNode.removeChild(t); } }, 300);
+    }, 1600);
+  }
+
+  function doGraph(el) {
+    var latex = el.getAttribute("data-lx-graph-expr") || "";
+    var mode = el.getAttribute("data-lx-graph-open") === "multi" ? "multi" : "single";
+    var fn;
+    try { fn = makeEvaluator(latex); }
+    catch (e) {
+      console.log("[lx-graph] cannot plot " + JSON.stringify(latex) + ": " + e.message);
+      toast("Can't plot this yet");
+      return;
+    }
+    var dom = parseDomain(el.getAttribute("data-lx-graph-domain"));
+    var eq = latex.indexOf("=");
+    var shown = (eq >= 0 ? latex.slice(eq + 1) : latex).trim();
+    console.log("[lx-graph] plot " + shown + " over [" + dom[0] + ", " + dom[1] + "] mode=" + mode);
+    if (mode === "multi") { openGraphMulti(el, latex, fn, dom[0], dom[1]); }
+    else { openGraph(el, latex, fn, dom[0], dom[1]); }
+  }
+
+  function init() {
+    var els = document.querySelectorAll(".lx-math[data-lx-graph-expr]");
+    console.log("[lx-graph] init: " + els.length + " graphable expressions");
+    Array.prototype.forEach.call(els, function (el) {
+      el.setAttribute("tabindex", "0");
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", "Plot " + (el.getAttribute("data-lx-graph-expr") || "expression"));
+      function trigger(ev) { ev.stopPropagation(); doGraph(el); }
+      el.addEventListener("click", trigger);
+      el.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" || ev.key === " " || ev.key === "Spacebar") { ev.preventDefault(); trigger(ev); }
+      });
+    });
+
+    // Click-away dismisses the transient (single) popup; persistent multi
+    // popups stopPropagation, so they are NOT closed by an outside click.
+    document.addEventListener("click", function () { closeGraph(false); });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Escape") { return; }
+      if (gpop && !gpop.hidden && gpop.contains(document.activeElement)) { closeGraph(true); return; }
+      var m = focusedMulti() || multiPops[multiPops.length - 1];
+      if (m) { closeMulti(m, true); return; }
+      if (gpop && !gpop.hidden) { closeGraph(true); }
+    });
+    // Scroll/resize dismiss the transient popup; multi popups are fixed + persist.
+    window.addEventListener("scroll", function () { closeGraph(false); }, true);
+    window.addEventListener("resize", function () { closeGraph(false); });
+  }
+
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", init); }
+  else { init(); }
+})();
+</script>
+</body>
+</html>
