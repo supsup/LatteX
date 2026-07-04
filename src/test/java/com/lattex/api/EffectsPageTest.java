@@ -29,9 +29,15 @@ import org.junit.jupiter.api.Test;
  *
  * <p><strong>Runtime.</strong> A tiny inline stylesheet ({@code @keyframes} for
  * {@code boom}/{@code pulse}/{@code fade}/{@code glow}) plus a small vanilla-JS
- * wirer read {@code data-lx-fx-enter}/{@code -hover}/{@code -click} and
- * {@code data-lx-fx-duration} and play the matching keyframe on load / hover /
- * click. {@code prefers-reduced-motion} softens or skips motion. No external
+ * wirer read {@code data-lx-fx-enter}/{@code -hover}/{@code -click},
+ * {@code data-lx-fx-duration} and {@code data-lx-fx-glow-color} and play the
+ * matching effect on load / hover / click. {@code glow} honours the author's
+ * {@code fx.glow-color} (via a CSS custom property, defaulting to
+ * {@code currentColor}). {@code lightning} is special-cased: not a keyframe on the
+ * element but a page-side, pointer-events-none {@code <canvas>} overlay appended to
+ * {@code <body>} on which jagged bolts arc in from the left/right viewport edges and
+ * converge on the element — the inner {@code <svg>} is never touched.
+ * {@code prefers-reduced-motion} softens or skips motion. No external
  * assets; the glyph paths fill with {@code currentColor} so they inherit the
  * page's theme-aware ink (light + dark via {@code prefers-color-scheme}).
  *
@@ -62,6 +68,12 @@ class EffectsPageTest {
             "fx.click=boom — scale-punch that settles", "click me"),
         new Fx("\\lx[fx.click=glow]{ \\sum_{i=1}^{n} i }",
             "fx.click=glow — glow pulse on click", "click me"),
+        new Fx("\\lx[fx.hover=glow, fx.glow-color=#e0a13a]{ \\zeta(s) }",
+            "fx.hover=glow, fx.glow-color=#e0a13a — custom amber halo", "hover me"),
+        new Fx("\\lx[fx.hover=lightning]{ \\sum_{k} s_k }",
+            "fx.hover=lightning — bolts converge on it from both edges", "hover — lightning converges"),
+        new Fx("\\lx[fx.click=lightning, fx.glow-color=#7fd4ff]{ \\nabla \\times E }",
+            "fx.click=lightning, fx.glow-color=#7fd4ff — icy confluence on click", "click me"),
         new Fx("\\lx[fx.enter=fade, fx.hover=pulse, fx.click=boom, fx.duration=400ms]"
             + "{ \\int_0^\\infty e^{-x}\\,dx }",
             "all three — fade in, pulse on hover, boom on click", "load · hover · click"));
@@ -109,6 +121,22 @@ class EffectsPageTest {
         assertTrue(written.contains("data-lx-fx-hover"), "reads the hover trigger attr");
         assertTrue(written.contains("data-lx-fx-click"), "reads the click trigger attr");
         assertTrue(written.contains("data-lx-fx-duration"), "reads the duration attr");
+        // glow-color option: stamped on the container + wired to the CSS var the glow
+        // keyframe reads (so unset = currentColor, set = the author's colour).
+        assertTrue(written.contains("data-lx-fx-glow-color=\"#e0a13a\""),
+            "amber glow-color stamped on the container");
+        assertTrue(written.contains("--lx-glow-color"), "glow-color wired to the CSS var");
+        assertTrue(written.contains("var(--lx-glow-color, currentColor)"),
+            "glow keyframe reads the glow-color var, defaulting to currentColor");
+        // lightning: parsed + stamped like any effect, and special-cased as a page-side
+        // canvas overlay (never a keyframe on / inside the element's SVG).
+        assertTrue(written.contains("data-lx-fx-hover=\"lightning\""),
+            "lightning stamped as a hover effect");
+        assertFalse(written.contains("@keyframes lx-lightning"),
+            "lightning is an overlay, NOT a CSS keyframe on the element");
+        assertTrue(written.contains("function lightning"), "lightning overlay routine embedded");
+        assertTrue(written.contains("createElement('canvas')"),
+            "lightning draws on a page-side canvas overlay");
         assertTrue(written.contains("prefers-reduced-motion"), "respects reduced motion");
         // Whole-page containment: the ONLY <script>/<style>/data-*/on* live in the
         // trusted <head> runtime — never inside any rendered <svg>. Re-scan each SVG.
@@ -357,10 +385,11 @@ class EffectsPageTest {
             0%   { opacity: 0; }
             100% { opacity: 1; }
           }
-          /* glow uses currentColor, so the halo inherits the theme-aware ink. */
+          /* glow halo colour = --lx-glow-color when the author set fx.glow-color,
+             else currentColor (unset = today's theme-aware-ink behaviour). */
           @keyframes lx-glow {
-            0%, 100% { filter: drop-shadow(0 0 0 currentColor); }
-            50%      { filter: drop-shadow(0 0 12px currentColor); }
+            0%, 100% { filter: drop-shadow(0 0 0 var(--lx-glow-color, currentColor)); }
+            50%      { filter: drop-shadow(0 0 12px var(--lx-glow-color, currentColor)); }
           }
 
           @media (prefers-reduced-motion: reduce) {
@@ -378,13 +407,123 @@ class EffectsPageTest {
     private static final String SCRIPT = """
         <script>
         (function () {
-          // Closed effect vocabulary — mirrors the Effect enum (boom|pulse|fade|glow|none).
+          // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
+          // (boom|pulse|fade|glow|none). 'lightning' is special-cased below: it is a
+          // page-side body overlay, NOT a keyframe on the element.
           var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, none: 1 };
           var reduced = window.matchMedia
             && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-          // Play a one-shot keyframe, resetting first so it can replay on re-trigger.
+          // Resolve the strike/halo colour: the author's fx.glow-color if set (and not
+          // the literal 'currentColor', which canvas can't resolve), else the element's
+          // computed ink colour so it matches the on-page glyphs.
+          function resolveColor(el) {
+            var c = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+            if (c && c.toLowerCase() !== 'currentcolor') { return c; }
+            var ink = getComputedStyle(el).color;
+            return ink || '#e6a24c';
+          }
+
+          // A jagged polyline from (x0,y0) to (x1,y1): interior points are pushed off
+          // the straight line by a random perpendicular jitter, so every strike differs.
+          function jagged(x0, y0, x1, y1, segs, jitter) {
+            var dx = x1 - x0, dy = y1 - y0;
+            var len = Math.sqrt(dx * dx + dy * dy) || 1;
+            var nx = -dy / len, ny = dx / len; // unit normal
+            var pts = [];
+            for (var i = 0; i <= segs; i++) {
+              var t = i / segs;
+              var x = x0 + dx * t, y = y0 + dy * t;
+              if (i > 0 && i < segs) {
+                var off = (Math.random() * 2 - 1) * jitter;
+                x += nx * off; y += ny * off;
+              }
+              pts.push([x, y]);
+            }
+            return pts;
+          }
+
+          function stroke(ctx, pts, upto) {
+            var n = Math.max(2, Math.min(pts.length, upto || pts.length));
+            if (n < 2) { return; }
+            ctx.beginPath();
+            ctx.moveTo(pts[0][0], pts[0][1]);
+            for (var i = 1; i < n; i++) { ctx.lineTo(pts[i][0], pts[i][1]); }
+            ctx.stroke();
+          }
+
+          // The confluence: two rivers of lightning arc IN from the left- and right-mid
+          // viewport edges and converge on the element's centre, flash, then fade. A
+          // lazily-created, pointer-events-none body overlay — never inside the <svg>.
+          function lightning(el) {
+            var r = el.getBoundingClientRect();
+            var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+            var vw = window.innerWidth, vh = window.innerHeight;
+            var color = resolveColor(el);
+            var sources = [[0, vh / 2], [vw, vh / 2]]; // left-mid + right-mid edges
+
+            var canvas = document.createElement('canvas');
+            var dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.round(vw * dpr);
+            canvas.height = Math.round(vh * dpr);
+            canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+              + 'pointer-events:none;z-index:2147483647;';
+            document.body.appendChild(canvas);
+            var ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+
+            // Reduced motion: one faint static arc from each side, no flicker, no flash.
+            if (reduced) {
+              ctx.globalAlpha = 0.45;
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 2;
+              sources.forEach(function (s) { stroke(ctx, jagged(s[0], s[1], cx, cy, 8, 6)); });
+              setTimeout(function () { canvas.remove(); }, 400);
+              return;
+            }
+
+            var DRAW = 180, HOLD = 90, FADE = 350;
+            function drawBolts(progress) {
+              ctx.clearRect(0, 0, vw, vh);
+              ctx.strokeStyle = color;
+              ctx.shadowColor = color;
+              ctx.shadowBlur = 12;
+              sources.forEach(function (s) {
+                for (var k = 0; k < 2; k++) { // 2 forked bolts per side
+                  var pts = jagged(s[0], s[1], cx, cy, 12, 18 + k * 10);
+                  ctx.lineWidth = 2 + k;
+                  ctx.globalAlpha = 0.9;
+                  stroke(ctx, pts, Math.floor(pts.length * progress));
+                }
+              });
+              if (progress > 0.85) { // bright convergence flash blob
+                var rad = 10 + Math.random() * 6;
+                var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+                g.addColorStop(0, color);
+                g.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = g;
+                ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+              }
+            }
+
+            var t0 = performance.now();
+            function frame(now) {
+              var e = now - t0;
+              if (e < DRAW) { drawBolts(e / DRAW); requestAnimationFrame(frame); }        // draw in + flicker
+              else if (e < DRAW + HOLD) { drawBolts(1); requestAnimationFrame(frame); }   // hold, still re-jagging
+              else if (e < DRAW + HOLD + FADE) {                                            // fade the whole overlay
+                canvas.style.opacity = String(1 - (e - DRAW - HOLD) / FADE);
+                requestAnimationFrame(frame);
+              } else { canvas.remove(); }
+            }
+            requestAnimationFrame(frame);
+          }
+
+          // Play a trigger's effect. lightning → the overlay routine; everything else is
+          // a one-shot CSS keyframe (reset first so it can replay on re-trigger).
           function play(el, name, dur) {
+            if (name === 'lightning') { lightning(el); return; }
             if (!VOCAB[name] || name === 'none') { return; }
             if (reduced) { return; }
             el.style.animation = 'none';
@@ -399,9 +538,26 @@ class EffectsPageTest {
               var hover = el.getAttribute('data-lx-fx-hover');
               var click = el.getAttribute('data-lx-fx-click');
               var dur = el.getAttribute('data-lx-fx-duration') || '400ms';
+              var glowColor = el.getAttribute('data-lx-fx-glow-color');
+
+              // Author-set glow colour drives both the glow keyframe (via the CSS var)
+              // and the lightning strike colour.
+              if (glowColor) { el.style.setProperty('--lx-glow-color', glowColor); }
 
               // enter: play once on load.
-              if (enter) { play(el, enter, dur); }
+              if (enter) {
+                play(el, enter, dur);
+                // enter=fade holds opacity:1 only via the animation's `both` fill; a
+                // LATER transform effect (hover/click) reassigns el.style.animation and
+                // drops that hold, so the element would revert to its base opacity:0 and
+                // vanish. Pin opacity to 1 once the first animation ends so it can't.
+                if (enter === 'fade') {
+                  el.addEventListener('animationend', function pin() {
+                    el.style.opacity = '1';
+                    el.removeEventListener('animationend', pin);
+                  });
+                }
+              }
               // hover: play on each mouseenter.
               if (hover) {
                 el.addEventListener('mouseenter', function () { play(el, hover, dur); });

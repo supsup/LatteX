@@ -18,11 +18,20 @@ public enum Effect {
     FADE,
     /** A soft glow. */
     GLOW,
+    /**
+     * A confluence of lightning: jagged bolts arc in from the left and right
+     * viewport edges and converge on the element. Unlike the others this is NOT a
+     * CSS keyframe on the element — the page-side runtime special-cases it and
+     * draws a full-viewport body overlay (see the fx runtime); the containment
+     * contract is unchanged (nothing reaches the inner {@code <svg>}).
+     */
+    LIGHTNING,
     /** Explicitly no effect. */
     NONE;
 
     /**
-     * Parse an effect name ({@code boom|pulse|fade|glow|none}, case-insensitive).
+     * Parse an effect name ({@code boom|pulse|fade|glow|lightning|none},
+     * case-insensitive).
      *
      * @param raw the effect name (surrounding whitespace is trimmed)
      * @return the effect
@@ -37,9 +46,11 @@ public enum Effect {
             case "pulse" -> PULSE;
             case "fade" -> FADE;
             case "glow" -> GLOW;
+            case "lightning" -> LIGHTNING;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
-                "invalid fx effect: \"" + raw + "\" (expected boom|pulse|fade|glow|none)");
+                "invalid fx effect: \"" + raw
+                    + "\" (expected boom|pulse|fade|glow|lightning|none)");
         };
     }
 

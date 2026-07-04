@@ -86,6 +86,26 @@ class LxRenderTest {
     }
 
     @Test
+    void containerStampsGlowColorAndLightning() {
+        String html = LatteX.renderStyledHtml(
+            "\\lx[fx.hover=glow, fx.glow-color=#e0a13a]{ \\zeta(s) }");
+        assertTrue(html.contains("data-lx-fx-hover=\"glow\""), "glow trigger on the container");
+        assertTrue(html.contains("data-lx-fx-glow-color=\"#e0a13a\""),
+            "validated glow colour stamped on the container");
+        // lightning validates + stamps like any effect (the runtime special-cases it).
+        String bolt = LatteX.renderStyledHtml("\\lx[fx.hover=lightning]{ \\sum_{k} s_k }");
+        assertTrue(bolt.contains("data-lx-fx-hover=\"lightning\""), "lightning stamped on the container");
+        // Neither reaches the inner SVG.
+        for (String svg : new String[] {innerSvg(html), innerSvg(bolt)}) {
+            for (String leak : new String[] {"glow-color", "#e0a13a", "lightning", "data-"}) {
+                assertFalse(svg.toLowerCase(Locale.ROOT).contains(leak.toLowerCase(Locale.ROOT)),
+                    "annotation must not reach the SVG: " + leak);
+            }
+            assertAlphabetContained(svg);
+        }
+    }
+
+    @Test
     void plainExpressionGetsBareContainer() {
         String html = LatteX.renderStyledHtml("x^2");
         assertTrue(html.startsWith("<span class=\"lx-math\">"), "bare container, no data attrs");

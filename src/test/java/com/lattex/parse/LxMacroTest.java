@@ -79,6 +79,40 @@ class LxMacroTest {
         assertTrue(sm.fx().effect(Trigger.CLICK).isEmpty());
     }
 
+    @Test
+    void parsesLightningEffect() {
+        // lightning validates + parses on every trigger, exactly like the others.
+        assertEquals(Effect.LIGHTNING,
+            lx("\\lx[fx.hover=lightning]{ x }").fx().effect(Trigger.HOVER).orElseThrow());
+        assertEquals(Effect.LIGHTNING,
+            lx("\\lx[fx.enter=lightning]{ x }").fx().effect(Trigger.ENTER).orElseThrow());
+        assertEquals(Effect.LIGHTNING,
+            lx("\\lx[fx.click=lightning]{ x }").fx().effect(Trigger.CLICK).orElseThrow());
+    }
+
+    @Test
+    void parsesGlowColorThroughTheColorBoundary() {
+        // A valid colour flows through Color.parse and is stored on the EffectSpec.
+        StyledMath hex = lx("\\lx[fx.hover=glow, fx.glow-color=#e0a13a]{ \\zeta(s) }");
+        assertEquals("#e0a13a", hex.fx().glowColorValue().orElseThrow().svgValue());
+        assertEquals(Color.CURRENT,
+            lx("\\lx[fx.glow-color=currentColor]{ x }").fx().glowColorValue().orElseThrow());
+        // 3-digit shorthand canonicalizes like every other colour.
+        assertEquals("#aabbcc",
+            lx("\\lx[fx.glow-color=#abc]{ x }").fx().glowColorValue().orElseThrow().svgValue());
+        // Absent by default (unset = currentColor behaviour downstream).
+        assertTrue(lx("\\lx[fx.hover=glow]{ x }").fx().glowColorValue().isEmpty());
+    }
+
+    @Test
+    void invalidGlowColorFailsLoud() {
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\lx[fx.glow-color=amber]{ x }"));
+        assertTrue(e.getMessage().contains("fx.glow-color"), "names the bad key: " + e.getMessage());
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\lx[fx.glow-color=#gggggg]{ x }"));
+    }
+
     // ---- semantics reduce to a typed Semantics ----
 
     @Test

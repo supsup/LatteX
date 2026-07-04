@@ -217,6 +217,12 @@ class S8LeftContainmentTest {
         b.add("\\lx[intent=ratio, concept=normalized_score, fx.enter=boom, fx.hover=pulse, "
             + "fx.click=glow, fx.duration=250ms, a11y.label=\"the ratio a plus b over c\", "
             + "data.role=header, data.group=scores]{ \\frac{a+b}{c} }");
+        // fx.glow-color + the lightning effect ride the container too (a colour VALUE
+        // and an overlay-only effect name); render() drops all of it, so the emitted
+        // SVG must still stay ⊆ the minimal alphabet.
+        b.add("\\lx[fx.hover=glow, fx.glow-color=#e0a13a]{ \\zeta(s) }");
+        b.add("\\lx[fx.hover=lightning, fx.glow-color=currentColor]{ \\sum_{k} s_k }");
+        b.add("\\lx[fx.enter=lightning, fx.click=lightning, fx.glow-color=#7fd4ff]{ \\nabla \\times E }");
         // graph.* plotting annotations ride the trusted container (data-lx-graph-*),
         // NEVER the SVG — render() drops them, so the emitter alphabet is unchanged.
         b.add("\\lx[graph.domain=-3..3, graph.open=multi]{ x^2 - 3 }");

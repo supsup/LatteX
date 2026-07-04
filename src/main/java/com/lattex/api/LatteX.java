@@ -155,6 +155,11 @@ public final class LatteX {
         }
         fx.durationValue().ifPresent(v ->
             sb.append(" data-lx-fx-duration=\"").append(v).append('"'));
+        // glow colour: a validated Color, so svgValue() is currentColor or a canonical
+        // #rrggbb literal — a safe attribute VALUE (never a new element/attribute), and
+        // it rides the container exactly like the other fx.* metadata.
+        fx.glowColorValue().ifPresent(c ->
+            sb.append(" data-lx-fx-glow-color=\"").append(c.svgValue()).append('"'));
         // data.* attributes (keys already identifier-validated) — iterated in sorted
         // key order so the generated HTML is deterministic regardless of the source
         // map's iteration order (a HashMap/Map.of view is randomized per JVM run).
