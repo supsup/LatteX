@@ -70,6 +70,17 @@ class ShowcasePageTest {
         new Feat("\\mathcal{F}, \\mathcal{L}, \\mathcal{H}", "Calligraphic alphabet"),
         new Feat("\\mathfrak{g}, \\mathfrak{sl}_2", "Fraktur alphabet"));
 
+    // --- Section 2c: the environment family — matrices, cases, and the aligned /
+    // multi-line equation environments, each a live 2-D layout. ---
+    private static final List<Eq> ENVIRONMENTS = List.of(
+        new Eq("\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}", "A 2×2 matrix"),
+        new Eq("\\begin{vmatrix} a & b \\\\ c & d \\end{vmatrix} = ad - bc", "A determinant"),
+        new Eq("|x| = \\begin{cases} x & x \\ge 0 \\\\ -x & x < 0 \\end{cases}", "A piecewise definition"),
+        new Eq("A = \\begin{pmatrix} a_{11} & \\cdots & a_{1n} \\\\ \\vdots & \\ddots & \\vdots \\\\ a_{m1} & \\cdots & a_{mn} \\end{pmatrix}", "A matrix with dots"),
+        new Eq("\\begin{align} (a+b)^2 &= a^2 + 2ab + b^2 \\\\ (a-b)^2 &= a^2 - 2ab + b^2 \\end{align}", "align — lined up on the ="),
+        new Eq("\\begin{gather} a = b \\\\ x + y = z \\end{gather}", "gather — centred lines"),
+        new Eq("\\begin{multline} a + b + c + d \\\\ + e + f + g \\\\ + h + i + j \\end{multline}", "multline — first left, last right"));
+
     /** A named strip of single-symbol specimens (macro name below each glyph). */
     private record Strip(String title, List<String> macros) {
     }
@@ -124,6 +135,14 @@ class ShowcasePageTest {
             svgCount++;
         }
 
+        // Environment family (matrices / cases / aligned + multi-line equations).
+        StringBuilder envCells = new StringBuilder();
+        for (Eq eq : ENVIRONMENTS) {
+            String svg = LatteX.render(eq.latex());
+            envCells.append(gridCell(eq.label(), eq.latex(), svg)).append('\n');
+            svgCount++;
+        }
+
         // Symbol strips.
         StringBuilder strips = new StringBuilder();
         for (Strip strip : STRIPS) {
@@ -136,7 +155,8 @@ class ShowcasePageTest {
             strips.append(strip(strip.title(), tiles.toString()));
         }
 
-        String html = page(heroSvg, gridCells.toString(), newCells.toString(), strips.toString());
+        String html = page(heroSvg, gridCells.toString(), newCells.toString(),
+            envCells.toString(), strips.toString());
         Path out = Path.of("examples", "showcase.html");
         Files.createDirectories(out.getParent());
         Files.writeString(out, html);
@@ -191,7 +211,8 @@ class ShowcasePageTest {
             """.formatted(escapeHtml(title), indentBlock(tiles, "    "));
     }
 
-    private static String page(String heroSvg, String gridCells, String newCells, String strips) {
+    private static String page(String heroSvg, String gridCells, String newCells,
+            String envCells, String strips) {
         return """
             <!doctype html>
             <html lang="en">
@@ -235,6 +256,19 @@ class ShowcasePageTest {
                        <code>\\text</code> runs, and the font-variant alphabets
                        (<code>\\mathbb</code>, <code>\\mathcal</code>, <code>\\mathfrak</code>) — all now
                        rendered by the same safe pipeline.</p>
+                  </header>
+                  <div class="grid">
+            %s
+                  </div>
+                </section>
+
+                <section class="band">
+                  <header class="band-head">
+                    <h2>Matrices &amp; multi-line equations</h2>
+                    <p>Whole 2-D layouts, drawn live: the matrix family and <code>cases</code>, and the
+                       aligned / multi-line equation environments — <code>align</code> lines up on the
+                       relation, <code>gather</code> centres each line, and <code>multline</code> sets
+                       the first line flush-left and the last flush-right.</p>
                   </header>
                   <div class="grid">
             %s
@@ -297,7 +331,7 @@ class ShowcasePageTest {
             </html>
             """.formatted(STYLE, indent(heroSvg, "        "), escapeHtml(HERO_EQ),
                 indentBlock(gridCells, "    "), indentBlock(newCells, "    "),
-                indentBlock(strips, "    "));
+                indentBlock(envCells, "    "), indentBlock(strips, "    "));
     }
 
     // -------------------------------------------------------------------------
