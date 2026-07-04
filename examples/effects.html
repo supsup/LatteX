@@ -136,10 +136,11 @@
     0%   { opacity: 0; }
     100% { opacity: 1; }
   }
-  /* glow uses currentColor, so the halo inherits the theme-aware ink. */
+  /* glow halo colour = --lx-glow-color when the author set fx.glow-color,
+     else currentColor (unset = today's theme-aware-ink behaviour). */
   @keyframes lx-glow {
-    0%, 100% { filter: drop-shadow(0 0 0 currentColor); }
-    50%      { filter: drop-shadow(0 0 12px currentColor); }
+    0%, 100% { filter: drop-shadow(0 0 0 var(--lx-glow-color, currentColor)); }
+    50%      { filter: drop-shadow(0 0 12px var(--lx-glow-color, currentColor)); }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -150,13 +151,123 @@
 </style>
   <script>
 (function () {
-  // Closed effect vocabulary — mirrors the Effect enum (boom|pulse|fade|glow|none).
+  // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
+  // (boom|pulse|fade|glow|none). 'lightning' is special-cased below: it is a
+  // page-side body overlay, NOT a keyframe on the element.
   var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, none: 1 };
   var reduced = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Play a one-shot keyframe, resetting first so it can replay on re-trigger.
+  // Resolve the strike/halo colour: the author's fx.glow-color if set (and not
+  // the literal 'currentColor', which canvas can't resolve), else the element's
+  // computed ink colour so it matches the on-page glyphs.
+  function resolveColor(el) {
+    var c = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+    if (c && c.toLowerCase() !== 'currentcolor') { return c; }
+    var ink = getComputedStyle(el).color;
+    return ink || '#e6a24c';
+  }
+
+  // A jagged polyline from (x0,y0) to (x1,y1): interior points are pushed off
+  // the straight line by a random perpendicular jitter, so every strike differs.
+  function jagged(x0, y0, x1, y1, segs, jitter) {
+    var dx = x1 - x0, dy = y1 - y0;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var nx = -dy / len, ny = dx / len; // unit normal
+    var pts = [];
+    for (var i = 0; i <= segs; i++) {
+      var t = i / segs;
+      var x = x0 + dx * t, y = y0 + dy * t;
+      if (i > 0 && i < segs) {
+        var off = (Math.random() * 2 - 1) * jitter;
+        x += nx * off; y += ny * off;
+      }
+      pts.push([x, y]);
+    }
+    return pts;
+  }
+
+  function stroke(ctx, pts, upto) {
+    var n = Math.max(2, Math.min(pts.length, upto || pts.length));
+    if (n < 2) { return; }
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < n; i++) { ctx.lineTo(pts[i][0], pts[i][1]); }
+    ctx.stroke();
+  }
+
+  // The confluence: two rivers of lightning arc IN from the left- and right-mid
+  // viewport edges and converge on the element's centre, flash, then fade. A
+  // lazily-created, pointer-events-none body overlay — never inside the <svg>.
+  function lightning(el) {
+    var r = el.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var color = resolveColor(el);
+    var sources = [[0, vh / 2], [vw, vh / 2]]; // left-mid + right-mid edges
+
+    var canvas = document.createElement('canvas');
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Reduced motion: one faint static arc from each side, no flicker, no flash.
+    if (reduced) {
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      sources.forEach(function (s) { stroke(ctx, jagged(s[0], s[1], cx, cy, 8, 6)); });
+      setTimeout(function () { canvas.remove(); }, 400);
+      return;
+    }
+
+    var DRAW = 180, HOLD = 90, FADE = 350;
+    function drawBolts(progress) {
+      ctx.clearRect(0, 0, vw, vh);
+      ctx.strokeStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 12;
+      sources.forEach(function (s) {
+        for (var k = 0; k < 2; k++) { // 2 forked bolts per side
+          var pts = jagged(s[0], s[1], cx, cy, 12, 18 + k * 10);
+          ctx.lineWidth = 2 + k;
+          ctx.globalAlpha = 0.9;
+          stroke(ctx, pts, Math.floor(pts.length * progress));
+        }
+      });
+      if (progress > 0.85) { // bright convergence flash blob
+        var rad = 10 + Math.random() * 6;
+        var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
+        g.addColorStop(0, color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    var t0 = performance.now();
+    function frame(now) {
+      var e = now - t0;
+      if (e < DRAW) { drawBolts(e / DRAW); requestAnimationFrame(frame); }        // draw in + flicker
+      else if (e < DRAW + HOLD) { drawBolts(1); requestAnimationFrame(frame); }   // hold, still re-jagging
+      else if (e < DRAW + HOLD + FADE) {                                            // fade the whole overlay
+        canvas.style.opacity = String(1 - (e - DRAW - HOLD) / FADE);
+        requestAnimationFrame(frame);
+      } else { canvas.remove(); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // Play a trigger's effect. lightning → the overlay routine; everything else is
+  // a one-shot CSS keyframe (reset first so it can replay on re-trigger).
   function play(el, name, dur) {
+    if (name === 'lightning') { lightning(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -171,9 +282,26 @@
       var hover = el.getAttribute('data-lx-fx-hover');
       var click = el.getAttribute('data-lx-fx-click');
       var dur = el.getAttribute('data-lx-fx-duration') || '400ms';
+      var glowColor = el.getAttribute('data-lx-fx-glow-color');
+
+      // Author-set glow colour drives both the glow keyframe (via the CSS var)
+      // and the lightning strike colour.
+      if (glowColor) { el.style.setProperty('--lx-glow-color', glowColor); }
 
       // enter: play once on load.
-      if (enter) { play(el, enter, dur); }
+      if (enter) {
+        play(el, enter, dur);
+        // enter=fade holds opacity:1 only via the animation's `both` fill; a
+        // LATER transform effect (hover/click) reassigns el.style.animation and
+        // drops that hold, so the element would revert to its base opacity:0 and
+        // vanish. Pin opacity to 1 once the first animation ends so it can't.
+        if (enter === 'fade') {
+          el.addEventListener('animationend', function pin() {
+            el.style.opacity = '1';
+            el.removeEventListener('animationend', pin);
+          });
+        }
+      }
       // hover: play on each mouseenter.
       if (hover) {
         el.addEventListener('mouseenter', function () { play(el, hover, dur); });
@@ -312,6 +440,56 @@
           <figcaption>
             <span class="cap">fx.click=glow — glow pulse on click</span>
             <code class="src">\lx[fx.click=glow]{ \sum_{i=1}^{n} i }</code>
+            <span class="hint">click me</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-hover="glow" data-lx-fx-glow-color="#e0a13a"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.6 -31.92 60.6 43" width="60.6" height="43" role="img" aria-label="ζ ( s )">
+              <g fill="currentColor">
+                <path d="M213 748 L232 732 Q200 700 200 662 Q200 637 215 620 Q230 604 252 594 Q259 600 266 605 Q274 611 280 616 Q320 648 346 667 Q373 686 388 685 Q396 685 402 672 Q409 660 412 640 Q418 604 410 594 Q407 591 397 587 Q387 583 364 574 Q341 565 299 546 Q268 522 229 486 Q190 451 155 407 Q120 363 97 314 Q74 266 74 215 Q74 178 91 156 Q108 135 136 123 Q164 112 198 104 Q232 97 265 89 Q299 82 327 69 Q355 56 372 33 Q389 10 389 -29 Q389 -79 365 -115 Q342 -151 306 -175 Q270 -199 232 -211 Q194 -224 164 -227 L149 -151 L149 -140 Q152 -140 159 -140 Q186 -140 218 -139 Q250 -138 278 -131 Q307 -125 325 -110 Q343 -95 343 -67 Q343 -43 328 -31 Q314 -19 289 -12 Q265 -6 236 -1 Q203 5 167 14 Q132 23 102 43 Q72 63 53 100 Q35 138 35 200 Q35 287 61 356 Q88 425 130 477 Q172 529 218 565 L218 568 Q207 569 187 576 Q167 584 150 602 Q134 620 134 650 Q134 675 152 697 Q171 720 213 748 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(15.44 0) scale(0.04 -0.04)"/>
+                <path d="M39 164 L65 164 Q81 87 112 56 Q143 26 198 26 Q236 26 260 41 Q284 57 284 92 Q284 116 275 132 Q267 148 243 164 Q219 181 172 204 Q104 239 72 271 Q40 304 40 359 Q40 421 84 453 Q129 485 193 485 Q231 485 255 476 Q279 468 298 459 L299 459 L316 480 L336 480 L339 327 L312 327 Q296 398 267 424 Q238 451 192 451 Q158 451 134 435 Q111 419 111 385 Q111 356 138 333 Q165 310 228 278 Q296 242 332 208 Q368 175 368 119 Q368 72 345 43 Q322 15 283 2 Q245 -11 200 -11 Q157 -11 131 -2 Q106 7 86 15 L84 15 L63 -8 L42 -8 L39 164 Z" transform="translate(29.72 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(45.52 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.hover=glow, fx.glow-color=#e0a13a — custom amber halo</span>
+            <code class="src">\lx[fx.hover=glow, fx.glow-color=#e0a13a]{ \zeta(s) }</code>
+            <span class="hint">hover me</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-hover="lightning"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1.4 -38.82 85.4387 83.8" width="85.4387" height="83.8" role="img" aria-label="the sum from k of s sub k">
+              <g fill="currentColor">
+                <path d="M1047 0 L968 -406 L15 -406 L15 -380 L526 280 L29 888 L29 919 L990 919 L1004 596 L959 596 Q949 682 929 733 Q909 785 875 811 Q842 838 791 847 Q740 856 666 856 L224 856 L224 851 L639 336 L639 316 L183 -278 L183 -284 L754 -284 Q811 -284 848 -266 Q886 -249 912 -214 Q938 -179 957 -125 Q977 -72 998 0 L1047 0 Z" transform="translate(0 -0.06) scale(0.04 -0.04)"/>
+                <path d="M539 0 L318 0 L318 29 Q340 29 348 31 Q357 34 357 41 Q357 48 353 54 Q350 61 346 65 L189 243 L183 243 L183 91 Q183 53 196 41 Q210 29 257 29 L257 0 L30 0 L30 29 Q75 29 87 41 Q100 54 100 95 L100 595 Q100 627 92 636 Q85 646 60 646 Q50 646 38 645 Q26 644 26 644 L26 671 L156 706 L183 706 L183 265 L189 265 L318 393 Q321 396 328 404 Q336 413 336 425 Q336 435 326 439 Q316 443 287 443 L287 473 L503 473 L503 443 Q479 443 460 438 Q442 434 423 421 Q404 409 376 386 Q349 363 307 326 L257 285 L433 87 Q457 60 472 47 Q488 35 503 32 Q518 29 539 29 L539 0 Z" transform="translate(14.652 42.98) scale(0.028 -0.028)"/>
+                <path d="M39 164 L65 164 Q81 87 112 56 Q143 26 198 26 Q236 26 260 41 Q284 57 284 92 Q284 116 275 132 Q267 148 243 164 Q219 181 172 204 Q104 239 72 271 Q40 304 40 359 Q40 421 84 453 Q129 485 193 485 Q231 485 255 476 Q279 468 298 459 L299 459 L316 480 L336 480 L339 327 L312 327 Q296 398 267 424 Q238 451 192 451 Q158 451 134 435 Q111 419 111 385 Q111 356 138 333 Q165 310 228 278 Q296 242 332 208 Q368 175 368 119 Q368 72 345 43 Q322 15 283 2 Q245 -11 200 -11 Q157 -11 131 -2 Q106 7 86 15 L84 15 L63 -8 L42 -8 L39 164 Z" transform="translate(51.1467 0) scale(0.04 -0.04)"/>
+                <path d="M539 0 L318 0 L318 29 Q340 29 348 31 Q357 34 357 41 Q357 48 353 54 Q350 61 346 65 L189 243 L183 243 L183 91 Q183 53 196 41 Q210 29 257 29 L257 0 L30 0 L30 29 Q75 29 87 41 Q100 54 100 95 L100 595 Q100 627 92 636 Q85 646 60 646 Q50 646 38 645 Q26 644 26 644 L26 671 L156 706 L183 706 L183 265 L189 265 L318 393 Q321 396 328 404 Q336 413 336 425 Q336 435 326 439 Q316 443 287 443 L287 473 L503 473 L503 443 Q479 443 460 438 Q442 434 423 421 Q404 409 376 386 Q349 363 307 326 L257 285 L433 87 Q457 60 472 47 Q488 35 503 32 Q518 29 539 29 L539 0 Z" transform="translate(66.9467 8.4) scale(0.028 -0.028)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.hover=lightning — bolts converge on it from both edges</span>
+            <code class="src">\lx[fx.hover=lightning]{ \sum_{k} s_k }</code>
+            <span class="hint">hover — lightning converges</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-click="lightning" data-lx-fx-glow-color="#7fd4ff"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0.56 -29.12 101.8578 32.16" width="101.8578" height="32.16" role="img" aria-label="∇ × E">
+              <g fill="currentColor">
+                <path d="M683 678 L388 -13 L367 -13 L64 678 L683 678 Z M618 636 L190 636 L403 130 L618 636 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M644 22 L597 -26 L360 210 L124 -26 L77 21 L312 258 L77 494 L125 541 L360 306 L597 541 L644 495 L409 258 L644 22 Z" transform="translate(38.8089 0) scale(0.04 -0.04)"/>
+                <path d="M598 186 L570 0 L36 0 L36 30 Q77 30 97 35 Q118 41 125 60 Q133 79 133 118 L133 535 Q133 573 125 593 Q118 613 97 620 Q77 627 36 627 L36 657 L561 657 L567 493 L535 493 Q528 543 513 568 Q499 594 466 603 Q434 612 372 612 L225 612 L225 358 L342 358 Q388 358 412 366 Q436 374 445 396 Q454 418 454 458 L486 458 L486 226 L454 226 Q454 267 445 287 Q436 307 412 313 Q388 319 342 319 L225 319 L225 44 L354 44 Q412 44 447 49 Q483 55 503 70 Q524 85 537 113 Q551 141 566 186 L598 186 Z" transform="translate(76.4978 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.click=lightning, fx.glow-color=#7fd4ff — icy confluence on click</span>
+            <code class="src">\lx[fx.click=lightning, fx.glow-color=#7fd4ff]{ \nabla \times E }</code>
             <span class="hint">click me</span>
           </figcaption>
         </figure>

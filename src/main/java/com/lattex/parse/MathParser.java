@@ -920,6 +920,7 @@ public final class MathParser {
         MathStyle mathStyle = MathStyle.DISPLAY;
         Map<Trigger, Effect> effects = new EnumMap<>(Trigger.class);
         String duration = null;
+        Color glowColor = null;
         String intent = null;
         String concept = null;
         String a11yLabel = null;
@@ -1007,6 +1008,18 @@ public final class MathParser {
                         case "fx.hover" -> effects.put(Trigger.HOVER, Effect.parse(value));
                         case "fx.click" -> effects.put(Trigger.CLICK, Effect.parse(value));
                         case "fx.duration" -> duration = value; // validated in EffectSpec
+                        // The glow/lightning halo colour. Validated through the same
+                        // Color boundary as style.color (accepts #rgb/#rrggbb/currentColor,
+                        // fails loud otherwise); it becomes a data-lx-fx-glow-color VALUE on
+                        // the container, never a new SVG element/attribute.
+                        case "fx.glow-color" -> {
+                            try {
+                                glowColor = Color.parse(value);
+                            } catch (IllegalArgumentException e) {
+                                throw new MathSyntaxException(
+                                    "invalid \\lx option \"" + key + "\": " + e.getMessage());
+                            }
+                        }
                         default -> throw unknownKey(key);
                     }
                 }
@@ -1087,12 +1100,15 @@ public final class MathParser {
 
         return new LxOptions(
             new RenderOptions(scale, color, mathStyle),
-            new EffectSpec(effects, duration),
+            new EffectSpec(effects, duration, glowColor),
             new Semantics(intent, concept, a11yLabel, data));
     }
 
     private static boolean isKeyChar(char c) {
-        return isAsciiLetter(c) || (c >= '0' && c <= '9') || c == '.' || c == '_';
+        // '-' lets hyphenated option keys like fx.glow-color tokenize as one key;
+        // every value is still validated by its own boundary, so this only widens
+        // the KEY grammar (an unknown hyphenated key still fails loud).
+        return isAsciiLetter(c) || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
     }
 
     private static MathSyntaxException unknownKey(String key) {
