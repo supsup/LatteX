@@ -17,8 +17,23 @@ The reviewed renderer foundation lands on `main`. It builds green and renders `x
 
 **Fractions, roots, full sub/superscripts, big-operator limits, and scaled `\left…\right` delimiters** all render to SVG — S4 landed (a `Box` layout model, math styles, Appendix-G spacing). The parser accepts the full MVP grammar; broader symbol/accent/environment coverage is the next tier (see `LatteX_docs/gap.md`).
 
-### In review / next
+## Coverage & tooling — 2026-07-03 (later)
 
-- **Render options + `\lx` macro** — `render(latex, RenderOptions)` (scale / color / mathstyle) and the self-delimiting `\lx[…]{…}` author syntax (validated, typed, fail-loud). Built; review pending.
-- **Container affordances** — inline em-sizing + baseline alignment, `fx` effects, a click action-menu (Copy LaTeX / contextual Graph), and live graph plotting (`graph.open=single|multi`). Prototyped page-side; the production home is the S8 markdown→HTML docs pipeline. The SVG stays clean — every affordance lives on the container, never in the sanitized SVG.
-- **S7 — native CLI** — a GraalVM `lattex` binary so non-JVM stacks (Node, Python, …) can shell out for SVG. Groundwork in place (reflection-free; font resource-config shipped).
+A broad coverage + tooling wave, each slice self-verified and green, the emitter/minimal-alphabet invariant intact throughout.
+
+### Added
+
+- **KaTeX-gap Tier-1 (complete) — general-math breadth.** 250+ **symbols** (relations, binary operators, arrows, greek variants, negations, `\not` prefix); **accents** (`\hat \vec \widehat \overline …` — new `Accent` node, MATH top-accent positioning, stretchy via glyph variants); **named operators** (`\sin \cos \lim \det \operatorname` — upright roman with limit placement); **`\text{…}` mode** (upright, spaces preserved — `\text \textbf \textit \texttt \mathrm`, new `TextRun` node); **spacing** (`\, \quad \! …` + the `\phantom` family). Parser coverage jumped **26 → 94** of the (now 119-entry) corpus.
+- **KaTeX-gap Tier-2 — font-variant alphabets.** `\mathbb \mathcal \mathfrak \mathbf \mathsf \mathscr \mathit \mathtt \boldsymbol` via the Unicode Mathematical Alphanumeric Symbols block — a codepoint remap (**no new fonts**; STIX covers the block), including the Letterlike-Symbols exceptions (ℝ ℒ ℨ …).
+- **S7 — native CLI.** A GraalVM `lattex` binary (~14.7 MB, reflection-free, font baked in): `echo '\frac{a}{b}' | lattex` → SVG. Plus a JVM `./gradlew run` fallback.
+- **S8 — left-containment test + specimen gallery.** A build-failing test asserting emitter output stays ⊆ the minimal alphabet (full deny-list, teeth-verified), and a live-rendered gallery (`examples/gallery-specimen.html`).
+- **Showcase page** (`examples/showcase.html`) — a polished, theme-aware landing page with 99 live-rendered SVGs.
+
+### Next
+
+- **`\lx` macro + render options** (`RenderOptions`: scale/color/mathstyle; the `\lx[…]{…}` author syntax) and the **container affordances** (`fx` effects, click action-menu, live graph plotting) — built on earlier branches; need **rebasing onto the now-much-evolved `main`** before review/merge.
+- **Tier-3 — environments** (matrices, `align`, `cases`, `array`) — the big remaining structural gap.
+- **MathML output backend** — a second emitter target for accessibility.
+- **S8 docs pipeline** — markdown `$…$` → LaTeX → SVG (`MathMarkerConverter`) for `stafficy_docs/LatteX`.
+
+See `LatteX_docs/gap.md` for the full competitive picture and `LatteX_docs/ideas.md` for exploration ideas.
