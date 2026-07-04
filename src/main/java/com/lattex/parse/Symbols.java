@@ -608,5 +608,15 @@ final class Symbols {
         Map.entry("Vmatrix", new EnvSpec(0x2016, 0x2016, MatrixKind.MATRIX, ColumnAlign.CENTER)),
         Map.entry("smallmatrix", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.SMALL, ColumnAlign.CENTER)),
         Map.entry("array", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ARRAY, ColumnAlign.CENTER)),
-        Map.entry("cases", new EnvSpec('{', NO_DELIM, MatrixKind.CASES, ColumnAlign.LEFT)));
+        Map.entry("cases", new EnvSpec('{', NO_DELIM, MatrixKind.CASES, ColumnAlign.LEFT)),
+        // Aligned-equation environments. align/aligned use alternating right/left
+        // column pairs (the per-column alignment is derived in EnvironmentParser by
+        // kind, so the uniform field is unused here); gather is a single centred
+        // column. The starred forms differ only in equation numbering, which LatteX
+        // does not render, so they map to the same spec.
+        Map.entry("align", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
+        Map.entry("align*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
+        Map.entry("aligned", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
+        Map.entry("gather", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
+        Map.entry("gather*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)));
 }

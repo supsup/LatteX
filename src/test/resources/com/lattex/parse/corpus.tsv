@@ -64,8 +64,8 @@ PARSES-NOW	delim-fixed	\lceil h\rceil	ceiling delimiters as ordinary symbols
 PARSES-NOW	delim-fixed	\ulcorner i\urcorner	corner delimiters as ordinary symbols
 PARSES-NOW	delim-fixed	/j\backslash	slash and \backslash symbol
 # ==== delimiters — scaled (\left \right) ===========================
-NEEDS-S4-LAYOUT	delim-scaled	\left(\frac{x^2}{y^3}\right)	scaled parens — parses; needs delimiter sizing to content
-NEEDS-S4-LAYOUT	delim-scaled	\left\{\frac{x^2}{y^3}\right\}	scaled braces — parses; needs delimiter sizing
+PARSES-NOW	delim-scaled	\left(\frac{x^2}{y^3}\right)	scaled parens — S4 fencedBox stretches the delimiters to the fraction body
+PARSES-NOW	delim-scaled	\left\{\frac{x^2}{y^3}\right\}	scaled braces — delimiters stretch symmetrically about the axis to the content
 NEEDS-S4-LAYOUT	delim-scaled	\left.\frac{x^3}{3}\right|_0^1	eval bar (braced) — parses; needs null-left + scaled bar layout
 NEEDS-S4-LAYOUT	delim-scaled	\left.\frac{x^3}3\right|_0^1	eval bar, terse \frac denominator — parses (single-token \frac arg); needs null-left + scaled bar layout
 NEEDS-PARSER-NODE	delim-scaled	P\left(A=2\middle|\frac{A^2}{B}>4\right)	mid delimiter — needs \middle node
@@ -115,6 +115,13 @@ NEEDS-PARSER-NODE	matrix	\bordermatrix{&1&2\\1&a&b\\2&c&d}	bordered matrix with 
 PARSES-NOW	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with vertical and horizontal rules — array node + column spec + \hline
 PARSES-NOW	matrix	\vdots	vertical dots symbol
 PARSES-NOW	matrix	\ddots	diagonal dots symbol
+# ==== aligned equations (align / aligned / gather) =================
+PARSES-NOW	align	\begin{align}a&=b\\c&=d\end{align}	two-equation align — alternating right/left column pair aligned on the relation
+PARSES-NOW	align	\begin{align*}E&=mc^2\end{align*}	starred align (no equation numbers) — same rendering
+PARSES-NOW	align	\begin{aligned}f(x)&=x^2\\&=x\cdot x\end{aligned}	derivation with an elided continuation LHS — empty first cell aligns on \=
+PARSES-NOW	align	\begin{align}x&=1&y&=2\\a&=3&b&=4\end{align}	several equations per line — two aligned relation columns with a wide inter-equation gap
+PARSES-NOW	align	\begin{align}\int_0^1 x\,dx&=\frac{1}{2}\\\sum_{k=1}^n k&=\frac{n(n+1)}{2}\end{align}	display-style cells — integrals, fractions and big-op limits set full size
+PARSES-NOW	gather	\begin{gather}a=b\\x+y=z\end{gather}	gather — each row centred, no & alignment
 # ==== named operators / misc =======================================
 PARSES-NOW	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — \lim (under-limits in display) + roman \exp
 PARSES-NOW	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — roman named operators with beside scripts

@@ -138,7 +138,14 @@ final class EnvironmentParser {
             }
             List<ColumnAlign> a = new ArrayList<>(cols);
             for (int i = 0; i < cols; i++) {
-                a.add(spec.uniform());
+                if (spec.kind() == MatrixKind.ALIGN) {
+                    // align/aligned: even (0-indexed) columns hold an equation LHS and
+                    // are right-aligned; the following odd column holds the RHS and is
+                    // left-aligned, so each &-separated pair meets at the alignment point.
+                    a.add((i % 2 == 0) ? ColumnAlign.RIGHT : ColumnAlign.LEFT);
+                } else {
+                    a.add(spec.uniform());
+                }
             }
             aligns = a;
             List<Integer> v = new ArrayList<>(cols + 1);

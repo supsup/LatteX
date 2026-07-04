@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **132 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **122**, `NEEDS-S4-LAYOUT` **4**, `NEEDS-PARSER-NODE` **5**, `NEEDS-FONT-STYLE` **1**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **138 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **130**, `NEEDS-S4-LAYOUT` **2**, `NEEDS-PARSER-NODE` **5**, `NEEDS-FONT-STYLE` **1**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -97,8 +97,8 @@ following once the node exists.
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `\left(\frac{x^2}{y^3}\right)` | scaled parens — parses; needs delimiter sizing to content | `NEEDS-S4-LAYOUT` |
-| `\left\{\frac{x^2}{y^3}\right\}` | scaled braces — parses; needs delimiter sizing | `NEEDS-S4-LAYOUT` |
+| `\left(\frac{x^2}{y^3}\right)` | scaled parens — S4 fencedBox stretches the delimiters to the fraction body | `PARSES-NOW` |
+| `\left\{\frac{x^2}{y^3}\right\}` | scaled braces — delimiters stretch symmetrically about the axis to the content | `PARSES-NOW` |
 | `\left.\frac{x^3}{3}\right\|_0^1` | eval bar (braced) — parses; needs null-left + scaled bar layout | `NEEDS-S4-LAYOUT` |
 | `\left.\frac{x^3}3\right\|_0^1` | eval bar, terse \\frac denominator — parses (single-token \\frac arg); needs null-left + scaled bar layout | `NEEDS-S4-LAYOUT` |
 | `P\left(A=2\middle\|\frac{A^2}{B}>4\right)` | mid delimiter — needs \\middle node | `NEEDS-PARSER-NODE` |
@@ -160,6 +160,17 @@ following once the node exists.
 | `\begin{array}{c\|c}1&2\\\hline 3&4\end{array}` | array with vertical and horizontal rules — array node + column spec + \\hline | `PARSES-NOW` |
 | `\vdots` | vertical dots symbol | `PARSES-NOW` |
 | `\ddots` | diagonal dots symbol | `PARSES-NOW` |
+
+## Aligned equations (align / aligned / gather)
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\begin{align}a&=b\\c&=d\end{align}` | two-equation align — alternating right/left column pair aligned on the relation | `PARSES-NOW` |
+| `\begin{align*}E&=mc^2\end{align*}` | starred align (no equation numbers) — same rendering | `PARSES-NOW` |
+| `\begin{aligned}f(x)&=x^2\\&=x\cdot x\end{aligned}` | derivation with an elided continuation LHS — empty first cell aligns on \\= | `PARSES-NOW` |
+| `\begin{align}x&=1&y&=2\\a&=3&b&=4\end{align}` | several equations per line — two aligned relation columns with a wide inter-equation gap | `PARSES-NOW` |
+| `\begin{align}\int_0^1 x\,dx&=\frac{1}{2}\\\sum_{k=1}^n k&=\frac{n(n+1)}{2}\end{align}` | display-style cells — integrals, fractions and big-op limits set full size | `PARSES-NOW` |
+| `\begin{gather}a=b\\x+y=z\end{gather}` | gather — each row centred, no & alignment | `PARSES-NOW` |
 
 ## Named operators / misc
 
@@ -228,12 +239,10 @@ following once the node exists.
 
 Every row that does **not** yet parse into a tree — i.e. everything outside `PARSES-NOW` — grouped by tier, generated straight from `corpus.tsv` so it can never list an already-shipped feature as still-needed.
 
-### `NEEDS-S4-LAYOUT` — parses today; faithful rendering needs *new* 2D layout (delimiter sizing to content, eval bars) (4)
+### `NEEDS-S4-LAYOUT` — parses today; faithful rendering needs *new* 2D layout (delimiter sizing to content, eval bars) (2)
 
 | LaTeX | Description |
 | --- | --- |
-| `\left(\frac{x^2}{y^3}\right)` | scaled parens — parses; needs delimiter sizing to content |
-| `\left\{\frac{x^2}{y^3}\right\}` | scaled braces — parses; needs delimiter sizing |
 | `\left.\frac{x^3}{3}\right\|_0^1` | eval bar (braced) — parses; needs null-left + scaled bar layout |
 | `\left.\frac{x^3}3\right\|_0^1` | eval bar, terse \\frac denominator — parses (single-token \\frac arg); needs null-left + scaled bar layout |
 

@@ -64,6 +64,15 @@ public final class LayoutEngine {
      */
     private static final double DELIMITER_FACTOR = 0.901;
 
+    /**
+     * {@code align} inter-column gaps, in em. Within an equation's right/left pair
+     * the columns meet at the relation with a {@code \thickmathspace} (5mu) gap,
+     * mirroring the space a relation carries on its far side inside the RHS cell;
+     * between successive equations on one line a {@code \qquad} (2em) separates them.
+     */
+    private static final double ALIGN_RELATION_GAP = 5.0 / 18.0;   // \thickmathspace
+    private static final double ALIGN_INTER_EQ_GAP = 2.0;          // \qquad
+
     private LayoutEngine() {
     }
 
@@ -850,9 +859,14 @@ public final class LayoutEngine {
         double ruleThick = c.fractionRuleThickness() * scale;
         SfntFont font = ctx.font();
 
-        // Cells are laid out one style down from display (matrices/array/cases in
-        // text style, smallmatrix in script style), un-cramped.
-        MathStyle cellStyle = mx.kind() == MatrixKind.SMALL ? MathStyle.SCRIPT : MathStyle.TEXT;
+        // Cell math style: matrices/array/cases sit one style down (text),
+        // smallmatrix two down (script); aligned-equation environments keep each
+        // equation in display style (full-size fractions, big-op limits), un-cramped.
+        MathStyle cellStyle = switch (mx.kind()) {
+            case SMALL -> MathStyle.SCRIPT;
+            case ALIGN, GATHER -> MathStyle.DISPLAY;
+            default -> MathStyle.TEXT;
+        };
         LayoutContext cellCtx =
             new LayoutContext(font, c, ctx.fontSize(), cellStyle, false);
 
@@ -876,7 +890,11 @@ public final class LayoutEngine {
 
         // 2. Vertical stacking: row 0's baseline at local y=0, each subsequent row a
         // pitch of (prev depth + inter-row gap + this height) below.
-        double interRowGap = (mx.kind() == MatrixKind.SMALL ? 0.15 : 0.3) * em;
+        double interRowGap = switch (mx.kind()) {
+            case SMALL -> 0.15 * em;
+            case ALIGN, GATHER -> 0.5 * em;   // matrix gap + \jot breathing room
+            default -> 0.3 * em;
+        };
         double[] baseline = new double[rows];
         for (int r = 1; r < rows; r++) {
             baseline[r] = baseline[r - 1] + rowDepth[r - 1] + interRowGap + rowHeight[r];
@@ -901,12 +919,21 @@ public final class LayoutEngine {
             case CASES -> { edgeGap = 0.18 * em; colGap = 1.0 * em; }    // \quad between columns
             case SMALL -> { edgeGap = 0.1 * em; colGap = 0.3 * em; }
             case MATRIX -> { edgeGap = 0.18 * em; colGap = 0.5 * em; }
+            // Aligned-equation environments flush to the outer margin (no edge gap);
+            // ALIGN's inter-column gaps are set per-boundary below, GATHER has a
+            // single centred column so its (unused) colGap stays 0.
+            case ALIGN, GATHER -> { edgeGap = 0.0; colGap = 0.0; }
             default -> { edgeGap = 0.18 * em; colGap = 0.5 * em; }
         }
         double[] boundaryGap = new double[cols + 1];
         boundaryGap[0] = edgeGap;
         for (int i = 1; i < cols; i++) {
-            boundaryGap[i] = colGap;
+            // align alternates gaps: within an r/l equation pair (odd boundary) a
+            // thin relation space; between successive equations (even boundary) a
+            // wide \qquad. Every other environment uses a uniform inter-column gap.
+            boundaryGap[i] = mx.kind() == MatrixKind.ALIGN
+                ? (i % 2 == 1 ? ALIGN_RELATION_GAP : ALIGN_INTER_EQ_GAP) * em
+                : colGap;
         }
         boundaryGap[cols] = edgeGap;
 
