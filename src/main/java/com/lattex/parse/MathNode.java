@@ -257,4 +257,64 @@ public sealed interface MathNode {
      */
     record Spacing(double muWidth) implements MathNode {
     }
+
+    /**
+     * A base decorated with an accent above (or a line below), covering the two
+     * families of TeX accent commands:
+     *
+     * <ul>
+     *   <li><strong>Glyph accents</strong> — an accent glyph centred over the
+     *       base. <em>Narrow</em> ({@code \hat \bar \vec \dot \ddot \tilde \check
+     *       \breve \acute \grave \mathring}) draw the accent at its natural size;
+     *       <em>stretchy</em> ({@code \widehat \widetilde \overrightarrow
+     *       \overleftarrow \overleftrightarrow}) size the accent to the base width
+     *       via the OpenType MATH horizontal glyph construction. In both cases
+     *       {@link #accentCodePoint} is the accent glyph's code point.</li>
+     *   <li><strong>Line decorations</strong> — {@code \overline} and
+     *       {@code \\underline}, drawn as a rule (not a glyph). These carry
+     *       {@link #accentCodePoint} == {@link #RULE}; {@link #under} selects an
+     *       under-line ({@code true}) versus an over-line ({@code false}).</li>
+     * </ul>
+     *
+     * <p>The accented result has an implied Ord class (like the nucleus it
+     * decorates). Positioning is clean-room from Knuth's TeXbook (Appendix G, the
+     * accent rule) and the public OpenType MATH spec
+     * ({@code MathTopAccentAttachment}, {@code accentBaseHeight}, the over/underbar
+     * constants, and {@code MathVariants} for stretchy sizing).
+     *
+     * @param command         the LaTeX command name (without backslash), for a11y
+     * @param base            the decorated nucleus
+     * @param accentCodePoint the accent glyph's code point, or {@link #RULE} for
+     *                        {@code \overline}/{@code \\underline}
+     * @param stretchy        whether the accent glyph is sized to the base width
+     * @param under           whether the decoration sits below the base (only the
+     *                        {@code \\underline} rule); {@code false} for every
+     *                        over-accent and the over-line
+     */
+    record Accent(String command, MathNode base, int accentCodePoint,
+                  boolean stretchy, boolean under) implements MathNode {
+
+        /** Sentinel {@link #accentCodePoint} for a rule decoration (over/underline). */
+        public static final int RULE = -1;
+
+        public Accent {
+            if (command == null) {
+                throw new IllegalArgumentException("Accent command must not be null");
+            }
+            if (base == null) {
+                throw new IllegalArgumentException("Accent base must not be null");
+            }
+            if (under && accentCodePoint != RULE) {
+                throw new IllegalArgumentException("only a rule decoration may be under the base");
+            }
+            if (stretchy && accentCodePoint == RULE) {
+                throw new IllegalArgumentException("a rule decoration is not stretchy");
+            }
+        }
+
+        /** Whether this decoration is a rule ({@code \overline}/{@code \\underline}). */
+        public boolean isRule() {
+            return accentCodePoint == RULE;
+        }
+    }
 }

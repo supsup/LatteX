@@ -3,6 +3,7 @@ package com.lattex.layout;
 import com.lattex.font.GlyphOutline;
 import com.lattex.font.SfntFont;
 import com.lattex.parse.MathNode;
+import com.lattex.parse.MathNode.Accent;
 import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
@@ -95,6 +96,7 @@ public final class LayoutEngine {
                 bigOperatorBox(op, lower, upper, limitsMode, ctx);
             case Fenced(var leftDelim, var body, var rightDelim) ->
                 fencedBox(leftDelim, body, rightDelim, ctx);
+            case Accent accent -> accentBox(accent, ctx);
         };
     }
 
@@ -230,6 +232,7 @@ public final class LayoutEngine {
             case Fenced _ -> MathClass.INNER;
             case BigOperator _ -> MathClass.OP;
             case MathList _ -> MathClass.ORD; // a {group} behaves as an Ord atom
+            case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
             case Spacing _ -> null;           // classless glue (handled by caller)
         };
     }
@@ -619,6 +622,185 @@ public final class LayoutEngine {
         double inkTop = -axis - d.span() / 2.0; // centre the ink on the axis
         d.placeInto(glyphs, x, inkTop);
         return new double[] {x + d.width(), axis + d.span() / 2.0, d.span() / 2.0 - axis};
+    }
+
+    // ------------------------------------------------------------------
+    // Accent — an accent glyph centred over the base (narrow or stretched to the
+    // base width), or a rule drawn over/under it (\overline / \\underline).
+    // Clean-room from the TeXbook accent rule (Appendix G) + the OpenType MATH
+    // constants (MathTopAccentAttachment, accentBaseHeight, over/underbar*).
+    // ------------------------------------------------------------------
+
+    /** One drawable piece of an accent: a glyph and its x-offset (design units). */
+    private record AccentPiece(int gid, int dx) {
+    }
+
+    private static Box accentBox(Accent accent, LayoutContext ctx) {
+        // The nucleus is set cramped (TeX): its own superscripts sit lower, less
+        // likely to collide with the accent above.
+        Box baseBox = layoutBox(accent.base(), ctx.cramp());
+        return accent.isRule()
+            ? overUnderLineBox(accent, baseBox, ctx)
+            : glyphAccentBox(accent, baseBox, ctx);
+    }
+
+    /**
+     * Positions an accent glyph over the base. The accent's ink is centred over
+     * the base's top-accent attachment point (MATH {@code MathTopAccentAttachment},
+     * falling back to the base centre) and raised so its bottom clears the base:
+     * TeXbook's rule lifts the accent by {@code max(0, baseHeight −
+     * accentBaseHeight)}, so a tall base pushes the accent up while a short one
+     * lets it hug — the combining accent glyph's intrinsic ink height supplies the
+     * clearance. A stretchy accent is first sized to the base width.
+     */
+    private static Box glyphAccentBox(Accent accent, Box baseBox, LayoutContext ctx) {
+        SfntFont font = ctx.font();
+        var c = ctx.constants();
+        double scale = ctx.scale();
+
+        // Base attachment x (where the accent centres over the base).
+        double baseAccentX;
+        if (accent.base() instanceof Atom a) {
+            int taa = font.topAccentAttachment(font.glyphId(a.codePoint()));
+            baseAccentX = taa != 0 ? taa * scale : baseBox.width() / 2.0;
+        } else {
+            baseAccentX = baseBox.width() / 2.0;
+        }
+
+        // Choose the accent rendering: a single glyph (narrow), or — for a stretchy
+        // accent — a wider MATH variant / assembled row sized to the base width.
+        int accentGid = font.glyphId(accent.accentCodePoint());
+        List<AccentPiece> pieces = new ArrayList<>();
+        if (accent.stretchy()) {
+            stretchHorizontal(font, accentGid, baseBox.width() / scale, pieces);
+        } else {
+            pieces.add(new AccentPiece(accentGid, 0));
+        }
+
+        // Ink bbox of the whole accent (design units, x-offsets applied).
+        double inkMinX = Double.POSITIVE_INFINITY;
+        double inkMaxX = Double.NEGATIVE_INFINITY;
+        double inkYMax = Double.NEGATIVE_INFINITY;
+        for (AccentPiece p : pieces) {
+            GlyphOutline o = font.outline(p.gid());
+            if (o.isEmpty()) {
+                continue;
+            }
+            inkMinX = Math.min(inkMinX, p.dx() + o.xMin());
+            inkMaxX = Math.max(inkMaxX, p.dx() + o.xMax());
+            inkYMax = Math.max(inkYMax, o.yMax());
+        }
+        if (inkMinX > inkMaxX) { // accent glyph has no ink (defensive)
+            return baseBox;
+        }
+        double inkCenterDesign = (inkMinX + inkMaxX) / 2.0;
+
+        // Align the accent ink centre to the base attachment point; raise it clear.
+        double accentOriginX = baseAccentX - scale * inkCenterDesign;
+        double raise = Math.max(0.0, baseBox.height() - c.accentBaseHeight() * scale);
+        double accentBaselineY = -raise;
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        baseBox.drawInto(glyphs, rules, 0.0, 0.0);
+        for (AccentPiece p : pieces) {
+            glyphs.add(new PositionedGlyph(
+                p.gid(), accentOriginX + scale * p.dx(), accentBaselineY, scale));
+        }
+
+        double height = Math.max(baseBox.height(), raise + scale * inkYMax);
+        // Advance is the base width (an over-accent never widens the row); ink may
+        // legitimately overhang, which the layout bbox accounts for.
+        return new Box(glyphs, rules, baseBox.width(), height, baseBox.depth());
+    }
+
+    /**
+     * Draws {@code \overline} / {@code \\underline} as a rule spanning the base
+     * width, above or below the base with the MATH over/underbar gap, rule
+     * thickness, and extra ascender/descender (all in-alphabet {@code <rect>}s).
+     */
+    private static Box overUnderLineBox(Accent accent, Box baseBox, LayoutContext ctx) {
+        var c = ctx.constants();
+        double scale = ctx.scale();
+        double width = baseBox.width();
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        baseBox.drawInto(glyphs, rules, 0.0, 0.0);
+
+        if (accent.under()) {
+            double gap = c.underbarVerticalGap() * scale;
+            double thickness = c.underbarRuleThickness() * scale;
+            double extra = c.underbarExtraDescender() * scale;
+            rules.add(new Rule(0.0, baseBox.depth() + gap, width, thickness));
+            double depth = baseBox.depth() + gap + thickness + extra;
+            return new Box(glyphs, rules, width, baseBox.height(), depth);
+        }
+        double gap = c.overbarVerticalGap() * scale;
+        double thickness = c.overbarRuleThickness() * scale;
+        double extra = c.overbarExtraAscender() * scale;
+        double ruleTopY = -(baseBox.height() + gap + thickness);
+        rules.add(new Rule(0.0, ruleTopY, width, thickness));
+        double height = baseBox.height() + gap + thickness + extra;
+        return new Box(glyphs, rules, width, height, baseBox.depth());
+    }
+
+    /**
+     * Sizes a stretchy accent to (at least) {@code targetDesignWidth} using the
+     * OpenType MATH horizontal glyph construction: the smallest pre-drawn variant
+     * that is wide enough, else an assembled row of parts, else the widest variant,
+     * else (documented last resort) the natural accent glyph. Fills {@code out}
+     * with the pieces to draw, left→right, at x-offsets in design units.
+     */
+    private static void stretchHorizontal(SfntFont font, int baseGid,
+                                          double targetDesignWidth, List<AccentPiece> out) {
+        var construction = font.horizontalVariants(baseGid);
+        int minSize = (int) Math.ceil(targetDesignWidth);
+        if (construction != null) {
+            var variant = construction.variantAtLeast(minSize);
+            if (variant.isPresent()) {
+                out.add(new AccentPiece(variant.getAsInt(), 0));
+                return;
+            }
+            if (construction.hasAssembly()) {
+                assembleHorizontal(font, construction.assembly(),
+                    font.minConnectorOverlap(), minSize, out);
+                return;
+            }
+            var variants = construction.variants();
+            if (!variants.isEmpty()) {
+                out.add(new AccentPiece(variants.get(variants.size() - 1).glyphId(), 0));
+                return;
+            }
+        }
+        // No horizontal construction: the natural accent glyph, unstretched.
+        out.add(new AccentPiece(baseGid, 0));
+    }
+
+    /**
+     * Assembles a wide accent from a {@link com.lattex.font.GlyphAssembly}: fixed
+     * ends plus repeated extenders, adjacent pieces overlapping by
+     * {@code minConnectorOverlap}. Repeats the extenders the fewest times needed to
+     * reach {@code minSizeDesign}, then lays the parts out left→right at their
+     * cumulative advances (design units). Mirrors {@link #assembledStack} on the
+     * horizontal axis; a completeness fallback for bases wider than the largest
+     * pre-drawn variant.
+     */
+    private static void assembleHorizontal(SfntFont font,
+                                           com.lattex.font.GlyphAssembly assembly,
+                                           int overlap, int minSizeDesign, List<AccentPiece> out) {
+        var parts = assembly.parts();
+        boolean hasExtender = parts.stream().anyMatch(com.lattex.font.GlyphPart::isExtender);
+        int rep = 1;
+        List<com.lattex.font.GlyphPart> stack = expandAssembly(parts, rep);
+        while (hasExtender && assemblySpanDesign(stack, overlap) < minSizeDesign) {
+            stack = expandAssembly(parts, ++rep);
+        }
+        int dx = 0;
+        for (com.lattex.font.GlyphPart part : stack) {
+            out.add(new AccentPiece(part.glyphId(), dx));
+            dx += part.fullAdvance() - overlap;
+        }
     }
 
     // ------------------------------------------------------------------

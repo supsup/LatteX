@@ -1,5 +1,6 @@
 package com.lattex.parse;
 
+import com.lattex.parse.MathNode.Accent;
 import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
@@ -77,6 +78,40 @@ public final class MathParser {
         " ", 6.0,    // control space \(space)
         "quad", 18.0,
         "qquad", 36.0);
+
+    /**
+     * Accent commands -> the accent glyph and how it is applied. Code points are
+     * from the Unicode standard (combining diacritics / combining arrows above,
+     * which STIX Two Math provides as standalone accent glyphs and, for the wide
+     * forms, with OpenType MATH horizontal constructions). {@code \overline} /
+     * {@code \\underline} map to {@link Accent#RULE} — they are drawn as a rule,
+     * not a glyph.
+     */
+    private record AccentSpec(int codePoint, boolean stretchy, boolean under) {
+    }
+
+    private static final Map<String, AccentSpec> ACCENTS = Map.ofEntries(
+        // Narrow accents (natural size).
+        Map.entry("hat", new AccentSpec(0x0302, false, false)),      // ◌̂ circumflex
+        Map.entry("bar", new AccentSpec(0x0304, false, false)),      // ◌̄ macron
+        Map.entry("vec", new AccentSpec(0x20D7, false, false)),      // ◌⃗ right arrow above
+        Map.entry("dot", new AccentSpec(0x0307, false, false)),      // ◌̇ dot above
+        Map.entry("ddot", new AccentSpec(0x0308, false, false)),     // ◌̈ diaeresis
+        Map.entry("tilde", new AccentSpec(0x0303, false, false)),    // ◌̃ tilde
+        Map.entry("check", new AccentSpec(0x030C, false, false)),    // ◌̌ caron
+        Map.entry("breve", new AccentSpec(0x0306, false, false)),    // ◌̆ breve
+        Map.entry("acute", new AccentSpec(0x0301, false, false)),    // ◌́ acute
+        Map.entry("grave", new AccentSpec(0x0300, false, false)),    // ◌̀ grave
+        Map.entry("mathring", new AccentSpec(0x030A, false, false)), // ◌̊ ring above
+        // Wide / stretchy accents (sized to the base width).
+        Map.entry("widehat", new AccentSpec(0x0302, true, false)),
+        Map.entry("widetilde", new AccentSpec(0x0303, true, false)),
+        Map.entry("overrightarrow", new AccentSpec(0x20D7, true, false)),
+        Map.entry("overleftarrow", new AccentSpec(0x20D6, true, false)),   // ◌⃖ left arrow above
+        Map.entry("overleftrightarrow", new AccentSpec(0x20E1, true, false)), // ◌⃡
+        // Line decorations (drawn as a rule, in-alphabet).
+        Map.entry("overline", new AccentSpec(Accent.RULE, false, false)),
+        Map.entry("underline", new AccentSpec(Accent.RULE, false, true)));
 
     // The \not prefix: base code point -> precomposed negated code point (Unicode).
     // We only negate relations that HAVE a single precomposed negation glyph in
@@ -723,6 +758,21 @@ public final class MathParser {
         return parseNucleus();
     }
 
+    /**
+     * The argument of an accent command ({@code \hat{a}}, {@code \vec v}): a
+     * single nucleus, so {@code '{'} opens a group and a bare token/command is
+     * taken as-is (matching LaTeX's brace-optional accent argument).
+     */
+    private MathNode parseAccentArg(String command) {
+        Kind k = peek().kind();
+        if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
+                || isCommand(peek(), "right")) {
+            throw new MathSyntaxException(
+                "\\" + command + " needs a base to accent, but found " + describe(peek()));
+        }
+        return parseNucleus();
+    }
+
     /** A single nucleus (no trailing scripts). */
     private MathNode parseNucleus() {
         Token t = peek();
@@ -786,6 +836,13 @@ public final class MathParser {
             case "limits", "nolimits" ->
                 throw new MathSyntaxException("\\" + name + " must directly follow a large operator");
             default -> {
+                // Accent (glyph accent, wide accent, or over/underline rule)?
+                AccentSpec accent = ACCENTS.get(name);
+                if (accent != null) {
+                    MathNode base = parseAccentArg(name);
+                    return new Accent(name, base, accent.codePoint(),
+                        accent.stretchy(), accent.under());
+                }
                 // Large operator?
                 Sym big = BIG_OPERATORS.get(name);
                 if (big != null) {

@@ -75,22 +75,22 @@ NEEDS-PARSER-NODE	delim-scaled	\frac{n!}{r!(n-r)!}=\binom{n}{r}	binomial identit
 PARSES-NOW	accents	a'	prime (parses as an ordinary ' atom)
 PARSES-NOW	accents	a''	double prime (two ' atoms)
 PARSES-NOW	accents	a''''	quadruple prime (four ' atoms)
-NEEDS-PARSER-NODE	accents	\hat{a}	hat accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\bar{a}	bar accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\dot{a}	dot accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\ddot{a}	double-dot accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\acute{a}	acute accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\grave{a}	grave accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\check{a}	caron accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\breve{a}	breve accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\tilde{a}	tilde accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\vec{a}	vector arrow accent — needs Accent node
-NEEDS-PARSER-NODE	accents	\mathring{a}	ring accent — needs Accent node
+PARSES-NOW	accents	\hat{a}	hat accent (glyph over base)
+PARSES-NOW	accents	\bar{a}	bar accent (macron over base)
+PARSES-NOW	accents	\dot{a}	dot accent (dot over base)
+PARSES-NOW	accents	\ddot{a}	double-dot accent (diaeresis over base)
+PARSES-NOW	accents	\acute{a}	acute accent (over base)
+PARSES-NOW	accents	\grave{a}	grave accent (over base)
+PARSES-NOW	accents	\check{a}	caron accent (over base)
+PARSES-NOW	accents	\breve{a}	breve accent (over base)
+PARSES-NOW	accents	\tilde{a}	tilde accent (over base)
+PARSES-NOW	accents	\vec{a}	vector arrow accent (over base)
+PARSES-NOW	accents	\mathring{a}	ring accent (over base)
 NEEDS-PARSER-NODE	accents	\aa	the letter a-with-ring (å) — needs symbol
-NEEDS-PARSER-NODE	accents	\widehat{AAA}	wide (stretchy) hat — needs stretchy-Accent node
-NEEDS-PARSER-NODE	accents	\widetilde{AAA}	wide (stretchy) tilde — needs stretchy-Accent node
-NEEDS-PARSER-NODE	accents	\overline{a}	overline — needs Overline node
-NEEDS-PARSER-NODE	accents	\underline{a}	underline — needs Underline node
+PARSES-NOW	accents	\widehat{AAA}	wide (stretchy) hat sized to the base
+PARSES-NOW	accents	\widetilde{AAA}	wide (stretchy) tilde sized to the base
+PARSES-NOW	accents	\overline{a}	overline (rule over base)
+PARSES-NOW	accents	\underline{a}	underline (rule under base)
 # ==== text / spacing / color =======================================
 NEEDS-PARSER-NODE	text	\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2	text runs — needs \text node (upright text mode)
 NEEDS-PARSER-NODE	cases	f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}	piecewise cases — needs cases environment node (then S4 layout)
