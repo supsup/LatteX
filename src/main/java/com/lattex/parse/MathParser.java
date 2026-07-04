@@ -1282,6 +1282,11 @@ public final class MathParser {
         SPACES.forEach((name, mu) ->
             out.add(new SupportedCommand("\\" + name, Category.SPACING,
                 "a\\" + name + " b")));
+        // The source tables are unordered maps; sort by (category, command) so the
+        // enumeration — and the generated index page — is deterministic (drift-free).
+        out.sort(java.util.Comparator
+            .comparingInt((SupportedCommand c) -> c.category().ordinal())
+            .thenComparing(SupportedCommand::command));
         return List.copyOf(out);
     }
 
