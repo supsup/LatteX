@@ -95,14 +95,95 @@ class S8SpecimenGalleryTest {
             new Specimen("1 + \\cdots + n", "\\cdots"),
             new Specimen("a_1, \\ldots, a_n", "\\ldots"))),
 
-        new Category("Everything together", "one dense display expression", List.of(
+        new Category("Accents", "\\hat \\vec \\bar \\dot — glyph accents over a base", List.of(
+            new Specimen("\\hat{a}", "\\hat{a}"),
+            new Specimen("\\vec{v}", "\\vec{v}"),
+            new Specimen("\\bar{z}", "\\bar{z}"),
+            new Specimen("\\tilde{n}", "\\tilde{n}"),
+            new Specimen("\\dot{x}", "\\dot{x}"),
+            new Specimen("\\ddot{x}", "\\ddot{x}"),
+            new Specimen("\\check{s}", "\\check{s}"),
+            new Specimen("\\acute{e}", "\\acute{e}"))),
+
+        new Category("Wide accents & bars", "stretchy accents sized to their base", List.of(
+            new Specimen("\\widehat{abc}", "\\widehat"),
+            new Specimen("\\widetilde{xyz}", "\\widetilde"),
+            new Specimen("\\overline{x+y}", "\\overline"),
+            new Specimen("\\underline{a+b}", "\\underline"),
+            new Specimen("\\overrightarrow{AB}", "\\overrightarrow"),
+            new Specimen("\\vec{F} = m\\vec{a}", "accents in an expression"))),
+
+        new Category("Named operators", "\\sin \\lim \\det — upright, limit-aware", List.of(
+            new Specimen("\\sin x", "\\sin"),
+            new Specimen("\\cos^2\\theta + \\sin^2\\theta", "beside-scripts"),
+            new Specimen("\\lim_{x\\to\\infty}", "\\lim (under-limit)"),
+            new Specimen("\\det(A)", "\\det"),
+            new Specimen("\\log_2 n", "\\log with base"),
+            new Specimen("\\exp(-x)", "\\exp"),
+            new Specimen("\\gcd(a,b)", "\\gcd"),
+            new Specimen("\\operatorname{lcm}(a,b)", "\\operatorname"))),
+
+        new Category("Text mode", "\\text \\textbf \\mathrm — upright words in math", List.of(
+            new Specimen("\\text{if } n \\text{ even}", "\\text (spaces kept)"),
+            new Specimen("\\textbf{bold}", "\\textbf"),
+            new Specimen("\\textit{italic}", "\\textit"),
+            new Specimen("\\mathrm{d}x", "\\mathrm (roman d)"),
+            new Specimen("v_{\\text{max}}", "text in a subscript"))),
+
+        new Category("Font variants", "\\mathbb \\mathcal \\mathfrak — math alphabets", List.of(
+            new Specimen("\\mathbb{RCQZ}", "blackboard bold"),
+            new Specimen("\\mathcal{LFH}", "calligraphic"),
+            new Specimen("\\mathfrak{gAB}", "fraktur"),
+            new Specimen("\\mathbf{xyz}", "bold"),
+            new Specimen("\\mathsf{ABC}", "sans-serif"),
+            new Specimen("\\mathit{abc}", "math italic"),
+            new Specimen("\\mathtt{code}", "monospace"),
+            new Specimen("\\boldsymbol{\\beta}", "bold Greek"))),
+
+        new Category("Arrows", "class REL — the arrow family", macros(List.of(
+            "to", "gets", "leftrightarrow", "Rightarrow", "Leftarrow",
+            "Leftrightarrow", "mapsto", "hookrightarrow", "longrightarrow",
+            "uparrow", "downarrow", "nearrow", "searrow", "rightsquigarrow",
+            "twoheadrightarrow", "rightleftharpoons"))),
+
+        new Category("More relations", "class REL — order, similarity, sets", macros(List.of(
+            "cong", "sim", "simeq", "propto", "asymp", "prec", "succ",
+            "preceq", "succeq", "ll", "gg", "supset", "subseteq", "supseteq",
+            "sqsubseteq", "sqsupseteq", "models", "vdash", "perp", "parallel",
+            "ni", "notin"))),
+
+        new Category("More operators", "class BIN — circled, lattice, dagger", macros(List.of(
+            "mp", "div", "ast", "star", "circ", "bullet", "oplus", "ominus",
+            "otimes", "oslash", "odot", "cap", "cup", "uplus", "sqcap", "sqcup",
+            "wedge", "vee", "dagger", "ddagger", "wr", "amalg", "setminus"))),
+
+        new Category("More symbols", "ORD — logic, blackboard, misc", macros(List.of(
+            "forall", "exists", "nexists", "neg", "emptyset", "varnothing",
+            "aleph", "hbar", "ell", "wp", "Re", "Im", "top", "bot", "angle",
+            "triangle", "flat", "sharp", "natural", "clubsuit", "diamondsuit",
+            "heartsuit", "spadesuit"))),
+
+        new Category("Everything together", "dense display expressions", List.of(
             new Specimen(
                 "\\sum_{i=1}^{n} \\frac{\\sqrt{\\alpha_i^2 + \\beta_i^2}}{\\gamma}"
                     + " \\leq \\left( \\int_0^\\infty e^{-x}\\,dx \\right)",
-                "sum of scaled roots bounded by an integral"))));
+                "sum of scaled roots bounded by an integral"),
+            new Specimen(
+                "\\lim_{n\\to\\infty} \\left( 1 + \\frac{x}{n} \\right)^n"
+                    + " = \\exp(x), \\quad x \\in \\mathbb{R}",
+                "a limit definition of exp over the reals"),
+            new Specimen(
+                "\\hat{\\beta} = \\operatorname{argmin}_{\\beta}"
+                    + " \\sum_i \\left( y_i - \\vec{x}_i^\\top \\beta \\right)^2",
+                "least-squares estimator with accents & \\operatorname"))));
 
     private static List<Specimen> greek(List<String> names) {
         return names.stream().map(n -> new Specimen("\\" + n, "\\" + n)).toList();
+    }
+
+    /** Turns a macro-name list into one specimen per macro (label = the macro). */
+    private static List<Specimen> macros(List<String> names) {
+        return greek(names);
     }
 
     @Test

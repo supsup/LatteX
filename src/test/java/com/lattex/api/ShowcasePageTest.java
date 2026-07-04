@@ -33,19 +33,41 @@ class ShowcasePageTest {
     private record Eq(String latex, String label) {
     }
 
-    // --- Hero: one large, gorgeous equation (the Gaussian integral identity). ---
-    private static final String HERO_EQ = "\\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}";
+    // --- Hero: one large, gorgeous equation. A limit showpiece — the compound-
+    // interest definition of e — now that named operators (\lim) have landed. ---
+    private static final String HERO_EQ =
+        "\\lim_{n \\to \\infty} \\left( 1 + \\frac{1}{n} \\right)^{n} = e";
 
-    // --- Section 2: ~8 hero examples spanning the renderer's range. ---
+    // --- Section 2: hero examples spanning the renderer's freshly-expanded range:
+    // classics alongside limits, accents, text-in-math, and font-variant alphabets. ---
     private static final List<Eq> HERO_GRID = List.of(
         new Eq("x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}", "The quadratic formula"),
-        new Eq("\\int_0^\\infty e^{-x}\\,dx = 1", "A definite integral with limits"),
-        new Eq("\\frac{1}{1 + \\frac{1}{1 + \\frac{1}{x}}}", "A continued fraction"),
-        new Eq("\\sqrt[3]{x^2 + y^2}", "An indexed radical"),
-        new Eq("\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}", "A summation identity"),
-        new Eq("\\frac{\\frac{a}{b}}{\\frac{c}{d}} = \\frac{ad}{bc}", "A fraction tower"),
         new Eq("e^{i\\pi} + 1 = 0", "Euler's identity"),
+        new Eq("\\sin^2\\theta + \\cos^2\\theta = 1", "Named operators, upright"),
+        new Eq("\\mathcal{L}\\{f\\}(s) = \\int_0^\\infty e^{-st} f(t)\\,dt", "A \\mathcal transform"),
+        new Eq("\\nabla \\times \\vec{F} = \\vec{0}", "An accented vector identity"),
+        new Eq("\\hat{p} = \\frac{x}{n}, \\quad x \\in \\mathbb{N}", "Accents & \\mathbb sets"),
+        new Eq("n! = \\prod_{k=1}^{n} k \\quad \\text{for } n \\ge 0", "Text inside math"),
+        new Eq("\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}", "A summation identity"),
+        new Eq("\\oint_{\\partial S} \\vec{E} \\cdot d\\vec{A} = \\frac{Q}{\\varepsilon_0}", "A contour integral"),
+        new Eq("\\sqrt[3]{x^2 + y^2}", "An indexed radical"),
+        new Eq("\\frac{1}{1 + \\frac{1}{1 + \\frac{1}{x}}}", "A continued fraction"),
         new Eq("\\left( \\sum_{k=0}^{n} \\frac{x^k}{k} \\right)", "Auto-scaled delimiters"));
+
+    /** A rendered showpiece where the caption points at a newly-landed feature. */
+    private record Feat(String latex, String label) {
+    }
+
+    // --- Section 2b: a compact "what's new" band spotlighting the fresh coverage. ---
+    private static final List<Feat> WHATS_NEW = List.of(
+        new Feat("\\widehat{ABC}", "Wide, stretchy accents"),
+        new Feat("\\overrightarrow{PQ}", "Vector arrows over a base"),
+        new Feat("\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1", "Named operators with limits"),
+        new Feat("\\det\\!\\left( A - \\lambda I \\right)", "\\det, \\log, \\gcd, \\operatorname"),
+        new Feat("\\text{if } n \\text{ even}", "Upright text runs, spaces kept"),
+        new Feat("\\mathbb{R} \\subset \\mathbb{C}", "Blackboard-bold alphabet"),
+        new Feat("\\mathcal{F}, \\mathcal{L}, \\mathcal{H}", "Calligraphic alphabet"),
+        new Feat("\\mathfrak{g}, \\mathfrak{sl}_2", "Fraktur alphabet"));
 
     /** A named strip of single-symbol specimens (macro name below each glyph). */
     private record Strip(String title, List<String> macros) {
@@ -69,9 +91,13 @@ class ShowcasePageTest {
             "psi", "omega")),
         new Strip("Greek — uppercase", List.of(
             "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Phi", "Psi", "Omega")),
+        new Strip("Big operators", List.of(
+            "sum", "prod", "coprod", "int", "oint", "bigcup", "bigcap", "bigsqcup",
+            "bigvee", "bigwedge", "bigodot", "bigotimes", "bigoplus", "biguplus")),
         new Strip("Symbols", List.of(
-            "infty", "partial", "nabla", "forall", "exists", "emptyset", "aleph",
-            "hbar", "Re", "Im", "ell", "top")));
+            "infty", "partial", "nabla", "forall", "exists", "nexists", "emptyset",
+            "aleph", "hbar", "ell", "wp", "Re", "Im", "top", "bot", "angle",
+            "flat", "sharp", "clubsuit", "spadesuit")));
 
     @Test
     void writesShowcasePage() throws IOException {
@@ -89,6 +115,14 @@ class ShowcasePageTest {
             svgCount++;
         }
 
+        // "What's new" spotlight band.
+        StringBuilder newCells = new StringBuilder();
+        for (Feat f : WHATS_NEW) {
+            String svg = LatteX.render(f.latex());
+            newCells.append(gridCell(f.label(), f.latex(), svg)).append('\n');
+            svgCount++;
+        }
+
         // Symbol strips.
         StringBuilder strips = new StringBuilder();
         for (Strip strip : STRIPS) {
@@ -101,7 +135,7 @@ class ShowcasePageTest {
             strips.append(strip(strip.title(), tiles.toString()));
         }
 
-        String html = page(heroSvg, gridCells.toString(), strips.toString());
+        String html = page(heroSvg, gridCells.toString(), newCells.toString(), strips.toString());
         Path out = Path.of("examples", "showcase.html");
         Files.createDirectories(out.getParent());
         Files.writeString(out, html);
@@ -156,7 +190,7 @@ class ShowcasePageTest {
             """.formatted(escapeHtml(title), indentBlock(tiles, "    "));
     }
 
-    private static String page(String heroSvg, String gridCells, String strips) {
+    private static String page(String heroSvg, String gridCells, String newCells, String strips) {
         return """
             <!doctype html>
             <html lang="en">
@@ -184,8 +218,22 @@ class ShowcasePageTest {
                 <section class="band">
                   <header class="band-head">
                     <h2>It renders real math</h2>
-                    <p>Every glyph here was drawn live by the pipeline — font&rarr;parse&rarr;layout&rarr;SVG —
-                       for this page. Nothing is a screenshot.</p>
+                    <p>Every equation here was drawn live by the pipeline — font&rarr;parse&rarr;layout&rarr;SVG —
+                       for this page. Fractions, roots, scripts, big operators, auto-scaled delimiters,
+                       accents, named operators, text runs, and math alphabets. Nothing is a screenshot.</p>
+                  </header>
+                  <div class="grid">
+            %s
+                  </div>
+                </section>
+
+                <section class="band">
+                  <header class="band-head">
+                    <h2>Freshly landed</h2>
+                    <p>Accents (glyph &amp; stretchy), named operators with limits, upright
+                       <code>\\text</code> runs, and the font-variant alphabets
+                       (<code>\\mathbb</code>, <code>\\mathcal</code>, <code>\\mathfrak</code>) — all now
+                       rendered by the same safe pipeline.</p>
                   </header>
                   <div class="grid">
             %s
@@ -195,8 +243,8 @@ class ShowcasePageTest {
                 <section class="band">
                   <header class="band-head">
                     <h2>250&plus; symbols</h2>
-                    <p>Relations, operators, arrows, Greek, and more — a taste of the table below.
-                       See the full <a href="gallery-specimen.html">specimen gallery</a>.</p>
+                    <p>Relations, operators, arrows, Greek, big operators, and more — a taste of the
+                       table below. See the full <a href="gallery-specimen.html">specimen gallery</a>.</p>
                   </header>
             %s
                 </section>
@@ -247,7 +295,8 @@ class ShowcasePageTest {
             </body>
             </html>
             """.formatted(STYLE, indent(heroSvg, "        "), escapeHtml(HERO_EQ),
-                indentBlock(gridCells, "    "), indentBlock(strips, "    "));
+                indentBlock(gridCells, "    "), indentBlock(newCells, "    "),
+                indentBlock(strips, "    "));
     }
 
     // -------------------------------------------------------------------------
