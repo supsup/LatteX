@@ -38,17 +38,17 @@ PARSES-NOW	bigops	\int y\,dx	indefinite integral with thin space
 PARSES-NOW	bigops	\int_0^\infty e^{-x}\,dx	definite integral over [0, infinity)
 PARSES-NOW	bigops	\int_b^c	integral with bare bounds
 PARSES-NOW	bigops	\prod_{i=1}^n	product with limits
-NEEDS-PARSER-NODE	bigops	\coprod	coproduct — needs big-operator symbol
-NEEDS-PARSER-NODE	bigops	\bigoplus	direct-sum big operator
-NEEDS-PARSER-NODE	bigops	\bigotimes	tensor-product big operator
-NEEDS-PARSER-NODE	bigops	\bigcap	big intersection
-NEEDS-PARSER-NODE	bigops	\bigcup	big union
-NEEDS-PARSER-NODE	bigops	\bigsqcup	big square union
-NEEDS-PARSER-NODE	bigops	\bigvee	big disjunction
-NEEDS-PARSER-NODE	bigops	\bigwedge	big conjunction
-NEEDS-PARSER-NODE	bigops	\bigodot	big circled dot
-NEEDS-PARSER-NODE	bigops	\biguplus	big multiset union
-NEEDS-PARSER-NODE	bigops	\oint	contour integral
+PARSES-NOW	bigops	\coprod	coproduct big operator
+PARSES-NOW	bigops	\bigoplus	direct-sum big operator
+PARSES-NOW	bigops	\bigotimes	tensor-product big operator
+PARSES-NOW	bigops	\bigcap	big intersection
+PARSES-NOW	bigops	\bigcup	big union
+PARSES-NOW	bigops	\bigsqcup	big square union
+PARSES-NOW	bigops	\bigvee	big disjunction
+PARSES-NOW	bigops	\bigwedge	big conjunction
+PARSES-NOW	bigops	\bigodot	big circled dot
+PARSES-NOW	bigops	\biguplus	big multiset union
+PARSES-NOW	bigops	\oint	contour integral
 NEEDS-PARSER-NODE	bigops	\iint	double integral
 NEEDS-PARSER-NODE	bigops	\iiint	triple integral
 NEEDS-PARSER-NODE	bigops	\idotsint	dotted multiple integral
@@ -58,11 +58,11 @@ PARSES-NOW	delim-fixed	[b]	square brackets
 PARSES-NOW	delim-fixed	\{c\}	escaped curly braces
 PARSES-NOW	delim-fixed	|d|	vertical bars
 PARSES-NOW	delim-fixed	\|e\|	double-bar (note: parses, but \| currently maps to single | glyph)
-NEEDS-PARSER-NODE	delim-fixed	\langle f\rangle	angle brackets as ordinary symbols (outside \left..\right)
-NEEDS-PARSER-NODE	delim-fixed	\lfloor g\rfloor	floor delimiters as ordinary symbols
-NEEDS-PARSER-NODE	delim-fixed	\lceil h\rceil	ceiling delimiters as ordinary symbols
-NEEDS-PARSER-NODE	delim-fixed	\ulcorner i\urcorner	corner delimiters as ordinary symbols
-NEEDS-PARSER-NODE	delim-fixed	/j\backslash	slash and \backslash symbol
+PARSES-NOW	delim-fixed	\langle f\rangle	angle brackets as ordinary symbols (outside \left..\right)
+PARSES-NOW	delim-fixed	\lfloor g\rfloor	floor delimiters as ordinary symbols
+PARSES-NOW	delim-fixed	\lceil h\rceil	ceiling delimiters as ordinary symbols
+PARSES-NOW	delim-fixed	\ulcorner i\urcorner	corner delimiters as ordinary symbols
+PARSES-NOW	delim-fixed	/j\backslash	slash and \backslash symbol
 # ==== delimiters — scaled (\left \right) ===========================
 NEEDS-S4-LAYOUT	delim-scaled	\left(\frac{x^2}{y^3}\right)	scaled parens — parses; needs delimiter sizing to content
 NEEDS-S4-LAYOUT	delim-scaled	\left\{\frac{x^2}{y^3}\right\}	scaled braces — parses; needs delimiter sizing
@@ -104,16 +104,16 @@ NEEDS-PARSER-NODE	matrix	\begin{vmatrix}a&b\\c&d\end{vmatrix}	determinant (singl
 NEEDS-PARSER-NODE	matrix	A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}	full matrix with \cdots \vdots \ddots
 NEEDS-PARSER-NODE	matrix	\bordermatrix{&1&2\\1&a&b\\2&c&d}	bordered matrix with row/col labels — needs \bordermatrix node
 NEEDS-PARSER-NODE	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with vertical and horizontal rules — needs array node + column spec + \hline
-NEEDS-PARSER-NODE	matrix	\vdots	vertical dots symbol
-NEEDS-PARSER-NODE	matrix	\ddots	diagonal dots symbol
+PARSES-NOW	matrix	\vdots	vertical dots symbol
+PARSES-NOW	matrix	\ddots	diagonal dots symbol
 # ==== named operators / misc =======================================
 NEEDS-PARSER-NODE	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — needs named-operator node (\lim under-limits, \exp)
 NEEDS-PARSER-NODE	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — needs named-operator node
 PARSES-NOW	named-op	\frac{d}{dx}(kg(x))	derivative operator built from primitives
 NEEDS-PARSER-NODE	named-op	x\equiv a\pmod{b}	modulo — needs \pmod node
 NEEDS-FONT-STYLE	named-op	\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)	bold beta vector — needs \boldsymbol (bold-math font variant)
-NEEDS-PARSER-NODE	named-op	\top	top symbol
-NEEDS-PARSER-NODE	named-op	\bot	bottom symbol
+PARSES-NOW	named-op	\top	top symbol
+PARSES-NOW	named-op	\bot	bottom symbol
 # ==== font / style alphabets =======================================
 NEEDS-FONT-STYLE	font	\mathcal{ABCDEF}	calligraphic alphabet — needs font-variant node + glyphs
 NEEDS-FONT-STYLE	font	\mathbb{ABCDEF}	blackboard-bold alphabet — needs font-variant node + glyphs
@@ -124,4 +124,18 @@ NEEDS-FONT-STYLE	font	\mathit{ABCDEF}	math italic — needs font-variant node
 NEEDS-FONT-STYLE	font	\mathbf{ABCDEF}	bold — needs font-variant node + glyphs
 NEEDS-FONT-STYLE	font	\boldsymbol{abcdef}	bold symbols — needs bold-math font variant
 PARSES-NOW	greek	\alpha,A,\beta,B,\gamma,\Gamma,\pi,\Pi,\phi,\mu,\Phi	greek upper+lower mixed with latin
-NEEDS-PARSER-NODE	greek	\varphi	variant phi — needs symbol
+PARSES-NOW	greek	\varphi	variant phi
+# ==== Tier-1a symbol breadth (relations / binops / arrows / negations) =====
+PARSES-NOW	relation	a\leq b\geq c\equiv d\sim e\simeq f\cong g	core relations
+PARSES-NOW	relation	x\prec y\succ z\ll w\gg v\subseteq u\supseteq t	ordering + set relations
+PARSES-NOW	relation	a\parallel b\perp c\models d\vdash e\propto f\approx g	logical + geometric relations
+PARSES-NOW	binop	a\pm b\mp c\times d\div e\cdot f\ast g\star h	arithmetic binary operators
+PARSES-NOW	binop	a\oplus b\ominus c\otimes d\oslash e\odot f	circled binary operators
+PARSES-NOW	binop	a\cap b\cup c\sqcap d\sqcup e\wedge f\vee g\setminus h	set + lattice binary operators
+PARSES-NOW	arrow	a\to b\gets c\mapsto d\leftrightarrow e	basic arrows
+PARSES-NOW	arrow	a\Leftarrow b\Rightarrow c\Leftrightarrow d\longrightarrow e	double + long arrows
+PARSES-NOW	arrow	a\hookrightarrow b\rightleftharpoons c\leadsto d	harpoon + hook + squiggle arrows
+PARSES-NOW	ord	\infty\partial\nabla\hbar\ell\Re\Im\aleph\forall\exists	miscellaneous ordinary symbols
+PARSES-NOW	negation	a\nleq b\ngeq c\nmid d\notin e\neq f	explicit precomposed negations
+PARSES-NOW	negation	a\not= b,\ x\not\in S,\ A\not\subset B	\not prefix over precomposed relations
+PARSES-NOW	greek	\varepsilon\vartheta\varpi\varrho\varsigma\varphi\digamma	greek variant letters
