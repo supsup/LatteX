@@ -126,9 +126,11 @@ class RenderOptionsTest {
     }
 
     @Test
-    void defaultFillIsBlackHex() {
+    void defaultFillIsCurrentColor() {
         String svg = LatteX.render("x^2", RenderOptions.defaults());
-        assertTrue(svg.contains("fill=\"#000000\""), "default fill is opaque black");
+        assertTrue(svg.contains("fill=\"currentColor\""),
+            "default fill is currentColor (inherits the surrounding text color)");
+        assertFalse(svg.contains("fill=\"#000000\""), "no hardcoded black default");
     }
 
     @Test

@@ -14,9 +14,9 @@ import java.util.regex.Pattern;
  *   <li>{@link #scale()} — output size multiplier (default {@code 1.0}). Folded
  *       into the effective font size, so geometry scales proportionally (crisp
  *       vector output, not a CSS zoom).</li>
- *   <li>{@link #color()} — a validated {@link Color} (default {@link Color#BLACK}
- *       so the no-options path stays byte-identical to the legacy fill; opt into
- *       {@link Color#CURRENT} for dark-mode inheritance).</li>
+ *   <li>{@link #color()} — a validated {@link Color} (default {@link Color#CURRENT}
+ *       so rendered math inherits the surrounding text color and adapts to dark
+ *       mode natively; pass a {@link Color.Hex} for a fixed fill).</li>
  *   <li>{@link #mathStyle()} — the top-level TeX {@link MathStyle} (default
  *       {@link MathStyle#DISPLAY}).</li>
  * </ul>
@@ -48,9 +48,9 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle) {
         }
     }
 
-    /** The default options: {@code scale=1.0}, {@link Color#BLACK}, display style. */
+    /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style. */
     public static RenderOptions defaults() {
-        return new RenderOptions(1.0, Color.BLACK, MathStyle.DISPLAY);
+        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY);
     }
 
     /** A copy with a different scale (must be in {@code [MIN_SCALE, MAX_SCALE]}). */

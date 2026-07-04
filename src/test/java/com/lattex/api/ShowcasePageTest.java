@@ -20,8 +20,9 @@ import org.junit.jupiter.api.Test;
  * slight blue bias and a single warm amber accent (a nod to the "Latte" in the
  * name without lapsing into cream). Editorial type hierarchy; the rendered math
  * is the star and is given room. Theme-aware (light + dark via
- * {@code prefers-color-scheme}); the {@code #000000} glyph paths are inverted in
- * dark mode via a wrapper filter.
+ * {@code prefers-color-scheme}); the glyph paths are filled with
+ * {@code currentColor}, so they inherit the container's theme-aware ink color —
+ * no invert filter needed.
  *
  * <p>No parser/layout/emitter code is touched — this is pure presentation over
  * the public render API. All SVGs are self-contained (the emitter's minimal
@@ -318,7 +319,6 @@ class ShowcasePageTest {
             --accent-2:#d68a2a;
             --chip:    #f1f3f5;
             --chip-line:#e0e4e8;
-            --glyph-invert: 0;
             --shadow: 0 1px 2px rgba(20,24,30,.04), 0 8px 30px rgba(20,24,30,.06);
           }
           @media (prefers-color-scheme: dark) {
@@ -334,7 +334,6 @@ class ShowcasePageTest {
               --accent-2:#f0b96b;
               --chip:    #1b2027;
               --chip-line:#2a313a;
-              --glyph-invert: 1;
               --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px rgba(0,0,0,.45);
             }
           }
@@ -343,7 +342,6 @@ class ShowcasePageTest {
             --bg:#eceef1; --bg-2:#e3e6ea; --panel:#ffffff; --ink:#171a1f;
             --muted:#5b6570; --faint:#8a939d; --line:#d8dce1;
             --accent:#b9761b; --accent-2:#d68a2a; --chip:#f1f3f5; --chip-line:#e0e4e8;
-            --glyph-invert:0;
             --shadow: 0 1px 2px rgba(20,24,30,.04), 0 8px 30px rgba(20,24,30,.06);
           }
           :root[data-theme="dark"] {
@@ -351,7 +349,6 @@ class ShowcasePageTest {
             --bg:#0e1116; --bg-2:#0a0d11; --panel:#161a20; --ink:#e9ecf1;
             --muted:#97a1ad; --faint:#6b7480; --line:#262c34;
             --accent:#e6a24c; --accent-2:#f0b96b; --chip:#1b2027; --chip-line:#2a313a;
-            --glyph-invert:1;
             --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px rgba(0,0,0,.45);
           }
 
@@ -371,11 +368,12 @@ class ShowcasePageTest {
           a { color: var(--accent); text-decoration: none; }
           a:hover { text-decoration: underline; }
 
-          /* All rendered glyph SVGs: fit their cell; invert #000 paths in dark. */
-          .render { display: flex; align-items: center; justify-content: center; width: 100%; }
+          /* All rendered glyph SVGs fill with currentColor, so they inherit the
+             container's theme-aware ink color — dark ink in light mode, light ink
+             in dark mode. No invert filter (that would double-flip). */
+          .render { display: flex; align-items: center; justify-content: center; width: 100%; color: var(--ink); }
           .render svg {
             display: block; width: auto; height: auto; max-width: 100%;
-            filter: invert(var(--glyph-invert));
           }
 
           /* ---- Hero ---- */
