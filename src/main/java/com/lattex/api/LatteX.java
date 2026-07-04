@@ -11,6 +11,7 @@ import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
 import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.OperatorName;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
@@ -110,6 +111,7 @@ public final class LatteX {
             }
             case Accent(var command, var base, _, _, _) ->
                 accentName(command) + " " + describe(base);
+            case OperatorName(var name, _) -> name;
         };
     }
 

@@ -8,6 +8,7 @@ import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.LimitsMode;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.OperatorName;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
@@ -68,6 +69,45 @@ public final class MathParser {
         Map.entry("bigotimes", new Sym(0x2A02, MathClass.OP)), // ⨂
         Map.entry("bigoplus", new Sym(0x2A01, MathClass.OP)), // ⨁
         Map.entry("biguplus", new Sym(0x2A04, MathClass.OP))); // ⨄
+
+    /**
+     * A named operator's roman rendering text plus whether it takes limits
+     * (over/under in display style) rather than beside-set scripts.
+     */
+    private record OpSpec(String display, boolean takesLimits) {
+    }
+
+    /**
+     * The predefined named operators (TeXbook Ch.18 "log-like functions" +
+     * the limit-taking operators). Rendered in upright roman; the {@code display}
+     * text is the letters to typeset — a single space marks the word break in the
+     * compound forms ({@code \liminf}, {@code \limsup}, {@code \injlim},
+     * {@code \projlim}), which TeX sets with a thin space. Clean-room: the name
+     * set and limit behaviour are from Knuth's TeXbook (operators are roman;
+     * {@code \lim} and friends take limits), not from any renderer's source.
+     */
+    private static final Map<String, OpSpec> NAMED_OPS = buildNamedOps();
+
+    private static Map<String, OpSpec> buildNamedOps() {
+        Map<String, OpSpec> m = new java.util.HashMap<>();
+        // Non-limit "log-like" functions: scripts always sit beside.
+        for (String f : List.of("sin", "cos", "tan", "cot", "sec", "csc",
+                "sinh", "cosh", "tanh", "coth", "arcsin", "arccos", "arctan",
+                "log", "ln", "lg", "exp")) {
+            m.put(f, new OpSpec(f, false));
+        }
+        // Limit-taking operators: scripts become over/under limits in display.
+        for (String f : List.of("lim", "max", "min", "sup", "inf", "det", "gcd",
+                "deg", "dim", "ker", "hom", "arg")) {
+            m.put(f, new OpSpec(f, true));
+        }
+        m.put("Pr", new OpSpec("Pr", true));
+        m.put("liminf", new OpSpec("lim inf", true));
+        m.put("limsup", new OpSpec("lim sup", true));
+        m.put("injlim", new OpSpec("inj lim", true));
+        m.put("projlim", new OpSpec("proj lim", true));
+        return Map.copyOf(m);
+    }
 
     // Explicit spacing commands -> width in math units (18mu = 1em).
     private static final Map<String, Double> SPACES = Map.of(
@@ -835,7 +875,22 @@ public final class MathParser {
             case "right" -> throw new MathSyntaxException("\\right without matching \\left");
             case "limits", "nolimits" ->
                 throw new MathSyntaxException("\\" + name + " must directly follow a large operator");
+            case "operatorname" -> {
+                // \operatorname{name} (beside scripts) / \operatorname*{name} (limits).
+                boolean withLimits = false;
+                if (peek().kind() == Kind.CHAR && peek().codePoint() == '*') {
+                    next(); // consume '*'
+                    withLimits = true;
+                }
+                String opText = readOperatorNameArg();
+                return new OperatorName(opText, withLimits);
+            }
             default -> {
+                // Predefined named operator (\sin \cos \lim \max \operatorname*…)?
+                OpSpec op = NAMED_OPS.get(name);
+                if (op != null) {
+                    return new OperatorName(op.display(), op.takesLimits());
+                }
                 // Accent (glyph accent, wide accent, or over/underline rule)?
                 AccentSpec accent = ACCENTS.get(name);
                 if (accent != null) {
@@ -895,6 +950,35 @@ public final class MathParser {
             items.add(parseComponent());
         }
         return wrap(items);
+    }
+
+    /**
+     * Reads the {@code {name}} argument of {@code \operatorname}: a brace group of
+     * plain characters (the roman letters to typeset). Rejects anything other than
+     * literal characters — an {@code \operatorname} whose argument reaches for a
+     * command/group/script fails cleanly rather than silently dropping it.
+     */
+    private String readOperatorNameArg() {
+        if (peek().kind() != Kind.LBRACE) {
+            throw new MathSyntaxException(
+                "\\operatorname needs a '{name}' argument but found " + describe(peek()));
+        }
+        next(); // consume '{'
+        StringBuilder sb = new StringBuilder();
+        while (peek().kind() != Kind.RBRACE) {
+            Token t = peek();
+            if (t.kind() != Kind.CHAR) {
+                throw new MathSyntaxException(
+                    "\\operatorname argument must be plain text, but found " + describe(t));
+            }
+            sb.appendCodePoint(t.codePoint());
+            next();
+        }
+        next(); // consume '}'
+        if (sb.length() == 0) {
+            throw new MathSyntaxException("\\operatorname argument must be non-empty");
+        }
+        return sb.toString();
     }
 
     /** Reads a delimiter code point after {@code \left}/{@code \right}. */

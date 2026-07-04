@@ -155,6 +155,21 @@ class S8LeftContainmentTest {
         b.add("\\underline{x}");
         b.add("\\hat{a}^2 + \\vec{v}");
 
+        // Named operators: roman trig/log family, limit-takers (over/under limits
+        // in display), compound names, and \operatorname / \operatorname*.
+        for (String op : List.of("sin", "cos", "tan", "cot", "sec", "csc",
+                "sinh", "cosh", "tanh", "coth", "arcsin", "arccos", "arctan",
+                "log", "ln", "lg", "exp", "lim", "max", "min", "sup", "inf",
+                "det", "gcd", "deg", "dim", "ker", "hom", "arg", "Pr",
+                "liminf", "limsup", "injlim", "projlim")) {
+            b.add("\\" + op + " x");
+        }
+        b.add("\\lim_{x\\to\\infty} f(x)");
+        b.add("\\cos^2\\theta + \\sin^2\\theta = 1");
+        b.add("\\max_{1 \\leq i \\leq n} a_i");
+        b.add("\\operatorname{lcm}(a,b)");
+        b.add("\\operatorname*{argmax}_{x} f(x)");
+
         // Spacing commands (produce inkless spacing, never elements/attrs).
         b.add("a \\, b \\: c \\; d \\! e \\quad f \\qquad g");
 

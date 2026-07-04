@@ -75,6 +75,8 @@ class MathParserTest {
                 String kind = cp == Accent.RULE ? (under ? "under" : "over") : sym(cp);
                 yield "Acc(" + cmd + "[" + kind + (stretchy ? ",wide" : "") + "]," + pp(base) + ")";
             }
+            case MathNode.OperatorName(var name, var takesLimits) ->
+                "Op(" + name + (takesLimits ? ",lim" : "") + ")";
         };
     }
 

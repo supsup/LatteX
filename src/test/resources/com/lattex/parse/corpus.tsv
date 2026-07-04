@@ -107,8 +107,8 @@ NEEDS-PARSER-NODE	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with
 PARSES-NOW	matrix	\vdots	vertical dots symbol
 PARSES-NOW	matrix	\ddots	diagonal dots symbol
 # ==== named operators / misc =======================================
-NEEDS-PARSER-NODE	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — needs named-operator node (\lim under-limits, \exp)
-NEEDS-PARSER-NODE	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — needs named-operator node
+PARSES-NOW	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — \lim (under-limits in display) + roman \exp
+PARSES-NOW	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — roman named operators with beside scripts
 PARSES-NOW	named-op	\frac{d}{dx}(kg(x))	derivative operator built from primitives
 NEEDS-PARSER-NODE	named-op	x\equiv a\pmod{b}	modulo — needs \pmod node
 NEEDS-FONT-STYLE	named-op	\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)	bold beta vector — needs \boldsymbol (bold-math font variant)
