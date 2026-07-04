@@ -152,8 +152,8 @@
   <script>
 (function () {
   // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
-  // (boom|pulse|fade|glow|none). 'lightning' is special-cased below: it is a
-  // page-side body overlay, NOT a keyframe on the element.
+  // (boom|pulse|fade|glow|none). 'lightning' and 'storm' are special-cased
+  // below: they are page-side body overlays, NOT keyframes on the element.
   var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, none: 1 };
   var reduced = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -264,10 +264,152 @@
     requestAnimationFrame(frame);
   }
 
-  // Play a trigger's effect. lightning → the overlay routine; everything else is
-  // a one-shot CSS keyframe (reset first so it can replay on re-trigger).
+  // NIGHT LIGHTNING. Reuses the bolt code, but first drops the whole scene to
+  // near-black behind a radial "spotlight" that stays transparent over the
+  // target (so the equation stays lit), converges bolts on the centre, and on
+  // EACH strike FLASHES the dark backdrop bright — like lightning at night —
+  // then restores the page. The darken backdrop, the white flash veil and the
+  // bolt canvas are three SEPARATE pointer-events-none body overlays; nothing
+  // is ever written into the element's <svg> (the containment contract holds).
+  function storm(el) {
+    var r = el.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var color = resolveColor(el);
+    var sources = [[0, vh / 2], [vw, vh / 2], [cx, 0]]; // left, right, top edges
+    // Spotlight radius: clears the element plus a soft margin.
+    var spot = Math.max(r.width, r.height) / 2 + 60;
+
+    // (1) DARKEN — a fixed radial backdrop: transparent over the element,
+    // near-black at the edges. A CSS var drives the edge darkness so a strike
+    // can momentarily lift it. Fades in fast (~150ms).
+    var backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
+      + 'z-index:2147483645;opacity:0;transition:opacity 150ms ease;background:'
+      + 'radial-gradient(circle ' + spot + 'px at ' + cx + 'px ' + cy + 'px,'
+      + ' rgba(2,4,9,0) 0%, rgba(2,4,9,0) 58%,'
+      + ' rgba(2,4,9,var(--lx-dark,0.94)) 100%);';
+    document.body.appendChild(backdrop);
+
+    // (2) FLASH VEIL — a whitish layer brightest in the dark surround (a
+    // transparent hole over the element), pulsed on each strike so the night
+    // "lights up" without washing out the spotlit equation.
+    var flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
+      + 'z-index:2147483646;opacity:0;transition:opacity 70ms ease;background:'
+      + 'radial-gradient(circle ' + (spot + 40) + 'px at ' + cx + 'px ' + cy + 'px,'
+      + ' rgba(226,238,255,0) 0%, rgba(226,238,255,0) 52%,'
+      + ' rgba(226,238,255,0.6) 100%);';
+    document.body.appendChild(flash);
+
+    // The target GLOWS HOTTER as bolts charge into it: a heat level 0..1 maps
+    // to a growing coloured halo + a white-hot core, warming toward white as
+    // it peaks. Biased to the author's glow-color if set, else a heated amber.
+    var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+    var heatTint = (authored && authored.toLowerCase() !== 'currentcolor')
+      ? color : '#ffb24d';
+    function heatFilter(level) {
+      var outer = 6 + level * 22;                 // coloured halo: 6 → 28px
+      var warm = 4 + level * 16;                  // warm/amber mid layer
+      var core = level * 12;                      // white-hot core (0 at rest)
+      return 'drop-shadow(0 0 ' + outer + 'px ' + color + ')'
+        + ' drop-shadow(0 0 ' + warm + 'px ' + heatTint + ')'
+        + ' drop-shadow(0 0 ' + core + 'px rgba(255,255,255,'
+        + (0.35 + level * 0.6).toFixed(3) + '))';
+    }
+    // Smooth the ramp between strike bumps (restored on cleanup).
+    var filter0 = el.style.filter, trans0 = el.style.transition;
+    el.style.transition = 'filter 170ms ease';
+    el.style.filter = heatFilter(0.15); // subtle base glow while the sky darkens
+
+    // (3) The bolt canvas, on top of both overlays.
+    var canvas = document.createElement('canvas');
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var sctx = canvas.getContext('2d');
+    sctx.scale(dpr, dpr);
+
+    function cleanup() {
+      backdrop.remove(); flash.remove(); canvas.remove();
+      el.style.filter = filter0; el.style.transition = trans0;
+    }
+
+    // Reduced motion: no darkening flurry, no strobing, no heat ramp. A brief
+    // soft dim + one faint static arc + a soft STEADY glow, then restore.
+    if (reduced) {
+      backdrop.style.setProperty('--lx-dark', '0.5');
+      el.style.filter = heatFilter(0.3); // gentle steady glow, no pulsing
+      requestAnimationFrame(function () { backdrop.style.opacity = '1'; });
+      sctx.globalAlpha = 0.4; sctx.strokeStyle = color; sctx.lineWidth = 2;
+      stroke(sctx, jagged(0, vh / 2, cx, cy, 8, 6));
+      setTimeout(function () { backdrop.style.opacity = '0'; }, 520);
+      setTimeout(cleanup, 950);
+      return;
+    }
+
+    requestAnimationFrame(function () { backdrop.style.opacity = '1'; });
+
+    // One strike: quickly draw converging jagged bolts to the centre, then at
+    // convergence FLASH the backdrop bright (~70ms) — drop its darkness, pulse
+    // the white veil, AND heat the equation hotter (level) — before settling
+    // back to dark while the equation holds its new, hotter glow.
+    function strike(level, done) {
+      var DRAW = 130, t0 = performance.now();
+      function frame(now) {
+        var p = Math.min(1, (now - t0) / DRAW);
+        sctx.clearRect(0, 0, vw, vh);
+        sctx.strokeStyle = color; sctx.shadowColor = color; sctx.shadowBlur = 14;
+        sources.forEach(function (s) {
+          for (var k = 0; k < 2; k++) { // 2 forked bolts per source
+            var pts = jagged(s[0], s[1], cx, cy, 12, 18 + k * 10);
+            sctx.lineWidth = 2 + k; sctx.globalAlpha = 0.9;
+            stroke(sctx, pts, Math.floor(pts.length * p));
+          }
+        });
+        if (p < 1) { requestAnimationFrame(frame); return; }
+        backdrop.style.setProperty('--lx-dark', '0.55'); // night lights up
+        flash.style.opacity = '1';
+        el.style.filter = heatFilter(level); // charge pulses the math hotter
+        setTimeout(function () {
+          backdrop.style.setProperty('--lx-dark', '0.94'); // settle back to dark
+          flash.style.opacity = '0';
+          sctx.clearRect(0, 0, vw, vh);
+          done();
+        }, 70);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // ~3 strikes with a dark gap between; each strikes hotter than the last,
+    // peaking (white-hot) at the climax. Then fade the backdrop + canvas out
+    // (~400ms), COOL the equation back to normal, and restore cleanly.
+    var LEVELS = [0.45, 0.72, 1.0]; // subtle → hot → white-hot climax
+    var i = 0;
+    function next() {
+      if (i >= LEVELS.length) {
+        backdrop.style.transition = 'opacity 400ms ease';
+        canvas.style.transition = 'opacity 400ms ease';
+        el.style.transition = 'filter 400ms ease';
+        backdrop.style.opacity = '0'; canvas.style.opacity = '0';
+        el.style.filter = heatFilter(0); // cool back down as the storm fades
+        setTimeout(cleanup, 420);
+        return;
+      }
+      strike(LEVELS[i++], function () { setTimeout(next, 200); });
+    }
+    setTimeout(next, 170); // let the darken settle before the first strike
+  }
+
+  // Play a trigger's effect. lightning/storm → their overlay routines;
+  // everything else is a one-shot CSS keyframe (reset first so it can replay
+  // on re-trigger).
   function play(el, name, dur) {
     if (name === 'lightning') { lightning(el); return; }
+    if (name === 'storm') { storm(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -491,6 +633,24 @@
             <span class="cap">fx.click=lightning, fx.glow-color=#7fd4ff — icy confluence on click</span>
             <code class="src">\lx[fx.click=lightning, fx.glow-color=#7fd4ff]{ \nabla \times E }</code>
             <span class="hint">click me</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-hover="storm"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.56 -34.432 143.5342 36.832" width="143.5342" height="36.832" role="img" aria-label="E = m c squared">
+              <g fill="currentColor">
+                <path d="M598 186 L570 0 L36 0 L36 30 Q77 30 97 35 Q118 41 125 60 Q133 79 133 118 L133 535 Q133 573 125 593 Q118 613 97 620 Q77 627 36 627 L36 657 L561 657 L567 493 L535 493 Q528 543 513 568 Q499 594 466 603 Q434 612 372 612 L225 612 L225 358 L342 358 Q388 358 412 366 Q436 374 445 396 Q454 418 454 458 L486 458 L486 226 L454 226 Q454 267 445 287 Q436 307 412 313 Q388 319 342 319 L225 319 L225 44 L354 44 Q412 44 447 49 Q483 55 503 70 Q524 85 537 113 Q551 141 566 186 L598 186 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(36.1511 0) scale(0.04 -0.04)"/>
+                <path d="M185 357 L185 97 Q185 55 199 42 Q214 29 260 29 L260 0 L32 0 L32 29 Q64 29 78 34 Q93 40 97 55 Q102 71 102 101 L102 381 Q102 408 91 417 Q81 426 60 426 Q49 426 41 425 Q33 424 33 424 L33 453 L158 482 L182 482 L182 401 L186 401 Q227 436 265 460 Q303 485 354 485 Q397 485 423 461 Q450 438 465 402 L469 402 Q510 443 549 464 Q588 485 628 485 Q687 485 722 448 Q757 411 757 320 L757 116 Q757 85 760 65 Q764 46 779 37 Q795 29 829 29 L829 0 L603 0 L603 29 Q637 29 652 38 Q667 47 670 66 Q674 86 674 116 L674 308 Q674 354 662 378 Q651 402 631 411 Q612 421 588 421 Q557 421 527 400 Q498 380 473 359 L473 116 Q473 82 477 63 Q482 44 498 36 Q514 29 550 29 L550 0 L313 0 L313 29 Q349 29 365 36 Q381 43 385 62 Q390 81 390 116 L390 314 Q390 378 367 399 Q345 421 310 421 Q271 421 239 399 Q207 377 185 357 Z" transform="translate(76.0622 0) scale(0.04 -0.04)"/>
+                <path d="M408 148 L427 134 Q408 94 383 61 Q359 28 323 9 Q287 -10 233 -10 Q171 -10 126 20 Q81 50 57 103 Q33 157 33 226 Q33 344 92 414 Q151 485 259 485 Q330 485 370 454 Q411 423 411 379 Q411 334 369 334 Q347 334 335 345 Q324 357 317 374 Q310 391 302 408 Q295 425 281 436 Q268 448 242 448 Q181 448 146 403 Q112 359 112 273 Q112 182 149 123 Q187 65 264 65 Q313 65 343 85 Q374 105 408 148 Z" transform="translate(110.1422 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(127.9822 -14.4) scale(0.028 -0.028)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.hover=storm — the screen darkens, bolts light it up</span>
+            <code class="src">\lx[fx.hover=storm]{ E = mc^2 }</code>
+            <span class="hint">hover — night lightning; the equation heats white-hot</span>
           </figcaption>
         </figure>
         <figure class="card">
