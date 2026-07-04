@@ -27,10 +27,12 @@ import com.lattex.svg.SvgEmitter;
  * (STIX Two Math), emitting glyphs as inline filled {@code <path>}s in a
  * minimal, sanitizer-safe element subset. Zero runtime dependencies.
  *
- * <p><strong>Status:</strong> M0 walking skeleton — the full font &rarr; parse
- * &rarr; layout &rarr; SVG pipeline is wired end-to-end, but only for a single
- * expression class ({@code x^2}: an atom with a superscript). Breadth lands
- * across the later milestones.
+ * <p><strong>Status:</strong> the full font &rarr; parse &rarr; layout &rarr; SVG
+ * pipeline renders fractions, roots, sub/superscripts, big-operator limits,
+ * scaled {@code \left..\right} delimiters, accents, named operators,
+ * {@code \text} mode, font-variant alphabets, and 250+ symbols/relations/arrows
+ * (KaTeX-gap Tier-1 &amp; Tier-2 complete). Output stays within the minimal,
+ * sanitizer-safe SVG alphabet by construction.
  */
 public final class LatteX {
 
