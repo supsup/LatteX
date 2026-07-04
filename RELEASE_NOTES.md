@@ -4,6 +4,28 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## 2026-07-04 — matrices, aligned equations & the `\lx` author syntax
+
+### Matrices, arrays & cases
+Grids built from `&` columns and `\\` rows: the whole matrix family (plain, parenthesized, bracketed, braced, determinant, double-bar norm, and inline small), `array` with per-column alignment and vertical/horizontal rules, and piecewise `cases`.
+> `\begin{pmatrix}a&b\\c&d\end{pmatrix}` &nbsp;·&nbsp; `\begin{cases}x & x>0\\-x & x<0\end{cases}` &nbsp;·&nbsp; `\begin{array}{c|c}1&2\\\hline 3&4\end{array}`
+
+### Aligned equations
+Multi-line equations that line up where you want them: `align` / `aligned` line up on the relation (the `&`), and `gather` centers each line. Set in display style, so fractions and big-operator limits stay full size across the block.
+> `\begin{aligned}(a+b)^2 &= (a+b)(a+b)\\ &= a^2+2ab+b^2\end{aligned}` &nbsp;·&nbsp; `\begin{gather}a=b\\x+y=z\end{gather}`
+
+### The `\lx[…]{…}` author syntax
+Wrap any math to style, animate, or tag it — inline, with no separate config. `style.*` (scale, color, math style), `fx.*` (hover/click effects like glow and lightning), `graph.*` (function-plot popups), and semantic / accessibility tags. Math inherits the page's text color by default (`currentColor`), so it's dark-mode-native out of the box.
+> `\lx[style.color=#c0392b, style.scale=1.4]{\frac{a+b}{c}}` &nbsp;·&nbsp; `\lx[fx.hover=glow]{E=mc^2}`
+
+### Multiple integrals
+Double, triple, and multi-integral operators.
+> `\iint_D f\,dA` &nbsp;·&nbsp; `\iiint_V \rho\,dV`
+
+**Browse it all:** `examples/effects.html` and `examples/graph.html` show the `\lx` effects and graph popups live; the corpus (`examples/corpus.md`) lists every supported expression with its status.
+
+---
+
 ## 2026-07-03 — first release
 
 Everything below shipped today, in the initial release. *(Future updates will each get their own dated section here.)* Hand LatteX a LaTeX math string and get back crisp, scalable SVG — here's what works, with an example of each.
@@ -66,7 +88,6 @@ Render at a custom scale, color, or math style.
 
 ## What's next
 
-- **Matrices, aligned equations, and cases** — `\begin{pmatrix}…\end{pmatrix}`, `align`, `cases`.
-- **The `\lx[…]{…}` author syntax** — inline styling, effects, and semantic tags (searchable, accessible, interactive math).
+- **More environments** — `split`, `multline`, and equation numbering.
 - **A MathML output option** — for screen readers and assistive tech.
 - **Markdown integration** — a drop-in step that renders `$…$` math inside a Markdown → HTML pipeline.
