@@ -11,6 +11,7 @@ import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.LimitsMode;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.OperatorName;
 import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
@@ -100,6 +101,7 @@ public final class LayoutEngine {
             case Fenced(var leftDelim, var body, var rightDelim) ->
                 fencedBox(leftDelim, body, rightDelim, ctx);
             case Accent accent -> accentBox(accent, ctx);
+            case OperatorName opName -> operatorNameBox(opName, ctx);
         };
     }
 
@@ -130,6 +132,47 @@ public final class LayoutEngine {
             keepWidth ? inner.width() : 0.0,
             keepVertical ? inner.height() : 0.0,
             keepVertical ? inner.depth() : 0.0);
+    }
+
+    // ------------------------------------------------------------------
+    // OperatorName — a named operator (\sin, \lim, \operatorname{lcm}) set as an
+    // upright roman word. Its letters are the font's plain (roman) glyphs laid
+    // adjacent at their advance widths — no inter-letter math spacing (a name is
+    // one unit); a single space in the display text renders as a thin (3mu) gap,
+    // matching TeX's thin space in the compound forms (lim inf, inj lim, …). The
+    // resulting box carries math class Op for its surrounding spacing (set in the
+    // enclosing row via classOf), like any large operator.
+    // ------------------------------------------------------------------
+
+    private static Box operatorNameBox(OperatorName opName, LayoutContext ctx) {
+        SfntFont font = ctx.font();
+        double scale = ctx.scale();
+        String text = opName.name();
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        double penX = 0.0;
+        double height = 0.0;
+        double depth = 0.0;
+        double thinSpace = 3.0 * ctx.mu(); // TeX thin space between compound words
+
+        int i = 0;
+        while (i < text.length()) {
+            int cp = text.codePointAt(i);
+            i += Character.charCount(cp);
+            if (cp == ' ') {
+                penX += thinSpace;
+                continue;
+            }
+            int gid = font.glyphId(cp);
+            GlyphOutline o = font.outline(gid);
+            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale));
+            penX += font.advanceWidth(gid) * scale;
+            if (!o.isEmpty()) {
+                height = Math.max(height, o.yMax() * scale);
+                depth = Math.max(depth, -o.yMin() * scale);
+            }
+        }
+        return new Box(glyphs, List.of(), penX, Math.max(0.0, height), Math.max(0.0, depth));
     }
 
     // ------------------------------------------------------------------
@@ -253,6 +296,7 @@ public final class LayoutEngine {
             case MathList _ -> MathClass.ORD; // a {group} behaves as an Ord atom
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
+            case OperatorName _ -> MathClass.OP; // a named operator is class Op
             case Spacing _ -> null;           // classless glue (handled by caller)
         };
     }
@@ -265,6 +309,17 @@ public final class LayoutEngine {
         SfntFont font = ctx.font();
         double baseScale = ctx.scale();
         Box baseBox = layoutBox(base, ctx);
+
+        // A limit-taking named operator (\lim, \max, \operatorname*{…}) stacks its
+        // scripts as limits above/below in display style (TeXbook: \lim takes
+        // limits), and sets them beside as ordinary scripts in text style. This
+        // reuses the BigOperator limit-stacking path — sup is the upper limit,
+        // sub the lower — exactly as a large operator does.
+        if (base instanceof OperatorName on && on.takesLimits() && ctx.style().isDisplay()) {
+            Box upperBox = sup == null ? null : layoutBox(sup, ctx.superscript());
+            Box lowerBox = sub == null ? null : layoutBox(sub, ctx.subscript());
+            return stackLimits(baseBox, upperBox, lowerBox, ctx);
+        }
 
         // Italic correction shifts a superscript right off a slanted nucleus; a
         // subscript is not shifted. Only a single-character nucleus carries one.

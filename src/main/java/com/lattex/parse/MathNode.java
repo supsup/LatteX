@@ -350,4 +350,40 @@ public sealed interface MathNode {
             }
         }
     }
+
+    /**
+     * A named mathematical operator set in upright roman type — the trig/log
+     * family ({@code \sin \cos \log \ln \exp}, …), the limit-taking operators
+     * ({@code \lim \max \min \sup \inf \det \gcd \dim \ker \arg \Pr}, …), and the
+     * user form {@code \operatorname{name}} / {@code \operatorname*{name}}.
+     *
+     * <p>Clean-room from Knuth's TeXbook: a named operator is a {@code \mathop}
+     * whose nucleus is roman text, so it has math class {@link MathClass#OP}
+     * (its surrounding spacing is the Op-class spacing, exactly like a large
+     * operator). Unlike a single-glyph {@link BigOperator}, its nucleus is a
+     * <em>multi-letter</em> roman word, so it is a distinct node kind rather than
+     * an {@link Atom}.
+     *
+     * <p>{@link #takesLimits} distinguishes the two TeX families: a limit-taking
+     * operator ({@code \lim}, {@code \operatorname*{…}}) sets its {@code ^}/{@code
+     * _} scripts as limits stacked <em>above/below</em> in display style (beside,
+     * as ordinary scripts, in text style — TeXbook Ch.18); a non-limit operator
+     * ({@code \sin}, {@code \operatorname{…}}) always sets scripts beside.
+     *
+     * <p>The {@link #name} is the roman text to render, and may contain a single
+     * ASCII space for the compound operators ({@code lim inf}, {@code lim sup},
+     * {@code inj lim}, {@code proj lim}); a space renders as a thin (3mu) gap.
+     *
+     * @param name        the roman operator text (letters, optionally with a
+     *                    single-space word break), e.g. {@code "sin"}, {@code "lim"}
+     * @param takesLimits whether {@code ^}/{@code _} scripts become over/under
+     *                    limits in display style
+     */
+    record OperatorName(String name, boolean takesLimits) implements MathNode {
+        public OperatorName {
+            if (name == null || name.isEmpty()) {
+                throw new IllegalArgumentException("OperatorName name must be non-empty");
+            }
+        }
+    }
 }
