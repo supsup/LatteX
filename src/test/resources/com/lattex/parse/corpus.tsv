@@ -118,18 +118,18 @@ PARSES-NOW	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — \lim (under-li
 PARSES-NOW	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — roman named operators with beside scripts
 PARSES-NOW	named-op	\frac{d}{dx}(kg(x))	derivative operator built from primitives
 NEEDS-PARSER-NODE	named-op	x\equiv a\pmod{b}	modulo — needs \pmod node
-NEEDS-FONT-STYLE	named-op	\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)	bold beta vector — needs \boldsymbol (bold-math font variant)
+PARSES-NOW	named-op	\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)	bold beta vector — \boldsymbol remaps to bold math-alphanumeric (incl. Greek)
 PARSES-NOW	named-op	\top	top symbol
 PARSES-NOW	named-op	\bot	bottom symbol
 # ==== font / style alphabets =======================================
-NEEDS-FONT-STYLE	font	\mathcal{ABCDEF}	calligraphic alphabet — needs font-variant node + glyphs
-NEEDS-FONT-STYLE	font	\mathbb{ABCDEF}	blackboard-bold alphabet — needs font-variant node + glyphs
-NEEDS-FONT-STYLE	font	\mathfrak{ABCDEF}	fraktur alphabet — needs font-variant node + glyphs
+PARSES-NOW	font	\mathcal{ABCDEF}	calligraphic/script alphabet — remaps to U+1D49C run (+ Letterlike exceptions)
+PARSES-NOW	font	\mathbb{ABCDEF}	blackboard-bold alphabet — remaps to U+1D538 run (C/H/N/P/Q/R/Z via Letterlike)
+PARSES-NOW	font	\mathfrak{ABCDEF}	fraktur alphabet — remaps to U+1D504 run (C/H/I/R/Z via Letterlike)
 NEEDS-FONT-STYLE	font	\mathrm{ABCDEF}	upright roman — needs font-variant node
-NEEDS-FONT-STYLE	font	\mathsf{ABCDEF}	sans-serif — needs font-variant node + glyphs
-NEEDS-FONT-STYLE	font	\mathit{ABCDEF}	math italic — needs font-variant node
-NEEDS-FONT-STYLE	font	\mathbf{ABCDEF}	bold — needs font-variant node + glyphs
-NEEDS-FONT-STYLE	font	\boldsymbol{abcdef}	bold symbols — needs bold-math font variant
+PARSES-NOW	font	\mathsf{ABCDEF}	sans-serif — remaps to U+1D5A0 run
+PARSES-NOW	font	\mathit{ABCDEF}	math italic — remaps to U+1D434 run (h via Letterlike)
+PARSES-NOW	font	\mathbf{ABCDEF}	bold — remaps to U+1D400 run
+PARSES-NOW	font	\boldsymbol{abcdef}	bold symbols — remaps to bold math-alphanumeric run
 PARSES-NOW	greek	\alpha,A,\beta,B,\gamma,\Gamma,\pi,\Pi,\phi,\mu,\Phi	greek upper+lower mixed with latin
 PARSES-NOW	greek	\varphi	variant phi
 # ==== Tier-1a symbol breadth (relations / binops / arrows / negations) =====
