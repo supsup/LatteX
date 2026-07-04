@@ -163,10 +163,51 @@ class RenderOptionsTest {
             "script style is smaller than display style");
     }
 
+    // ---- inline() / display() api selectors + LatteX.renderInline (plan 7c0dd924) ----
+
+    @Test
+    void inlineAndDisplaySelectorsSetTheMathStyle() {
+        // api-only selectors — a caller gets TEXT/DISPLAY without naming the (non-exported) type.
+        assertEquals(MathStyle.DISPLAY, RenderOptions.defaults().mathStyle(), "default is display");
+        assertEquals(MathStyle.TEXT, RenderOptions.defaults().inline().mathStyle());
+        assertEquals(MathStyle.DISPLAY, RenderOptions.defaults().inline().display().mathStyle());
+        // They preserve the other knobs.
+        RenderOptions o = RenderOptions.defaults().withScale(1.4).inline();
+        assertEquals(1.4, o.scale());
+        assertEquals(MathStyle.TEXT, o.mathStyle());
+    }
+
+    @Test
+    void renderInlineIsTextStyledAndShorterThanDisplay() {
+        // A display fraction stacks numerator over denominator at full size; the inline (text)
+        // fraction is set smaller, so it is shorter — right for math on a prose line.
+        String frac = "\\frac{a}{b}";
+        String inline = LatteX.renderInline(frac);
+        String display = LatteX.render(frac); // defaults to display
+        assertNotEquals(inline, display, "inline vs display render differently");
+        assertTrue(height(inline) < height(display),
+            "inline fraction is shorter than the display fraction: "
+                + height(inline) + " vs " + height(display));
+    }
+
+    @Test
+    void renderInlineEqualsExplicitInlineOptions() {
+        String expr = "\\sum_{i=1}^{n} i";
+        assertEquals(LatteX.render(expr, RenderOptions.defaults().inline()),
+            LatteX.renderInline(expr), "renderInline == render(latex, defaults().inline())");
+    }
+
     /** Extracts the numeric {@code width="…"} from an emitted SVG. */
     private static double width(String svg) {
         Matcher m = Pattern.compile("width=\"([0-9.]+)\"").matcher(svg);
         assertTrue(m.find(), "svg has a width attribute");
+        return Double.parseDouble(m.group(1));
+    }
+
+    /** Extracts the numeric {@code height="…"} from an emitted SVG. */
+    private static double height(String svg) {
+        Matcher m = Pattern.compile("height=\"([0-9.]+)\"").matcher(svg);
+        assertTrue(m.find(), "svg has a height attribute");
         return Double.parseDouble(m.group(1));
     }
 }

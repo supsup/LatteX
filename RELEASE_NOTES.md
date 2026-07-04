@@ -22,6 +22,10 @@ Wrap any math to style, animate, or tag it — inline, with no separate config. 
 Double, triple, and multi-integral operators.
 > `\iint_D f\,dA` &nbsp;·&nbsp; `\iiint_V \rho\,dV`
 
+### Inline vs display sizing
+Math for a line of running prose can now be set in **inline** (text) style — smaller fractions and scripts, big-operator limits beside rather than stacked — via `LatteX.renderInline(latex)` or `RenderOptions.defaults().inline()` (`.display()` picks the default). API-only, so callers never name the internal style type.
+> `LatteX.renderInline("\\frac{a}{b}")`
+
 **Browse it all:** `examples/effects.html` and `examples/graph.html` show the `\lx` effects and graph popups live; the corpus (`examples/corpus.md`) lists every supported expression with its status.
 
 ---
