@@ -136,6 +136,58 @@ class AlignEnvironmentTest {
         assertAlphabet(LatteX.render("\\begin{align}\\int_0^1 x\\,dx&=\\frac{1}{2}\\\\\\sum_{k=1}^n k&=\\frac{n(n+1)}{2}\\end{align}"));
     }
 
+    // ---- split / multline (plan 337e0001) --------------------------------
+
+    /** Glyphs whose baseline sits within 0.5 of the given row baseline. */
+    private static List<PositionedGlyph> glyphsInRow(Layout l, double baseline) {
+        return l.glyphs().stream().filter(g -> Math.abs(g.baselineY() - baseline) < 0.5).toList();
+    }
+
+    @Test
+    void splitAlignsOnItsRelationLikeAligned() {
+        // split reuses the ALIGN machinery — relations line up on the & even with unequal LHS.
+        Layout l = layout("\\begin{split}a&=b\\\\xyz&=w\\end{split}");
+        List<Double> eqXs = equalsGlyphXs(l);
+        assertEquals(2, eqXs.size(), "one '=' per line");
+        assertTrue(Math.abs(eqXs.get(0) - eqXs.get(1)) < 0.001, "split lines up on the relation: " + eqXs);
+    }
+
+    @Test
+    void multlineFirstLineIsLeftAndLastLineIsRight() {
+        // Narrow first (A) and last (Z) lines around a wide middle line spanning the block.
+        // First line flush-left, last flush-right ⇒ A sits entirely left of where Z begins.
+        Layout l = layout("\\begin{multline}A\\\\WWWWWWWW\\\\Z\\end{multline}");
+        double topBaseline = l.glyphs().stream().mapToDouble(PositionedGlyph::baselineY).min().orElseThrow();
+        double botBaseline = l.glyphs().stream().mapToDouble(PositionedGlyph::baselineY).max().orElseThrow();
+        double firstX = glyphsInRow(l, topBaseline).stream().mapToDouble(PositionedGlyph::originX).min().orElseThrow();
+        double lastX = glyphsInRow(l, botBaseline).stream().mapToDouble(PositionedGlyph::originX).min().orElseThrow();
+        assertTrue(lastX > firstX + 40.0,
+            "last line is pushed right of the left-flushed first line: firstX=" + firstX + " lastX=" + lastX);
+    }
+
+    @Test
+    void multlineMiddleLineIsCentred() {
+        // Wide first+last lines (full width), a narrow middle line ⇒ the middle line is centred,
+        // so its left edge sits well right of the left margin and well left of the right margin.
+        Layout l = layout("\\begin{multline}WWWWWWWW\\\\A\\\\WWWWWWWW\\end{multline}");
+        double gridMinX = l.glyphs().stream().mapToDouble(PositionedGlyph::originX).min().orElseThrow();
+        double gridMaxX = l.glyphs().stream().mapToDouble(PositionedGlyph::originX).max().orElseThrow();
+        double width = gridMaxX - gridMinX;
+        // Middle row = baseline nearest the axis (neither the min nor the max baseline).
+        double midBaseline = l.glyphs().stream().mapToDouble(PositionedGlyph::baselineY)
+            .boxed().sorted().skip(l.glyphs().size() / 2).findFirst().orElseThrow();
+        double midX = glyphsInRow(l, midBaseline).stream().mapToDouble(PositionedGlyph::originX).min().orElseThrow();
+        assertTrue(midX > gridMinX + width * 0.25 && midX < gridMinX + width * 0.75,
+            "middle line is centred (not flushed to either margin): midX=" + midX + " in [" + gridMinX + "," + gridMaxX + "]");
+    }
+
+    @Test
+    void splitAndMultlineStayInTheSvgAlphabet() {
+        assertAlphabet(LatteX.render("\\begin{split}f(x)&=\\frac{1}{2}\\\\&=\\sum_{k=1}^n k\\end{split}"));
+        assertAlphabet(LatteX.render("\\begin{multline}a+b+c\\\\+d+e\\\\+f\\end{multline}"));
+        assertAlphabet(LatteX.render("\\begin{multline*}x\\\\y\\end{multline*}"));
+    }
+
     // ---- alphabet guard (same minimal set as MatrixLayoutTest) -----------
 
     private static final Set<String> ALLOWED_ELEMENTS = Set.of("svg", "g", "path", "rect");

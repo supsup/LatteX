@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **138 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **130**, `NEEDS-S4-LAYOUT` **2**, `NEEDS-PARSER-NODE` **5**, `NEEDS-FONT-STYLE` **1**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **141 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **133**, `NEEDS-S4-LAYOUT` **2**, `NEEDS-PARSER-NODE` **5**, `NEEDS-FONT-STYLE` **1**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -171,6 +171,9 @@ following once the node exists.
 | `\begin{align}x&=1&y&=2\\a&=3&b&=4\end{align}` | several equations per line — two aligned relation columns with a wide inter-equation gap | `PARSES-NOW` |
 | `\begin{align}\int_0^1 x\,dx&=\frac{1}{2}\\\sum_{k=1}^n k&=\frac{n(n+1)}{2}\end{align}` | display-style cells — integrals, fractions and big-op limits set full size | `PARSES-NOW` |
 | `\begin{gather}a=b\\x+y=z\end{gather}` | gather — each row centred, no & alignment | `PARSES-NOW` |
+| `\begin{split}a&=b+c\\&=d\end{split}` | split — a single equation broken over lines, aligned on the relation (reuses the align machinery) | `PARSES-NOW` |
+| `\begin{multline}a+b+c+d\\+e+f+g\\+h+i\end{multline}` | multline — one long equation: first line flush-left, last flush-right, middle centred | `PARSES-NOW` |
+| `\begin{multline*}\int_0^1 f\\=\frac{1}{2}\end{multline*}` | starred multline (no equation number) — same layout | `PARSES-NOW` |
 
 ## Named operators / misc
 

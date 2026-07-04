@@ -122,6 +122,9 @@ PARSES-NOW	align	\begin{aligned}f(x)&=x^2\\&=x\cdot x\end{aligned}	derivation wi
 PARSES-NOW	align	\begin{align}x&=1&y&=2\\a&=3&b&=4\end{align}	several equations per line — two aligned relation columns with a wide inter-equation gap
 PARSES-NOW	align	\begin{align}\int_0^1 x\,dx&=\frac{1}{2}\\\sum_{k=1}^n k&=\frac{n(n+1)}{2}\end{align}	display-style cells — integrals, fractions and big-op limits set full size
 PARSES-NOW	gather	\begin{gather}a=b\\x+y=z\end{gather}	gather — each row centred, no & alignment
+PARSES-NOW	align	\begin{split}a&=b+c\\&=d\end{split}	split — a single equation broken over lines, aligned on the relation (reuses the align machinery)
+PARSES-NOW	align	\begin{multline}a+b+c+d\\+e+f+g\\+h+i\end{multline}	multline — one long equation: first line flush-left, last flush-right, middle centred
+PARSES-NOW	align	\begin{multline*}\int_0^1 f\\=\frac{1}{2}\end{multline*}	starred multline (no equation number) — same layout
 # ==== named operators / misc =======================================
 PARSES-NOW	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — \lim (under-limits in display) + roman \exp
 PARSES-NOW	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — roman named operators with beside scripts
