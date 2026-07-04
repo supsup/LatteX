@@ -412,12 +412,51 @@
     setTimeout(next, 170); // let the darken settle before the first strike
   }
 
-  // Play a trigger's effect. lightning/storm → their overlay routines;
+  // The equation writes itself: ink each glyph <path> in stroke-by-stroke,
+  // staggered left-to-right, then settle to the filled glyph. Special-cased like
+  // lightning/storm — but this one toggles PRESENTATION attributes on the existing
+  // inner-<svg> paths (stroke / fill / stroke-dashoffset); it adds NO element to the
+  // SVG, so the containment contract is unchanged.
+  function handscribe(el) {
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; } // reduced motion: leave it static
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    var DRAW = 460, FILL = 260, STAGGER = 55;
+    paths.forEach(function (p, i) {
+      var len;
+      try { len = p.getTotalLength() || 100; } catch (e) { len = 100; }
+      p.style.stroke = 'currentColor';
+      p.style.strokeWidth = '1.5';
+      p.style.fill = 'transparent';
+      p.style.strokeDasharray = len;
+      p.style.strokeDashoffset = len;
+      setTimeout(function () {
+        p.style.transition = 'stroke-dashoffset ' + DRAW + 'ms ease, fill '
+          + FILL + 'ms ease ' + Math.round(DRAW * 0.6) + 'ms';
+        p.style.strokeDashoffset = '0';
+        p.style.fill = 'currentColor';
+        setTimeout(function () { // settle to a pristine filled glyph
+          p.style.stroke = '';
+          p.style.strokeWidth = '';
+          p.style.strokeDasharray = '';
+          p.style.strokeDashoffset = '';
+          p.style.transition = '';
+        }, DRAW + FILL + 120);
+      }, i * STAGGER);
+    });
+  }
+
+  // Play a trigger's effect. lightning/storm/handscribe → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
   // on re-trigger).
   function play(el, name, dur) {
     if (name === 'lightning') { lightning(el); return; }
     if (name === 'storm') { storm(el); return; }
+    if (name === 'handscribe') { handscribe(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -659,6 +698,26 @@
             <span class="cap">fx.hover=storm — the screen darkens, bolts light it up</span>
             <code class="src">\lx[fx.hover=storm]{ E = mc^2 }</code>
             <span class="hint">hover — night lightning; the equation heats white-hot</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="handscribe"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.64 -35.244 183.448 38.844" width="183.448" height="38.844" role="img" aria-label="e to the power of i π + 1 = 0">
+              <g fill="currentColor">
+                <path d="M415 143 L434 129 Q416 91 392 59 Q368 28 333 9 Q299 -10 247 -10 Q187 -10 138 18 Q90 47 62 102 Q34 158 34 238 Q34 322 62 376 Q91 431 139 458 Q187 485 245 485 Q327 485 377 428 Q427 371 431 266 L115 266 Q115 197 137 152 Q160 108 195 86 Q231 65 271 65 Q312 65 337 76 Q363 87 381 104 Q399 122 415 143 Z M114 303 L337 303 Q336 340 324 372 Q312 405 289 425 Q266 445 230 445 Q126 445 114 303 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M257 28 L257 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 380 Q102 412 91 419 Q80 427 58 427 Q48 427 40 426 Q33 425 33 425 L33 454 L159 482 L185 482 L185 101 Q185 72 189 56 Q193 40 208 34 Q224 28 257 28 Z M145 673 Q171 673 186 656 Q202 640 202 617 Q202 594 186 577 Q171 560 145 560 Q120 560 104 577 Q88 594 88 617 Q88 640 103 656 Q119 673 145 673 Z" transform="translate(18.56 -14.4) scale(0.028 -0.028)"/>
+                <path d="M571 455 L558 391 L438 391 Q435 373 430 335 Q426 298 422 255 Q419 212 419 175 Q419 122 432 91 Q446 61 477 61 Q504 61 518 69 Q532 78 542 88 L558 74 Q538 36 511 13 Q484 -9 438 -9 Q393 -9 372 24 Q352 57 352 106 Q352 147 359 196 Q366 245 376 295 Q387 346 395 391 L247 391 Q245 352 236 296 Q227 240 214 182 Q201 124 187 75 Q174 26 163 0 L69 0 L66 15 Q85 47 95 66 Q106 85 116 105 Q126 125 142 159 Q163 203 175 239 Q188 275 196 311 Q204 348 209 391 Q151 391 119 388 Q88 386 71 374 Q54 363 38 336 L18 346 Q38 415 87 443 Q136 471 214 471 L571 471 L571 455 Z" transform="translate(26.54 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(53.5769 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(91.2658 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(122.1769 0) scale(0.04 -0.04)"/>
+                <path d="M468 317 Q468 253 455 194 Q443 135 416 89 Q390 43 348 16 Q306 -11 247 -11 Q187 -11 145 15 Q103 42 77 88 Q51 134 39 194 Q27 254 27 320 Q27 415 52 487 Q78 560 127 601 Q177 642 249 642 Q314 642 363 603 Q412 565 440 492 Q468 420 468 317 Z M371 311 Q371 463 339 535 Q308 608 246 608 Q187 608 155 536 Q123 464 123 315 Q123 170 155 97 Q187 25 247 25 Q306 25 338 96 Q371 167 371 311 Z" transform="translate(162.088 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=handscribe — the equation writes itself, stroke by stroke</span>
+            <code class="src">\lx[fx.enter=handscribe]{ e^{i\pi} + 1 = 0 }</code>
+            <span class="hint">load — watch it ink in</span>
           </figcaption>
         </figure>
         <figure class="card">

@@ -82,6 +82,9 @@ class EffectsPageTest {
         new Fx("\\lx[fx.hover=storm]{ E = mc^2 }",
             "fx.hover=storm — the screen darkens, bolts light it up",
             "hover — night lightning; the equation heats white-hot"),
+        new Fx("\\lx[fx.enter=handscribe]{ e^{i\\pi} + 1 = 0 }",
+            "fx.enter=handscribe — the equation writes itself, stroke by stroke",
+            "load — watch it ink in"),
         new Fx("\\lx[fx.enter=fade, fx.hover=pulse, fx.click=boom, fx.duration=400ms]"
             + "{ \\int_0^\\infty e^{-x}\\,dx }",
             "all three — fade in, pulse on hover, boom on click", "load · hover · click"));
@@ -157,6 +160,16 @@ class EffectsPageTest {
             "storm darkens via a radial spotlight backdrop (transparent over the element)");
         assertTrue(written.contains("heatFilter"),
             "storm heats the equation's glow across the strike sequence");
+        // handscribe: parsed + stamped like any effect, special-cased as a page-side
+        // stroke-draw routine (NOT a keyframe on the element). It toggles presentation
+        // (stroke / fill / stroke-dashoffset) on the EXISTING inner-<svg> paths only.
+        assertTrue(written.contains("data-lx-fx-enter=\"handscribe\""),
+            "handscribe stamped as an enter effect");
+        assertFalse(written.contains("@keyframes lx-handscribe"),
+            "handscribe is a JS stroke-draw, NOT a CSS keyframe on the element");
+        assertTrue(written.contains("function handscribe"), "handscribe routine embedded");
+        assertTrue(written.contains("strokeDashoffset"),
+            "handscribe inks glyphs in via stroke-dashoffset");
         assertTrue(written.contains("prefers-reduced-motion"), "respects reduced motion");
         // Whole-page containment: the ONLY <script>/<style>/data-*/on* live in the
         // trusted <head> runtime — never inside any rendered <svg>. Re-scan each SVG.
@@ -688,12 +701,51 @@ class EffectsPageTest {
             setTimeout(next, 170); // let the darken settle before the first strike
           }
 
-          // Play a trigger's effect. lightning/storm → their overlay routines;
+          // The equation writes itself: ink each glyph <path> in stroke-by-stroke,
+          // staggered left-to-right, then settle to the filled glyph. Special-cased like
+          // lightning/storm — but this one toggles PRESENTATION attributes on the existing
+          // inner-<svg> paths (stroke / fill / stroke-dashoffset); it adds NO element to the
+          // SVG, so the containment contract is unchanged.
+          function handscribe(el) {
+            var svg = el.querySelector('svg');
+            if (!svg) { return; }
+            var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+            if (!paths.length || reduced) { return; } // reduced motion: leave it static
+            paths.sort(function (a, b) {
+              try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+            });
+            var DRAW = 460, FILL = 260, STAGGER = 55;
+            paths.forEach(function (p, i) {
+              var len;
+              try { len = p.getTotalLength() || 100; } catch (e) { len = 100; }
+              p.style.stroke = 'currentColor';
+              p.style.strokeWidth = '1.5';
+              p.style.fill = 'transparent';
+              p.style.strokeDasharray = len;
+              p.style.strokeDashoffset = len;
+              setTimeout(function () {
+                p.style.transition = 'stroke-dashoffset ' + DRAW + 'ms ease, fill '
+                  + FILL + 'ms ease ' + Math.round(DRAW * 0.6) + 'ms';
+                p.style.strokeDashoffset = '0';
+                p.style.fill = 'currentColor';
+                setTimeout(function () { // settle to a pristine filled glyph
+                  p.style.stroke = '';
+                  p.style.strokeWidth = '';
+                  p.style.strokeDasharray = '';
+                  p.style.strokeDashoffset = '';
+                  p.style.transition = '';
+                }, DRAW + FILL + 120);
+              }, i * STAGGER);
+            });
+          }
+
+          // Play a trigger's effect. lightning/storm/handscribe → their JS routines;
           // everything else is a one-shot CSS keyframe (reset first so it can replay
           // on re-trigger).
           function play(el, name, dur) {
             if (name === 'lightning') { lightning(el); return; }
             if (name === 'storm') { storm(el); return; }
+            if (name === 'handscribe') { handscribe(el); return; }
             if (!VOCAB[name] || name === 'none') { return; }
             if (reduced) { return; }
             el.style.animation = 'none';

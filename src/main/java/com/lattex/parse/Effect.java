@@ -37,6 +37,16 @@ public enum Effect {
      * the inner {@code <svg>}.
      */
     STORM,
+    /**
+     * The equation writes itself: each glyph is drawn stroke-by-stroke, staggered
+     * left-to-right, as if by an invisible pen. Like {@link #LIGHTNING}/{@link #STORM}
+     * the page-side runtime special-cases it (NOT a CSS keyframe on the element): it
+     * reads the container's inner {@code <svg>} {@code <path>} glyphs and animates their
+     * {@code stroke-dashoffset} to "ink" them in. The containment contract is unchanged —
+     * the runtime only toggles presentation attributes on the existing paths; it adds no
+     * new element to the inner {@code <svg>}.
+     */
+    HANDSCRIBE,
     /** Explicitly no effect. */
     NONE;
 
@@ -59,10 +69,11 @@ public enum Effect {
             case "glow" -> GLOW;
             case "lightning" -> LIGHTNING;
             case "storm" -> STORM;
+            case "handscribe" -> HANDSCRIBE;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
-                    + "\" (expected boom|pulse|fade|glow|lightning|storm|none)");
+                    + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe|none)");
         };
     }
 
