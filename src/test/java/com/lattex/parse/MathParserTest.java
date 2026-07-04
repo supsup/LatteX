@@ -89,6 +89,25 @@ class MathParserTest {
                 "Op(" + name + (takesLimits ? ",lim" : "") + ")";
             case MathNode.TextRun(var text, var style) ->
                 "Txt[" + style + "](" + text + ")";
+            case MathNode.Matrix m -> {
+                StringBuilder sb = new StringBuilder("Mat[").append(m.kind());
+                if (m.hasDelimiters()) {
+                    sb.append(',').append(delim(m.leftDelim())).append(delim(m.rightDelim()));
+                }
+                sb.append("](");
+                for (int r = 0; r < m.rows().size(); r++) {
+                    if (r > 0) {
+                        sb.append("\\\\");
+                    }
+                    for (int col = 0; col < m.columnCount(); col++) {
+                        if (col > 0) {
+                            sb.append('&');
+                        }
+                        sb.append(pp(m.rows().get(r).get(col)));
+                    }
+                }
+                yield sb.append(')').toString();
+            }
             case MathNode.StyledMath sm -> "Lx(" + pp(sm.body()) + ")";
         };
     }

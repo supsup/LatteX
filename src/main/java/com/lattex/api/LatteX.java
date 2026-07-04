@@ -11,6 +11,7 @@ import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
 import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.Matrix;
 import com.lattex.parse.MathNode.OperatorName;
 import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
@@ -223,8 +224,32 @@ public final class LatteX {
                 accentName(command) + " " + describe(base);
             case OperatorName(var name, _) -> name;
             case TextRun(var text, _) -> text;
+            case Matrix m -> describeMatrix(m);
             case StyledMath sm -> describe(sm.body()); // the wrapper is transparent to a11y
         };
+    }
+
+    /** A plain-language label for a grid: kind, size, then each row's cells. */
+    private static String describeMatrix(Matrix m) {
+        int rows = m.rows().size();
+        int cols = m.columnCount();
+        String kind = switch (m.kind()) {
+            case CASES -> "cases";
+            case ARRAY -> "array";
+            default -> "matrix";
+        };
+        StringBuilder sb = new StringBuilder(kind)
+            .append(" of ").append(rows).append(" rows and ").append(cols).append(" columns");
+        for (int r = 0; r < rows; r++) {
+            sb.append("; row ").append(r + 1).append(": ");
+            for (int col = 0; col < cols; col++) {
+                if (col > 0) {
+                    sb.append(", ");
+                }
+                sb.append(describe(m.rows().get(r).get(col)));
+            }
+        }
+        return sb.toString();
     }
 
     /** A spoken name for an accent/decoration command. */

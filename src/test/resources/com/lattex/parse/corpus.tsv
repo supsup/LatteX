@@ -100,17 +100,19 @@ PARSES-NOW	spacing	a\enspace b\ c\>d~e	enspace (.5em), control space, \> (=\:), 
 PARSES-NOW	spacing	\phantom{M}x\hphantom{yy}z\vphantom{(}w	phantom / hphantom / vphantom reserve space with no ink
 PARSES-NOW	spacing	\sqrt{x}+\mathstrut y	mathstrut — a zero-width strut sizing the row
 PARSES-NOW	text	\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2	text runs — needs \text node (upright text mode)
-NEEDS-PARSER-NODE	cases	f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}	piecewise cases — needs cases environment node (then S4 layout)
+PARSES-NOW	cases	f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}	piecewise cases — cases environment (left brace over two left-aligned columns)
 NEEDS-FONT-STYLE	color	k={\color{red}x}-2	colored subterm — needs \color node + emitter color
 # ==== matrices / arrays ============================================
-NEEDS-PARSER-NODE	matrix	\begin{matrix}a&b\\c&d\end{matrix}	plain matrix — needs environment + &/\\ node
-NEEDS-PARSER-NODE	matrix	\begin{pmatrix}a&b\\c&d\end{pmatrix}	parenthesized matrix
-NEEDS-PARSER-NODE	matrix	\begin{bmatrix}a&b\\c&d\end{bmatrix}	bracketed matrix
-NEEDS-PARSER-NODE	matrix	\begin{Bmatrix}a&b\\c&d\end{Bmatrix}	brace matrix
-NEEDS-PARSER-NODE	matrix	\begin{vmatrix}a&b\\c&d\end{vmatrix}	determinant (single-bar) matrix
-NEEDS-PARSER-NODE	matrix	A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}	full matrix with \cdots \vdots \ddots
+PARSES-NOW	matrix	\begin{matrix}a&b\\c&d\end{matrix}	plain matrix — environment with &/\\ grid node
+PARSES-NOW	matrix	\begin{pmatrix}a&b\\c&d\end{pmatrix}	parenthesized matrix
+PARSES-NOW	matrix	\begin{bmatrix}a&b\\c&d\end{bmatrix}	bracketed matrix
+PARSES-NOW	matrix	\begin{Bmatrix}a&b\\c&d\end{Bmatrix}	brace matrix
+PARSES-NOW	matrix	\begin{vmatrix}a&b\\c&d\end{vmatrix}	determinant (single-bar) matrix
+PARSES-NOW	matrix	\begin{Vmatrix}a&b\\c&d\end{Vmatrix}	double-bar (norm) matrix
+PARSES-NOW	matrix	\begin{smallmatrix}a&b\\c&d\end{smallmatrix}	inline small matrix (script style)
+PARSES-NOW	matrix	A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}	full matrix with \cdots \vdots \ddots
 NEEDS-PARSER-NODE	matrix	\bordermatrix{&1&2\\1&a&b\\2&c&d}	bordered matrix with row/col labels — needs \bordermatrix node
-NEEDS-PARSER-NODE	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with vertical and horizontal rules — needs array node + column spec + \hline
+PARSES-NOW	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with vertical and horizontal rules — array node + column spec + \hline
 PARSES-NOW	matrix	\vdots	vertical dots symbol
 PARSES-NOW	matrix	\ddots	diagonal dots symbol
 # ==== named operators / misc =======================================

@@ -185,6 +185,24 @@ class S8LeftContainmentTest {
         // Spacing commands (produce inkless spacing, never elements/attrs).
         b.add("a \\, b \\: c \\; d \\! e \\quad f \\qquad g");
 
+        // Environments: matrix family (every delimiter), smallmatrix, cases, and an
+        // array with a vertical rule + \hline / \hdashline. Every grid glyph is a
+        // <path>, every rule (fraction-style bars, column/row rules, and the dashes
+        // of \hdashline) a <rect> — the whole grid must stay ⊆ the minimal alphabet.
+        b.add("\\begin{matrix}a&b\\\\c&d\\end{matrix}");
+        b.add("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}");
+        b.add("\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}");
+        b.add("\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}");
+        b.add("\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}");
+        b.add("\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}");
+        b.add("\\begin{smallmatrix}a&b\\\\c&d\\end{smallmatrix}");
+        b.add("\\begin{cases}n/2&\\text{if }n\\text{ even}\\\\-(n+1)/2&\\text{if odd}\\end{cases}");
+        b.add("\\begin{array}{c|c}1&2\\\\\\hline 3&4\\end{array}");
+        b.add("\\begin{array}{lcr}\\hline a&bb&ccc\\\\\\hdashline 1&2&3\\\\\\hline\\end{array}");
+        b.add("A_{m,n}=\\begin{pmatrix}a_{1,1}&\\cdots&a_{1,n}\\\\"
+            + "\\vdots&\\ddots&\\vdots\\\\a_{m,1}&\\cdots&a_{m,n}\\end{pmatrix}");
+        b.add("\\left(\\begin{matrix}1&0\\\\0&1\\end{matrix}\\right)^2");
+
         // A dense everything-together stress expression.
         b.add("\\sum_{i=1}^{n} \\frac{\\sqrt{\\alpha_i^2 + \\beta_i^2}}{\\gamma}"
             + " \\leq \\left( \\int_0^\\infty e^{-x}\\,dx \\right)");
