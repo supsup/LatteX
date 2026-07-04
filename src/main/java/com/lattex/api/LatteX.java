@@ -241,6 +241,8 @@ public final class LatteX {
         String kind = switch (m.kind()) {
             case CASES -> "cases";
             case ARRAY -> "array";
+            case ALIGN -> "aligned equations";
+            case GATHER -> "gathered equations";
             default -> "matrix";
         };
         StringBuilder sb = new StringBuilder(kind)

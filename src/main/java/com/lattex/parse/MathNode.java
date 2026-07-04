@@ -557,7 +557,15 @@ public sealed interface MathNode {
         /** {@code array} — user column spec (l/c/r + {@code |} rules), {@code \hline}s. */
         ARRAY,
         /** {@code cases} — a left brace over two left-aligned columns, wide gap. */
-        CASES
+        CASES,
+        /**
+         * {@code align}/{@code aligned} — alternating right/left column pairs, each
+         * pair meeting at the relation alignment point (the {@code &}); cells in
+         * display style.
+         */
+        ALIGN,
+        /** {@code gather} — a single centred column, one equation per row, display style. */
+        GATHER
     }
 
     /**
