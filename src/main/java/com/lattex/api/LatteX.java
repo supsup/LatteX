@@ -154,8 +154,10 @@ public final class LatteX {
         }
         fx.durationValue().ifPresent(v ->
             sb.append(" data-lx-fx-duration=\"").append(v).append('"'));
-        // data.* attributes (keys already identifier-validated).
-        for (Map.Entry<String, String> e : sem.data().entrySet()) {
+        // data.* attributes (keys already identifier-validated) — iterated in sorted
+        // key order so the generated HTML is deterministic regardless of the source
+        // map's iteration order (a HashMap/Map.of view is randomized per JVM run).
+        for (Map.Entry<String, String> e : new java.util.TreeMap<>(sem.data()).entrySet()) {
             sb.append(" data-lx-").append(e.getKey()).append("=\"").append(e.getValue()).append('"');
         }
         // a11y label (already HTML-escaped by the parser).
