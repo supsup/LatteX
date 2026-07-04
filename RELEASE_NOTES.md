@@ -10,9 +10,9 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 Grids built from `&` columns and `\\` rows: the whole matrix family (plain, parenthesized, bracketed, braced, determinant, double-bar norm, and inline small), `array` with per-column alignment and vertical/horizontal rules, and piecewise `cases`.
 > `\begin{pmatrix}a&b\\c&d\end{pmatrix}` &nbsp;·&nbsp; `\begin{cases}x & x>0\\-x & x<0\end{cases}` &nbsp;·&nbsp; `\begin{array}{c|c}1&2\\\hline 3&4\end{array}`
 
-### Aligned equations
-Multi-line equations that line up where you want them: `align` / `aligned` line up on the relation (the `&`), and `gather` centers each line. Set in display style, so fractions and big-operator limits stay full size across the block.
-> `\begin{aligned}(a+b)^2 &= (a+b)(a+b)\\ &= a^2+2ab+b^2\end{aligned}` &nbsp;·&nbsp; `\begin{gather}a=b\\x+y=z\end{gather}`
+### Aligned & multi-line equations
+Multi-line equations that line up where you want them: `align` / `aligned` line up on the relation (the `&`), `gather` centers each line, `split` breaks a single equation across lines (aligned on the relation), and `multline` sets a long equation's first line flush-left and its last line flush-right. Set in display style, so fractions and big-operator limits stay full size across the block.
+> `\begin{aligned}(a+b)^2 &= (a+b)(a+b)\\ &= a^2+2ab+b^2\end{aligned}` &nbsp;·&nbsp; `\begin{gather}a=b\\x+y=z\end{gather}` &nbsp;·&nbsp; `\begin{multline}a+b\\+c+d\\+e\end{multline}`
 
 ### The `\lx[…]{…}` author syntax
 Wrap any math to style, animate, or tag it — inline, with no separate config. `style.*` (scale, color, math style), `fx.*` (hover/click effects like glow and lightning), `graph.*` (function-plot popups), and semantic / accessibility tags. Math inherits the page's text color by default (`currentColor`), so it's dark-mode-native out of the box.
@@ -92,6 +92,6 @@ Render at a custom scale, color, or math style.
 
 ## What's next
 
-- **More environments** — `split`, `multline`, and equation numbering.
+- **Live in docs, made interactive** — `$…$` math renders in a Markdown → HTML pipeline (the flexmark seam), with `\lx` effects, graph popups, and click-to-copy reaching the page.
 - **A MathML output option** — for screen readers and assistive tech.
-- **Markdown integration** — a drop-in step that renders `$…$` math inside a Markdown → HTML pipeline.
+- **Equation numbering** — for numbered display equations.
