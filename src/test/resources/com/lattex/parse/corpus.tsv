@@ -99,7 +99,7 @@ PARSES-NOW	spacing	x\quad y\qquad z	quad (18mu) and qquad (36mu)
 PARSES-NOW	spacing	a\enspace b\ c\>d~e	enspace (.5em), control space, \> (=\:), and tie ~
 PARSES-NOW	spacing	\phantom{M}x\hphantom{yy}z\vphantom{(}w	phantom / hphantom / vphantom reserve space with no ink
 PARSES-NOW	spacing	\sqrt{x}+\mathstrut y	mathstrut — a zero-width strut sizing the row
-NEEDS-PARSER-NODE	text	\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2	text runs — needs \text node (upright text mode)
+PARSES-NOW	text	\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2	text runs — needs \text node (upright text mode)
 NEEDS-PARSER-NODE	cases	f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}	piecewise cases — needs cases environment node (then S4 layout)
 NEEDS-FONT-STYLE	color	k={\color{red}x}-2	colored subterm — needs \color node + emitter color
 # ==== matrices / arrays ============================================
@@ -125,7 +125,7 @@ PARSES-NOW	named-op	\bot	bottom symbol
 PARSES-NOW	font	\mathcal{ABCDEF}	calligraphic/script alphabet — remaps to U+1D49C run (+ Letterlike exceptions)
 PARSES-NOW	font	\mathbb{ABCDEF}	blackboard-bold alphabet — remaps to U+1D538 run (C/H/N/P/Q/R/Z via Letterlike)
 PARSES-NOW	font	\mathfrak{ABCDEF}	fraktur alphabet — remaps to U+1D504 run (C/H/I/R/Z via Letterlike)
-NEEDS-FONT-STYLE	font	\mathrm{ABCDEF}	upright roman — needs font-variant node
+PARSES-NOW	font	\mathrm{ABCDEF}	upright roman — needs font-variant node
 PARSES-NOW	font	\mathsf{ABCDEF}	sans-serif — remaps to U+1D5A0 run
 PARSES-NOW	font	\mathit{ABCDEF}	math italic — remaps to U+1D434 run (h via Letterlike)
 PARSES-NOW	font	\mathbf{ABCDEF}	bold — remaps to U+1D400 run

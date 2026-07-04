@@ -11,6 +11,7 @@ import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
+import com.lattex.parse.MathNode.TextRun;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -247,9 +248,10 @@ public final class MathVariant {
                 a.accentCodePoint(), a.stretchy(), a.under());
             case Phantom p -> new Phantom(
                 apply(style, p.content()), p.keepWidth(), p.keepVertical());
-            // Glue and roman operator words carry no letter to restyle.
+            // Glue, roman operator words, and text-mode runs carry no math letter to restyle.
             case Spacing s -> s;
             case OperatorName o -> o;
+            case TextRun t -> t;
         };
     }
 }

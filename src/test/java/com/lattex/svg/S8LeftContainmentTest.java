@@ -170,6 +170,18 @@ class S8LeftContainmentTest {
         b.add("\\operatorname{lcm}(a,b)");
         b.add("\\operatorname*{argmax}_{x} f(x)");
 
+        // Text mode: upright words with real spaces, shape variants, \mathrm, and
+        // a text run carrying a superscript — every glyph must stay a <path>, never
+        // an SVG <text> element, and the inter-word spaces must not leak markup.
+        b.add("\\text{if } n \\text{ is even}");
+        b.add("\\textrm{Roman text 123}");
+        b.add("\\textbf{Bold text 456}");
+        b.add("\\textit{Italic text}");
+        b.add("\\texttt{Mono text 789}");
+        b.add("\\mathrm{d}x");
+        b.add("\\text{area} = \\pi r^2");
+        b.add("\\text{count}^2 + \\textbf{k}_i");
+
         // Spacing commands (produce inkless spacing, never elements/attrs).
         b.add("a \\, b \\: c \\; d \\! e \\quad f \\qquad g");
 
