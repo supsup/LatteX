@@ -252,7 +252,46 @@ runnable benchmark (`tools/bench.sh`), see
 
 ---
 
-## 7. Lee — "I just want to see it work"
+## 7. Nadia — rendering a whole page's worth of math at once
+
+> *"My page has 200 `$…$` spans. Shelling out once per span works, but that's 200
+> process starts — 200× the startup cost. Can I render them all in one shot?"*
+
+**Approach: `lattex --batch` — many expressions in, many SVGs out, one process.**
+Feed one expression per line on stdin; get back one **NUL-terminated** SVG record
+per input, in the same order. The JVM starts (or the native binary spawns)
+**once**, no matter how many formulas you throw at it — so the per-formula cost
+collapses toward just the render itself.
+
+```bash
+# one LaTeX expression per line → one NUL-delimited SVG per line, in order
+printf 'x^2\n\\frac{a}{b}\n\\sum_{i=1}^{n} i\n' | lattex --batch > out.nul
+```
+
+Split the output on NUL to line records back up 1:1 with your inputs:
+
+```python
+records = open("out.nul", "rb").read().split(b"\0")[:-1]   # drop the trailing empty
+for src, rec in zip(["x^2", "\\frac{a}{b}", "\\sum_{i=1}^{n} i"], records):
+    svg = rec.decode("utf-8")
+    ok  = svg.startswith("<svg")          # else it's a "lattex: error: …" line
+    print(src, "→", "rendered" if ok else svg)
+```
+
+A single bad expression doesn't sink the batch — its slot becomes a marked
+`lattex: error: …` record and the rest still render (the exit code is `1` if any
+failed, so CI still catches it). If an expression contains a literal newline (a
+rare multi-line block), separate inputs with NUL instead and add `-0`.
+
+This is the efficient backend for a docs pipeline rendering a page's many spans —
+and it's what makes a fair **jar-vs-binary** timing comparison possible: without
+it you'd be measuring process-spawn cost, not the renderer.
+
+**Status: Built.** `--batch` (and `-0` / `--null`) ship in the CLI.
+
+---
+
+## 8. Lee — "I just want to see it work"
 
 > *"Before I integrate anything, show me it renders."*
 
@@ -288,6 +327,7 @@ calling from.
 |---|---|---|---|
 | on the JVM (Java/Kotlin/Scala) | **the JAR** | `com.lattex.api.LatteX.render(latex)` | **Built** |
 | on any other stack (Python, Node, Ruby, Go, shell) | **the native CLI** | `lattex "…"` (argv or stdin) → SVG | **Built (S7)** |
+| rendering many formulas at once (a page, a batch job) | **the CLI in `--batch`** | `… \| lattex --batch` → NUL-delimited SVGs, one process | **Built** |
 | just trying it, or a one-off without building native | **`./gradlew run` / `java -jar`** | `./gradlew run --args="x^2"` | **Built** (dev / one-off) |
 | authoring Markdown/docs and want `$…$` markers understood | **CLI preprocessor now; first-class pipeline later** | shell out per span (§2), or the flexmark extension | CLI **Built**; pipeline **Planned (S8)** |
 | wanting typed styling (scale / color / math-style, `\lx[…]{…}`) | the `RenderOptions` overload + `\lx` macro | *(see QUICKSTART §2–§3)* | on review branches, **merging soon** |
