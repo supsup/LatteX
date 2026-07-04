@@ -13,6 +13,8 @@ import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
+import com.lattex.parse.MathNode.TextRun;
+import com.lattex.parse.MathNode.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -576,21 +578,44 @@ public final class MathParser {
     // ------------------------------------------------------------------
     // Lexer
     // ------------------------------------------------------------------
-    private enum Kind { CHAR, COMMAND, LBRACE, RBRACE, SUP, SUB, EOF }
+    private enum Kind { CHAR, COMMAND, TEXT, LBRACE, RBRACE, SUP, SUB, EOF }
 
-    private record Token(Kind kind, int codePoint, String name) {
+    /**
+     * A lexer token. For {@link Kind#TEXT} the {@code name} holds the text-family
+     * command (e.g. {@code "textbf"}) and {@code text} the raw brace content with
+     * spaces preserved (text mode is space-significant); for other kinds {@code
+     * text} is {@code null}.
+     */
+    private record Token(Kind kind, int codePoint, String name, String text) {
         static Token special(Kind k) {
-            return new Token(k, 0, null);
+            return new Token(k, 0, null, null);
         }
 
         static Token ch(int cp) {
-            return new Token(Kind.CHAR, cp, null);
+            return new Token(Kind.CHAR, cp, null, null);
         }
 
         static Token cmd(String name) {
-            return new Token(Kind.COMMAND, 0, name);
+            return new Token(Kind.COMMAND, 0, name, null);
+        }
+
+        static Token text(String command, String raw) {
+            return new Token(Kind.TEXT, 0, command, raw);
         }
     }
+
+    /**
+     * The text-family commands captured whole at lex time (so their inter-word
+     * spaces survive math mode's whitespace stripping): {@code \text} and its
+     * shape variants, plus the math-mode upright {@code \mathrm}.
+     */
+    private static final Map<String, TextStyle> TEXT_COMMANDS = Map.of(
+        "text", TextStyle.ROMAN,
+        "textrm", TextStyle.ROMAN,
+        "mathrm", TextStyle.ROMAN,
+        "textbf", TextStyle.BOLD,
+        "textit", TextStyle.ITALIC,
+        "texttt", TextStyle.MONO);
 
     private final List<Token> tokens;
     private int p;
@@ -622,8 +647,16 @@ public final class MathParser {
                         while (j < n && isAsciiLetter(s.charAt(j))) {
                             j++;
                         }
-                        out.add(Token.cmd(s.substring(i, j)));
+                        String name = s.substring(i, j);
                         i = j;
+                        if (TEXT_COMMANDS.containsKey(name)) {
+                            // Capture the {…} argument raw so text-mode spaces
+                            // survive (math mode strips whitespace); grouping
+                            // braces are invisible, as in LaTeX.
+                            i = lexTextArgument(s, name, i, out);
+                        } else {
+                            out.add(Token.cmd(name));
+                        }
                     } else {
                         // Single-character control sequence: \, \{ \} \| \! etc.
                         out.add(Token.cmd(String.valueOf(d)));
@@ -659,6 +692,51 @@ public final class MathParser {
 
     private static boolean isAsciiLetter(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    }
+
+    /**
+     * Reads the {@code {…}} argument of a text-family command starting at index
+     * {@code i} (just past the command name), emitting a single {@link Kind#TEXT}
+     * token, and returns the index just past the closing brace. Spaces are kept
+     * verbatim (text mode is space-significant); grouping braces are stripped
+     * (invisible, as in LaTeX). Nested-math ({@code $…$}) inside the argument is a
+     * documented follow-up — the content is taken literally here.
+     */
+    private static int lexTextArgument(String s, String command, int i, List<Token> out) {
+        int n = s.length();
+        while (i < n && isWhitespace(s.charAt(i))) {
+            i++; // skip space between the control word and its argument
+        }
+        if (i >= n || s.charAt(i) != '{') {
+            throw new MathSyntaxException(
+                "\\" + command + " expects a '{...}' text argument");
+        }
+        i++; // consume '{'
+        StringBuilder sb = new StringBuilder();
+        int depth = 1;
+        while (i < n) {
+            char c = s.charAt(i);
+            if (c == '{') {
+                depth++;
+                i++;
+            } else if (c == '}') {
+                depth--;
+                i++;
+                if (depth == 0) {
+                    out.add(Token.text(command, sb.toString()));
+                    return i;
+                }
+            } else {
+                int cp = s.codePointAt(i);
+                sb.appendCodePoint(cp);
+                i += Character.charCount(cp);
+            }
+        }
+        throw new MathSyntaxException("Unbalanced brace in \\" + command + " argument");
+    }
+
+    private static boolean isWhitespace(char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r';
     }
 
     // ------------------------------------------------------------------
@@ -839,6 +917,10 @@ public final class MathParser {
                     yield new Spacing(6.0);
                 }
                 yield charAtom(t.codePoint());
+            }
+            case TEXT -> {
+                next();
+                yield new TextRun(t.text(), TEXT_COMMANDS.get(t.name()));
             }
             case COMMAND -> parseCommand();
             case SUP -> throw new MathSyntaxException(
@@ -1094,6 +1176,7 @@ public final class MathParser {
         return switch (t.kind()) {
             case CHAR -> "'" + new String(Character.toChars(t.codePoint())) + "'";
             case COMMAND -> "\\" + t.name();
+            case TEXT -> "\\" + t.name() + "{...}";
             case LBRACE -> "'{'";
             case RBRACE -> "'}'";
             case SUP -> "'^'";

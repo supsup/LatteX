@@ -386,4 +386,54 @@ public sealed interface MathNode {
             }
         }
     }
+
+    /**
+     * The typeface shape of a {@link TextRun}, selecting which glyph family the
+     * run's ASCII letters/digits are drawn from. Clean-room from Knuth's TeXbook
+     * (text mode is upright roman; {@code \textbf}/{@code \textit}/{@code \texttt}
+     * switch the family). {@link #ROMAN} uses the font's plain (upright) glyphs;
+     * the others remap ASCII letters/digits to the corresponding Unicode
+     * Mathematical Alphanumeric Symbols, which the bundled math font provides.
+     */
+    enum TextStyle {
+        /** Upright roman (the font's plain glyphs) — {@code \text}, {@code \textrm}, {@code \mathrm}. */
+        ROMAN,
+        /** Upright bold — {@code \textbf}. */
+        BOLD,
+        /** Slanted italic — {@code \textit}. */
+        ITALIC,
+        /** Monospace (typewriter) — {@code \texttt}. */
+        MONO
+    }
+
+    /**
+     * A run of <em>text-mode</em> characters set as an upright (or {@link
+     * TextStyle}-shaped) word — the {@code \text}/{@code \textrm}/{@code \textbf}/
+     * {@code \textit}/{@code \texttt} family and the math-mode {@code \mathrm}.
+     *
+     * <p>Text mode differs from math mode in two ways (TeXbook Ch.18): letters are
+     * <strong>not</strong> italicised (roman by default, versus math's slanted
+     * variables) and inter-word <strong>spaces are significant</strong> (in math
+     * mode they are ignored). The {@link #text} therefore carries its spaces
+     * literally; layout renders each as a real inter-word gap (the font's space
+     * advance), and every character — letters, digits, punctuation, and the spaces
+     * — is drawn as a filled glyph {@code <path>} (never an SVG {@code <text>}
+     * element), so the run stays within the minimal SVG alphabet.
+     *
+     * <p>The run has an implied Ord class (a word behaves as an ordinary atom in a
+     * row). {@link #text} may be empty (an empty {@code \text{}} renders nothing).
+     *
+     * @param text  the literal text to typeset, spaces preserved
+     * @param style the typeface shape
+     */
+    record TextRun(String text, TextStyle style) implements MathNode {
+        public TextRun {
+            if (text == null) {
+                throw new IllegalArgumentException("TextRun text must not be null");
+            }
+            if (style == null) {
+                throw new IllegalArgumentException("TextRun style must not be null");
+            }
+        }
+    }
 }

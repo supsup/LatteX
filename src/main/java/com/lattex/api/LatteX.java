@@ -16,6 +16,7 @@ import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
+import com.lattex.parse.MathNode.TextRun;
 import com.lattex.parse.MathParser;
 import com.lattex.svg.SvgEmitter;
 
@@ -114,6 +115,7 @@ public final class LatteX {
             case Accent(var command, var base, _, _, _) ->
                 accentName(command) + " " + describe(base);
             case OperatorName(var name, _) -> name;
+            case TextRun(var text, _) -> text;
         };
     }
 

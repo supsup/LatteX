@@ -82,6 +82,8 @@ class MathParserTest {
             }
             case MathNode.OperatorName(var name, var takesLimits) ->
                 "Op(" + name + (takesLimits ? ",lim" : "") + ")";
+            case MathNode.TextRun(var text, var style) ->
+                "Txt[" + style + "](" + text + ")";
         };
     }
 

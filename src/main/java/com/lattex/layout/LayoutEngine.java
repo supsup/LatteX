@@ -16,6 +16,8 @@ import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
+import com.lattex.parse.MathNode.TextRun;
+import com.lattex.parse.MathNode.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -102,6 +104,7 @@ public final class LayoutEngine {
                 fencedBox(leftDelim, body, rightDelim, ctx);
             case Accent accent -> accentBox(accent, ctx);
             case OperatorName opName -> operatorNameBox(opName, ctx);
+            case TextRun textRun -> textRunBox(textRun, ctx);
         };
     }
 
@@ -173,6 +176,103 @@ public final class LayoutEngine {
             }
         }
         return new Box(glyphs, List.of(), penX, Math.max(0.0, height), Math.max(0.0, depth));
+    }
+
+    // ------------------------------------------------------------------
+    // TextRun — a text-mode word (\text, \textbf, \textit, \texttt, \mathrm) set
+    // upright (or in the requested shape) at the surrounding font size. Unlike a
+    // math row, letters carry NO inter-atom spacing (a word is one unit) and the
+    // literal inter-word spaces render as real gaps (the font's space advance) —
+    // math mode ignores spaces, text mode keeps them (TeXbook Ch.18). Every
+    // character, spaces included, is a filled glyph <path>; the space glyph is
+    // inkless, so it advances the pen without emitting ink.
+    // ------------------------------------------------------------------
+
+    private static Box textRunBox(TextRun textRun, LayoutContext ctx) {
+        SfntFont font = ctx.font();
+        double scale = ctx.scale();
+        String text = textRun.text();
+        TextStyle style = textRun.style();
+        double spaceAdvance = font.advanceWidth(font.glyphId(' ')) * scale;
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        double penX = 0.0;
+        double height = 0.0;
+        double depth = 0.0;
+
+        int i = 0;
+        while (i < text.length()) {
+            int cp = text.codePointAt(i);
+            i += Character.charCount(cp);
+            if (cp == ' ') {
+                penX += spaceAdvance; // a real inter-word gap
+                continue;
+            }
+            int styledCp = styledCodePoint(cp, style);
+            int gid = font.glyphId(styledCp);
+            if (gid == 0 && styledCp != cp) {
+                gid = font.glyphId(cp); // font lacks the shaped variant: plain glyph
+            }
+            GlyphOutline o = font.outline(gid);
+            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale));
+            penX += font.advanceWidth(gid) * scale;
+            if (!o.isEmpty()) {
+                height = Math.max(height, o.yMax() * scale);
+                depth = Math.max(depth, -o.yMin() * scale);
+            }
+        }
+        return new Box(glyphs, List.of(), penX, Math.max(0.0, height), Math.max(0.0, depth));
+    }
+
+    /**
+     * Maps an ASCII letter/digit to its {@link TextStyle}-shaped code point in the
+     * Unicode Mathematical Alphanumeric Symbols block (the bundled math font's
+     * bold/italic/monospace families). {@link TextStyle#ROMAN} keeps the plain
+     * upright glyph; non-letter/non-digit characters (punctuation, symbols) are
+     * left unchanged in every style (there is no shaped variant, and text
+     * punctuation is upright regardless). Clean-room from the Unicode code charts.
+     */
+    private static int styledCodePoint(int cp, TextStyle style) {
+        return switch (style) {
+            case ROMAN -> cp;
+            // Upright bold: A→U+1D400, a→U+1D41A, 0→U+1D7CE (contiguous, no holes).
+            case BOLD -> mapAlphaNumeric(cp, 0x1D400, 0x1D41A, 0x1D7CE);
+            case ITALIC -> italicCodePoint(cp);
+            // Monospace: A→U+1D670, a→U+1D68A, 0→U+1D7F6 (contiguous, no holes).
+            case MONO -> mapAlphaNumeric(cp, 0x1D670, 0x1D68A, 0x1D7F6);
+        };
+    }
+
+    /** ASCII letter/digit → a contiguous Mathematical Alphanumeric range; else unchanged. */
+    private static int mapAlphaNumeric(int cp, int upperBase, int lowerBase, int digitBase) {
+        if (cp >= 'A' && cp <= 'Z') {
+            return upperBase + (cp - 'A');
+        }
+        if (cp >= 'a' && cp <= 'z') {
+            return lowerBase + (cp - 'a');
+        }
+        if (cp >= '0' && cp <= '9') {
+            return digitBase + (cp - '0');
+        }
+        return cp;
+    }
+
+    /**
+     * ASCII letter → Mathematical Italic. The italic small "h" (U+1D455) is a
+     * reserved hole in the block — Unicode places it at U+210E (PLANCK CONSTANT).
+     * Digits have no italic form, so they stay upright ASCII (as in LaTeX text).
+     */
+    private static int italicCodePoint(int cp) {
+        if (cp == 'h') {
+            return 0x210E; // reserved-hole substitute
+        }
+        if (cp >= 'A' && cp <= 'Z') {
+            return 0x1D434 + (cp - 'A');
+        }
+        if (cp >= 'a' && cp <= 'z') {
+            return 0x1D44E + (cp - 'a');
+        }
+        return cp;
     }
 
     // ------------------------------------------------------------------
@@ -297,6 +397,7 @@ public final class LayoutEngine {
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
             case OperatorName _ -> MathClass.OP; // a named operator is class Op
+            case TextRun _ -> MathClass.ORD;   // a text run behaves as an Ord atom
             case Spacing _ -> null;           // classless glue (handled by caller)
         };
     }
