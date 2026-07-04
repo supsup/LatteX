@@ -13,6 +13,7 @@ import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.LimitsMode;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
@@ -71,6 +72,10 @@ class MathParserTest {
             case Fenced(int left, var body, int right) ->
                 "Fen(" + delim(left) + " " + pp(body) + " " + delim(right) + ")";
             case Spacing(double mu) -> "Sp(" + mu + ")";
+            case Phantom(var content, var keepW, var keepV) -> {
+                String kind = keepW && keepV ? "phantom" : keepW ? "hphantom" : "vphantom";
+                yield "Ph[" + kind + "](" + pp(content) + ")";
+            }
             case Accent(var cmd, var base, var cp, var stretchy, var under) -> {
                 String kind = cp == Accent.RULE ? (under ? "under" : "over") : sym(cp);
                 yield "Acc(" + cmd + "[" + kind + (stretchy ? ",wide" : "") + "]," + pp(base) + ")";
@@ -234,6 +239,41 @@ class MathParserTest {
     void spacingNode() {
         assertInstanceOf(Spacing.class, MathParser.parse("\\,"));
         assertInstanceOf(Spacing.class, MathParser.parse("\\quad"));
+    }
+
+    @Test
+    void spacingCommandWidths() {
+        // Each command maps to its TeXbook mu-width (18mu = 1em).
+        assertEquals(3.0, spacingMu("\\,"), "\\, is 3mu");
+        assertEquals(3.0, spacingMu("\\thinspace"), "\\thinspace is 3mu");
+        assertEquals(4.0, spacingMu("\\:"), "\\: is 4mu");
+        assertEquals(4.0, spacingMu("\\>"), "\\> aliases \\: (4mu)");
+        assertEquals(4.0, spacingMu("\\medspace"), "\\medspace is 4mu");
+        assertEquals(5.0, spacingMu("\\;"), "\\; is 5mu");
+        assertEquals(5.0, spacingMu("\\thickspace"), "\\thickspace is 5mu");
+        assertEquals(-3.0, spacingMu("\\!"), "\\! is -3mu");
+        assertEquals(-3.0, spacingMu("\\negthinspace"), "\\negthinspace is -3mu");
+        assertEquals(-4.0, spacingMu("\\negmedspace"), "\\negmedspace is -4mu");
+        assertEquals(-5.0, spacingMu("\\negthickspace"), "\\negthickspace is -5mu");
+        assertEquals(18.0, spacingMu("\\quad"), "\\quad is 18mu (1em)");
+        assertEquals(36.0, spacingMu("\\qquad"), "\\qquad is 36mu (2em)");
+        assertEquals(9.0, spacingMu("\\enspace"), "\\enspace is 9mu (0.5em)");
+        assertEquals(6.0, spacingMu("~"), "~ (tie) is an interword space");
+    }
+
+    private static double spacingMu(String latex) {
+        return assertInstanceOf(Spacing.class, MathParser.parse(latex)).muWidth();
+    }
+
+    @Test
+    void phantomFamilyParses() {
+        assertEquals("Ph[phantom](A(x,ORD))", pp(MathParser.parse("\\phantom{x}")));
+        assertEquals("Ph[hphantom](A(x,ORD))", pp(MathParser.parse("\\hphantom{x}")));
+        assertEquals("Ph[vphantom](A(x,ORD))", pp(MathParser.parse("\\vphantom{x}")));
+        // \mathstrut is a zero-width strut with the metrics of '('.
+        Phantom strut = assertInstanceOf(Phantom.class, MathParser.parse("\\mathstrut"));
+        assertTrue(!strut.keepWidth() && strut.keepVertical(), "\\mathstrut keeps only vertical extent");
+        assertEquals("Ph[vphantom](A((,OPEN))", pp(strut));
     }
 
     @Test

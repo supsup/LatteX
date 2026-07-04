@@ -11,6 +11,7 @@ import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.LimitsMode;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.SupSub;
@@ -92,6 +93,8 @@ public final class LayoutEngine {
             case Fraction(var num, var den) -> fractionBox(num, den, ctx);
             case Radical(var radicand, var index) -> radicalBox(radicand, index, ctx);
             case Spacing(var muWidth) -> Box.glue(muWidth * ctx.mu());
+            case Phantom(var content, var keepW, var keepV) ->
+                phantomBox(content, keepW, keepV, ctx);
             case BigOperator(var op, var lower, var upper, var limitsMode) ->
                 bigOperatorBox(op, lower, upper, limitsMode, ctx);
             case Fenced(var leftDelim, var body, var rightDelim) ->
@@ -111,6 +114,22 @@ public final class LayoutEngine {
         double height = o.isEmpty() ? 0.0 : Math.max(0.0, o.yMax() * scale);
         double depth = o.isEmpty() ? 0.0 : Math.max(0.0, -o.yMin() * scale);
         return new Box(List.of(glyph), List.of(), width, height, depth);
+    }
+
+    /**
+     * A phantom box: lay out the content to borrow its metrics, then discard all
+     * ink (glyphs and rules), keeping only the selected dimensions. {@code \phantom}
+     * keeps width and vertical extent; {@code \hphantom} keeps width; {@code
+     * \vphantom} / {@code \mathstrut} keep height and depth. Emitting no ink, it is
+     * trivially within the minimal SVG alphabet.
+     */
+    private static Box phantomBox(MathNode content, boolean keepWidth,
+                                  boolean keepVertical, LayoutContext ctx) {
+        Box inner = layoutBox(content, ctx);
+        return new Box(List.of(), List.of(),
+            keepWidth ? inner.width() : 0.0,
+            keepVertical ? inner.height() : 0.0,
+            keepVertical ? inner.depth() : 0.0);
     }
 
     // ------------------------------------------------------------------
@@ -233,6 +252,7 @@ public final class LayoutEngine {
             case BigOperator _ -> MathClass.OP;
             case MathList _ -> MathClass.ORD; // a {group} behaves as an Ord atom
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
+            case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
             case Spacing _ -> null;           // classless glue (handled by caller)
         };
     }
