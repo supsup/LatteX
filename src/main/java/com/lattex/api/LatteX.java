@@ -243,6 +243,7 @@ public final class LatteX {
             case ARRAY -> "array";
             case ALIGN -> "aligned equations";
             case GATHER -> "gathered equations";
+            case MULTLINE -> "multi-line equation";
             default -> "matrix";
         };
         StringBuilder sb = new StringBuilder(kind)

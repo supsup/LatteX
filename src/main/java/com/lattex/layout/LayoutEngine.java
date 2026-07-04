@@ -864,7 +864,7 @@ public final class LayoutEngine {
         // equation in display style (full-size fractions, big-op limits), un-cramped.
         MathStyle cellStyle = switch (mx.kind()) {
             case SMALL -> MathStyle.SCRIPT;
-            case ALIGN, GATHER -> MathStyle.DISPLAY;
+            case ALIGN, GATHER, MULTLINE -> MathStyle.DISPLAY;
             default -> MathStyle.TEXT;
         };
         LayoutContext cellCtx =
@@ -892,7 +892,7 @@ public final class LayoutEngine {
         // pitch of (prev depth + inter-row gap + this height) below.
         double interRowGap = switch (mx.kind()) {
             case SMALL -> 0.15 * em;
-            case ALIGN, GATHER -> 0.5 * em;   // matrix gap + \jot breathing room
+            case ALIGN, GATHER, MULTLINE -> 0.5 * em;   // matrix gap + \jot breathing room
             default -> 0.3 * em;
         };
         double[] baseline = new double[rows];
@@ -922,7 +922,7 @@ public final class LayoutEngine {
             // Aligned-equation environments flush to the outer margin (no edge gap);
             // ALIGN's inter-column gaps are set per-boundary below, GATHER has a
             // single centred column so its (unused) colGap stays 0.
-            case ALIGN, GATHER -> { edgeGap = 0.0; colGap = 0.0; }
+            case ALIGN, GATHER, MULTLINE -> { edgeGap = 0.0; colGap = 0.0; }
             default -> { edgeGap = 0.18 * em; colGap = 0.5 * em; }
         }
         double[] boundaryGap = new double[cols + 1];
@@ -978,11 +978,19 @@ public final class LayoutEngine {
         }
         double totalWidth = penX;
 
-        // 7. Stamp each cell at its column x (per-column alignment) and row baseline.
+        // 7. Stamp each cell at its column x and row baseline. Alignment is per-COLUMN for
+        // every environment EXCEPT multline, which is per-ROW in its single column: the first
+        // line flush-left, the last flush-right, the middle centred (a single-row multline is
+        // treated as the first line ⇒ left).
         for (int r = 0; r < rows; r++) {
             for (int col = 0; col < cols; col++) {
                 Box b = cell[r][col];
-                double dx = colX[col] + alignOffset(mx.columnAligns().get(col), colWidth[col], b.width());
+                ColumnAlign align = mx.kind() == MatrixKind.MULTLINE
+                    ? (r == 0 ? ColumnAlign.LEFT
+                       : r == rows - 1 ? ColumnAlign.RIGHT
+                       : ColumnAlign.CENTER)
+                    : mx.columnAligns().get(col);
+                double dx = colX[col] + alignOffset(align, colWidth[col], b.width());
                 b.drawInto(glyphs, rules, dx, baseline[r]);
             }
         }

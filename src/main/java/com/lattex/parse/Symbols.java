@@ -618,5 +618,14 @@ final class Symbols {
         Map.entry("align*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
         Map.entry("aligned", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
         Map.entry("gather", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
-        Map.entry("gather*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)));
+        Map.entry("gather*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
+        // split: a single equation broken over lines, aligned on the relation (the &) —
+        // identical layout to aligned, so it reuses the ALIGN kind. Always used inside a
+        // host display in LaTeX; LatteX renders it standalone too.
+        Map.entry("split", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
+        // multline: one long equation with NO alignment column — first line flush-left, last
+        // flush-right, middle centred (applied per-row in layout). The starred form differs
+        // only in numbering, which LatteX does not render.
+        Map.entry("multline", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MULTLINE, ColumnAlign.CENTER)),
+        Map.entry("multline*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MULTLINE, ColumnAlign.CENTER)));
 }

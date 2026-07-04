@@ -565,7 +565,13 @@ public sealed interface MathNode {
          */
         ALIGN,
         /** {@code gather} — a single centred column, one equation per row, display style. */
-        GATHER
+        GATHER,
+        /**
+         * {@code multline} — one long equation across lines with NO alignment column:
+         * the first line is flush-left, the last line flush-right, middle lines centred.
+         * A single-column grid whose alignment is applied per ROW in layout. Display style.
+         */
+        MULTLINE
     }
 
     /**
