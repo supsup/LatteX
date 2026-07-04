@@ -306,14 +306,12 @@ class S8SpecimenGalleryTest {
                     border-radius: 12px; padding: 1.5rem 1rem 1rem;
                     transition: border-color .15s ease, transform .15s ease; }
             .cell:hover { border-color: var(--accent); transform: translateY(-2px); }
+            /* glyph paths fill with currentColor, inheriting the container's
+               theme-aware ink color — no invert filter needed. */
             .render { flex: 1; display: flex; align-items: center; justify-content: center;
-                      min-height: 78px; width: 100%; }
+                      min-height: 78px; width: 100%; color: var(--ink); }
             .render svg { max-height: 84px; max-width: 100%; width: auto; height: auto;
                           display: block; }
-            @media (prefers-color-scheme: dark) {
-              /* glyph paths are #000; invert into the dark panel */
-              .render svg { filter: invert(1) hue-rotate(180deg); }
-            }
             .src { font-family: ui-monospace, monospace; font-size: .72rem;
                    color: var(--muted); background: var(--chip);
                    border: 1px solid var(--chip-line); border-radius: 6px;
