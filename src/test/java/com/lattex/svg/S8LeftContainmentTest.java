@@ -223,6 +223,10 @@ class S8LeftContainmentTest {
         b.add("\\lx[fx.hover=glow, fx.glow-color=#e0a13a]{ \\zeta(s) }");
         b.add("\\lx[fx.hover=lightning, fx.glow-color=currentColor]{ \\sum_{k} s_k }");
         b.add("\\lx[fx.enter=lightning, fx.click=lightning, fx.glow-color=#7fd4ff]{ \\nabla \\times E }");
+        // storm (night lightning) is likewise overlay-only: render() drops it, so the
+        // emitted SVG stays ⊆ the minimal alphabet.
+        b.add("\\lx[fx.hover=storm]{ E = mc^2 }");
+        b.add("\\lx[fx.enter=storm, fx.glow-color=#7fd4ff]{ \\nabla \\times E }");
         // graph.* plotting annotations ride the trusted container (data-lx-graph-*),
         // NEVER the SVG — render() drops them, so the emitter alphabet is unchanged.
         b.add("\\lx[graph.domain=-3..3, graph.open=multi]{ x^2 - 3 }");

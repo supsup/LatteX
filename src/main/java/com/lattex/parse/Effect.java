@@ -26,11 +26,22 @@ public enum Effect {
      * contract is unchanged (nothing reaches the inner {@code <svg>}).
      */
     LIGHTNING,
+    /**
+     * Night lightning. Like {@link #LIGHTNING} the page-side runtime special-cases
+     * it (never a keyframe on the element), but first it drops the whole scene to
+     * near-black behind a spotlit target: a full-viewport body overlay darkens the
+     * page while the target stays lit, converging bolts strike the centre, and each
+     * strike briefly FLASHES the dark backdrop bright (like lightning at night)
+     * before the page restores. The containment contract is unchanged — the darken
+     * backdrop, bolt canvas, and flash are separate body elements; nothing reaches
+     * the inner {@code <svg>}.
+     */
+    STORM,
     /** Explicitly no effect. */
     NONE;
 
     /**
-     * Parse an effect name ({@code boom|pulse|fade|glow|lightning|none},
+     * Parse an effect name ({@code boom|pulse|fade|glow|lightning|storm|none},
      * case-insensitive).
      *
      * @param raw the effect name (surrounding whitespace is trimmed)
@@ -47,10 +58,11 @@ public enum Effect {
             case "fade" -> FADE;
             case "glow" -> GLOW;
             case "lightning" -> LIGHTNING;
+            case "storm" -> STORM;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
-                    + "\" (expected boom|pulse|fade|glow|lightning|none)");
+                    + "\" (expected boom|pulse|fade|glow|lightning|storm|none)");
         };
     }
 

@@ -91,6 +91,17 @@ class LxMacroTest {
     }
 
     @Test
+    void parsesStormEffect() {
+        // storm (night lightning) validates + parses on every trigger, like lightning.
+        assertEquals(Effect.STORM,
+            lx("\\lx[fx.hover=storm]{ x }").fx().effect(Trigger.HOVER).orElseThrow());
+        assertEquals(Effect.STORM,
+            lx("\\lx[fx.enter=storm]{ x }").fx().effect(Trigger.ENTER).orElseThrow());
+        assertEquals(Effect.STORM,
+            lx("\\lx[fx.click=storm]{ x }").fx().effect(Trigger.CLICK).orElseThrow());
+    }
+
+    @Test
     void parsesGlowColorThroughTheColorBoundary() {
         // A valid colour flows through Color.parse and is stored on the EffectSpec.
         StyledMath hex = lx("\\lx[fx.hover=glow, fx.glow-color=#e0a13a]{ \\zeta(s) }");
