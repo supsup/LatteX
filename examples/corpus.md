@@ -149,16 +149,18 @@ capability (stretchy delimiter sizing, eval bars) beyond the box-stacking that
 
 | LaTeX | Description | Tier |
 | --- | --- | --- |
-| `\begin{matrix}a&b\\c&d\end{matrix}` | plain matrix — needs **environment + `&`/`\\`** node | `NEEDS-PARSER-NODE` |
-| `\begin{pmatrix}a&b\\c&d\end{pmatrix}` | parenthesized matrix | `NEEDS-PARSER-NODE` |
-| `\begin{bmatrix}a&b\\c&d\end{bmatrix}` | bracketed matrix | `NEEDS-PARSER-NODE` |
-| `\begin{Bmatrix}a&b\\c&d\end{Bmatrix}` | brace matrix | `NEEDS-PARSER-NODE` |
-| `\begin{vmatrix}a&b\\c&d\end{vmatrix}` | determinant (single-bar) matrix | `NEEDS-PARSER-NODE` |
-| `A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}` | full matrix with `\cdots \vdots \ddots` | `NEEDS-PARSER-NODE` |
+| `\begin{matrix}a&b\\c&d\end{matrix}` | plain matrix — **environment + `&`/`\\`** grid node | `PARSES-NOW` |
+| `\begin{pmatrix}a&b\\c&d\end{pmatrix}` | parenthesized matrix | `PARSES-NOW` |
+| `\begin{bmatrix}a&b\\c&d\end{bmatrix}` | bracketed matrix | `PARSES-NOW` |
+| `\begin{Bmatrix}a&b\\c&d\end{Bmatrix}` | brace matrix | `PARSES-NOW` |
+| `\begin{vmatrix}a&b\\c&d\end{vmatrix}` | determinant (single-bar) matrix | `PARSES-NOW` |
+| `\begin{Vmatrix}a&b\\c&d\end{Vmatrix}` | double-bar (norm) matrix | `PARSES-NOW` |
+| `\begin{smallmatrix}a&b\\c&d\end{smallmatrix}` | inline small matrix (script style) | `PARSES-NOW` |
+| `A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}` | full matrix with `\cdots \vdots \ddots` | `PARSES-NOW` |
 | `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs **`\bordermatrix`** node | `NEEDS-PARSER-NODE` |
-| `\begin{array}{c|c}1&2\\\hline 3&4\end{array}` | array with vertical+horizontal rules — needs **array node + column spec + `\hline`** | `NEEDS-PARSER-NODE` |
-| `\vdots` | vertical-dots symbol | `NEEDS-PARSER-NODE` |
-| `\ddots` | diagonal-dots symbol | `NEEDS-PARSER-NODE` |
+| `\begin{array}{c|c}1&2\\\hline 3&4\end{array}` | array with vertical+horizontal rules — **array node + column spec + `\hline`** | `PARSES-NOW` |
+| `\vdots` | vertical-dots symbol | `PARSES-NOW` |
+| `\ddots` | diagonal-dots symbol | `PARSES-NOW` |
 
 ## Named operators / misc
 

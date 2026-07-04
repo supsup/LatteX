@@ -8,10 +8,14 @@ import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
 import com.lattex.parse.MathNode.Fraction;
+import com.lattex.parse.MathNode.ColumnAlign;
 import com.lattex.parse.MathNode.LimitsMode;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.MathList;
+import com.lattex.parse.MathNode.Matrix;
+import com.lattex.parse.MathNode.MatrixKind;
 import com.lattex.parse.MathNode.OperatorName;
+import com.lattex.parse.MathNode.RowRule;
 import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.parse.MathNode.Spacing;
@@ -106,6 +110,7 @@ public final class LayoutEngine {
             case Accent accent -> accentBox(accent, ctx);
             case OperatorName opName -> operatorNameBox(opName, ctx);
             case TextRun textRun -> textRunBox(textRun, ctx);
+            case Matrix matrix -> matrixBox(matrix, ctx);
             // A top-level \lx wrapper: its RenderOptions (scale / mathStyle / color)
             // are applied at the render entry by seeding the LayoutContext + the
             // emitter fill, so here we simply lay out the wrapped body. (\lx is
@@ -405,6 +410,9 @@ public final class LayoutEngine {
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
             case OperatorName _ -> MathClass.OP; // a named operator is class Op
             case TextRun _ -> MathClass.ORD;   // a text run behaves as an Ord atom
+            // A delimited grid behaves as an Inner sub-formula (like \left..\right);
+            // a bare grid (matrix/array with no fence) behaves as an Ord atom.
+            case Matrix m -> m.hasDelimiters() ? MathClass.INNER : MathClass.ORD;
             case Spacing _ -> null;           // classless glue (handled by caller)
             case StyledMath sm -> classOf(sm.body()); // wrapper is transparent to spacing
         };
@@ -806,6 +814,213 @@ public final class LayoutEngine {
         double inkTop = -axis - d.span() / 2.0; // centre the ink on the axis
         d.placeInto(glyphs, x, inkTop);
         return new double[] {x + d.width(), axis + d.span() / 2.0, d.span() / 2.0 - axis};
+    }
+
+    // ------------------------------------------------------------------
+    // Matrix — a 2-D grid (matrix family / array / cases). Column widths are the
+    // per-column max cell advance; each row has its own height/depth; rows stack on
+    // a baseline pitch (depth + gap + next height); the whole grid is centred on
+    // the math axis and any enclosing delimiters stretch to the grid height (the
+    // same S4 delimiter machinery as \left..\right). \hline/vertical rules and the
+    // \hdashline dashes are all in-alphabet <rect>s.
+    //
+    // Spacing is clean-room from Knuth's TeXbook \halign template: \arraycolsep
+    // (5pt ≈ 0.5em, so a 2·arraycolsep=1em inter-column gap and a 0.5em edge gap in
+    // an array), the \quad (1em) inter-column gap of cases, tighter matrix gaps,
+    // and a jot-sized inter-row gap. Cells are set one style down (text style;
+    // smallmatrix in script style), like a fraction's numerator, never in display.
+    // ------------------------------------------------------------------
+
+    private static Box matrixBox(Matrix mx, LayoutContext ctx) {
+        var c = ctx.constants();
+        double scale = ctx.scale();
+        double axis = c.axisHeight() * scale;
+        double em = 18.0 * ctx.mu();                 // one em at the current (outer) style
+        double ruleThick = c.fractionRuleThickness() * scale;
+        SfntFont font = ctx.font();
+
+        // Cells are laid out one style down from display (matrices/array/cases in
+        // text style, smallmatrix in script style), un-cramped.
+        MathStyle cellStyle = mx.kind() == MatrixKind.SMALL ? MathStyle.SCRIPT : MathStyle.TEXT;
+        LayoutContext cellCtx =
+            new LayoutContext(font, c, ctx.fontSize(), cellStyle, false);
+
+        int rows = mx.rows().size();
+        int cols = mx.columnCount();
+
+        // 1. Lay out every cell; derive per-column widths and per-row height/depth.
+        Box[][] cell = new Box[rows][cols];
+        double[] colWidth = new double[cols];
+        double[] rowHeight = new double[rows];
+        double[] rowDepth = new double[rows];
+        for (int r = 0; r < rows; r++) {
+            for (int col = 0; col < cols; col++) {
+                Box b = layoutBox(mx.rows().get(r).get(col), cellCtx);
+                cell[r][col] = b;
+                colWidth[col] = Math.max(colWidth[col], b.width());
+                rowHeight[r] = Math.max(rowHeight[r], b.height());
+                rowDepth[r] = Math.max(rowDepth[r], b.depth());
+            }
+        }
+
+        // 2. Vertical stacking: row 0's baseline at local y=0, each subsequent row a
+        // pitch of (prev depth + inter-row gap + this height) below.
+        double interRowGap = (mx.kind() == MatrixKind.SMALL ? 0.15 : 0.3) * em;
+        double[] baseline = new double[rows];
+        for (int r = 1; r < rows; r++) {
+            baseline[r] = baseline[r - 1] + rowDepth[r - 1] + interRowGap + rowHeight[r];
+        }
+        double gridTop = -rowHeight[0];
+        double gridBottom = baseline[rows - 1] + rowDepth[rows - 1];
+        // Centre the grid on the math axis (axis is at y = -axis, above the baseline).
+        double shift = -axis - (gridTop + gridBottom) / 2.0;
+        double boxHeight = -(gridTop + shift);
+        double boxDepth = gridBottom + shift;
+        double fullSpan = boxHeight + boxDepth;      // grid vertical extent
+        double gridTopY = gridTop + shift;           // = -boxHeight
+        for (int r = 0; r < rows; r++) {
+            baseline[r] += shift;
+        }
+
+        // 3. Horizontal spacing template (clean-room TeXbook \halign — see above).
+        double edgeGap;
+        double colGap;
+        switch (mx.kind()) {
+            case ARRAY -> { edgeGap = 0.5 * em; colGap = 1.0 * em; }     // \arraycolsep = 5pt
+            case CASES -> { edgeGap = 0.18 * em; colGap = 1.0 * em; }    // \quad between columns
+            case SMALL -> { edgeGap = 0.1 * em; colGap = 0.3 * em; }
+            case MATRIX -> { edgeGap = 0.18 * em; colGap = 0.5 * em; }
+            default -> { edgeGap = 0.18 * em; colGap = 0.5 * em; }
+        }
+        double[] boundaryGap = new double[cols + 1];
+        boundaryGap[0] = edgeGap;
+        for (int i = 1; i < cols; i++) {
+            boundaryGap[i] = colGap;
+        }
+        boundaryGap[cols] = edgeGap;
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        double penX = 0.0;
+
+        // 4. Left delimiter (stretched to the grid height, centred on the axis).
+        double leftH = 0.0;
+        double leftD = 0.0;
+        if (mx.leftDelim() != MathNode.Fenced.NULL_DELIMITER) {
+            double[] hd = placeDelimiter(font, mx.leftDelim(), fullSpan, axis, scale, penX, glyphs);
+            penX = hd[0];
+            leftH = hd[1];
+            leftD = hd[2];
+        }
+
+        // 5. Walk the columns, placing per-column x and drawing vertical rules in the
+        // boundary gaps. Grid content spans [contentStartX, contentEndX].
+        double contentStartX = penX;
+        double[] colX = new double[cols];
+        for (int col = 0; col < cols; col++) {
+            addVerticalRules(rules, penX, boundaryGap[col], mx.columnRules().get(col),
+                ruleThick, gridTopY, fullSpan);
+            penX += boundaryGap[col];
+            colX[col] = penX;
+            penX += colWidth[col];
+        }
+        addVerticalRules(rules, penX, boundaryGap[cols], mx.columnRules().get(cols),
+            ruleThick, gridTopY, fullSpan);
+        penX += boundaryGap[cols];
+        double contentEndX = penX;
+
+        // 6. Right delimiter.
+        double rightH = 0.0;
+        double rightD = 0.0;
+        if (mx.rightDelim() != MathNode.Fenced.NULL_DELIMITER) {
+            double[] hd = placeDelimiter(font, mx.rightDelim(), fullSpan, axis, scale, penX, glyphs);
+            penX = hd[0];
+            rightH = hd[1];
+            rightD = hd[2];
+        }
+        double totalWidth = penX;
+
+        // 7. Stamp each cell at its column x (per-column alignment) and row baseline.
+        for (int r = 0; r < rows; r++) {
+            for (int col = 0; col < cols; col++) {
+                Box b = cell[r][col];
+                double dx = colX[col] + alignOffset(mx.columnAligns().get(col), colWidth[col], b.width());
+                b.drawInto(glyphs, rules, dx, baseline[r]);
+            }
+        }
+
+        // 8. Horizontal rules (\hline / \hdashline) at the inter-row gaps.
+        double hlineW = contentEndX - contentStartX;
+        for (int g = 0; g <= rows; g++) {
+            RowRule rule = mx.rowRules().get(g);
+            if (rule == RowRule.NONE) {
+                continue;
+            }
+            double yCenter;
+            if (g == 0) {
+                yCenter = gridTopY;
+            } else if (g == rows) {
+                yCenter = gridTopY + fullSpan;
+            } else {
+                double above = baseline[g - 1] + rowDepth[g - 1];
+                double below = baseline[g] - rowHeight[g];
+                yCenter = (above + below) / 2.0;
+            }
+            addHorizontalRule(rules, contentStartX, yCenter - ruleThick / 2.0, hlineW,
+                ruleThick, rule == RowRule.DASHED, em);
+        }
+
+        double height = Math.max(boxHeight, Math.max(leftH, rightH));
+        double depth = Math.max(boxDepth, Math.max(leftD, rightD));
+        return new Box(glyphs, rules, totalWidth, height, depth);
+    }
+
+    /** The x-offset of a cell of {@code cellWidth} within a column of {@code colWidth}. */
+    private static double alignOffset(ColumnAlign align, double colWidth, double cellWidth) {
+        return switch (align) {
+            case LEFT -> 0.0;
+            case CENTER -> (colWidth - cellWidth) / 2.0;
+            case RIGHT -> colWidth - cellWidth;
+        };
+    }
+
+    /**
+     * Draws {@code count} vertical rules (an array {@code |} / {@code ||}) centred in
+     * the boundary gap {@code [regionStart, regionStart+gap]}, each a full-grid-height
+     * {@code <rect>}; a double rule separates the two bars by one rule thickness.
+     */
+    private static void addVerticalRules(List<Rule> rules, double regionStart, double gap,
+                                         int count, double thick, double topY, double spanH) {
+        if (count <= 0) {
+            return;
+        }
+        double block = count * thick + (count - 1) * thick; // bars + inter-bar gaps
+        double x0 = regionStart + (gap - block) / 2.0;
+        for (int k = 0; k < count; k++) {
+            rules.add(new Rule(x0 + k * 2.0 * thick, topY, thick, spanH));
+        }
+    }
+
+    /**
+     * Draws a horizontal rule spanning the grid width: a single {@code <rect>} for
+     * {@code \hline}, or a run of short {@code <rect>} dashes for {@code \hdashline}
+     * (both strictly in-alphabet).
+     */
+    private static void addHorizontalRule(List<Rule> rules, double x, double y, double width,
+                                          double thick, boolean dashed, double em) {
+        if (!dashed) {
+            rules.add(new Rule(x, y, width, thick));
+            return;
+        }
+        double dash = 0.25 * em;
+        double gap = 0.18 * em;
+        double cursor = x;
+        double end = x + width;
+        while (cursor < end) {
+            double w = Math.min(dash, end - cursor);
+            rules.add(new Rule(cursor, y, w, thick));
+            cursor += dash + gap;
+        }
     }
 
     // ------------------------------------------------------------------

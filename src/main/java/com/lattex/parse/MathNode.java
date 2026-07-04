@@ -482,4 +482,117 @@ public sealed interface MathNode {
             Objects.requireNonNull(sem, "sem");
         }
     }
+
+    /**
+     * Per-column horizontal alignment inside a {@link Matrix} grid cell (the
+     * {@code l}/{@code c}/{@code r} of an {@code array} column spec; matrices are
+     * uniformly {@link #CENTER}, {@code cases} uniformly {@link #LEFT}).
+     */
+    enum ColumnAlign {
+        /** Left-aligned column ({@code l}). */
+        LEFT,
+        /** Centred column ({@code c}) — the matrix default. */
+        CENTER,
+        /** Right-aligned column ({@code r}). */
+        RIGHT
+    }
+
+    /**
+     * A horizontal rule between grid rows: {@code \hline} (a solid rule) or
+     * {@code \hdashline} (a dashed rule, drawn as a run of short {@code <rect>}s).
+     * Both stay within the minimal SVG alphabet ({@code <rect>} only).
+     */
+    enum RowRule {
+        /** No rule at this inter-row gap. */
+        NONE,
+        /** A solid rule ({@code \hline}). */
+        SOLID,
+        /** A dashed rule ({@code \hdashline}). */
+        DASHED
+    }
+
+    /**
+     * The kind of grid environment, which selects the clean-room TeX spacing
+     * template (inter-column / inter-row separation and cell math style).
+     */
+    enum MatrixKind {
+        /** {@code matrix}/{@code pmatrix}/… — cells in text style, centred. */
+        MATRIX,
+        /** {@code smallmatrix} — cells in script style, tight spacing. */
+        SMALL,
+        /** {@code array} — user column spec (l/c/r + {@code |} rules), {@code \hline}s. */
+        ARRAY,
+        /** {@code cases} — a left brace over two left-aligned columns, wide gap. */
+        CASES
+    }
+
+    /**
+     * A 2-D grid of cells — the {@code matrix}/{@code pmatrix}/{@code bmatrix}/
+     * {@code Bmatrix}/{@code vmatrix}/{@code Vmatrix}/{@code smallmatrix},
+     * {@code array}, and {@code cases} LaTeX environments (TeXbook {@code \halign}).
+     * {@code &} separates columns and {@code \\} separates rows; the parser pads
+     * short rows so {@link #rows} is rectangular with exactly
+     * {@link #columnAligns}{@code .size()} columns.
+     *
+     * <p>Optional enclosing delimiters ({@link #leftDelim}/{@link #rightDelim}, code
+     * points or {@link Fenced#NULL_DELIMITER}) stretch to the grid height exactly as
+     * a {@code \left..\right} pair does. Vertical rules from an {@code array} column
+     * spec are carried in {@link #columnRules} (a count at each of the
+     * {@code columns+1} boundaries); horizontal {@code \hline}/{@code \hdashline}
+     * rules are carried in {@link #rowRules} (one entry per {@code rows+1} inter-row
+     * gap). Both rule families render as {@code <rect>}s (in-alphabet).
+     *
+     * <p>A grid with any delimiter has an implied Inner class (like a
+     * {@code \left..\right} sub-formula); a bare grid is Ord.
+     *
+     * @param rows         the grid cells, {@code rows[r][c]}, rectangular
+     * @param columnAligns per-column alignment (length = column count)
+     * @param columnRules  vertical-rule counts at each boundary (length = columns+1)
+     * @param rowRules     the rule at each inter-row gap (length = rows+1)
+     * @param leftDelim    the opening delimiter code point, or {@link Fenced#NULL_DELIMITER}
+     * @param rightDelim   the closing delimiter code point, or {@link Fenced#NULL_DELIMITER}
+     * @param kind         the environment kind (selects the spacing template)
+     */
+    record Matrix(List<List<MathNode>> rows, List<ColumnAlign> columnAligns,
+                  List<Integer> columnRules, List<RowRule> rowRules,
+                  int leftDelim, int rightDelim, MatrixKind kind) implements MathNode {
+        public Matrix {
+            if (rows == null || rows.isEmpty()) {
+                throw new IllegalArgumentException("Matrix must have at least one row");
+            }
+            // Deep-copy to immutable, and validate rectangularity against the aligns.
+            List<List<MathNode>> copied = new java.util.ArrayList<>(rows.size());
+            int cols = columnAligns.size();
+            for (List<MathNode> row : rows) {
+                if (row.size() != cols) {
+                    throw new IllegalArgumentException(
+                        "Matrix row has " + row.size() + " cells, expected " + cols);
+                }
+                copied.add(List.copyOf(row));
+            }
+            rows = List.copyOf(copied);
+            columnAligns = List.copyOf(columnAligns);
+            columnRules = List.copyOf(columnRules);
+            rowRules = List.copyOf(rowRules);
+            if (columnRules.size() != cols + 1) {
+                throw new IllegalArgumentException("columnRules length must be columns+1");
+            }
+            if (rowRules.size() != rows.size() + 1) {
+                throw new IllegalArgumentException("rowRules length must be rows+1");
+            }
+            if (kind == null) {
+                throw new IllegalArgumentException("Matrix kind must not be null");
+            }
+        }
+
+        /** Whether the grid carries an enclosing delimiter (⇒ Inner class). */
+        public boolean hasDelimiters() {
+            return leftDelim != Fenced.NULL_DELIMITER || rightDelim != Fenced.NULL_DELIMITER;
+        }
+
+        /** The number of columns in the (rectangular) grid. */
+        public int columnCount() {
+            return columnAligns.size();
+        }
+    }
 }

@@ -253,6 +253,19 @@ public final class MathVariant {
             case Spacing s -> s;
             case OperatorName o -> o;
             case TextRun t -> t;
+            // A grid: restyle every cell, preserving the grid's shape/delimiters/rules.
+            case MathNode.Matrix mx -> {
+                List<List<MathNode>> restyled = new ArrayList<>(mx.rows().size());
+                for (List<MathNode> gridRow : mx.rows()) {
+                    List<MathNode> cells = new ArrayList<>(gridRow.size());
+                    for (MathNode c : gridRow) {
+                        cells.add(apply(style, c));
+                    }
+                    restyled.add(cells);
+                }
+                yield new MathNode.Matrix(restyled, mx.columnAligns(), mx.columnRules(),
+                    mx.rowRules(), mx.leftDelim(), mx.rightDelim(), mx.kind());
+            }
             // A \lx wrapper is top-level-only (nested \lx is rejected by the parser),
             // so this arm is unreachable in practice; restyle the body for totality.
             case StyledMath sm -> new StyledMath(
