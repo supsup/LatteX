@@ -49,9 +49,9 @@ PARSES-NOW	bigops	\bigwedge	big conjunction
 PARSES-NOW	bigops	\bigodot	big circled dot
 PARSES-NOW	bigops	\biguplus	big multiset union
 PARSES-NOW	bigops	\oint	contour integral
-NEEDS-PARSER-NODE	bigops	\iint	double integral
-NEEDS-PARSER-NODE	bigops	\iiint	triple integral
-NEEDS-PARSER-NODE	bigops	\idotsint	dotted multiple integral
+PARSES-NOW	bigops	\iint	double integral
+PARSES-NOW	bigops	\iiint	triple integral
+PARSES-NOW	bigops	\idotsint	dotted multiple integral
 # ==== delimiters — fixed ===========================================
 PARSES-NOW	delim-fixed	(a)	round parentheses
 PARSES-NOW	delim-fixed	[b]	square brackets

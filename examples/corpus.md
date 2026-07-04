@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **132 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **119**, `NEEDS-S4-LAYOUT` **4**, `NEEDS-PARSER-NODE` **8**, `NEEDS-FONT-STYLE` **1**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **132 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **122**, `NEEDS-S4-LAYOUT` **4**, `NEEDS-PARSER-NODE` **5**, `NEEDS-FONT-STYLE` **1**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -74,9 +74,9 @@ following once the node exists.
 | `\bigodot` | big circled dot | `PARSES-NOW` |
 | `\biguplus` | big multiset union | `PARSES-NOW` |
 | `\oint` | contour integral | `PARSES-NOW` |
-| `\iint` | double integral | `NEEDS-PARSER-NODE` |
-| `\iiint` | triple integral | `NEEDS-PARSER-NODE` |
-| `\idotsint` | dotted multiple integral | `NEEDS-PARSER-NODE` |
+| `\iint` | double integral | `PARSES-NOW` |
+| `\iiint` | triple integral | `PARSES-NOW` |
+| `\idotsint` | dotted multiple integral | `PARSES-NOW` |
 
 ## Delimiters — fixed
 
@@ -237,14 +237,11 @@ Every row that does **not** yet parse into a tree — i.e. everything outside `P
 | `\left.\frac{x^3}{3}\right\|_0^1` | eval bar (braced) — parses; needs null-left + scaled bar layout |
 | `\left.\frac{x^3}3\right\|_0^1` | eval bar, terse \\frac denominator — parses (single-token \\frac arg); needs null-left + scaled bar layout |
 
-### `NEEDS-PARSER-NODE` — needs a new `MathNode` / parser feature (named in the row) (8)
+### `NEEDS-PARSER-NODE` — needs a new `MathNode` / parser feature (named in the row) (5)
 
 | LaTeX | Description |
 | --- | --- |
 | `\sum_{\substack{0<i<m\\0<j<n}}P(i,j)` | multi-line subscript — needs \\substack node |
-| `\iint` | double integral |
-| `\iiint` | triple integral |
-| `\idotsint` | dotted multiple integral |
 | `P\left(A=2\middle\|\frac{A^2}{B}>4\right)` | mid delimiter — needs \\middle node |
 | `\aa` | the letter a-with-ring (å) — needs symbol |
 | `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs \\bordermatrix node |

@@ -302,6 +302,48 @@ class MathParserTest {
     }
 
     @Test
+    void multiIntegralsAreBigOperators() {
+        // \iint / \iiint / \idotsint flow through the existing BigOperator node,
+        // rendered with the precomposed STIX integral glyphs (no new node/layout).
+        assertEquals(0x222C, assertInstanceOf(BigOperator.class,
+            MathParser.parse("\\iint")).op().codePoint());
+        assertEquals(0x222D, assertInstanceOf(BigOperator.class,
+            MathParser.parse("\\iiint")).op().codePoint());
+        assertEquals(0x2A0C, assertInstanceOf(BigOperator.class,
+            MathParser.parse("\\idotsint")).op().codePoint());
+        // They take limits like every other big operator.
+        BigOperator withLimits = assertInstanceOf(BigOperator.class,
+            MathParser.parse("\\iint_{D}"));
+        assertEquals(MathClass.OP, withLimits.op().mathClass());
+        assertTrue(withLimits.lowerLimit().isPresent());
+    }
+
+    @Test
+    void bareOrdinaryDelimitersParseWithDelimiterAtomClasses() {
+        // Delimiters usable as bare atoms outside \left..\right, with the atom
+        // class TeX assigns them (openers OPEN, closers CLOSE).
+        assertEquals(MathClass.OPEN, assertInstanceOf(Atom.class,
+            MathParser.parse("\\langle")).mathClass());
+        assertEquals(MathClass.CLOSE, assertInstanceOf(Atom.class,
+            MathParser.parse("\\rangle")).mathClass());
+        assertEquals(MathClass.OPEN, assertInstanceOf(Atom.class,
+            MathParser.parse("\\lfloor")).mathClass());
+        assertEquals(MathClass.CLOSE, assertInstanceOf(Atom.class,
+            MathParser.parse("\\rfloor")).mathClass());
+        assertEquals(MathClass.OPEN, assertInstanceOf(Atom.class,
+            MathParser.parse("\\lceil")).mathClass());
+        assertEquals(MathClass.CLOSE, assertInstanceOf(Atom.class,
+            MathParser.parse("\\rceil")).mathClass());
+        assertEquals(MathClass.OPEN, assertInstanceOf(Atom.class,
+            MathParser.parse("\\ulcorner")).mathClass());
+        assertEquals(MathClass.CLOSE, assertInstanceOf(Atom.class,
+            MathParser.parse("\\urcorner")).mathClass());
+        // \backslash is an ordinary symbol (∖).
+        assertEquals(MathClass.ORD, assertInstanceOf(Atom.class,
+            MathParser.parse("\\backslash")).mathClass());
+    }
+
+    @Test
     void radicalOptionalIndex() {
         Radical sq = assertInstanceOf(Radical.class, MathParser.parse("\\sqrt{x}"));
         assertTrue(sq.indexNode().isEmpty());

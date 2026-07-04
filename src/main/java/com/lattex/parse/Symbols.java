@@ -41,6 +41,11 @@ final class Symbols {
         Map.entry("prod", new Sym(0x220F, MathClass.OP)),     // ∏
         Map.entry("coprod", new Sym(0x2210, MathClass.OP)),   // ∐
         Map.entry("oint", new Sym(0x222E, MathClass.OP)),     // ∮
+        // Multi-integrals render as precomposed integral glyphs (STIX Two Math
+        // provides them at these code points; verified present).
+        Map.entry("iint", new Sym(0x222C, MathClass.OP)),     // ∬
+        Map.entry("iiint", new Sym(0x222D, MathClass.OP)),    // ∭
+        Map.entry("idotsint", new Sym(0x2A0C, MathClass.OP)), // ⨌
         Map.entry("bigcup", new Sym(0x22C3, MathClass.OP)),   // ⋃
         Map.entry("bigcap", new Sym(0x22C2, MathClass.OP)),   // ⋂
         Map.entry("bigsqcup", new Sym(0x2A06, MathClass.OP)), // ⨆
