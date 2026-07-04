@@ -1058,8 +1058,9 @@ class EffectsPageTest {
             var NEIGH = (vb && vb.width ? vb.width : 100) * 0.28;
             var STIFF = 240, DAMP = 19, REST = 0.05;
             var states = paths.map(function (p) {
-              p.style.transformBox = 'fill-box';
-              p.style.transformOrigin = 'center';
+              // transform-box/origin are set lazily in render() (only while a transform is
+              // applied) and cleared at rest — setting them on a RESTING glyph mispositions
+              // it (the glyph vanishes on load). Keep resting glyphs pristine.
               p.style.cursor = 'grab';
               p.style.touchAction = 'none';
               var b; try { b = p.getBBox(); } catch (e) { b = { x:0, y:0, width:0, height:0 }; }
@@ -1071,6 +1072,8 @@ class EffectsPageTest {
               var stretch = Math.min(0.55, sp / 3200);
               var ang = sp > 0.01 ? Math.atan2(s.vy, s.vx) : 0;
               var sx = 1 + stretch, sy = 1 - stretch * 0.6;
+              s.p.style.transformBox = 'fill-box';   // pivot the stretch on the glyph's
+              s.p.style.transformOrigin = 'center';  // own centre, only while transforming
               s.p.style.transform =
                 'translate(' + s.x.toFixed(2) + 'px,' + s.y.toFixed(2) + 'px) '
                 + 'rotate(' + ang.toFixed(3) + 'rad) scale(' + sx.toFixed(3) + ',' + sy.toFixed(3) + ') '
@@ -1092,7 +1095,10 @@ class EffectsPageTest {
                     || Math.abs(s.vx) > REST || Math.abs(s.vy) > REST) {
                   moving = true; render(s);
                 } else if (s.x || s.y || s.vx || s.vy) {
-                  s.x = s.y = s.vx = s.vy = 0; s.p.style.transform = '';
+                  s.x = s.y = s.vx = s.vy = 0;
+                  s.p.style.transform = '';
+                  s.p.style.transformBox = '';      // back to pristine at rest
+                  s.p.style.transformOrigin = '';
                 }
               });
               raf = moving ? requestAnimationFrame(loop) : 0;
@@ -1158,8 +1164,9 @@ class EffectsPageTest {
             var SQUASH = 0.28;
             var timers = [];
             paths.forEach(function (src) {
-              src.style.transformBox = 'fill-box';
-              src.style.transformOrigin = 'center';
+              // transform-box/origin are set lazily per pulled glyph in the click handler
+              // (only while a transform is applied) and cleared at rest — setting them on a
+              // RESTING glyph mispositions it (the glyph vanishes on load).
               src.style.cursor = 'pointer';
               src.addEventListener('click', function () {
                 var s = centre(src);
@@ -1177,6 +1184,8 @@ class EffectsPageTest {
                   var ang = Math.atan2(uy, ux) * 180 / Math.PI;
                   var sx = (1 + STRETCH * falloff).toFixed(3);
                   var sy = (1 - SQUASH * falloff).toFixed(3);
+                  p.style.transformBox = 'fill-box';   // pivot the stretch on the glyph's
+                  p.style.transformOrigin = 'center';  // own centre, only while transforming
                   p.style.transition = 'transform 220ms cubic-bezier(.22,.61,.36,1)';
                   p.style.transform = 'translate(' + (ux * pull).toFixed(2) + 'px,'
                     + (uy * pull).toFixed(2) + 'px) rotate(' + ang.toFixed(2)
@@ -1192,6 +1201,8 @@ class EffectsPageTest {
                     paths.forEach(function (p) {
                       p.style.transition = '';
                       p.style.transform = '';
+                      p.style.transformBox = '';      // back to pristine at rest
+                      p.style.transformOrigin = '';
                     });
                   }, 660));
                 }, 300));
