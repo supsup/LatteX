@@ -158,14 +158,23 @@ Everything wraps the one core: `render(latex, options) → SVG string`.
 
 ### JVM — Java / Kotlin / Scala — *available*
 
-Depend on the JAR (module `com.lattex`, exporting `com.lattex.api`) and call
-the API directly:
+Depend on the versioned artifact `com.lattex:lattex:0.1.0` (module `com.lattex`,
+exporting `com.lattex.api`) and call the API directly:
+
+```kotlin
+// build.gradle.kts — resolve from ~/.m2 after `./gradlew publishToMavenLocal`
+// in the LatteX repo (a published repo can be added later).
+repositories { mavenLocal(); mavenCentral() }
+dependencies { implementation("com.lattex:lattex:0.1.0") }
+```
 
 ```java
 String svg = com.lattex.api.LatteX.render("\\frac{a}{b}");
 ```
 
 Zero runtime dependencies, so it drops into any JVM app with no transitive baggage.
+The version is a real immutable release — pin it, and it can never silently change
+under you (a LatteX update is an explicit version bump).
 
 ### Any other stack — Node, Python, Ruby, Go, static-site generators — *available (S7)*
 
@@ -207,7 +216,7 @@ API merges to the mainline — the CLI's arg parser has the seam ready.
 
 ```bash
 ./gradlew run --args="\frac{a}{b}"                 # via Gradle
-java -jar build/libs/lattex-0.1.0-SNAPSHOT.jar "x^2"   # via the runnable jar
+java -jar build/libs/lattex-0.1.0.jar "x^2"            # via the runnable jar
 ```
 
 ### Performance — native binary vs. `java -jar` vs. `./gradlew run`
