@@ -121,6 +121,7 @@
   /* enter=fade starts hidden so the JS fade-in has somewhere to come from
      (no flash-of-visible before the animation is wired). */
   .lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
+  .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; } /* JS blooms it out of the ink */
 
   @keyframes lx-boom {
     0%   { transform: scale(1); }
@@ -147,6 +148,7 @@
     /* Soften: no motion. Held-visible states must still be legible. */
     .lx-math { animation: none !important; }
     .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
+    .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
   }
 
   /* blueprint: the container becomes an engineer's drafting field — a deep
@@ -851,6 +853,499 @@
     });
   }
 
+  // MATRIXRAIN. Green "digital rain" cascades DOWN over the equation, then DECRYPTS
+  // into it: katakana/digit streams fall in columns over the element's box, then thin
+  // while the real math fades back in. Dims el + draws on a pointer-events-none body
+  // <canvas>; rAF + timers cleared, canvas removed, el restored on cleanup.
+  function matrixrain(el) {
+    var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+    var authoredOk = authored && authored.toLowerCase() !== 'currentcolor';
+    var head = authoredOk ? authored : '#d7ffdd';
+    var trail = authoredOk ? authored : '#39f16a';
+    if (reduced) { el.style.opacity = '1'; return; }
+    var r = el.getBoundingClientRect();
+    if (!r.width || !r.height) { el.style.opacity = '1'; return; }
+    var op0 = el.style.opacity, trans0 = el.style.transition;
+    el.style.opacity = '0';
+    var canvas = document.createElement('canvas');
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(r.width * dpr);
+    canvas.height = Math.round(r.height * dpr);
+    canvas.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
+      + 'left:' + r.left + 'px;top:' + r.top + 'px;'
+      + 'width:' + r.width + 'px;height:' + r.height + 'px;'
+      + 'transition:opacity 320ms ease;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    var GLYPHS = ('アイウエオカキクケコサシスセソタチツテトナニヌネノ'
+      + '0123456789=+-<>{}πΔΣ√').split('');
+    function rnd() { return GLYPHS[(Math.random() * GLYPHS.length) | 0]; }
+    var FONT = 15;
+    ctx.font = FONT + 'px ui-monospace, "SF Mono", Menlo, monospace';
+    ctx.textBaseline = 'top';
+    var cols = Math.max(1, Math.floor(r.width / (FONT * 0.72)));
+    var colW = r.width / cols;
+    var rows = Math.max(1, Math.ceil(r.height / FONT) + 1);
+    var drops = [];
+    for (var c = 0; c < cols; c++) {
+      drops.push({ y: -Math.floor(Math.random() * rows), v: 0.35 + Math.random() * 0.5 });
+    }
+    var raf = 0, timers = [], done = false;
+    function stop() {
+      if (done) { return; }
+      done = true;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove();
+      el.style.opacity = op0 || '1';
+      el.style.transition = trans0;
+    }
+    var t0 = performance.now(), RAIN = 1100;
+    function frame(now) {
+      if (done) { return; }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(0,0,0,0.16)';
+      ctx.fillRect(0, 0, r.width, r.height);
+      for (var c = 0; c < cols; c++) {
+        var d = drops[c], x = c * colW, hy = Math.floor(d.y) * FONT;
+        ctx.globalAlpha = 0.95; ctx.fillStyle = head;
+        ctx.fillText(rnd(), x, hy);
+        ctx.fillStyle = trail;
+        for (var t = 1; t <= 3; t++) {
+          ctx.globalAlpha = 0.5 - t * 0.13;
+          if (ctx.globalAlpha > 0) { ctx.fillText(rnd(), x, hy - t * FONT); }
+        }
+        d.y += d.v;
+        if (hy > r.height && Math.random() > 0.975) {
+          d.y = -1; d.v = 0.35 + Math.random() * 0.5;
+        }
+      }
+      if (now - t0 < RAIN) { raf = requestAnimationFrame(frame); return; }
+      raf = 0;
+      el.style.transition = 'opacity 440ms ease';
+      el.style.opacity = '1';
+      canvas.style.opacity = '0';
+      timers.push(setTimeout(stop, 480));
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  // SUPERNOVA. Click to detonate: the equation COLLAPSES to a hot point, then
+  // DETONATES on a body <canvas> — radial flash + expanding shockwave ring + stardust
+  // flung with gravity/drag + fading trails — then RE-CONDENSES from the dust.
+  function supernova(el) {
+    if (el.__lxNova) { return; }
+    el.__lxNova = true;
+    var r = el.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var color = resolveColor(el);
+    var palette = ['#ffffff', '#ffe9b0', '#ffab4d', color, '#7fd4ff'];
+    var trans0 = el.style.transition, tf0 = el.style.transform, fil0 = el.style.filter;
+    function restore() {
+      el.__lxNova = false;
+      el.style.transition = trans0; el.style.transform = tf0; el.style.filter = fil0;
+    }
+    if (reduced) {
+      var veil = document.createElement('div');
+      veil.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
+        + 'z-index:2147483647;opacity:0;transition:opacity 120ms ease;background:'
+        + 'radial-gradient(circle 120px at ' + cx + 'px ' + cy + 'px,'
+        + ' rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 70%);';
+      document.body.appendChild(veil);
+      requestAnimationFrame(function () { veil.style.opacity = '1'; });
+      setTimeout(function () { veil.style.opacity = '0'; }, 130);
+      setTimeout(function () { veil.remove(); el.__lxNova = false; }, 340);
+      return;
+    }
+    el.style.transition = 'transform 170ms cubic-bezier(.6,0,.9,.2), filter 170ms ease';
+    el.style.transform = 'scale(0.1)';
+    el.style.filter = 'brightness(2.6) drop-shadow(0 0 10px ' + color + ')';
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    var N = 64, parts = [];
+    for (var i = 0; i < N; i++) {
+      var ang = (i / N) * Math.PI * 2 + Math.random() * 0.35;
+      var speed = 120 + Math.random() * 340;
+      parts.push({ x: cx, y: cy, px: cx, py: cy,
+        vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
+        life: 1, decay: 0.6 + Math.random() * 0.7,
+        col: palette[(Math.random() * palette.length) | 0],
+        size: 1 + Math.random() * 2 });
+    }
+    var GRAV = 220, DRAG = 0.86;
+    var LIFE = 900, DETONATE = 170;
+    var raf = 0, timers = [], t0 = 0, lastT = 0;
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove(); restore();
+    }
+    function frame(now) {
+      var e = now - t0;
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+      lastT = now;
+      ctx.clearRect(0, 0, vw, vh);
+      var fa = Math.max(0, 1 - e / 180);
+      if (fa > 0) {
+        var fr = 60 + e * 0.5;
+        var fg = ctx.createRadialGradient(cx, cy, 0, cx, cy, fr);
+        fg.addColorStop(0, 'rgba(255,255,255,' + (0.95 * fa).toFixed(3) + ')');
+        fg.addColorStop(0.4, 'rgba(255,220,150,' + (0.6 * fa).toFixed(3) + ')');
+        fg.addColorStop(1, 'rgba(255,160,60,0)');
+        ctx.fillStyle = fg;
+        ctx.beginPath(); ctx.arc(cx, cy, fr, 0, Math.PI * 2); ctx.fill();
+      }
+      var sa = Math.max(0, 1 - e / 520);
+      if (sa > 0) {
+        ctx.strokeStyle = 'rgba(255,210,150,' + (0.8 * sa).toFixed(3) + ')';
+        ctx.lineWidth = 1 + 5 * sa;
+        ctx.beginPath(); ctx.arc(cx, cy, e * 0.9, 0, Math.PI * 2); ctx.stroke();
+      }
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        if (p.life <= 0) { continue; }
+        p.px = p.x; p.py = p.y;
+        p.vy += GRAV * dt;
+        var d = Math.pow(DRAG, dt * 60);
+        p.vx *= d; p.vy *= d;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.life -= p.decay * dt;
+        ctx.strokeStyle = p.col;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.lineWidth = p.size;
+        ctx.beginPath(); ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      if (e < LIFE) { raf = requestAnimationFrame(frame); } else { cleanup(); }
+    }
+    timers.push(setTimeout(function () {
+      el.style.transition = 'transform 720ms cubic-bezier(.16,1.4,.3,1), filter 640ms ease';
+      el.style.transform = tf0 || 'scale(1)';
+      el.style.filter = fil0;
+      t0 = performance.now();
+      raf = requestAnimationFrame(frame);
+    }, DETONATE));
+  }
+
+  // INKDROP. The equation grows out of a falling ink splat: a dark drop falls, hits
+  // the centre, splats into an irregular blot flinging spatter, and the glyphs bloom
+  // up out of the settled ink. Body-level drop/splat/spatter overlays, removed on cleanup.
+  function inkdrop(el) {
+    if (el.__lxInk) { return; }
+    el.__lxInk = true;
+    var ink = resolveColor(el);
+    var trans0 = el.style.transition, to0 = el.style.transformOrigin,
+        pos0 = el.style.position, z0 = el.style.zIndex, tf0 = el.style.transform;
+    if (reduced) { el.style.opacity = '1'; return; }
+    var r = el.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    var timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+    el.style.opacity = '0';
+    el.style.position = 'relative';
+    el.style.zIndex = '2147483647';
+    el.style.transformOrigin = (r.width / 2) + 'px ' + r.height + 'px';
+    el.style.transform = 'scale(.32)';
+    var FALL = 84, DROP = 260, SPLAT = 210, BLOOM = 440;
+    var dSize = 15;
+    var drop = document.createElement('div');
+    drop.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;background:' + ink
+      + ';left:' + (cx - dSize / 2) + 'px;top:' + (cy - dSize / 2 - FALL) + 'px;'
+      + 'width:' + dSize + 'px;height:' + dSize + 'px;opacity:.94;'
+      + 'border-radius:62% 62% 60% 60% / 82% 82% 54% 54%;transform:scale(.7,1.15);'
+      + 'transition:transform ' + DROP + 'ms cubic-bezier(.55,.06,.9,.35);';
+    document.body.appendChild(drop);
+    var bW = Math.max(30, Math.min(r.width * 0.9, 130)), bH = bW * 0.66;
+    var splat = document.createElement('div');
+    splat.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483645;background:' + ink
+      + ';left:' + cx + 'px;top:' + cy + 'px;width:' + bW + 'px;height:' + bH + 'px;'
+      + 'margin:' + (-bH / 2) + 'px 0 0 ' + (-bW / 2) + 'px;opacity:0;'
+      + 'border-radius:46% 54% 62% 38% / 58% 44% 56% 42%;transform:scale(0);'
+      + 'transition:transform ' + SPLAT + 'ms cubic-bezier(.2,1.35,.4,1), opacity 180ms ease;';
+    document.body.appendChild(splat);
+    var spatter = [];
+    requestAnimationFrame(function () {
+      drop.style.transform = 'translateY(' + FALL + 'px) scale(1,.82)';
+    });
+    later(function () {
+      drop.style.opacity = '0';
+      splat.style.opacity = '1';
+      splat.style.transform = 'scale(1)';
+      for (var i = 0; i < 5; i++) {
+        (function (i) {
+          var ang = Math.PI * 2 * (i / 5) + Math.random() * 0.8;
+          var dist = 16 + Math.random() * 24, sz = 3 + Math.random() * 4;
+          var d = document.createElement('div');
+          d.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483645;background:' + ink
+            + ';left:' + cx + 'px;top:' + cy + 'px;width:' + sz + 'px;height:' + sz + 'px;'
+            + 'margin:' + (-sz / 2) + 'px 0 0 ' + (-sz / 2) + 'px;border-radius:50%;opacity:.85;'
+            + 'transition:transform 300ms cubic-bezier(.15,.7,.3,1), opacity 520ms ease;';
+          document.body.appendChild(d);
+          spatter.push(d);
+          requestAnimationFrame(function () {
+            d.style.transform = 'translate(' + (Math.cos(ang) * dist).toFixed(1) + 'px,'
+              + (Math.sin(ang) * dist).toFixed(1) + 'px) scale('
+              + (0.4 + Math.random() * 0.6).toFixed(2) + ')';
+          });
+        })(i);
+      }
+    }, DROP);
+    later(function () {
+      el.style.transition = 'opacity ' + BLOOM + 'ms ease, transform '
+        + BLOOM + 'ms cubic-bezier(.2,1.12,.35,1)';
+      el.style.opacity = '1';
+      el.style.transform = 'scale(1)';
+      splat.style.transition = 'opacity ' + BLOOM + 'ms ease, transform ' + BLOOM + 'ms ease';
+      splat.style.transform = 'scale(1.18)';
+      splat.style.opacity = '0';
+      spatter.forEach(function (d) { d.style.opacity = '0'; });
+    }, DROP + SPLAT);
+    later(function () {
+      timers.length = 0;
+      drop.remove(); splat.remove();
+      spatter.forEach(function (d) { d.remove(); });
+      el.style.transition = trans0; el.style.transform = tf0;
+      el.style.transformOrigin = to0; el.style.position = pos0; el.style.zIndex = z0;
+    }, DROP + SPLAT + BLOOM + 140);
+  }
+
+  // A module-scoped counter so each element's diffusion filter gets a unique id
+  // (multiple specimens on the page must not share one <filter>).
+  var __lxDiffuseSeq = 0;
+
+  // DIFFUSION. On hover the equation dissolves into ink-in-water — a turbulent
+  // spreading blur — and reassembles on leave (reversible). A runtime body-level
+  // hidden <svg> holds an feTurbulence→feDisplacementMap filter; el.style.filter
+  // points at it and a single rAF loop drives the map's scale + opacity; removed idle.
+  function diffusion(el) {
+    if (reduced) { return; }
+    var st = el.__lxDiffuse;
+    if (!st) {
+      st = el.__lxDiffuse =
+        { p: 0, dir: 1, raf: 0, last: 0, holder: null, map: null };
+      el.addEventListener('mouseleave', function () {
+        st.dir = -1;
+        if (!st.raf) { st.last = 0; st.raf = requestAnimationFrame(step); }
+      });
+    }
+    st.dir = 1;
+    ensureFilter();
+    if (!st.raf) { st.last = 0; st.raf = requestAnimationFrame(step); }
+    function ensureFilter() {
+      if (st.holder) { return; }
+      var seq = ++__lxDiffuseSeq;
+      var id = 'lx-diffuse-' + seq;
+      var holder =
+        document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      holder.setAttribute('aria-hidden', 'true');
+      holder.setAttribute('width', '0');
+      holder.setAttribute('height', '0');
+      holder.style.cssText =
+        'position:absolute;width:0;height:0;overflow:hidden;';
+      holder.innerHTML =
+        '<defs><filter id="' + id
+          + '" x="-50%" y="-50%" width="200%" height="200%">'
+        + '<feTurbulence type="fractalNoise" baseFrequency="0.02"'
+          + ' numOctaves="2" seed="' + seq + '" result="lx-noise"/>'
+        + '<feDisplacementMap in="SourceGraphic" in2="lx-noise" scale="0"'
+          + ' xChannelSelector="R" yChannelSelector="G"/>'
+        + '</filter></defs>';
+      document.body.appendChild(holder);
+      st.holder = holder;
+      st.map = holder.querySelector('feDisplacementMap');
+      el.style.filter = 'url(#' + id + ')';
+    }
+    function step(now) {
+      if (!st.last) { st.last = now; }
+      var dt = Math.min(64, now - st.last);
+      st.last = now;
+      st.p += st.dir * dt / 520;
+      if (st.p > 1) { st.p = 1; }
+      if (st.p < 0) { st.p = 0; }
+      if (st.map) { st.map.setAttribute('scale', (st.p * 30).toFixed(2)); }
+      el.style.opacity = (1 - st.p * 0.82).toFixed(3);
+      var settled = (st.dir > 0 && st.p >= 1) || (st.dir < 0 && st.p <= 0);
+      if (!settled) { st.raf = requestAnimationFrame(step); return; }
+      st.raf = 0;
+      if (st.dir < 0 && st.p <= 0) {
+        el.style.filter = '';
+        el.style.opacity = '';
+        if (st.holder) { st.holder.remove(); st.holder = null; st.map = null; }
+      }
+    }
+  }
+
+  // REFRACTION. Armed on hover: a small glassy lens (a body-level, pointer-events-none
+  // <div> whose backdrop-filter blurs + lifts the glyphs beneath it) follows the
+  // pointer across the equation, torn down on pointerleave. Touches nothing in the <svg>.
+  function refraction(el) {
+    if (reduced) { return; }
+    if (el.__lxLensArmed) { return; }
+    el.__lxLensArmed = true;
+    var lens = null;
+    function makeLens(r) {
+      var d = Math.max(34, Math.min(120, r.height * 1.6));
+      var n = document.createElement('div');
+      n.setAttribute('aria-hidden', 'true');
+      var s = n.style;
+      s.position = 'fixed';
+      s.left = '0'; s.top = '0';
+      s.width = d + 'px'; s.height = d + 'px';
+      s.marginLeft = (-d / 2) + 'px';
+      s.marginTop = (-d / 2) + 'px';
+      s.borderRadius = '50%';
+      s.pointerEvents = 'none';
+      s.zIndex = '2147483646';
+      s.willChange = 'transform';
+      s.backdropFilter = 'blur(1.3px) brightness(1.14) contrast(1.06) saturate(1.12)';
+      s.webkitBackdropFilter = s.backdropFilter;
+      s.background = 'radial-gradient(circle at 34% 30%, rgba(255,255,255,.38),'
+        + ' rgba(255,255,255,.06) 42%, rgba(255,255,255,0) 62%)';
+      s.boxShadow = 'inset 0 0 0 1px rgba(255,255,255,.35),'
+        + ' inset 0 -6px 12px rgba(0,0,0,.10), 0 3px 10px rgba(0,0,0,.18)';
+      s.transition = 'opacity 140ms ease';
+      s.opacity = '0';
+      document.body.appendChild(n);
+      requestAnimationFrame(function () { if (n.parentNode) { n.style.opacity = '1'; } });
+      return n;
+    }
+    function move(ev) {
+      if (!lens) { lens = makeLens(el.getBoundingClientRect()); }
+      lens.style.transform = 'translate(' + ev.clientX + 'px,' + ev.clientY + 'px)';
+    }
+    function leave() {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerleave', leave);
+      el.__lxLensArmed = false;
+      var dead = lens; lens = null;
+      if (dead) {
+        dead.style.opacity = '0';
+        setTimeout(function () {
+          if (dead.parentNode) { dead.parentNode.removeChild(dead); }
+        }, 160);
+      }
+    }
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerleave', leave);
+  }
+
+  // TELEPORT. A transporter beam-out/in. On click the equation DEMATERIALIZES — el
+  // fades out while a body <canvas> over its box draws a rising column of shimmering
+  // cyan/white particles behind a soft vertical beam — holds a beat, then REMATERIALIZES
+  // as the particles descend/converge and el fades in. opacity/filter on el + a canvas.
+  function teleport(el) {
+    if (el.__lxTeleporting) { return; }
+    el.__lxTeleporting = true;
+    var color = resolveColor(el);
+    var filter0 = el.style.filter, trans0 = el.style.transition, op0 = el.style.opacity;
+    var timers = [];
+    function restore() {
+      el.style.transition = trans0; el.style.filter = filter0;
+      el.style.opacity = op0 || '1'; el.__lxTeleporting = false;
+    }
+    if (reduced) {
+      el.style.transition = 'opacity 240ms ease';
+      el.style.opacity = '0';
+      timers.push(setTimeout(function () {
+        el.style.opacity = '1';
+        timers.push(setTimeout(restore, 260));
+      }, 420));
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var pad = 30;
+    var W = r.width, H = r.height + pad * 2;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    canvas.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
+      + 'left:' + r.left + 'px;top:' + (r.top - pad) + 'px;'
+      + 'width:' + W + 'px;height:' + H + 'px;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    var N = Math.max(90, Math.min(320, Math.round(W * 1.4)));
+    var particles = [];
+    for (var i = 0; i < N; i++) {
+      particles.push({
+        x: Math.random() * W,
+        y: pad + Math.random() * r.height,
+        vx: (Math.random() * 2 - 1) * 0.35,
+        vy: -(0.4 + Math.random() * 1.6),
+        size: 0.6 + Math.random() * 1.9,
+        life: Math.random(),
+        c: Math.random() < 0.5 ? '255,255,255' : '150,238,255'
+      });
+    }
+    function reseed() {
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i];
+        p.x = Math.random() * W;
+        p.y = Math.random() * pad;
+        p.vx = (W / 2 - p.x) / (r.height + pad) * (0.6 + Math.random() * 0.8);
+        p.vy = 0.5 + Math.random() * 1.7;
+        p.life = Math.random();
+      }
+    }
+    var OUT = 620, HOLD = 240, IN = 620, END = OUT + HOLD + IN;
+    el.style.transition = 'opacity ' + OUT + 'ms ease, filter ' + OUT + 'ms ease';
+    el.style.filter = 'drop-shadow(0 0 6px ' + color + ')';
+    el.style.opacity = '0';
+    var raf = 0, inStarted = false, t0 = performance.now();
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove();
+      restore();
+    }
+    function draw(now) {
+      var t = now - t0;
+      if (t >= OUT + HOLD && !inStarted) {
+        inStarted = true;
+        el.style.transition = 'opacity ' + IN + 'ms ease, filter ' + IN + 'ms ease';
+        el.style.filter = filter0 || 'none';
+        el.style.opacity = '1';
+        reseed();
+      }
+      var phase = t < OUT ? 0 : (t < OUT + HOLD ? 1 : 2);
+      var g = phase === 0 ? Math.min(1, t / OUT)
+            : phase === 1 ? 1
+            : Math.max(0, 1 - (t - OUT - HOLD) / IN);
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'lighter';
+      var beam = ctx.createLinearGradient(0, 0, 0, H);
+      beam.addColorStop(0, 'rgba(150,238,255,0)');
+      beam.addColorStop(0.5, 'rgba(150,238,255,' + (0.22 * g).toFixed(3) + ')');
+      beam.addColorStop(1, 'rgba(150,238,255,0)');
+      ctx.fillStyle = beam;
+      ctx.fillRect(W / 2 - 7, 0, 14, H);
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i];
+        p.x += p.vx; p.y += p.vy; p.life += 0.03;
+        var tw = 0.5 + 0.5 * Math.sin(p.life * 6.283 + i);
+        var a = Math.max(0, g * tw * 0.9);
+        if (a <= 0.01) { continue; }
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(' + p.c + ',' + a.toFixed(3) + ')';
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (t >= END) { cleanup(); return; }
+      raf = requestAnimationFrame(draw);
+    }
+    raf = requestAnimationFrame(draw);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -865,6 +1360,12 @@
     if (name === 'blueprint') { blueprint(el); return; }
     if (name === 'wobble') { wobble(el); return; }
     if (name === 'gravwell') { gravwell(el); return; }
+    if (name === 'matrixrain') { matrixrain(el); return; }
+    if (name === 'supernova') { supernova(el); return; }
+    if (name === 'inkdrop') { inkdrop(el); return; }
+    if (name === 'diffusion') { diffusion(el); return; }
+    if (name === 'refraction') { refraction(el); return; }
+    if (name === 'teleport') { teleport(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -1244,6 +1745,121 @@
             <span class="cap">fx.enter=gravwell — click a glyph; its neighbours fall toward it, then snap back</span>
             <code class="src">\lx[fx.enter=gravwell]{ \sum_{k=0}^{n} a_k x^k }</code>
             <span class="hint">click any glyph — it becomes a gravity well</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="matrixrain"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.64 -35.244 183.448 38.844" width="183.448" height="38.844" role="img" aria-label="e to the power of i π + 1 = 0">
+              <g fill="currentColor">
+                <path d="M415 143 L434 129 Q416 91 392 59 Q368 28 333 9 Q299 -10 247 -10 Q187 -10 138 18 Q90 47 62 102 Q34 158 34 238 Q34 322 62 376 Q91 431 139 458 Q187 485 245 485 Q327 485 377 428 Q427 371 431 266 L115 266 Q115 197 137 152 Q160 108 195 86 Q231 65 271 65 Q312 65 337 76 Q363 87 381 104 Q399 122 415 143 Z M114 303 L337 303 Q336 340 324 372 Q312 405 289 425 Q266 445 230 445 Q126 445 114 303 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M257 28 L257 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 380 Q102 412 91 419 Q80 427 58 427 Q48 427 40 426 Q33 425 33 425 L33 454 L159 482 L185 482 L185 101 Q185 72 189 56 Q193 40 208 34 Q224 28 257 28 Z M145 673 Q171 673 186 656 Q202 640 202 617 Q202 594 186 577 Q171 560 145 560 Q120 560 104 577 Q88 594 88 617 Q88 640 103 656 Q119 673 145 673 Z" transform="translate(18.56 -14.4) scale(0.028 -0.028)"/>
+                <path d="M571 455 L558 391 L438 391 Q435 373 430 335 Q426 298 422 255 Q419 212 419 175 Q419 122 432 91 Q446 61 477 61 Q504 61 518 69 Q532 78 542 88 L558 74 Q538 36 511 13 Q484 -9 438 -9 Q393 -9 372 24 Q352 57 352 106 Q352 147 359 196 Q366 245 376 295 Q387 346 395 391 L247 391 Q245 352 236 296 Q227 240 214 182 Q201 124 187 75 Q174 26 163 0 L69 0 L66 15 Q85 47 95 66 Q106 85 116 105 Q126 125 142 159 Q163 203 175 239 Q188 275 196 311 Q204 348 209 391 Q151 391 119 388 Q88 386 71 374 Q54 363 38 336 L18 346 Q38 415 87 443 Q136 471 214 471 L571 471 L571 455 Z" transform="translate(26.54 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(53.5769 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(91.2658 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(122.1769 0) scale(0.04 -0.04)"/>
+                <path d="M468 317 Q468 253 455 194 Q443 135 416 89 Q390 43 348 16 Q306 -11 247 -11 Q187 -11 145 15 Q103 42 77 88 Q51 134 39 194 Q27 254 27 320 Q27 415 52 487 Q78 560 127 601 Q177 642 249 642 Q314 642 363 603 Q412 565 440 492 Q468 420 468 317 Z M371 311 Q371 463 339 535 Q308 608 246 608 Q187 608 155 536 Q123 464 123 315 Q123 170 155 97 Q187 25 247 25 Q306 25 338 96 Q371 167 371 311 Z" transform="translate(162.088 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=matrixrain — green digital rain falls, then decrypts into the equation</span>
+            <code class="src">\lx[fx.enter=matrixrain]{ e^{i\pi}+1=0 }</code>
+            <span class="hint">load — watch the code rain resolve into math</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-click="supernova"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.56 -34.432 143.5342 36.832" width="143.5342" height="36.832" role="img" aria-label="E = m c squared">
+              <g fill="currentColor">
+                <path d="M598 186 L570 0 L36 0 L36 30 Q77 30 97 35 Q118 41 125 60 Q133 79 133 118 L133 535 Q133 573 125 593 Q118 613 97 620 Q77 627 36 627 L36 657 L561 657 L567 493 L535 493 Q528 543 513 568 Q499 594 466 603 Q434 612 372 612 L225 612 L225 358 L342 358 Q388 358 412 366 Q436 374 445 396 Q454 418 454 458 L486 458 L486 226 L454 226 Q454 267 445 287 Q436 307 412 313 Q388 319 342 319 L225 319 L225 44 L354 44 Q412 44 447 49 Q483 55 503 70 Q524 85 537 113 Q551 141 566 186 L598 186 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(36.1511 0) scale(0.04 -0.04)"/>
+                <path d="M185 357 L185 97 Q185 55 199 42 Q214 29 260 29 L260 0 L32 0 L32 29 Q64 29 78 34 Q93 40 97 55 Q102 71 102 101 L102 381 Q102 408 91 417 Q81 426 60 426 Q49 426 41 425 Q33 424 33 424 L33 453 L158 482 L182 482 L182 401 L186 401 Q227 436 265 460 Q303 485 354 485 Q397 485 423 461 Q450 438 465 402 L469 402 Q510 443 549 464 Q588 485 628 485 Q687 485 722 448 Q757 411 757 320 L757 116 Q757 85 760 65 Q764 46 779 37 Q795 29 829 29 L829 0 L603 0 L603 29 Q637 29 652 38 Q667 47 670 66 Q674 86 674 116 L674 308 Q674 354 662 378 Q651 402 631 411 Q612 421 588 421 Q557 421 527 400 Q498 380 473 359 L473 116 Q473 82 477 63 Q482 44 498 36 Q514 29 550 29 L550 0 L313 0 L313 29 Q349 29 365 36 Q381 43 385 62 Q390 81 390 116 L390 314 Q390 378 367 399 Q345 421 310 421 Q271 421 239 399 Q207 377 185 357 Z" transform="translate(76.0622 0) scale(0.04 -0.04)"/>
+                <path d="M408 148 L427 134 Q408 94 383 61 Q359 28 323 9 Q287 -10 233 -10 Q171 -10 126 20 Q81 50 57 103 Q33 157 33 226 Q33 344 92 414 Q151 485 259 485 Q330 485 370 454 Q411 423 411 379 Q411 334 369 334 Q347 334 335 345 Q324 357 317 374 Q310 391 302 408 Q295 425 281 436 Q268 448 242 448 Q181 448 146 403 Q112 359 112 273 Q112 182 149 123 Q187 65 264 65 Q313 65 343 85 Q374 105 408 148 Z" transform="translate(110.1422 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(127.9822 -14.4) scale(0.028 -0.028)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.click=supernova — collapses to a point, detonates, re-condenses from the dust</span>
+            <code class="src">\lx[fx.click=supernova]{ E = mc^2 }</code>
+            <span class="hint">click me — re-detonates each click</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="inkdrop"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -69.808 195.2693 115.004" width="195.2693" height="115.004" role="img" aria-label="the integral from a to b of f ( x ) d x">
+              <g fill="currentColor">
+                <path d="M873 1365 L873 1371 Q873 1371 864 1374 Q856 1378 839 1378 Q797 1378 765 1331 Q733 1285 709 1203 Q685 1121 667 1014 Q649 907 635 785 Q622 663 609 536 Q597 410 584 290 Q542 -99 487 -368 Q433 -638 355 -777 Q278 -917 168 -917 Q106 -917 78 -886 Q50 -855 50 -816 Q50 -772 70 -749 Q90 -727 118 -727 Q141 -727 152 -742 Q164 -757 164 -783 Q164 -805 157 -822 Q150 -840 140 -855 L140 -861 Q140 -861 147 -864 Q154 -868 169 -868 Q221 -868 258 -814 Q295 -760 323 -660 Q351 -560 372 -420 Q394 -281 414 -109 Q434 63 456 259 Q472 394 489 532 Q507 671 529 802 Q551 933 580 1046 Q610 1160 648 1246 Q687 1332 737 1380 Q788 1429 853 1429 Q898 1429 927 1405 Q957 1382 957 1334 Q957 1288 932 1267 Q908 1247 883 1247 Q864 1247 852 1259 Q840 1272 840 1297 Q840 1337 873 1365 Z" transform="translate(0 -0.08) scale(0.04 -0.04)"/>
+                <path d="M163 706 L163 400 L166 400 Q192 432 231 458 Q270 485 320 485 Q370 485 407 456 Q445 428 466 378 Q487 328 487 263 Q487 174 456 113 Q425 52 371 21 Q317 -10 247 -10 Q183 -10 140 5 Q98 20 80 30 L80 592 Q80 626 72 635 Q65 645 36 645 Q24 645 16 644 Q8 643 8 643 L8 671 L137 706 L163 706 Z M163 356 L163 78 Q177 61 201 46 Q225 31 265 31 Q313 31 341 58 Q370 85 383 130 Q396 176 396 231 Q396 279 386 321 Q376 364 350 390 Q324 417 276 417 Q238 417 207 395 Q177 374 163 356 Z" transform="translate(62.88 -48.04) scale(0.028 -0.028)"/>
+                <path d="M308 62 L304 62 Q269 31 237 12 Q205 -7 157 -7 Q99 -7 68 25 Q38 57 38 105 Q38 145 56 172 Q75 200 105 219 Q136 238 171 251 Q207 264 241 273 Q275 282 301 290 L301 334 Q301 399 278 426 Q256 454 211 454 Q168 454 156 436 Q144 418 144 373 Q144 327 100 327 Q85 327 71 338 Q58 350 58 375 Q58 403 79 428 Q101 453 140 469 Q180 485 234 485 Q316 485 350 447 Q384 409 384 331 L384 104 Q384 73 391 64 Q398 55 414 55 Q428 55 439 62 Q451 69 461 80 L476 64 Q451 28 428 11 Q406 -5 368 -5 Q335 -5 324 12 Q313 29 308 62 Z M301 92 L301 257 Q256 246 216 231 Q176 216 151 192 Q126 168 126 129 Q126 92 146 70 Q166 48 198 48 Q248 48 301 92 Z" transform="translate(41.28 43) scale(0.028 -0.028)"/>
+                <path d="M26 468 L102 468 Q102 529 108 567 Q115 606 134 640 Q154 675 184 694 Q215 713 267 713 Q316 713 347 695 Q379 677 379 643 Q379 621 367 610 Q355 600 338 600 Q319 600 307 611 Q295 623 285 638 Q276 653 264 664 Q252 676 233 676 Q205 676 195 650 Q185 625 185 562 L185 468 L307 468 L307 426 L185 426 L185 119 Q185 80 193 61 Q201 42 223 35 Q245 29 287 29 L287 0 L18 0 L18 29 Q55 29 72 35 Q90 42 96 61 Q102 80 102 119 L102 426 L26 426 L26 468 Z" transform="translate(85.7627 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(98.0427 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(112.3227 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(131.4827 0) scale(0.04 -0.04)"/>
+                <path d="M514 18 L386 -5 L363 -5 L363 64 L359 64 Q331 39 292 15 Q254 -8 204 -8 Q148 -8 109 22 Q71 52 52 103 Q33 155 33 219 Q33 302 64 361 Q95 421 147 453 Q200 485 263 485 Q288 485 312 479 Q337 474 360 461 L360 592 Q360 625 352 635 Q345 645 316 645 Q309 645 299 644 Q290 643 290 643 L290 671 L416 706 L443 706 L443 107 Q443 68 454 56 Q465 45 493 45 L514 45 L514 18 Z M360 101 L360 365 Q354 396 331 420 Q308 445 261 445 Q198 445 159 399 Q120 353 120 258 Q120 155 153 109 Q187 64 251 64 Q286 64 310 73 Q334 83 360 101 Z" transform="translate(152.4293 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(173.9893 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=inkdrop — an ink drop falls, splats, and the equation blooms out of it</span>
+            <code class="src">\lx[fx.enter=inkdrop]{ \int_a^b f(x)\,dx }</code>
+            <span class="hint">load — watch it grow out of the ink</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-hover="diffusion"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0.56 -42.8 84.7778 45.32" width="84.7778" height="45.32" role="img" aria-label="∇ ⋅ vector E">
+              <g fill="currentColor">
+                <path d="M683 678 L388 -13 L367 -13 L64 678 L683 678 Z M618 636 L190 636 L403 130 L618 636 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M208 259 Q208 234 190 215 Q172 197 147 197 Q122 197 103 216 Q85 236 85 259 Q85 282 103 301 Q122 320 147 320 Q172 320 190 302 Q208 284 208 259 Z" transform="translate(38.8089 0) scale(0.04 -0.04)"/>
+                <path d="M598 186 L570 0 L36 0 L36 30 Q77 30 97 35 Q118 41 125 60 Q133 79 133 118 L133 535 Q133 573 125 593 Q118 613 97 620 Q77 627 36 627 L36 657 L561 657 L567 493 L535 493 Q528 543 513 568 Q499 594 466 603 Q434 612 372 612 L225 612 L225 358 L342 358 Q388 358 412 366 Q436 374 445 396 Q454 418 454 458 L486 458 L486 226 L454 226 Q454 267 445 287 Q436 307 412 313 Q388 319 342 319 L225 319 L225 44 L354 44 Q412 44 447 49 Q483 55 503 70 Q524 85 537 113 Q551 141 566 186 L598 186 Z" transform="translate(59.4178 0) scale(0.04 -0.04)"/>
+                <path d="M-3 718 L-3 705 L-145 580 L-162 600 L-127 636 Q-116 648 -109 656 Q-102 665 -102 675 Q-102 683 -109 685 Q-116 688 -127 688 L-438 688 L-438 735 L-127 735 Q-116 735 -109 737 Q-102 740 -102 748 Q-102 759 -109 767 Q-116 775 -127 787 L-162 823 L-145 843 L-3 718 Z" transform="translate(81.4378 -7.08) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.hover=diffusion — dissolves into ink-in-water on hover, reassembles on leave</span>
+            <code class="src">\lx[fx.hover=diffusion]{ \nabla \cdot \vec{E} }</code>
+            <span class="hint">hover — watch it diffuse away · leave — it swirls back</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-hover="refraction"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -54.52 80.1867 82.12" width="80.1867" height="82.12" role="img" aria-label="the fraction sin x over x">
+              <g fill="currentColor">
+                <path d="M39 164 L65 164 Q81 87 112 56 Q143 26 198 26 Q236 26 260 41 Q284 57 284 92 Q284 116 275 132 Q267 148 243 164 Q219 181 172 204 Q104 239 72 271 Q40 304 40 359 Q40 421 84 453 Q129 485 193 485 Q231 485 255 476 Q279 468 298 459 L299 459 L316 480 L336 480 L339 327 L312 327 Q296 398 267 424 Q238 451 192 451 Q158 451 134 435 Q111 419 111 385 Q111 356 138 333 Q165 310 228 278 Q296 242 332 208 Q368 175 368 119 Q368 72 345 43 Q322 15 283 2 Q245 -11 200 -11 Q157 -11 131 -2 Q106 7 86 15 L84 15 L63 -8 L42 -8 L39 164 Z" transform="translate(0 -25.6) scale(0.04 -0.04)"/>
+                <path d="M257 28 L257 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 380 Q102 412 91 419 Q80 427 58 427 Q48 427 40 426 Q33 425 33 425 L33 454 L159 482 L185 482 L185 101 Q185 72 189 56 Q193 40 208 34 Q224 28 257 28 Z M145 673 Q171 673 186 656 Q202 640 202 617 Q202 594 186 577 Q171 560 145 560 Q120 560 104 577 Q88 594 88 617 Q88 640 103 656 Q119 673 145 673 Z" transform="translate(15.8 -25.6) scale(0.04 -0.04)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(27.2 -25.6) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(56.9067 -25.6) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(28.4533 25.6) scale(0.04 -0.04)"/>
+                <rect x="0" y="-11.68" width="76.0667" height="2.72"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.hover=refraction — a glassy lens glides under the cursor, bending the glyphs</span>
+            <code class="src">\lx[fx.hover=refraction]{ \frac{\sin x}{x} }</code>
+            <span class="hint">hover · move across</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-click="teleport"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.48 -31.44 104.2667 42.12" width="104.2667" height="42.12" role="img" aria-label="ψ ( x , t )">
+              <g fill="currentColor">
+                <path d="M71 409 Q48 409 32 395 Q17 382 6 366 L-12 375 Q4 416 30 448 Q57 480 105 480 Q178 480 178 403 Q178 370 167 331 Q157 293 146 254 Q136 216 136 182 Q136 130 173 102 Q211 74 284 74 L293 505 L285 693 L376 695 L356 500 L342 79 Q407 88 443 117 Q479 146 493 186 Q508 226 508 269 Q508 330 495 369 Q483 409 467 432 Q451 456 438 469 L446 482 Q471 477 501 453 Q531 429 553 380 Q575 331 575 252 Q575 192 552 136 Q530 81 479 42 Q428 4 343 -7 L356 -191 L285 -217 L260 -214 L277 -11 Q183 -11 135 42 Q87 95 87 177 Q87 225 94 275 Q101 325 101 357 Q101 379 95 394 Q89 409 71 409 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(24.8 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(39.08 0) scale(0.04 -0.04)"/>
+                <path d="M70 -132 L58 -107 Q77 -99 96 -86 Q115 -74 128 -50 Q141 -26 141 14 Q125 8 110 8 Q81 8 68 24 Q55 40 55 62 Q55 86 71 103 Q87 121 117 121 Q155 121 174 97 Q194 74 194 33 Q194 -9 180 -38 Q167 -67 147 -85 Q127 -103 106 -114 Q85 -125 70 -132 Z" transform="translate(58.24 0) scale(0.04 -0.04)"/>
+                <path d="M293 90 L312 74 Q293 47 276 28 Q260 10 240 0 Q220 -10 188 -10 Q138 -10 115 19 Q92 49 92 116 L92 426 L37 426 L37 449 Q72 471 97 508 Q123 546 150 610 L176 610 L175 468 L288 468 L288 426 L175 426 L175 144 Q175 91 184 70 Q194 49 223 49 Q247 49 260 59 Q274 69 293 90 Z" transform="translate(74.7067 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(87.3067 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.click=teleport — dematerializes into a particle beam, then re-coalesces</span>
+            <code class="src">\lx[fx.click=teleport]{ \psi(x,t) }</code>
+            <span class="hint">click — beam out, then back in</span>
           </figcaption>
         </figure>
         <figure class="card">
