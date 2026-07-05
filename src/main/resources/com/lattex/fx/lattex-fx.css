@@ -1,0 +1,58 @@
+/* LatteX fx layer — OPTIONAL styles for the \lx effects (keyframes + effect classes).
+   Pair with lattex-fx.js. The math renders without either; include both only to enable
+   effects. Keyed off the container's data-lx-fx-*; the inner <svg> is never touched
+   (affordance-free). Transforms need an inline-block box. This is the fx layer ONLY — no
+   page chrome — so it drops into any page without leaking generic styles. */
+
+.lx-math { display: inline-block; transform-origin: center center; }
+
+/* enter=fade / enter=inkdrop start hidden so the JS reveal has somewhere to come from
+   (no flash-of-visible before the runtime wires). */
+.lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
+.lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; }
+
+@keyframes lx-boom {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.45); }
+  60%  { transform: scale(.92); }
+  100% { transform: scale(1); }
+}
+@keyframes lx-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.14); }
+}
+@keyframes lx-fade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+/* glow halo colour = --lx-glow-color when the author set fx.glow-color, else currentColor. */
+@keyframes lx-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 var(--lx-glow-color, currentColor)); }
+  50%      { filter: drop-shadow(0 0 12px var(--lx-glow-color, currentColor)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No motion; held-visible states stay legible. */
+  .lx-math { animation: none !important; }
+  .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
+  .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
+}
+
+/* blueprint: the container becomes an engineer's drafting field — a deep cyan-blue ground
+   under a faint white grid. The JS stroke-draws the glyphs in white over it. */
+.lx-math.lx-blueprint {
+  color: #eaf3ff;
+  padding: .5rem .7rem;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(226, 238, 255, .18);
+  background:
+    repeating-linear-gradient(0deg,  rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
+    repeating-linear-gradient(90deg, rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
+    linear-gradient(180deg, #0b3a66, #08294a);
+}
+
+/* hologram: scrolls the scanline body-overlay's gradient (3px period → 6px loop). */
+@keyframes lx-holo-scan {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 6px; }
+}
