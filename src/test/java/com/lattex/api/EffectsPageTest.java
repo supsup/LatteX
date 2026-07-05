@@ -1134,10 +1134,10 @@ class EffectsPageTest {
           }
 
           // GRAVWELL. Armed on enter: wire a click listener onto each glyph path. On click,
-          // the source glyph becomes a gravity well — every other glyph SPIRALS in toward it
-          // (radius collapsing as the angle sweeps) and SHRINKS + spins as it falls, then
-          // unwinds back out. rAF-driven; only toggles transform on the existing paths (set
-          // while animating, cleared at rest); no element into the inner <svg>.
+          // the source glyph becomes a gravity well — every other nearby glyph is gently pulled
+          // TOWARD it and SHRINKS as it's drawn in (1/r² reach), then eases back out. rAF-driven;
+          // only toggles transform on the existing paths (set while animating, cleared at rest).
+          // Simple by design: no spiral, no spin, no overlay orb — just pull + shrink.
           function gravwell(el) {
             var svg = el.querySelector('svg');
             if (!svg || reduced) { return; }
@@ -1151,9 +1151,9 @@ class EffectsPageTest {
               return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
             }
             var R0 = 46;       // reach: glyphs within ~this radius feel the well
-            var SWIRL = 3.4;   // radians of spiral swept on the way in
-            var SHRINK = 0.82; // how small a fully-pulled glyph gets
-            var IN = 640, HOLD = 130, BACK = 560;
+            var PULL = 0.6;    // fraction of the distance to the well a glyph closes at peak
+            var SHRINK = 0.6;  // how small a fully-pulled glyph gets
+            var IN = 260, HOLD = 110, BACK = 480;
             var raf = 0;
             paths.forEach(function (src) {
               src.style.cursor = 'pointer';
@@ -1161,62 +1161,27 @@ class EffectsPageTest {
                 var s = centre(src);
                 if (!s) { return; }
                 if (raf) { cancelAnimationFrame(raf); raf = 0; }
-                // Capture each non-source glyph's start polar coords about the well.
                 var movers = [];
                 paths.forEach(function (p) {
                   if (p === src) { return; }
                   var g = centre(p); if (!g) { return; }
-                  var dx = g.x - s.x, dy = g.y - s.y;          // well → glyph
-                  var r0 = Math.sqrt(dx * dx + dy * dy); if (r0 < 1e-3) { return; }
-                  var fall = Math.min(1, (R0 * R0) / (r0 * r0));
+                  var dx = s.x - g.x, dy = s.y - g.y;          // glyph → well
+                  var r = Math.sqrt(dx * dx + dy * dy); if (r < 1e-3) { return; }
+                  var fall = Math.min(1, (R0 * R0) / (r * r));
                   if (fall < 0.03) { return; }                 // too far to matter
                   p.style.transformBox = 'fill-box';
                   p.style.transformOrigin = 'center';
-                  p.style.transition = '';                     // rAF drives it, no CSS tween
-                  movers.push({ p: p, gx: g.x, gy: g.y, r0: r0,
-                    th0: Math.atan2(dy, dx), fall: fall });
+                  p.style.transition = '';
+                  movers.push({ p: p, dx: dx, dy: dy, fall: fall });
                 });
                 if (!movers.length) { return; }
-                // Once the glyphs have fallen in, the SOURCE collapses into an eclipse orb —
-                // a dark disc with a glowing corona — parked over the source glyph (a body-
-                // level overlay; the source path is dimmed beneath it), released on unwind.
-                var sr = src.getBoundingClientRect();
-                var osz = Math.max(15, Math.max(sr.width, sr.height) * 1.15);
-                function makeOrb() {
-                  if (el.__lxOrb) { return; }
-                  var o = document.createElement('div');
-                  o.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;'
-                    + 'border-radius:50%;left:' + (sr.left + sr.width / 2 - osz / 2) + 'px;'
-                    + 'top:' + (sr.top + sr.height / 2 - osz / 2) + 'px;'
-                    + 'width:' + osz + 'px;height:' + osz + 'px;opacity:0;transform:scale(.2);'
-                    + 'background:radial-gradient(circle,#000 54%,rgba(0,0,0,.35) 66%,transparent 73%);'
-                    + 'box-shadow:0 0 14px 3px rgba(255,238,190,.95),0 0 36px 11px rgba(255,175,80,.5);'
-                    + 'transition:opacity 200ms ease,transform 280ms cubic-bezier(.2,1.35,.4,1);';
-                  document.body.appendChild(o);
-                  el.__lxOrb = o;
-                  src.style.transition = 'opacity 200ms ease';
-                  src.style.opacity = '0.06';                  // the glyph collapses into the orb
-                  requestAnimationFrame(function () {
-                    if (el.__lxOrb === o) { o.style.opacity = '1'; o.style.transform = 'scale(1)'; }
-                  });
-                }
-                function killOrb() {
-                  var o = el.__lxOrb;
-                  if (!o) { return; }
-                  el.__lxOrb = null;
-                  o.style.opacity = '0'; o.style.transform = 'scale(.2)';
-                  src.style.opacity = '';                      // the source glyph returns
-                  setTimeout(function () { if (o.parentNode) { o.parentNode.removeChild(o); } }, 300);
-                }
-                killOrb();                                     // clear any lingering orb on re-click
                 var t0 = performance.now();
                 function frame(now) {
                   var e = now - t0, k;
-                  if (e < IN) { var u = e / IN; k = u * u * (3 - 2 * u); }   // ease in to 1
-                  else if (e < IN + HOLD) { k = 1; makeOrb(); }             // eclipse orb forms
+                  if (e < IN) { var u = e / IN; k = u * u * (3 - 2 * u); }   // ease in
+                  else if (e < IN + HOLD) { k = 1; }                        // hold at the well
                   else {
                     var d = (e - IN - HOLD) / BACK;
-                    killOrb();                                 // release: the orb dissolves
                     if (d >= 1) {                              // done → pristine at rest
                       movers.forEach(function (m) {
                         m.p.style.transform = '';
@@ -1225,18 +1190,15 @@ class EffectsPageTest {
                       });
                       raf = 0; return;
                     }
-                    k = 1 - d * d * (3 - 2 * d);               // unwind back out
+                    k = 1 - d * d * (3 - 2 * d);               // ease back out
                   }
                   movers.forEach(function (m) {
                     var pull = m.fall * k;                     // 0..1 depth into the well
-                    var r = m.r0 * (1 - 0.92 * pull);          // radius collapses inward
-                    var th = m.th0 + SWIRL * pull;             // angle sweeps → the spiral
-                    var tx = (s.x + r * Math.cos(th)) - m.gx;  // offset from the glyph's rest
-                    var ty = (s.y + r * Math.sin(th)) - m.gy;
-                    var sc = 1 - SHRINK * pull;                // shrinks as it spirals in
-                    var spin = SWIRL * pull * 57.2958;         // the glyph spins with the swirl
+                    var tx = m.dx * PULL * pull;               // slide toward the well
+                    var ty = m.dy * PULL * pull;
+                    var sc = 1 - SHRINK * pull;                // shrink as drawn in
                     m.p.style.transform = 'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2)
-                      + 'px) rotate(' + spin.toFixed(1) + 'deg) scale(' + sc.toFixed(3) + ')';
+                      + 'px) scale(' + sc.toFixed(3) + ')';
                   });
                   raf = requestAnimationFrame(frame);
                 }
@@ -1259,8 +1221,11 @@ class EffectsPageTest {
               ? authored : resolveColor(el);
             var r = el.getBoundingClientRect();
             if (!r.width || !r.height) { return; }
-            var pos0 = el.style.position;
+            var pos0 = el.style.position, iso0 = el.style.isolation;
             if (getComputedStyle(el).position === 'static') { el.style.position = 'relative'; }
+            el.style.isolation = 'isolate';            // own stacking context so the z-index:-1
+                                                       // canvas stays BEHIND the glyphs but IN
+                                                       // FRONT of the page (else it escapes, unseen)
             var padTop = Math.round(r.height * 1.4);   // headroom so streams fall INTO the box
             var W = r.width, H = r.height + padTop;
             var canvas = document.createElement('canvas');
@@ -1296,6 +1261,7 @@ class EffectsPageTest {
               timers.forEach(clearTimeout); timers.length = 0;
               canvas.remove();
               el.style.position = pos0;
+              el.style.isolation = iso0;
             }
             var t0 = performance.now(), RAIN = 2000;
             function frame(now) {
