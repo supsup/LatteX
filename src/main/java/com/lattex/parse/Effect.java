@@ -94,6 +94,49 @@ public enum Effect {
      * {@code <svg>}.
      */
     GRAVWELL,
+    /**
+     * MATRIXRAIN: green "digital rain" cascades down over the equation, then decrypts into it —
+     * katakana/digit streams fall in columns over the element's box, then thin as the real math
+     * resolves back in. Page-side JS routine (NOT a keyframe): it dims the container and draws on
+     * a pointer-events-none body {@code <canvas>}; it adds no element to the inner {@code <svg>}.
+     */
+    MATRIXRAIN,
+    /**
+     * SUPERNOVA: click and the equation collapses to a brilliant point, detonates (flash +
+     * shockwave ring + stardust), then re-condenses from the dust. Page-side JS routine: it
+     * toggles {@code transform}/{@code filter} on the container and draws a body {@code <canvas>}
+     * overlay; it adds no element to the inner {@code <svg>}.
+     */
+    SUPERNOVA,
+    /**
+     * INKDROP: the equation grows out of a falling ink splat — a drop falls, bursts into an
+     * irregular blot flinging spatter, and the glyphs bloom out of the ink. Page-side JS routine:
+     * it hides the container, drives body-level drop/splat/spatter overlays, and reveals the
+     * container from the blot; it adds no element to the inner {@code <svg>}.
+     */
+    INKDROP,
+    /**
+     * DIFFUSION: on hover the equation dissolves into ink-in-water (a turbulent spreading blur)
+     * and reassembles on leave. Page-side JS routine: it injects a runtime body-level hidden
+     * {@code <svg>} holding an {@code feTurbulence}→{@code feDisplacementMap} filter, points
+     * {@code el.style.filter} at it, and drives the map's scale + opacity; it adds no element to
+     * the inner math {@code <svg>} and removes its filter {@code <svg>} once idle.
+     */
+    DIFFUSION,
+    /**
+     * REFRACTION: on hover a small glassy lens follows the pointer across the equation, bending +
+     * brightening the glyphs beneath it like light through water. Page-side JS routine: it tracks
+     * {@code pointermove} and parks a body-level {@code backdrop-filter} lens overlay, removed on
+     * {@code pointerleave}; it touches nothing in the inner {@code <svg>}.
+     */
+    REFRACTION,
+    /**
+     * TELEPORT: a transporter beam. On click the equation dematerializes into a rising shimmer of
+     * particles that scatter, then re-coalesces. Page-side JS routine: it toggles {@code opacity}/
+     * {@code filter} on the container and drives a pointer-events-none body {@code <canvas>}
+     * particle field; it adds no element to the inner {@code <svg>}.
+     */
+    TELEPORT,
     /** Explicitly no effect. */
     NONE;
 
@@ -123,11 +166,18 @@ public enum Effect {
             case "blueprint" -> BLUEPRINT;
             case "wobble" -> WOBBLE;
             case "gravwell" -> GRAVWELL;
+            case "matrixrain" -> MATRIXRAIN;
+            case "supernova" -> SUPERNOVA;
+            case "inkdrop" -> INKDROP;
+            case "diffusion" -> DIFFUSION;
+            case "refraction" -> REFRACTION;
+            case "teleport" -> TELEPORT;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
                     + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
-                    + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell|none)");
+                    + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
+                    + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport|none)");
         };
     }
 

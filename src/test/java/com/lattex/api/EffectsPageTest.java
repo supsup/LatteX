@@ -103,6 +103,24 @@ class EffectsPageTest {
         new Fx("\\lx[fx.enter=gravwell]{ \\sum_{k=0}^{n} a_k x^k }",
             "fx.enter=gravwell — click a glyph; its neighbours fall toward it, then snap back",
             "click any glyph — it becomes a gravity well"),
+        new Fx("\\lx[fx.enter=matrixrain]{ e^{i\\pi}+1=0 }",
+            "fx.enter=matrixrain — green digital rain falls, then decrypts into the equation",
+            "load — watch the code rain resolve into math"),
+        new Fx("\\lx[fx.click=supernova]{ E = mc^2 }",
+            "fx.click=supernova — collapses to a point, detonates, re-condenses from the dust",
+            "click me — re-detonates each click"),
+        new Fx("\\lx[fx.enter=inkdrop]{ \\int_a^b f(x)\\,dx }",
+            "fx.enter=inkdrop — an ink drop falls, splats, and the equation blooms out of it",
+            "load — watch it grow out of the ink"),
+        new Fx("\\lx[fx.hover=diffusion]{ \\nabla \\cdot \\vec{E} }",
+            "fx.hover=diffusion — dissolves into ink-in-water on hover, reassembles on leave",
+            "hover — watch it diffuse away · leave — it swirls back"),
+        new Fx("\\lx[fx.hover=refraction]{ \\frac{\\sin x}{x} }",
+            "fx.hover=refraction — a glassy lens glides under the cursor, bending the glyphs",
+            "hover · move across"),
+        new Fx("\\lx[fx.click=teleport]{ \\psi(x,t) }",
+            "fx.click=teleport — dematerializes into a particle beam, then re-coalesces",
+            "click — beam out, then back in"),
         new Fx("\\lx[fx.enter=fade, fx.hover=pulse, fx.click=boom, fx.duration=400ms]"
             + "{ \\int_0^\\infty e^{-x}\\,dx }",
             "all three — fade in, pulse on hover, boom on click", "load · hover · click"));
@@ -227,6 +245,45 @@ class EffectsPageTest {
         assertTrue(written.contains("function gravwell"), "gravwell routine embedded");
         assertTrue(written.contains("__lxWellArmed"),
             "gravwell arms click handlers on the glyph paths");
+        // batch-2 (matrixrain/supernova/inkdrop/diffusion/refraction/teleport): page-side JS
+        // routines (NOT keyframes), stamped like any effect, touching only the container +
+        // existing paths (+ body-level canvas/overlay/filter defs).
+        assertTrue(written.contains("data-lx-fx-enter=\"matrixrain\""), "matrixrain stamped");
+        assertFalse(written.contains("@keyframes lx-matrixrain"),
+            "matrixrain is a JS canvas routine, not a keyframe");
+        assertTrue(written.contains("function matrixrain"), "matrixrain routine embedded");
+        assertTrue(written.contains("アイウエオ"),
+            "matrixrain rains katakana/digit columns over the element's box");
+        assertTrue(written.contains("data-lx-fx-click=\"supernova\""), "supernova stamped");
+        assertFalse(written.contains("@keyframes lx-supernova"),
+            "supernova is a JS overlay routine, not a keyframe");
+        assertTrue(written.contains("function supernova"), "supernova routine embedded");
+        assertTrue(written.contains("createRadialGradient"),
+            "supernova draws its detonation flash on a body canvas");
+        assertTrue(written.contains("data-lx-fx-enter=\"inkdrop\""), "inkdrop stamped");
+        assertFalse(written.contains("@keyframes lx-inkdrop"),
+            "inkdrop is a JS splat routine, not a keyframe");
+        assertTrue(written.contains("function inkdrop"), "inkdrop routine embedded");
+        assertTrue(written.contains("__lxInk"),
+            "inkdrop blooms the math out of the settled ink");
+        assertTrue(written.contains("data-lx-fx-hover=\"diffusion\""), "diffusion stamped");
+        assertFalse(written.contains("@keyframes lx-diffusion"),
+            "diffusion is a JS filter routine, not a keyframe");
+        assertTrue(written.contains("function diffusion"), "diffusion routine embedded");
+        assertTrue(written.contains("feDisplacementMap"),
+            "diffusion drives an feDisplacementMap scale to dissolve the glyphs");
+        assertTrue(written.contains("data-lx-fx-hover=\"refraction\""), "refraction stamped");
+        assertFalse(written.contains("@keyframes lx-refraction"),
+            "refraction is a JS pointer-tracked lens, not a keyframe");
+        assertTrue(written.contains("function refraction"), "refraction routine embedded");
+        assertTrue(written.contains("backdropFilter"),
+            "refraction lens reads as glass via a backdrop-filter overlay");
+        assertTrue(written.contains("data-lx-fx-click=\"teleport\""), "teleport stamped");
+        assertFalse(written.contains("@keyframes lx-teleport"),
+            "teleport is a JS beam routine, not a keyframe");
+        assertTrue(written.contains("function teleport"), "teleport routine embedded");
+        assertTrue(written.contains("globalCompositeOperation = 'lighter'"),
+            "teleport blooms its beam particles additively");
         assertTrue(written.contains("prefers-reduced-motion"), "respects reduced motion");
         // Whole-page containment: the ONLY <script>/<style>/data-*/on* live in the
         // trusted <head> runtime — never inside any rendered <svg>. Re-scan each SVG.
@@ -460,6 +517,7 @@ class EffectsPageTest {
           /* enter=fade starts hidden so the JS fade-in has somewhere to come from
              (no flash-of-visible before the animation is wired). */
           .lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
+          .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; } /* JS blooms it out of the ink */
 
           @keyframes lx-boom {
             0%   { transform: scale(1); }
@@ -486,6 +544,7 @@ class EffectsPageTest {
             /* Soften: no motion. Held-visible states must still be legible. */
             .lx-math { animation: none !important; }
             .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
+            .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
           }
 
           /* blueprint: the container becomes an engineer's drafting field — a deep
@@ -1197,6 +1256,499 @@ class EffectsPageTest {
             });
           }
 
+          // MATRIXRAIN. Green "digital rain" cascades DOWN over the equation, then DECRYPTS
+          // into it: katakana/digit streams fall in columns over the element's box, then thin
+          // while the real math fades back in. Dims el + draws on a pointer-events-none body
+          // <canvas>; rAF + timers cleared, canvas removed, el restored on cleanup.
+          function matrixrain(el) {
+            var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+            var authoredOk = authored && authored.toLowerCase() !== 'currentcolor';
+            var head = authoredOk ? authored : '#d7ffdd';
+            var trail = authoredOk ? authored : '#39f16a';
+            if (reduced) { el.style.opacity = '1'; return; }
+            var r = el.getBoundingClientRect();
+            if (!r.width || !r.height) { el.style.opacity = '1'; return; }
+            var op0 = el.style.opacity, trans0 = el.style.transition;
+            el.style.opacity = '0';
+            var canvas = document.createElement('canvas');
+            var dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.round(r.width * dpr);
+            canvas.height = Math.round(r.height * dpr);
+            canvas.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
+              + 'left:' + r.left + 'px;top:' + r.top + 'px;'
+              + 'width:' + r.width + 'px;height:' + r.height + 'px;'
+              + 'transition:opacity 320ms ease;';
+            document.body.appendChild(canvas);
+            var ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            var GLYPHS = ('アイウエオカキクケコサシスセソタチツテトナニヌネノ'
+              + '0123456789=+-<>{}πΔΣ√').split('');
+            function rnd() { return GLYPHS[(Math.random() * GLYPHS.length) | 0]; }
+            var FONT = 15;
+            ctx.font = FONT + 'px ui-monospace, "SF Mono", Menlo, monospace';
+            ctx.textBaseline = 'top';
+            var cols = Math.max(1, Math.floor(r.width / (FONT * 0.72)));
+            var colW = r.width / cols;
+            var rows = Math.max(1, Math.ceil(r.height / FONT) + 1);
+            var drops = [];
+            for (var c = 0; c < cols; c++) {
+              drops.push({ y: -Math.floor(Math.random() * rows), v: 0.35 + Math.random() * 0.5 });
+            }
+            var raf = 0, timers = [], done = false;
+            function stop() {
+              if (done) { return; }
+              done = true;
+              if (raf) { cancelAnimationFrame(raf); raf = 0; }
+              timers.forEach(clearTimeout); timers.length = 0;
+              canvas.remove();
+              el.style.opacity = op0 || '1';
+              el.style.transition = trans0;
+            }
+            var t0 = performance.now(), RAIN = 1100;
+            function frame(now) {
+              if (done) { return; }
+              ctx.globalAlpha = 1;
+              ctx.fillStyle = 'rgba(0,0,0,0.16)';
+              ctx.fillRect(0, 0, r.width, r.height);
+              for (var c = 0; c < cols; c++) {
+                var d = drops[c], x = c * colW, hy = Math.floor(d.y) * FONT;
+                ctx.globalAlpha = 0.95; ctx.fillStyle = head;
+                ctx.fillText(rnd(), x, hy);
+                ctx.fillStyle = trail;
+                for (var t = 1; t <= 3; t++) {
+                  ctx.globalAlpha = 0.5 - t * 0.13;
+                  if (ctx.globalAlpha > 0) { ctx.fillText(rnd(), x, hy - t * FONT); }
+                }
+                d.y += d.v;
+                if (hy > r.height && Math.random() > 0.975) {
+                  d.y = -1; d.v = 0.35 + Math.random() * 0.5;
+                }
+              }
+              if (now - t0 < RAIN) { raf = requestAnimationFrame(frame); return; }
+              raf = 0;
+              el.style.transition = 'opacity 440ms ease';
+              el.style.opacity = '1';
+              canvas.style.opacity = '0';
+              timers.push(setTimeout(stop, 480));
+            }
+            raf = requestAnimationFrame(frame);
+          }
+
+          // SUPERNOVA. Click to detonate: the equation COLLAPSES to a hot point, then
+          // DETONATES on a body <canvas> — radial flash + expanding shockwave ring + stardust
+          // flung with gravity/drag + fading trails — then RE-CONDENSES from the dust.
+          function supernova(el) {
+            if (el.__lxNova) { return; }
+            el.__lxNova = true;
+            var r = el.getBoundingClientRect();
+            var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+            var color = resolveColor(el);
+            var palette = ['#ffffff', '#ffe9b0', '#ffab4d', color, '#7fd4ff'];
+            var trans0 = el.style.transition, tf0 = el.style.transform, fil0 = el.style.filter;
+            function restore() {
+              el.__lxNova = false;
+              el.style.transition = trans0; el.style.transform = tf0; el.style.filter = fil0;
+            }
+            if (reduced) {
+              var veil = document.createElement('div');
+              veil.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
+                + 'z-index:2147483647;opacity:0;transition:opacity 120ms ease;background:'
+                + 'radial-gradient(circle 120px at ' + cx + 'px ' + cy + 'px,'
+                + ' rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 70%);';
+              document.body.appendChild(veil);
+              requestAnimationFrame(function () { veil.style.opacity = '1'; });
+              setTimeout(function () { veil.style.opacity = '0'; }, 130);
+              setTimeout(function () { veil.remove(); el.__lxNova = false; }, 340);
+              return;
+            }
+            el.style.transition = 'transform 170ms cubic-bezier(.6,0,.9,.2), filter 170ms ease';
+            el.style.transform = 'scale(0.1)';
+            el.style.filter = 'brightness(2.6) drop-shadow(0 0 10px ' + color + ')';
+            var vw = window.innerWidth, vh = window.innerHeight;
+            var dpr = window.devicePixelRatio || 1;
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.round(vw * dpr);
+            canvas.height = Math.round(vh * dpr);
+            canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+              + 'pointer-events:none;z-index:2147483647;';
+            document.body.appendChild(canvas);
+            var ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            var N = 64, parts = [];
+            for (var i = 0; i < N; i++) {
+              var ang = (i / N) * Math.PI * 2 + Math.random() * 0.35;
+              var speed = 120 + Math.random() * 340;
+              parts.push({ x: cx, y: cy, px: cx, py: cy,
+                vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
+                life: 1, decay: 0.6 + Math.random() * 0.7,
+                col: palette[(Math.random() * palette.length) | 0],
+                size: 1 + Math.random() * 2 });
+            }
+            var GRAV = 220, DRAG = 0.86;
+            var LIFE = 900, DETONATE = 170;
+            var raf = 0, timers = [], t0 = 0, lastT = 0;
+            function cleanup() {
+              if (raf) { cancelAnimationFrame(raf); raf = 0; }
+              timers.forEach(clearTimeout); timers.length = 0;
+              canvas.remove(); restore();
+            }
+            function frame(now) {
+              var e = now - t0;
+              var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+              lastT = now;
+              ctx.clearRect(0, 0, vw, vh);
+              var fa = Math.max(0, 1 - e / 180);
+              if (fa > 0) {
+                var fr = 60 + e * 0.5;
+                var fg = ctx.createRadialGradient(cx, cy, 0, cx, cy, fr);
+                fg.addColorStop(0, 'rgba(255,255,255,' + (0.95 * fa).toFixed(3) + ')');
+                fg.addColorStop(0.4, 'rgba(255,220,150,' + (0.6 * fa).toFixed(3) + ')');
+                fg.addColorStop(1, 'rgba(255,160,60,0)');
+                ctx.fillStyle = fg;
+                ctx.beginPath(); ctx.arc(cx, cy, fr, 0, Math.PI * 2); ctx.fill();
+              }
+              var sa = Math.max(0, 1 - e / 520);
+              if (sa > 0) {
+                ctx.strokeStyle = 'rgba(255,210,150,' + (0.8 * sa).toFixed(3) + ')';
+                ctx.lineWidth = 1 + 5 * sa;
+                ctx.beginPath(); ctx.arc(cx, cy, e * 0.9, 0, Math.PI * 2); ctx.stroke();
+              }
+              for (var i = 0; i < parts.length; i++) {
+                var p = parts[i];
+                if (p.life <= 0) { continue; }
+                p.px = p.x; p.py = p.y;
+                p.vy += GRAV * dt;
+                var d = Math.pow(DRAG, dt * 60);
+                p.vx *= d; p.vy *= d;
+                p.x += p.vx * dt; p.y += p.vy * dt;
+                p.life -= p.decay * dt;
+                ctx.strokeStyle = p.col;
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.lineWidth = p.size;
+                ctx.beginPath(); ctx.moveTo(p.px, p.py); ctx.lineTo(p.x, p.y); ctx.stroke();
+              }
+              ctx.globalAlpha = 1;
+              if (e < LIFE) { raf = requestAnimationFrame(frame); } else { cleanup(); }
+            }
+            timers.push(setTimeout(function () {
+              el.style.transition = 'transform 720ms cubic-bezier(.16,1.4,.3,1), filter 640ms ease';
+              el.style.transform = tf0 || 'scale(1)';
+              el.style.filter = fil0;
+              t0 = performance.now();
+              raf = requestAnimationFrame(frame);
+            }, DETONATE));
+          }
+
+          // INKDROP. The equation grows out of a falling ink splat: a dark drop falls, hits
+          // the centre, splats into an irregular blot flinging spatter, and the glyphs bloom
+          // up out of the settled ink. Body-level drop/splat/spatter overlays, removed on cleanup.
+          function inkdrop(el) {
+            if (el.__lxInk) { return; }
+            el.__lxInk = true;
+            var ink = resolveColor(el);
+            var trans0 = el.style.transition, to0 = el.style.transformOrigin,
+                pos0 = el.style.position, z0 = el.style.zIndex, tf0 = el.style.transform;
+            if (reduced) { el.style.opacity = '1'; return; }
+            var r = el.getBoundingClientRect();
+            var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+            var timers = [];
+            function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+            el.style.opacity = '0';
+            el.style.position = 'relative';
+            el.style.zIndex = '2147483647';
+            el.style.transformOrigin = (r.width / 2) + 'px ' + r.height + 'px';
+            el.style.transform = 'scale(.32)';
+            var FALL = 84, DROP = 260, SPLAT = 210, BLOOM = 440;
+            var dSize = 15;
+            var drop = document.createElement('div');
+            drop.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;background:' + ink
+              + ';left:' + (cx - dSize / 2) + 'px;top:' + (cy - dSize / 2 - FALL) + 'px;'
+              + 'width:' + dSize + 'px;height:' + dSize + 'px;opacity:.94;'
+              + 'border-radius:62% 62% 60% 60% / 82% 82% 54% 54%;transform:scale(.7,1.15);'
+              + 'transition:transform ' + DROP + 'ms cubic-bezier(.55,.06,.9,.35);';
+            document.body.appendChild(drop);
+            var bW = Math.max(30, Math.min(r.width * 0.9, 130)), bH = bW * 0.66;
+            var splat = document.createElement('div');
+            splat.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483645;background:' + ink
+              + ';left:' + cx + 'px;top:' + cy + 'px;width:' + bW + 'px;height:' + bH + 'px;'
+              + 'margin:' + (-bH / 2) + 'px 0 0 ' + (-bW / 2) + 'px;opacity:0;'
+              + 'border-radius:46% 54% 62% 38% / 58% 44% 56% 42%;transform:scale(0);'
+              + 'transition:transform ' + SPLAT + 'ms cubic-bezier(.2,1.35,.4,1), opacity 180ms ease;';
+            document.body.appendChild(splat);
+            var spatter = [];
+            requestAnimationFrame(function () {
+              drop.style.transform = 'translateY(' + FALL + 'px) scale(1,.82)';
+            });
+            later(function () {
+              drop.style.opacity = '0';
+              splat.style.opacity = '1';
+              splat.style.transform = 'scale(1)';
+              for (var i = 0; i < 5; i++) {
+                (function (i) {
+                  var ang = Math.PI * 2 * (i / 5) + Math.random() * 0.8;
+                  var dist = 16 + Math.random() * 24, sz = 3 + Math.random() * 4;
+                  var d = document.createElement('div');
+                  d.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483645;background:' + ink
+                    + ';left:' + cx + 'px;top:' + cy + 'px;width:' + sz + 'px;height:' + sz + 'px;'
+                    + 'margin:' + (-sz / 2) + 'px 0 0 ' + (-sz / 2) + 'px;border-radius:50%;opacity:.85;'
+                    + 'transition:transform 300ms cubic-bezier(.15,.7,.3,1), opacity 520ms ease;';
+                  document.body.appendChild(d);
+                  spatter.push(d);
+                  requestAnimationFrame(function () {
+                    d.style.transform = 'translate(' + (Math.cos(ang) * dist).toFixed(1) + 'px,'
+                      + (Math.sin(ang) * dist).toFixed(1) + 'px) scale('
+                      + (0.4 + Math.random() * 0.6).toFixed(2) + ')';
+                  });
+                })(i);
+              }
+            }, DROP);
+            later(function () {
+              el.style.transition = 'opacity ' + BLOOM + 'ms ease, transform '
+                + BLOOM + 'ms cubic-bezier(.2,1.12,.35,1)';
+              el.style.opacity = '1';
+              el.style.transform = 'scale(1)';
+              splat.style.transition = 'opacity ' + BLOOM + 'ms ease, transform ' + BLOOM + 'ms ease';
+              splat.style.transform = 'scale(1.18)';
+              splat.style.opacity = '0';
+              spatter.forEach(function (d) { d.style.opacity = '0'; });
+            }, DROP + SPLAT);
+            later(function () {
+              timers.length = 0;
+              drop.remove(); splat.remove();
+              spatter.forEach(function (d) { d.remove(); });
+              el.style.transition = trans0; el.style.transform = tf0;
+              el.style.transformOrigin = to0; el.style.position = pos0; el.style.zIndex = z0;
+            }, DROP + SPLAT + BLOOM + 140);
+          }
+
+          // A module-scoped counter so each element's diffusion filter gets a unique id
+          // (multiple specimens on the page must not share one <filter>).
+          var __lxDiffuseSeq = 0;
+
+          // DIFFUSION. On hover the equation dissolves into ink-in-water — a turbulent
+          // spreading blur — and reassembles on leave (reversible). A runtime body-level
+          // hidden <svg> holds an feTurbulence→feDisplacementMap filter; el.style.filter
+          // points at it and a single rAF loop drives the map's scale + opacity; removed idle.
+          function diffusion(el) {
+            if (reduced) { return; }
+            var st = el.__lxDiffuse;
+            if (!st) {
+              st = el.__lxDiffuse =
+                { p: 0, dir: 1, raf: 0, last: 0, holder: null, map: null };
+              el.addEventListener('mouseleave', function () {
+                st.dir = -1;
+                if (!st.raf) { st.last = 0; st.raf = requestAnimationFrame(step); }
+              });
+            }
+            st.dir = 1;
+            ensureFilter();
+            if (!st.raf) { st.last = 0; st.raf = requestAnimationFrame(step); }
+            function ensureFilter() {
+              if (st.holder) { return; }
+              var seq = ++__lxDiffuseSeq;
+              var id = 'lx-diffuse-' + seq;
+              var holder =
+                document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+              holder.setAttribute('aria-hidden', 'true');
+              holder.setAttribute('width', '0');
+              holder.setAttribute('height', '0');
+              holder.style.cssText =
+                'position:absolute;width:0;height:0;overflow:hidden;';
+              holder.innerHTML =
+                '<defs><filter id="' + id
+                  + '" x="-50%" y="-50%" width="200%" height="200%">'
+                + '<feTurbulence type="fractalNoise" baseFrequency="0.02"'
+                  + ' numOctaves="2" seed="' + seq + '" result="lx-noise"/>'
+                + '<feDisplacementMap in="SourceGraphic" in2="lx-noise" scale="0"'
+                  + ' xChannelSelector="R" yChannelSelector="G"/>'
+                + '</filter></defs>';
+              document.body.appendChild(holder);
+              st.holder = holder;
+              st.map = holder.querySelector('feDisplacementMap');
+              el.style.filter = 'url(#' + id + ')';
+            }
+            function step(now) {
+              if (!st.last) { st.last = now; }
+              var dt = Math.min(64, now - st.last);
+              st.last = now;
+              st.p += st.dir * dt / 520;
+              if (st.p > 1) { st.p = 1; }
+              if (st.p < 0) { st.p = 0; }
+              if (st.map) { st.map.setAttribute('scale', (st.p * 30).toFixed(2)); }
+              el.style.opacity = (1 - st.p * 0.82).toFixed(3);
+              var settled = (st.dir > 0 && st.p >= 1) || (st.dir < 0 && st.p <= 0);
+              if (!settled) { st.raf = requestAnimationFrame(step); return; }
+              st.raf = 0;
+              if (st.dir < 0 && st.p <= 0) {
+                el.style.filter = '';
+                el.style.opacity = '';
+                if (st.holder) { st.holder.remove(); st.holder = null; st.map = null; }
+              }
+            }
+          }
+
+          // REFRACTION. Armed on hover: a small glassy lens (a body-level, pointer-events-none
+          // <div> whose backdrop-filter blurs + lifts the glyphs beneath it) follows the
+          // pointer across the equation, torn down on pointerleave. Touches nothing in the <svg>.
+          function refraction(el) {
+            if (reduced) { return; }
+            if (el.__lxLensArmed) { return; }
+            el.__lxLensArmed = true;
+            var lens = null;
+            function makeLens(r) {
+              var d = Math.max(34, Math.min(120, r.height * 1.6));
+              var n = document.createElement('div');
+              n.setAttribute('aria-hidden', 'true');
+              var s = n.style;
+              s.position = 'fixed';
+              s.left = '0'; s.top = '0';
+              s.width = d + 'px'; s.height = d + 'px';
+              s.marginLeft = (-d / 2) + 'px';
+              s.marginTop = (-d / 2) + 'px';
+              s.borderRadius = '50%';
+              s.pointerEvents = 'none';
+              s.zIndex = '2147483646';
+              s.willChange = 'transform';
+              s.backdropFilter = 'blur(1.3px) brightness(1.14) contrast(1.06) saturate(1.12)';
+              s.webkitBackdropFilter = s.backdropFilter;
+              s.background = 'radial-gradient(circle at 34% 30%, rgba(255,255,255,.38),'
+                + ' rgba(255,255,255,.06) 42%, rgba(255,255,255,0) 62%)';
+              s.boxShadow = 'inset 0 0 0 1px rgba(255,255,255,.35),'
+                + ' inset 0 -6px 12px rgba(0,0,0,.10), 0 3px 10px rgba(0,0,0,.18)';
+              s.transition = 'opacity 140ms ease';
+              s.opacity = '0';
+              document.body.appendChild(n);
+              requestAnimationFrame(function () { if (n.parentNode) { n.style.opacity = '1'; } });
+              return n;
+            }
+            function move(ev) {
+              if (!lens) { lens = makeLens(el.getBoundingClientRect()); }
+              lens.style.transform = 'translate(' + ev.clientX + 'px,' + ev.clientY + 'px)';
+            }
+            function leave() {
+              el.removeEventListener('pointermove', move);
+              el.removeEventListener('pointerleave', leave);
+              el.__lxLensArmed = false;
+              var dead = lens; lens = null;
+              if (dead) {
+                dead.style.opacity = '0';
+                setTimeout(function () {
+                  if (dead.parentNode) { dead.parentNode.removeChild(dead); }
+                }, 160);
+              }
+            }
+            el.addEventListener('pointermove', move);
+            el.addEventListener('pointerleave', leave);
+          }
+
+          // TELEPORT. A transporter beam-out/in. On click the equation DEMATERIALIZES — el
+          // fades out while a body <canvas> over its box draws a rising column of shimmering
+          // cyan/white particles behind a soft vertical beam — holds a beat, then REMATERIALIZES
+          // as the particles descend/converge and el fades in. opacity/filter on el + a canvas.
+          function teleport(el) {
+            if (el.__lxTeleporting) { return; }
+            el.__lxTeleporting = true;
+            var color = resolveColor(el);
+            var filter0 = el.style.filter, trans0 = el.style.transition, op0 = el.style.opacity;
+            var timers = [];
+            function restore() {
+              el.style.transition = trans0; el.style.filter = filter0;
+              el.style.opacity = op0 || '1'; el.__lxTeleporting = false;
+            }
+            if (reduced) {
+              el.style.transition = 'opacity 240ms ease';
+              el.style.opacity = '0';
+              timers.push(setTimeout(function () {
+                el.style.opacity = '1';
+                timers.push(setTimeout(restore, 260));
+              }, 420));
+              return;
+            }
+            var r = el.getBoundingClientRect();
+            var dpr = window.devicePixelRatio || 1;
+            var pad = 30;
+            var W = r.width, H = r.height + pad * 2;
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.round(W * dpr);
+            canvas.height = Math.round(H * dpr);
+            canvas.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
+              + 'left:' + r.left + 'px;top:' + (r.top - pad) + 'px;'
+              + 'width:' + W + 'px;height:' + H + 'px;';
+            document.body.appendChild(canvas);
+            var ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            var N = Math.max(90, Math.min(320, Math.round(W * 1.4)));
+            var particles = [];
+            for (var i = 0; i < N; i++) {
+              particles.push({
+                x: Math.random() * W,
+                y: pad + Math.random() * r.height,
+                vx: (Math.random() * 2 - 1) * 0.35,
+                vy: -(0.4 + Math.random() * 1.6),
+                size: 0.6 + Math.random() * 1.9,
+                life: Math.random(),
+                c: Math.random() < 0.5 ? '255,255,255' : '150,238,255'
+              });
+            }
+            function reseed() {
+              for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+                p.x = Math.random() * W;
+                p.y = Math.random() * pad;
+                p.vx = (W / 2 - p.x) / (r.height + pad) * (0.6 + Math.random() * 0.8);
+                p.vy = 0.5 + Math.random() * 1.7;
+                p.life = Math.random();
+              }
+            }
+            var OUT = 620, HOLD = 240, IN = 620, END = OUT + HOLD + IN;
+            el.style.transition = 'opacity ' + OUT + 'ms ease, filter ' + OUT + 'ms ease';
+            el.style.filter = 'drop-shadow(0 0 6px ' + color + ')';
+            el.style.opacity = '0';
+            var raf = 0, inStarted = false, t0 = performance.now();
+            function cleanup() {
+              if (raf) { cancelAnimationFrame(raf); raf = 0; }
+              timers.forEach(clearTimeout); timers.length = 0;
+              canvas.remove();
+              restore();
+            }
+            function draw(now) {
+              var t = now - t0;
+              if (t >= OUT + HOLD && !inStarted) {
+                inStarted = true;
+                el.style.transition = 'opacity ' + IN + 'ms ease, filter ' + IN + 'ms ease';
+                el.style.filter = filter0 || 'none';
+                el.style.opacity = '1';
+                reseed();
+              }
+              var phase = t < OUT ? 0 : (t < OUT + HOLD ? 1 : 2);
+              var g = phase === 0 ? Math.min(1, t / OUT)
+                    : phase === 1 ? 1
+                    : Math.max(0, 1 - (t - OUT - HOLD) / IN);
+              ctx.clearRect(0, 0, W, H);
+              ctx.globalCompositeOperation = 'lighter';
+              var beam = ctx.createLinearGradient(0, 0, 0, H);
+              beam.addColorStop(0, 'rgba(150,238,255,0)');
+              beam.addColorStop(0.5, 'rgba(150,238,255,' + (0.22 * g).toFixed(3) + ')');
+              beam.addColorStop(1, 'rgba(150,238,255,0)');
+              ctx.fillStyle = beam;
+              ctx.fillRect(W / 2 - 7, 0, 14, H);
+              for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.life += 0.03;
+                var tw = 0.5 + 0.5 * Math.sin(p.life * 6.283 + i);
+                var a = Math.max(0, g * tw * 0.9);
+                if (a <= 0.01) { continue; }
+                ctx.beginPath();
+                ctx.fillStyle = 'rgba(' + p.c + ',' + a.toFixed(3) + ')';
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              if (t >= END) { cleanup(); return; }
+              raf = requestAnimationFrame(draw);
+            }
+            raf = requestAnimationFrame(draw);
+          }
+
           // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
           // crystallize/blueprint/wobble/gravwell) → their JS routines;
           // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1211,6 +1763,12 @@ class EffectsPageTest {
             if (name === 'blueprint') { blueprint(el); return; }
             if (name === 'wobble') { wobble(el); return; }
             if (name === 'gravwell') { gravwell(el); return; }
+            if (name === 'matrixrain') { matrixrain(el); return; }
+            if (name === 'supernova') { supernova(el); return; }
+            if (name === 'inkdrop') { inkdrop(el); return; }
+            if (name === 'diffusion') { diffusion(el); return; }
+            if (name === 'refraction') { refraction(el); return; }
+            if (name === 'teleport') { teleport(el); return; }
             if (!VOCAB[name] || name === 'none') { return; }
             if (reduced) { return; }
             el.style.animation = 'none';
