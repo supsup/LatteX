@@ -26,6 +26,17 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, and delimiters to SVG today. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, `fx` effects, and a click action menu (Copy / Graph) are built too. (These currently live on review branches, merging to the mainline soon.) See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
+## The fx layer is OPTIONAL
+
+The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, and 16 more) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations:
+
+```java
+LatteX.fxRuntimeJs()   // the runtime — serve as /js/lattex-fx.js, or inline in a trusted <script>
+LatteX.fxStylesCss()   // the styles — serve as /css/lattex-fx.css, or inline in a <style>
+```
+
+Both are jar resources (`com/lattex/fx/lattex-fx.{js,css}`); a consumer gets them from the jar it already depends on — no separately-managed asset. Drop them into a page and the effects light up; leave them out and the math is exactly as safe/static as before. Browse the whole catalogue live in `examples/effects.html`.
+
 ## Build
 
 ```bash

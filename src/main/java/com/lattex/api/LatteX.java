@@ -320,4 +320,38 @@ public final class LatteX {
             default -> Character.toString(codePoint);
         };
     }
+
+    /**
+     * The OPTIONAL LatteX fx runtime — vanilla JS, zero dependencies. It reads {@code data-lx-fx-*}
+     * attributes on {@code .lx-math} wrappers and animates the {@code \lx} effects. The math renders
+     * from this jar WITHOUT it; include this script (with {@link #fxStylesCss()}) only if you want
+     * the effects. Bundled as a jar resource so any consumer gets it from the jar it already depends
+     * on — no separately-managed asset.
+     *
+     * @return the {@code lattex-fx.js} runtime source
+     */
+    public static String fxRuntimeJs() {
+        return bundledResource("/com/lattex/fx/lattex-fx.js");
+    }
+
+    /**
+     * The OPTIONAL styles for the fx layer — the effect {@code @keyframes} + a couple of effect
+     * classes. Pair with {@link #fxRuntimeJs()}. Optional: the math needs neither.
+     *
+     * @return the {@code lattex-fx.css} source
+     */
+    public static String fxStylesCss() {
+        return bundledResource("/com/lattex/fx/lattex-fx.css");
+    }
+
+    private static String bundledResource(String path) {
+        try (java.io.InputStream in = LatteX.class.getResourceAsStream(path)) {
+            if (in == null) {
+                throw new IllegalStateException("bundled LatteX resource missing: " + path);
+            }
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException("failed to read bundled resource " + path, e);
+        }
+    }
 }

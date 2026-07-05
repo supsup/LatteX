@@ -113,67 +113,71 @@
   }
 
   /* =====================================================================
-     fx EFFECT RUNTIME — page-side, keyed off the container's data-lx-fx-*.
-     The animation lives ENTIRELY here + the JS below; the inner <svg> is
-     untouched (affordance-free). Transforms need an inline-block box.
-     ===================================================================== */
-  .lx-math { display: inline-block; transform-origin: center center; }
-  /* enter=fade starts hidden so the JS fade-in has somewhere to come from
-     (no flash-of-visible before the animation is wired). */
-  .lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
-  .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; } /* JS blooms it out of the ink */
 
-  @keyframes lx-boom {
-    0%   { transform: scale(1); }
-    30%  { transform: scale(1.45); }
-    60%  { transform: scale(.92); }
-    100% { transform: scale(1); }
-  }
-  @keyframes lx-pulse {
-    0%, 100% { transform: scale(1); }
-    50%      { transform: scale(1.14); }
-  }
-  @keyframes lx-fade {
-    0%   { opacity: 0; }
-    100% { opacity: 1; }
-  }
-  /* glow halo colour = --lx-glow-color when the author set fx.glow-color,
-     else currentColor (unset = today's theme-aware-ink behaviour). */
-  @keyframes lx-glow {
-    0%, 100% { filter: drop-shadow(0 0 0 var(--lx-glow-color, currentColor)); }
-    50%      { filter: drop-shadow(0 0 12px var(--lx-glow-color, currentColor)); }
-  }
+/* LatteX fx layer — OPTIONAL styles for the \lx effects (keyframes + effect classes).
+   Pair with lattex-fx.js. The math renders without either; include both only to enable
+   effects. Keyed off the container's data-lx-fx-*; the inner <svg> is never touched
+   (affordance-free). Transforms need an inline-block box. This is the fx layer ONLY — no
+   page chrome — so it drops into any page without leaking generic styles. */
 
-  @media (prefers-reduced-motion: reduce) {
-    /* Soften: no motion. Held-visible states must still be legible. */
-    .lx-math { animation: none !important; }
-    .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
-    .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
-  }
+.lx-math { display: inline-block; transform-origin: center center; }
 
-  /* blueprint: the container becomes an engineer's drafting field — a deep
-     cyan-blue ground under a faint white grid. The JS then stroke-draws the
-     glyphs in white + fades transient guide marks; under reduced motion this
-     static look is all that shows. */
-  .lx-math.lx-blueprint {
-    color: #eaf3ff;
-    padding: .5rem .7rem;
-    border-radius: 6px;
-    box-shadow: inset 0 0 0 1px rgba(226, 238, 255, .18);
-    background:
-      repeating-linear-gradient(0deg,  rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
-      repeating-linear-gradient(90deg, rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
-      linear-gradient(180deg, #0b3a66, #08294a);
-  }
+/* enter=fade / enter=inkdrop start hidden so the JS reveal has somewhere to come from
+   (no flash-of-visible before the runtime wires). */
+.lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
+.lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; }
 
-  /* hologram: scrolls the scanline body-overlay's gradient (3px period → 6px
-     loop). Rides the overlay, never the element — hologram itself is JS-driven. */
-  @keyframes lx-holo-scan {
-    0%   { background-position: 0 0; }
-    100% { background-position: 0 6px; }
-  }
+@keyframes lx-boom {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.45); }
+  60%  { transform: scale(.92); }
+  100% { transform: scale(1); }
+}
+@keyframes lx-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.14); }
+}
+@keyframes lx-fade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+/* glow halo colour = --lx-glow-color when the author set fx.glow-color, else currentColor. */
+@keyframes lx-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 var(--lx-glow-color, currentColor)); }
+  50%      { filter: drop-shadow(0 0 12px var(--lx-glow-color, currentColor)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No motion; held-visible states stay legible. */
+  .lx-math { animation: none !important; }
+  .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
+  .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
+}
+
+/* blueprint: the container becomes an engineer's drafting field — a deep cyan-blue ground
+   under a faint white grid. The JS stroke-draws the glyphs in white over it. */
+.lx-math.lx-blueprint {
+  color: #eaf3ff;
+  padding: .5rem .7rem;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(226, 238, 255, .18);
+  background:
+    repeating-linear-gradient(0deg,  rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
+    repeating-linear-gradient(90deg, rgba(226,238,255,.10) 0 1px, transparent 1px 14px),
+    linear-gradient(180deg, #0b3a66, #08294a);
+}
+
+/* hologram: scrolls the scanline body-overlay's gradient (3px period → 6px loop). */
+@keyframes lx-holo-scan {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 6px; }
+}
+
 </style>
   <script>
+/* LatteX fx runtime — OPTIONAL. Reads data-lx-fx-* on .lx-math wrappers and animates the
+   \lx effects. Self-contained, no deps, CSP-friendly (one external script). The math renders
+   without this; include it (+ lattex-fx.css) only if you want the effects. */
 (function () {
   // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
   // (boom|pulse|fade|glow|none). 'lightning' and 'storm' are special-cased
@@ -1376,6 +1380,7 @@
     init();
   }
 })();
+
 </script>
 </head>
 <body>
