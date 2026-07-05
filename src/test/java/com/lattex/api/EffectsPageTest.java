@@ -1100,12 +1100,11 @@ class EffectsPageTest {
             setTimeout(function () { guide.remove(); }, total + 120);
           }
 
-          // WOBBLE. On its trigger the glyphs jiggle like jelly: each glyph does an
-          // AUTONOMOUS damped wobble — a springy rotate + bob decaying over ~1.5s —
-          // staggered left-to-right so it ripples across the equation. No interaction
-          // needed (visible on load). transform-box/origin are set only WHILE wobbling and
-          // cleared at rest (setting them on a resting glyph mispositions it); it toggles
-          // style.transform on the existing paths only — nothing touches the inner <svg>.
+          // WOBBLE. On its trigger the glyphs jiggle like jelly: each does an AUTONOMOUS
+          // damped VERTICAL bob decaying over ~1.4s, staggered left-to-right so it ripples
+          // across the equation. Pure translateY (origin-independent) — NO rotation (which
+          // read as an eraser sweep) and NO transform-box (which left a stray horizontal line);
+          // it toggles style.transform on the existing paths only — nothing touches the <svg>.
           function wobble(el) {
             if (reduced) { return; }
             var svg = el.querySelector('svg');
@@ -1115,32 +1114,22 @@ class EffectsPageTest {
             paths.sort(function (a, b) {          // left-to-right so the ripple reads
               try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
             });
-            var DUR = 1500; // ms of wobble per glyph
+            var DUR = 1400; // ms of wobble per glyph
             paths.forEach(function (p, i) {
               setTimeout(function () {                     // stagger → the ripple
-                var wobbleAmp = 13 + Math.random() * 6;    // peak degrees of swing
-                var freq = 6 + Math.random() * 3;          // oscillations over the life
+                var wobbleAmp = 5 + Math.random() * 2.5;   // peak PX of bounce
+                var freq = 5 + Math.random() * 2;          // oscillations over the life
                 var t0 = performance.now();
-                p.style.transformBox = 'fill-box';
-                p.style.transformOrigin = 'center';
                 function step(now) {
                   var t = (now - t0) / DUR;                // 0..1
-                  if (t >= 1) {                            // done → pristine at rest
-                    p.style.transform = '';
-                    p.style.transformBox = '';
-                    p.style.transformOrigin = '';
-                    return;
-                  }
+                  if (t >= 1) { p.style.transform = ''; return; }   // pristine at rest
                   var env = (1 - t) * (1 - t);             // ease-out decay envelope
-                  var ph = t * freq * Math.PI * 2;
-                  var ang = Math.sin(ph) * wobbleAmp * env;
-                  var ty = Math.cos(ph * 1.05) * wobbleAmp * 0.32 * env;
-                  p.style.transform = 'translateY(' + ty.toFixed(2) + 'px) rotate('
-                    + ang.toFixed(2) + 'deg)';
+                  var ty = -Math.sin(t * freq * Math.PI * 2) * wobbleAmp * env;
+                  p.style.transform = 'translateY(' + ty.toFixed(2) + 'px)';
                   requestAnimationFrame(step);
                 }
                 requestAnimationFrame(step);
-              }, i * 55);
+              }, i * 50);
             });
           }
 
@@ -1256,43 +1245,48 @@ class EffectsPageTest {
             });
           }
 
-          // MATRIXRAIN. Green "digital rain" cascades DOWN over the equation, then DECRYPTS
-          // into it: katakana/digit streams fall in columns over the element's box, then thin
-          // while the real math fades back in. Dims el + draws on a pointer-events-none body
-          // <canvas>; rAF + timers cleared, canvas removed, el restored on cleanup.
+          // MATRIXRAIN. "Digital rain" falls DOWN — but BEHIND the equation, which stays fully
+          // visible in front. A child <canvas> at z-index:-1 covers the element's box (with
+          // headroom above so streams fall INTO it); the rain is tinted to the equation's OWN
+          // ink colour (matches the theme) — an author's fx.glow-color overrides. A
+          // destination-out fade tapers each column to TRANSPARENT (no dark box behind the math).
           function matrixrain(el) {
+            if (reduced) { return; }
+            var svg = el.querySelector('svg');
+            if (!svg) { return; }
             var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
-            var authoredOk = authored && authored.toLowerCase() !== 'currentcolor';
-            var head = authoredOk ? authored : '#d7ffdd';
-            var trail = authoredOk ? authored : '#39f16a';
-            if (reduced) { el.style.opacity = '1'; return; }
+            var ink = (authored && authored.toLowerCase() !== 'currentcolor')
+              ? authored : resolveColor(el);
             var r = el.getBoundingClientRect();
-            if (!r.width || !r.height) { el.style.opacity = '1'; return; }
-            var op0 = el.style.opacity, trans0 = el.style.transition;
-            el.style.opacity = '0';
+            if (!r.width || !r.height) { return; }
+            var pos0 = el.style.position;
+            if (getComputedStyle(el).position === 'static') { el.style.position = 'relative'; }
+            var padTop = Math.round(r.height * 1.4);   // headroom so streams fall INTO the box
+            var W = r.width, H = r.height + padTop;
             var canvas = document.createElement('canvas');
             var dpr = window.devicePixelRatio || 1;
-            canvas.width = Math.round(r.width * dpr);
-            canvas.height = Math.round(r.height * dpr);
-            canvas.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
-              + 'left:' + r.left + 'px;top:' + r.top + 'px;'
-              + 'width:' + r.width + 'px;height:' + r.height + 'px;'
-              + 'transition:opacity 320ms ease;';
-            document.body.appendChild(canvas);
+            canvas.width = Math.round(W * dpr);
+            canvas.height = Math.round(H * dpr);
+            canvas.style.cssText = 'position:absolute;pointer-events:none;z-index:-1;'
+              + 'left:0;top:' + (-padTop) + 'px;width:' + W + 'px;height:' + H + 'px;'
+              + 'opacity:0;transition:opacity 400ms ease;';
+            el.appendChild(canvas);                    // BEHIND the glyphs (z-index:-1)
             var ctx = canvas.getContext('2d');
             ctx.scale(dpr, dpr);
+            requestAnimationFrame(function () { canvas.style.opacity = '1'; });
             var GLYPHS = ('アイウエオカキクケコサシスセソタチツテトナニヌネノ'
               + '0123456789=+-<>{}πΔΣ√').split('');
             function rnd() { return GLYPHS[(Math.random() * GLYPHS.length) | 0]; }
-            var FONT = 15;
+            var FONT = 14;
             ctx.font = FONT + 'px ui-monospace, "SF Mono", Menlo, monospace';
             ctx.textBaseline = 'top';
-            var cols = Math.max(1, Math.floor(r.width / (FONT * 0.72)));
-            var colW = r.width / cols;
-            var rows = Math.max(1, Math.ceil(r.height / FONT) + 1);
+            var cols = Math.max(1, Math.floor(W / (FONT * 0.72)));
+            var colW = W / cols;
+            var rows = Math.max(1, Math.ceil(H / FONT) + 1);
             var drops = [];
             for (var c = 0; c < cols; c++) {
-              drops.push({ y: -Math.floor(Math.random() * rows), v: 0.35 + Math.random() * 0.5 });
+              drops.push({ y: -Math.floor(Math.random() * rows),
+                v: 0.30 + Math.random() * 0.45, lastRow: -999 });
             }
             var raf = 0, timers = [], done = false;
             function stop() {
@@ -1301,35 +1295,33 @@ class EffectsPageTest {
               if (raf) { cancelAnimationFrame(raf); raf = 0; }
               timers.forEach(clearTimeout); timers.length = 0;
               canvas.remove();
-              el.style.opacity = op0 || '1';
-              el.style.transition = trans0;
+              el.style.position = pos0;
             }
-            var t0 = performance.now(), RAIN = 1100;
+            var t0 = performance.now(), RAIN = 2000;
             function frame(now) {
               if (done) { return; }
+              ctx.globalCompositeOperation = 'destination-out';   // fade the tail to TRANSPARENT
               ctx.globalAlpha = 1;
-              ctx.fillStyle = 'rgba(0,0,0,0.16)';
-              ctx.fillRect(0, 0, r.width, r.height);
+              ctx.fillStyle = 'rgba(0,0,0,0.10)';
+              ctx.fillRect(0, 0, W, H);
+              ctx.globalCompositeOperation = 'source-over';
+              ctx.globalAlpha = 0.92;
+              ctx.fillStyle = ink;
               for (var c = 0; c < cols; c++) {
-                var d = drops[c], x = c * colW, hy = Math.floor(d.y) * FONT;
-                ctx.globalAlpha = 0.95; ctx.fillStyle = head;
-                ctx.fillText(rnd(), x, hy);
-                ctx.fillStyle = trail;
-                for (var t = 1; t <= 3; t++) {
-                  ctx.globalAlpha = 0.5 - t * 0.13;
-                  if (ctx.globalAlpha > 0) { ctx.fillText(rnd(), x, hy - t * FONT); }
+                var d = drops[c], row = Math.floor(d.y);
+                if (row !== d.lastRow && row >= 0) {              // new glyph only on row advance
+                  ctx.fillText(rnd(), c * colW, row * FONT);
+                  d.lastRow = row;
                 }
                 d.y += d.v;
-                if (hy > r.height && Math.random() > 0.975) {
-                  d.y = -1; d.v = 0.35 + Math.random() * 0.5;
+                if (row * FONT > H && Math.random() > 0.975) {
+                  d.y = -1; d.lastRow = -999; d.v = 0.30 + Math.random() * 0.45;
                 }
               }
               if (now - t0 < RAIN) { raf = requestAnimationFrame(frame); return; }
               raf = 0;
-              el.style.transition = 'opacity 440ms ease';
-              el.style.opacity = '1';
               canvas.style.opacity = '0';
-              timers.push(setTimeout(stop, 480));
+              timers.push(setTimeout(stop, 440));
             }
             raf = requestAnimationFrame(frame);
           }
