@@ -23,7 +23,9 @@ class FxCssOnlyVisibilityTest {
 
     @Test
     void everyEnterHideRuleIsRootMarkerScoped() {
-        String css = LatteX.fxStylesCss();
+        // Comments stripped first — a doc comment ahead of a rule would otherwise be
+        // absorbed into the selector capture and break the prefix assertion.
+        String css = LatteX.fxStylesCss().replaceAll("(?s)/\\*.*?\\*/", "");
         Matcher m = HIDE_RULE.matcher(css);
         int hides = 0;
         while (m.find()) {
