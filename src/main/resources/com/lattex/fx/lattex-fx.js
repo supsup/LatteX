@@ -1738,12 +1738,18 @@
     if (!groups) { return; } // no/invalid glyphmap: semantic effects stay inert
     el.__lxThread = true;
 
+    // NEVER set style.transform on these paths: each carries its PLACEMENT as an
+    // SVG transform attribute (translate + font-unit downscale), and the CSS
+    // transform property overrides the attribute wholesale — the glyph loses its
+    // placement and renders as a font-unit-sized blob (Charles's smoke, 2026-07-06).
+    // The emphasis is a bold-stroke instead: stroke-width is in the path's LOCAL
+    // (font design) units, so ~28 units reads as a crisp optical bolding at any
+    // rendered size, composing with the placement rather than fighting it.
     function restore() {
       for (var i = 0; i < paths.length; i++) {
         paths[i].style.opacity = '';
-        paths[i].style.transform = '';
-        paths[i].style.transformBox = '';
-        paths[i].style.transformOrigin = '';
+        paths[i].style.stroke = '';
+        paths[i].style.strokeWidth = '';
         paths[i].style.transition = '';
       }
     }
@@ -1751,13 +1757,10 @@
       for (var i = 0; i < paths.length; i++) {
         var mate = group.indexOf(i) >= 0;
         var p = paths[i];
-        p.style.transition = 'opacity 140ms ease, transform 140ms ease';
+        p.style.transition = 'opacity 140ms ease';
         p.style.opacity = mate ? '1' : '0.22';
-        if (mate && !reduced) {
-          p.style.transformBox = 'fill-box';
-          p.style.transformOrigin = 'center';
-          p.style.transform = 'scale(1.18)';
-        }
+        p.style.stroke = mate ? 'currentColor' : '';
+        p.style.strokeWidth = mate ? '28' : '';
       }
     }
     paths.forEach(function (p, i) {

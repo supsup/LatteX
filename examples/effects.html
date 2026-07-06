@@ -1904,6 +1904,76 @@
   }
 
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
+  // THREAD: the first SEMANTIC effect — hover any glyph and every other occurrence
+  // of the same source token lights up while the rest of the equation recedes.
+  // Identity arrives via the data-lx-glyphmap container sidecar (RFC lattex/34→35):
+  // runs of <hex-codepoint>:<path-index-list>, indices addressing the inner SVG's
+  // <path>s in emit order. The map is renderer-derived and value-constrained by the
+  // sanitizer; we still validate against the contract grammar here (defense in
+  // depth + the drift-guard test keys on this literal). No map → inert. Only
+  // opacity/transform presentation attributes on EXISTING paths change.
+  var GLYPHMAP_RE = /^[0-9a-f]+:[0-9]+(,[0-9]+)*(;[0-9a-f]+:[0-9]+(,[0-9]+)*)*$/;
+
+  function parseGlyphmap(el, pathCount) {
+    var raw = el.getAttribute('data-lx-glyphmap');
+    if (!raw || !GLYPHMAP_RE.test(raw)) { return null; }
+    var groups = {}; // path index -> [all indices of its token group]
+    var runs = raw.split(';');
+    for (var r = 0; r < runs.length; r++) {
+      var pair = runs[r].split(':');
+      var idx = pair[1].split(',').map(Number);
+      for (var i = 0; i < idx.length; i++) {
+        if (idx[i] >= pathCount) { return null; } // out-of-bounds map: refuse whole
+        groups[idx[i]] = idx;
+      }
+    }
+    return groups;
+  }
+
+  function thread(el) {
+    if (el.__lxThread) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    var groups = parseGlyphmap(el, paths.length);
+    if (!groups) { return; } // no/invalid glyphmap: semantic effects stay inert
+    el.__lxThread = true;
+
+    // NEVER set style.transform on these paths: each carries its PLACEMENT as an
+    // SVG transform attribute (translate + font-unit downscale), and the CSS
+    // transform property overrides the attribute wholesale — the glyph loses its
+    // placement and renders as a font-unit-sized blob (Charles's smoke, 2026-07-06).
+    // The emphasis is a bold-stroke instead: stroke-width is in the path's LOCAL
+    // (font design) units, so ~28 units reads as a crisp optical bolding at any
+    // rendered size, composing with the placement rather than fighting it.
+    function restore() {
+      for (var i = 0; i < paths.length; i++) {
+        paths[i].style.opacity = '';
+        paths[i].style.stroke = '';
+        paths[i].style.strokeWidth = '';
+        paths[i].style.transition = '';
+      }
+    }
+    function light(group) {
+      for (var i = 0; i < paths.length; i++) {
+        var mate = group.indexOf(i) >= 0;
+        var p = paths[i];
+        p.style.transition = 'opacity 140ms ease';
+        p.style.opacity = mate ? '1' : '0.22';
+        p.style.stroke = mate ? 'currentColor' : '';
+        p.style.strokeWidth = mate ? '28' : '';
+      }
+    }
+    paths.forEach(function (p, i) {
+      var group = groups[i];
+      if (!group) { return; } // structural/unmapped glyph: recedes with the rest
+      p.style.cursor = 'default';
+      p.addEventListener('mouseenter', function () { light(group); });
+    });
+    svg.addEventListener('mouseleave', restore);
+  }
+
+  // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
   // on re-trigger).
@@ -1928,6 +1998,7 @@
     if (name === 'quantum') { quantum(el); return; }
     if (name === 'typeset') { typeset(el); return; }
     if (name === 'constellation') { constellation(el); return; }
+    if (name === 'thread') { thread(el); return; } // arming effect: binds per-glyph hover
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
