@@ -189,6 +189,17 @@ public enum Effect {
      * {@code <svg>}.
      */
     CONSTELLATION,
+    /**
+     * THREAD: the first <em>semantic</em> effect — hover any glyph and every other
+     * occurrence of the same source token lights up while the rest of the equation
+     * recedes ({@code x} threads with {@code x²}'s x, across the whole expression).
+     * Page-side JS routine reading the {@code data-lx-glyphmap} container sidecar
+     * (RFC lattex/34→35): identity rides the wrapper as a validated attribute,
+     * paths are addressed by emit order, and only {@code opacity}/{@code transform}
+     * presentation attributes on the existing {@code <path>}s change; it adds no
+     * element to the inner {@code <svg>}. Without a glyphmap it is inert.
+     */
+    THREAD,
     /** Explicitly no effect. */
     NONE;
 
@@ -230,13 +241,14 @@ public enum Effect {
             case "quantum" -> QUANTUM;
             case "typeset" -> TYPESET;
             case "constellation" -> CONSTELLATION;
+            case "thread" -> THREAD;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
                     + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
                     + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
-                    + "|shatter|glitch|sparkler|quantum|typeset|constellation|none)");
+                    + "|shatter|glitch|sparkler|quantum|typeset|constellation|thread|none)");
         };
     }
 
