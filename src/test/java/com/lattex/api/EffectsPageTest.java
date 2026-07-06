@@ -127,6 +127,9 @@ class EffectsPageTest {
         new Fx("\\lx[fx.hover=glitch]{ \\det(A - \\lambda I) = 0 }",
             "fx.hover=glitch — the red/cyan channels rip apart, slices shear, then snap back",
             "hover — datamosh"),
+        new Fx("\\lx[fx.enter=sparkler]{ \\oint_C \\vec{B} \\cdot d\\vec{l} = \\mu_0 I }",
+            "fx.enter=sparkler — a white-hot spark writes the equation in fire, embers spraying off the tip",
+            "load — watch it burn in"),
         new Fx("\\lx[fx.enter=fade, fx.hover=pulse, fx.click=boom, fx.duration=400ms]"
             + "{ \\int_0^\\infty e^{-x}\\,dx }",
             "all three — fade in, pulse on hover, boom on click", "load · hover · click"));

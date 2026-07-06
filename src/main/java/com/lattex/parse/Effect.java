@@ -154,6 +154,15 @@ public enum Effect {
      * {@code <svg>}.
      */
     GLITCH,
+    /**
+     * SPARKLER: a white-hot spark travels along every glyph stroke, writing the
+     * equation in fire — embers spray off the moving tip, drift, and die out as the
+     * letters cool into place. Page-side JS routine: handscribe's dashoffset draw-on
+     * (presentation attributes on the existing {@code <path>}s only) plus a
+     * pointer-events-none body {@code <canvas>} for the tip glow and embers; it adds
+     * no element to the inner {@code <svg>}.
+     */
+    SPARKLER,
     /** Explicitly no effect. */
     NONE;
 
@@ -191,13 +200,14 @@ public enum Effect {
             case "teleport" -> TELEPORT;
             case "shatter" -> SHATTER;
             case "glitch" -> GLITCH;
+            case "sparkler" -> SPARKLER;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
                     + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
                     + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
-                    + "|shatter|glitch|none)");
+                    + "|shatter|glitch|sparkler|none)");
         };
     }
 

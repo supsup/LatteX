@@ -1329,6 +1329,148 @@
     raf = requestAnimationFrame(frame);
   }
 
+  // SPARKLER: a white-hot spark travels along every glyph stroke, writing the
+  // equation in fire — embers spray off the moving tip, drift, and die as the
+  // letters cool into place. Handscribe's dashoffset draw-on, driven manually
+  // per frame so a body-canvas ember tip can ride the exact frontier (mapped
+  // through getScreenCTM); presentation attributes only on the existing
+  // <path>s — nothing is added to the inner <svg>.
+  function sparkler(el) {
+    if (el.__lxSparkler) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; } // reduced motion: leave it static
+    el.__lxSparkler = true;
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    var DRAW = 420, STAGGER = 70, FILL = 300, COOL = 700;
+    var glyphs = [];
+    paths.forEach(function (p, i) {
+      var len;
+      try { len = p.getTotalLength() || 100; } catch (e) { len = 100; }
+      p.style.stroke = '#ffb25e';
+      p.style.strokeWidth = '1.5';
+      p.style.fill = 'transparent';
+      p.style.strokeDasharray = len;
+      p.style.strokeDashoffset = len;
+      glyphs.push({ p: p, len: len, start: i * STAGGER, done: false });
+    });
+    var total = (glyphs.length - 1) * STAGGER + DRAW;
+
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var fil0 = el.style.filter, trans0 = el.style.transition;
+    el.style.filter = 'drop-shadow(0 0 7px rgba(255,150,60,0.65))';
+    var embers = [], raf = 0, timers = [], t0 = performance.now(), lastT = 0;
+
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove();
+      el.style.filter = fil0; el.style.transition = trans0;
+      el.__lxSparkler = false;
+    }
+
+    function tipAt(g, prog) {
+      // The draw frontier in page coordinates: dashoffset len→0 reveals from
+      // the path's start, so the visible tip is at length len*prog.
+      var pt, m;
+      try {
+        pt = g.p.getPointAtLength(g.len * prog);
+        m = g.p.getScreenCTM();
+      } catch (e) { return null; }
+      if (!m) { return null; }
+      return { x: m.a * pt.x + m.c * pt.y + m.e,
+               y: m.b * pt.x + m.d * pt.y + m.f };
+    }
+
+    var PALETTE = ['#ffffff', '#ffe9b0', '#ffc46a', '#ff9d3a', '#ff5f2e'];
+    function frame(now) {
+      var e = now - t0;
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+      lastT = now;
+      ctx.clearRect(0, 0, vw, vh);
+      ctx.globalCompositeOperation = 'lighter';
+      for (var i = 0; i < glyphs.length; i++) {
+        var g = glyphs[i];
+        var prog = Math.max(0, Math.min(1, (e - g.start) / DRAW));
+        if (prog <= 0) { continue; }
+        g.p.style.strokeDashoffset = String(g.len * (1 - prog));
+        if (prog >= 1 && !g.done) {
+          g.done = true;
+          // Cool the finished glyph: warm stroke fades as the ink fill takes.
+          (function (p) {
+            p.style.transition = 'fill ' + FILL + 'ms ease, stroke ' + FILL + 'ms ease';
+            p.style.fill = 'currentColor';
+            p.style.stroke = 'transparent';
+            timers.push(setTimeout(function () {
+              p.style.stroke = ''; p.style.strokeWidth = '';
+              p.style.strokeDasharray = ''; p.style.strokeDashoffset = '';
+              p.style.transition = ''; p.style.fill = '';
+            }, FILL + 80));
+          })(g.p);
+        }
+        if (prog < 1) {
+          var tip = tipAt(g, prog);
+          if (tip) {
+            // White-hot tip glow.
+            var tg = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, 7);
+            tg.addColorStop(0, 'rgba(255,255,255,0.95)');
+            tg.addColorStop(0.5, 'rgba(255,200,110,0.55)');
+            tg.addColorStop(1, 'rgba(255,140,40,0)');
+            ctx.fillStyle = tg;
+            ctx.beginPath(); ctx.arc(tip.x, tip.y, 7, 0, Math.PI * 2); ctx.fill();
+            // Spray a few embers off the tip.
+            for (var s = 0; s < 3; s++) {
+              var ang = Math.random() * Math.PI * 2;
+              var sp = 20 + Math.random() * 90;
+              embers.push({ x: tip.x, y: tip.y,
+                vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 35,
+                life: 0.5 + Math.random() * 0.6,
+                size: 0.6 + Math.random() * 1.4,
+                col: PALETTE[(Math.random() * PALETTE.length) | 0] });
+            }
+          }
+        }
+      }
+      // Integrate + draw the embers (light gravity, fade out).
+      var alive = 0;
+      for (var k = 0; k < embers.length; k++) {
+        var em = embers[k];
+        if (em.life <= 0) { continue; }
+        alive++;
+        em.x += em.vx * dt; em.y += em.vy * dt;
+        em.vy += 130 * dt; em.life -= dt * 1.1;
+        var a = Math.max(0, Math.min(1, em.life));
+        ctx.beginPath();
+        ctx.fillStyle = em.col;
+        ctx.globalAlpha = a;
+        ctx.arc(em.x, em.y, em.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (e > total + COOL && alive === 0) {
+        el.style.transition = 'filter 400ms ease';
+        el.style.filter = fil0 || 'none';
+        timers.push(setTimeout(cleanup, 420));
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1350,6 +1492,7 @@
     if (name === 'refraction') { refraction(el); return; }
     if (name === 'teleport') { teleport(el); return; }
     if (name === 'shatter') { shatter(el); return; }
+    if (name === 'sparkler') { sparkler(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
