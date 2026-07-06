@@ -627,32 +627,48 @@
       + ' transparent 1px, transparent 3px);';
     document.body.appendChild(scan);
     el._lxHolo = scan;
+    var col0 = el.style.color, fil0 = el.style.filter,
+        tf0 = el.style.transform, trans0 = el.style.transition, op0 = el.style.opacity;
     function place() {
       var r = el.getBoundingClientRect();
       scan.style.left = r.left + 'px'; scan.style.top = r.top + 'px';
       scan.style.width = r.width + 'px'; scan.style.height = r.height + 'px';
     }
     place();
-    window.addEventListener('scroll', place, true);
     window.addEventListener('resize', place);
+    // The idle loop runs indefinitely, so teardown is MANDATORY, not optional
+    // (the leak the review flagged HIGH: no clearInterval, listeners + overlay
+    // outlived the element forever). die() ends it on scroll and restores
+    // everything; the interval + resize listener + overlay all release.
+    var idle = 0;
+    var die = scrollKillable(function () {
+      if (idle) { clearInterval(idle); idle = 0; }
+      window.removeEventListener('resize', place);
+      scan.remove();
+      el._lxHolo = false;
+      el.style.color = col0; el.style.filter = fil0; el.style.transform = tf0;
+      el.style.transition = trans0; el.style.opacity = op0;
+    });
     if (reduced) { return; }
     scan.style.animation = 'lx-holo-scan 1.1s linear infinite';
     el.style.transition = 'transform 1400ms ease-in-out, opacity 90ms linear';
     var seq = ['0', '1', '.2', '1', '.5', '1'], j = 0;
     (function boot() {
+      if (die.dead()) { return; }
       if (j < seq.length) { el.style.opacity = seq[j++]; setTimeout(boot, 55); return; }
       var dir = 1;
-      setInterval(function () {
+      idle = setInterval(function () {
+        if (die.dead()) { clearInterval(idle); idle = 0; return; }
         place();
         dir = -dir;
         el.style.transform = 'perspective(440px) rotateY(' + (dir * 6) + 'deg)';
         if (Math.random() < 0.5) {
           el.style.filter = aberr(3 + Math.random() * 3);
-          setTimeout(function () { el.style.filter = aberr(1.2); }, 90);
+          setTimeout(function () { if (!die.dead()) { el.style.filter = aberr(1.2); } }, 90);
         }
         if (Math.random() < 0.28) {
           el.style.opacity = '.4';
-          setTimeout(function () { el.style.opacity = '1'; }, 70);
+          setTimeout(function () { if (!die.dead()) { el.style.opacity = '1'; } }, 70);
         }
       }, 900);
     })();
@@ -662,6 +678,13 @@
   // one glyph left flickering forever. Drives a drop-shadow bloom + opacity on the
   // container and toggles opacity on ONE existing inner-<svg> path; no <svg> edits.
   function neonsign(el) {
+    // Re-entry guard: neonsign was the ONLY JS effect without one, so every
+    // mouseenter (data-lx-fx-hover=neonsign) stacked a fresh perpetual flicker
+    // loop (review HIGH). Guard blocks re-entry; the loop stops when the flag
+    // clears (the element leaving the DOM is out of scope, but re-trigger no
+    // longer compounds, which was the actual observed leak).
+    if (el.__lxNeon) { return; }
+    el.__lxNeon = true;
     var color = resolveColor(el);
     function glow(on) {
       var core = 2 + on * 1;
@@ -690,17 +713,27 @@
       }, s[0]);
     });
     var paths = el.querySelectorAll('svg path');
-    if (!paths.length) { return; }
+    if (!paths.length) { el.__lxNeon = false; return; }
     var broken = paths[Math.floor(paths.length / 2)];
     broken.style.transition = 'opacity 60ms linear';
+    // The "one glyph flickers forever" idle loop is scroll-killable so it
+    // releases its timer + clears the guard on scroll-away (the loop no longer
+    // outlives the element unconditionally).
+    var timer = 0;
+    var die = scrollKillable(function () {
+      if (timer) { clearTimeout(timer); timer = 0; }
+      broken.style.opacity = ''; broken.style.transition = '';
+      el.__lxNeon = false;
+    });
     function flicker() {
+      if (die.dead()) { return; }
       var dropout = Math.random() < 0.35;
       broken.style.opacity = dropout
         ? (Math.random() < 0.5 ? '0.15' : '0.6') : '1';
       var next = dropout ? 40 + Math.random() * 90 : 300 + Math.random() * 1500;
-      setTimeout(flicker, next);
+      timer = setTimeout(flicker, next);
     }
-    setTimeout(flicker, 600);
+    timer = setTimeout(flicker, 600);
   }
 
   // CRYSTALLIZE. A frost front sweeps across (a body-level frost pane, clip-swept),
@@ -973,13 +1006,18 @@
   // destination-out fade tapers each column to TRANSPARENT (no dark box behind the math).
   function matrixrain(el) {
     if (reduced) { return; }
+    // Re-entry guard: a re-trigger while active would re-read the ALREADY
+    // position:relative/isolation:isolate inline styles as its "originals" and
+    // corrupt the restore (review LOW). The cleanup clears the flag.
+    if (el.__lxRain) { return; }
     var svg = el.querySelector('svg');
     if (!svg) { return; }
+    el.__lxRain = true;
     var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
     var ink = (authored && authored.toLowerCase() !== 'currentcolor')
       ? authored : resolveColor(el);
     var r = el.getBoundingClientRect();
-    if (!r.width || !r.height) { return; }
+    if (!r.width || !r.height) { el.__lxRain = false; return; }
     var pos0 = el.style.position, iso0 = el.style.isolation;
     if (getComputedStyle(el).position === 'static') { el.style.position = 'relative'; }
     el.style.isolation = 'isolate';            // own stacking context so the z-index:-1
@@ -1020,6 +1058,7 @@
       canvas.remove();
       el.style.position = pos0;
       el.style.isolation = iso0;
+      el.__lxRain = false;
     });
     var t0 = performance.now(), RAIN = 2000;
     function frame(now) {
@@ -1963,7 +2002,12 @@
                      ignite: Math.random() * 700 });
       }
     });
-    if (!stars.length) { el.__lxConst = false; return; }
+    // If star-sampling produced nothing — the container was display:none or
+    // detached at load, so getScreenCTM/getTotalLength returned null/0 — the CSS
+    // pre-hide (opacity:0) would otherwise leave the equation PERMANENTLY
+    // invisible (review MEDIUM). Reveal it plainly and bail: no stars, but the
+    // math is visible, which is the correct degrade.
+    if (!stars.length) { el.style.opacity = '1'; el.__lxConst = false; return; }
     // Join each star to its 2 nearest neighbours (the constellation lines).
     var links = [], seen = {};
     stars.forEach(function (s, i) {
