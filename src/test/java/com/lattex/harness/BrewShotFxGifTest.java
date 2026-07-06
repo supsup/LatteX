@@ -1,5 +1,8 @@
 package com.lattex.harness;
 
+import com.brewshot.BrewShot;
+import com.brewshot.MiniJson;
+
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -21,7 +24,7 @@ import org.junit.jupiter.api.Test;
  * frames (a dead trigger or a no-op effect produces identical frames and
  * fails), which pins trigger wiring + animation liveness per effect.
  */
-class CdpFxGifTest {
+class BrewShotFxGifTest {
 
     private static final int FRAMES = 14;
     private static final int FRAME_DELAY_MS = 110;
@@ -39,15 +42,15 @@ class CdpFxGifTest {
 
     @Test
     void recordsShowpieceGifsBesideTheHtml() throws Exception {
-        assumeTrue(CdpChrome.available(), "no local Chrome; skipping browser pin");
+        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
         Path page = examples().resolve("effects.html");
         assumeTrue(Files.exists(page), "examples/effects.html not generated");
         assumeTrue(Files.readString(page).contains("data-lx-fx-overlay"),
             "stale examples/effects.html (predates the current runtime) — "
                 + "full-suite runs regenerate it first (class ordering)");
 
-        try (CdpChrome chrome = CdpChrome.launch(1200, 900)) {
-            chrome.navigate(page.toUri().toString());
+        try (BrewShot chrome = BrewShot.launch(1200, 900)) {
+            chrome.open(page.toUri().toString());
             chrome.settle(1500); // let load-time enter effects finish
 
             for (String[] piece : SHOWPIECES) {
@@ -58,7 +61,7 @@ class CdpFxGifTest {
         }
     }
 
-    private void recordOne(CdpChrome chrome, String pageUrl, String effect, String trigger)
+    private void recordOne(BrewShot chrome, String pageUrl, String effect, String trigger)
             throws Exception {
         // Locate the card, scroll it into view, return its page-coordinate rect.
         Object rect = chrome.eval("""
@@ -87,7 +90,7 @@ class CdpFxGifTest {
         // IIFE), so re-navigate and record the fresh load immediately. The
         // page-coordinate rect stays valid across the reload (same layout).
         if (trigger.equals("enter")) {
-            chrome.navigate(pageUrl);
+            chrome.open(pageUrl);
             chrome.settle(60); // catch the animation young
         } else {
             String fire = trigger.equals("hover")
@@ -118,7 +121,7 @@ class CdpFxGifTest {
             + " produced identical frames — trigger dead or animation inert");
 
         Path out = examples().resolve("fx-" + trigger + "-" + effect + ".gif");
-        GifWriter.write(frames, FRAME_DELAY_MS, out);
+        BrewShot.gif(frames, FRAME_DELAY_MS, out);
         assertTrue(Files.size(out) > 5_000, "suspiciously small GIF at " + out);
     }
 }

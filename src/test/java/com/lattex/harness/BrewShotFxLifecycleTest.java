@@ -1,5 +1,8 @@
 package com.lattex.harness;
 
+import com.brewshot.BrewShot;
+import com.brewshot.MiniJson;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -25,7 +28,7 @@ import org.junit.jupiter.api.Test;
  * behavioral test at all. Pinned end-to-end: mouseenter on a mapped glyph
  * bolds exactly its codepoint-group mates; mouseleave restores every path.
  */
-class CdpFxLifecycleTest {
+class BrewShotFxLifecycleTest {
 
     private static Path examples() {
         return Path.of("examples").toAbsolutePath();
@@ -33,7 +36,7 @@ class CdpFxLifecycleTest {
 
     @Test
     void hologramAndNeonsignTearDownOnScroll() throws Exception {
-        assumeTrue(CdpChrome.available(), "no local Chrome; skipping browser pin");
+        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
         Path page = examples().resolve("effects.html");
         assumeTrue(Files.exists(page), "examples/effects.html not generated");
         assumeTrue(Files.readString(page).contains("data-lx-fx-overlay"),
@@ -41,8 +44,8 @@ class CdpFxLifecycleTest {
                 + "full-suite runs regenerate it first (class ordering)");
 
         // Short viewport so the page is scrollable (the kill needs a REAL scroll).
-        try (CdpChrome chrome = CdpChrome.launch(1200, 800)) {
-            chrome.navigate(page.toUri().toString());
+        try (BrewShot chrome = BrewShot.launch(1200, 800)) {
+            chrome.open(page.toUri().toString());
             // enter effects play immediately on load; give the hologram boot
             // sequence (6 x 55ms) time to finish arming.
             chrome.settle(800);
@@ -96,12 +99,12 @@ class CdpFxLifecycleTest {
 
     @Test
     void threadGlyphmapBoldsExactlyTheHoveredCodepointGroup() throws Exception {
-        assumeTrue(CdpChrome.available(), "no local Chrome; skipping browser pin");
+        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
         Path page = examples().resolve("thread-preview.html");
         assumeTrue(Files.exists(page), "examples/thread-preview.html not generated");
 
-        try (CdpChrome chrome = CdpChrome.launch(900, 700)) {
-            chrome.navigate(page.toUri().toString());
+        try (BrewShot chrome = BrewShot.launch(900, 700)) {
+            chrome.open(page.toUri().toString());
             chrome.settle(300);
 
             // The preview stamps GLYPHMAP "78:0,2,4;2b:1,3" over "x + x + x":
