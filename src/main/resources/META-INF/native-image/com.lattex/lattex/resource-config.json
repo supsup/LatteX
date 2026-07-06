@@ -3,6 +3,12 @@
     "includes": [
       {
         "pattern": "\\Qcom/lattex/font/STIXTwoMath-Regular.ttf\\E"
+      },
+      {
+        "pattern": "\\Qcom/lattex/fx/lattex-fx.js\\E"
+      },
+      {
+        "pattern": "\\Qcom/lattex/fx/lattex-fx.css\\E"
       }
     ]
   }

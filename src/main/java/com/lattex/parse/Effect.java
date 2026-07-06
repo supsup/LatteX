@@ -137,6 +137,58 @@ public enum Effect {
      * particle field; it adds no element to the inner {@code <svg>}.
      */
     TELEPORT,
+    /**
+     * SHATTER: the equation cracks like glass — a bright crack-web flashes, the pane
+     * breaks into triangular shards that scatter and hang in zero-g, and the next
+     * click magnetically reassembles them (a toggle). Page-side JS routine: it replays
+     * the existing inner-{@code <svg>} ink onto a body-level {@code <canvas>} overlay
+     * and animates shards of it while the container only fades under the pane; it adds
+     * no element to the inner {@code <svg>}.
+     */
+    SHATTER,
+    /**
+     * GLITCH: datamosh — the red/cyan channels rip apart, slice bands drop out and
+     * shear sideways with static jitter, then everything snaps back pixel-perfect.
+     * Unlike the JS routines this is a pure CSS keyframe on the container
+     * ({@code filter}/{@code transform}/{@code clip-path}); nothing reaches the inner
+     * {@code <svg>}.
+     */
+    GLITCH,
+    /**
+     * SPARKLER: a white-hot spark travels along every glyph stroke, writing the
+     * equation in fire — embers spray off the moving tip, drift, and die out as the
+     * letters cool into place. Page-side JS routine: handscribe's dashoffset draw-on
+     * (presentation attributes on the existing {@code <path>}s only) plus a
+     * pointer-events-none body {@code <canvas>} for the tip glow and embers; it adds
+     * no element to the inner {@code <svg>}.
+     */
+    SPARKLER,
+    /**
+     * QUANTUM: the equation sits in superposition — every glyph jitters fuzzily between
+     * ghost positions under a soft blur until you OBSERVE it (hover), when the
+     * wavefunction collapses crisp with a snap-flash (idle-collapses on its own after a
+     * while). Page-side JS routine: inline {@code transform}/{@code filter} on the
+     * existing {@code <path>}s plus a container flash; it adds no element to the inner
+     * {@code <svg>}.
+     */
+    QUANTUM,
+    /**
+     * TYPESET: letterpress — the glyphs stamp onto the page one by one in reading order,
+     * each pressed in with a satisfying squash. Page-side JS routine: staggered inline
+     * {@code opacity}/{@code transform} on the existing {@code <path>}s; it adds no
+     * element to the inner {@code <svg>}.
+     */
+    TYPESET,
+    /**
+     * CONSTELLATION: the equation first appears as a night-sky star map — points
+     * ignite along the glyph outlines, faint lines join near neighbours, the map
+     * twinkles, then the stars fuse into the crisp equation. Page-side JS routine:
+     * star positions are sampled read-only from the existing {@code <path>}s, the
+     * stars/lines live on a pointer-events-none body {@code <canvas>}, and only
+     * {@code opacity} is toggled on the paths; it adds no element to the inner
+     * {@code <svg>}.
+     */
+    CONSTELLATION,
     /** Explicitly no effect. */
     NONE;
 
@@ -172,12 +224,19 @@ public enum Effect {
             case "diffusion" -> DIFFUSION;
             case "refraction" -> REFRACTION;
             case "teleport" -> TELEPORT;
+            case "shatter" -> SHATTER;
+            case "glitch" -> GLITCH;
+            case "sparkler" -> SPARKLER;
+            case "quantum" -> QUANTUM;
+            case "typeset" -> TYPESET;
+            case "constellation" -> CONSTELLATION;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
                     + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
-                    + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport|none)");
+                    + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
+                    + "|shatter|glitch|sparkler|quantum|typeset|constellation|none)");
         };
     }
 

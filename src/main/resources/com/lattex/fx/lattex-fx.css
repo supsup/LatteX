@@ -10,6 +10,7 @@
    (no flash-of-visible before the runtime wires). */
 .lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
 .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; }
+.lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
 
 @keyframes lx-boom {
   0%   { transform: scale(1); }
@@ -31,11 +32,34 @@
   50%      { filter: drop-shadow(0 0 12px var(--lx-glow-color, currentColor)); }
 }
 
+/* glitch: datamosh — the red/cyan channels rip apart, slice bands drop out and shear
+   sideways with static jitter, then everything snaps back pixel-perfect. Single-element
+   (filter + transform + clip-path on the container); the inner <svg> is never touched. */
+@keyframes lx-glitch {
+  0%   { transform: none; filter: none; }
+  8%   { transform: translate(-3px, 1px) skewX(-4deg);
+         filter: drop-shadow(3px 0 rgba(255, 0, 64, .9)) drop-shadow(-3px 0 rgba(0, 229, 255, .9)); }
+  16%  { transform: translate(2px, -1px); clip-path: inset(12% 0 55% 0);
+         filter: drop-shadow(-4px 0 rgba(255, 0, 64, .9)) drop-shadow(4px 0 rgba(0, 229, 255, .9)); }
+  24%  { transform: translate(-4px, 2px) skewX(6deg); clip-path: inset(58% 0 8% 0); }
+  32%  { transform: translate(3px, 0); clip-path: inset(30% 0 38% 0);
+         filter: drop-shadow(2px 0 rgba(255, 0, 64, .9)) drop-shadow(-2px 0 rgba(0, 229, 255, .9)); }
+  40%  { transform: translate(-2px, -2px) skewX(-8deg); }
+  55%  { transform: translate(1px, 1px);
+         filter: drop-shadow(-2px 0 rgba(255, 0, 64, .7)) drop-shadow(2px 0 rgba(0, 229, 255, .7)); }
+  70%  { transform: none; filter: none; }
+  74%  { transform: translate(-3px, 0) skewX(5deg);
+         filter: drop-shadow(4px 0 rgba(255, 0, 64, .8)) drop-shadow(-4px 0 rgba(0, 229, 255, .8)); }
+  78%  { transform: none; filter: none; }
+  100% { transform: none; filter: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* No motion; held-visible states stay legible. */
   .lx-math { animation: none !important; }
   .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
   .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
+  .lx-math[data-lx-fx-enter="constellation"] { opacity: 1; }
 }
 
 /* blueprint: the container becomes an engineer's drafting field — a deep cyan-blue ground

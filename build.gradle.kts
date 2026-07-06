@@ -9,7 +9,12 @@ group = "com.lattex"
 // /docs) pin this exact version; a LatteX change requires an explicit version bump +
 // republish, so a pinned consumer can never silently go stale (plan 38cf48e4). Bump on
 // each release that downstream should pick up.
-version = "0.1.0"
+//
+// 0.2.0-rc1: this branch's pre-release (25 effects + fxContainerAttrs) so the Stafficy
+// Phase-B branch can vendor + verify end-to-end ahead of the official 0.2.0 train
+// (coord 5737: + the DoS parse-guard). The final cut re-stamps this to "0.2.0";
+// downstream keeps 0.1.0 untouched (immutable) beside the rc.
+version = "0.2.0"
 
 java {
     toolchain {

@@ -5,7 +5,7 @@
   // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
   // (boom|pulse|fade|glow|none). 'lightning' and 'storm' are special-cased
   // below: they are page-side body overlays, NOT keyframes on the element.
-  var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, none: 1 };
+  var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, glitch: 1, none: 1 };
   var reduced = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1131,6 +1131,577 @@
     raf = requestAnimationFrame(draw);
   }
 
+  // SHATTER: the equation cracks like glass — a bright crack-web flashes, the
+  // pane breaks into triangular shards that scatter outward and hang in zero-g,
+  // then the SECOND click magnetically reassembles them (a toggle). The ink is
+  // replayed onto a full-viewport body canvas (existing <path>/<rect> data via
+  // Path2D — read-only); the element itself just fades under the pane, and the
+  // inner <svg> is never touched.
+  function shatter(el) {
+    if (el.__lxShatter) { el.__lxShatter(); return; } // second click → reassemble
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var op0 = el.style.opacity, trans0 = el.style.transition;
+    if (reduced) {
+      // No motion: a quiet fade-out/fade-in toggle.
+      el.style.transition = 'opacity 200ms ease';
+      el.style.opacity = '0.25';
+      el.__lxShatter = function () {
+        el.style.opacity = op0 || '1';
+        el.style.transition = trans0;
+        el.__lxShatter = null;
+      };
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) { return; }
+    var dpr = window.devicePixelRatio || 1;
+    var sx = r.width / vb[2], sy = r.height / vb[3];
+
+    // Replay the ink (paths + rects, their own fills) onto an offscreen pane.
+    var pane = document.createElement('canvas');
+    pane.width = Math.max(1, Math.round(r.width * dpr));
+    pane.height = Math.max(1, Math.round(r.height * dpr));
+    var pctx = pane.getContext('2d');
+    pctx.scale(dpr * sx, dpr * sy);
+    pctx.translate(-vb[0], -vb[1]);
+    var ink = getComputedStyle(svg).color || '#000';
+    function fillOf(node) {
+      var f = node.getAttribute('fill');
+      return (!f || f === 'currentColor') ? ink : f;
+    }
+    Array.prototype.forEach.call(svg.querySelectorAll('path'), function (p) {
+      var d = p.getAttribute('d');
+      if (!d) { return; }
+      pctx.fillStyle = fillOf(p);
+      pctx.fill(new Path2D(d));
+    });
+    Array.prototype.forEach.call(svg.querySelectorAll('rect'), function (q) {
+      pctx.fillStyle = fillOf(q);
+      pctx.fillRect(+q.getAttribute('x') || 0, +q.getAttribute('y') || 0,
+        +q.getAttribute('width') || 0, +q.getAttribute('height') || 0);
+    });
+
+    // Jittered triangular shard mesh over the pane (overlay-local coords).
+    var CELL = 26, cols = Math.max(2, Math.ceil(r.width / CELL)),
+        rows = Math.max(2, Math.ceil(r.height / CELL));
+    var gx = [], gy = [];
+    for (var i = 0; i <= cols; i++) {
+      var jx = (i === 0 || i === cols) ? 0 : (Math.random() * 0.7 - 0.35) * (r.width / cols);
+      gx.push((i / cols) * r.width + jx);
+    }
+    for (var j = 0; j <= rows; j++) {
+      var jy = (j === 0 || j === rows) ? 0 : (Math.random() * 0.7 - 0.35) * (r.height / rows);
+      gy.push((j / rows) * r.height + jy);
+    }
+    var shards = [], ccx = r.width / 2, ccy = r.height / 2;
+    for (var cj = 0; cj < rows; cj++) {
+      for (var ci = 0; ci < cols; ci++) {
+        var x0 = gx[ci], x1 = gx[ci + 1], y0 = gy[cj], y1 = gy[cj + 1];
+        var tris = Math.random() < 0.5
+          ? [[[x0, y0], [x1, y0], [x1, y1]], [[x0, y0], [x1, y1], [x0, y1]]]
+          : [[[x0, y0], [x1, y0], [x0, y1]], [[x1, y0], [x1, y1], [x0, y1]]];
+        for (var t = 0; t < 2; t++) {
+          var tri = tris[t];
+          var mx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+          var my = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+          var ang = Math.atan2(my - ccy, mx - ccx) + (Math.random() * 0.6 - 0.3);
+          var speed = 90 + Math.random() * 260;
+          shards.push({ tri: tri, mx: mx, my: my,
+            dx: 0, dy: 0, rot: 0,
+            vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed - 30,
+            vr: (Math.random() * 2 - 1) * 2.4,
+            bobA: 1 + Math.random() * 1.6, bobW: 0.8 + Math.random() * 1.2,
+            bobP: Math.random() * 6.283 });
+        }
+      }
+    }
+
+    // Full-viewport overlay the shards fly across.
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var CRACK = 150, BREAK = 850;      // crack-flash, then scatter-to-rest
+    var phase = 0;                     // 0 crack, 1 scatter, 2 hang, 3 reassemble
+    var raf = 0, t0 = performance.now(), lastT = 0, homeT = 0;
+    el.style.transition = 'none';
+
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      canvas.remove();
+      el.style.opacity = op0 || '1';
+      el.style.transition = trans0;
+      el.__lxShatter = null;
+    }
+    el.__lxShatter = function () {
+      if (phase !== 2) { return; }
+      for (var i = 0; i < shards.length; i++) {
+        var s = shards[i];
+        s.hx = s.dx; s.hy = s.dy; s.hr = s.rot; // reassembly start pose
+      }
+      phase = 3; homeT = 0;
+    };
+
+    // glassFade (0..1) dims the pane tint + edge lines — 1 while broken/hanging,
+    // easing to 0 during reassembly so the crack-web never lingers on the
+    // healed equation (Charles smoke feedback 2026-07-06).
+    function drawShard(s, glassFade) {
+      ctx.save();
+      ctx.translate(r.left + s.mx + s.dx, r.top + s.my + s.dy);
+      ctx.rotate(s.rot);
+      ctx.beginPath();
+      ctx.moveTo(s.tri[0][0] - s.mx, s.tri[0][1] - s.my);
+      ctx.lineTo(s.tri[1][0] - s.mx, s.tri[1][1] - s.my);
+      ctx.lineTo(s.tri[2][0] - s.mx, s.tri[2][1] - s.my);
+      ctx.closePath();
+      // Glass body: clipped ink + a faint pane tint + a bright edge.
+      ctx.save();
+      ctx.clip();
+      if (glassFade > 0.01) {
+        ctx.fillStyle = 'rgba(190,225,255,' + (0.10 * glassFade).toFixed(3) + ')';
+        ctx.fill();
+      }
+      ctx.drawImage(pane, -s.mx, -s.my, r.width, r.height);
+      ctx.restore();
+      if (glassFade > 0.01) {
+        ctx.strokeStyle = 'rgba(220,240,255,' + (0.35 * glassFade).toFixed(3) + ')';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function frame(now) {
+      var e = now - t0;
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+      lastT = now;
+      ctx.clearRect(0, 0, vw, vh);
+      if (phase === 0) {
+        // Crack-web flash: the mesh edges light up over the still-visible pane.
+        var a = Math.min(1, e / 60);
+        ctx.strokeStyle = 'rgba(235,248,255,' + (0.85 * a).toFixed(3) + ')';
+        ctx.lineWidth = 1;
+        for (var i = 0; i < shards.length; i += 2) {
+          var s = shards[i];
+          ctx.beginPath();
+          ctx.moveTo(r.left + s.tri[0][0], r.top + s.tri[0][1]);
+          ctx.lineTo(r.left + s.tri[1][0], r.top + s.tri[1][1]);
+          ctx.lineTo(r.left + s.tri[2][0], r.top + s.tri[2][1]);
+          ctx.closePath();
+          ctx.stroke();
+        }
+        if (e >= CRACK) { phase = 1; el.style.opacity = '0'; }
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      if (phase === 1) {
+        // Zero-g scatter: pure drag decays the break impulse to a drift.
+        var drag = Math.pow(0.14, dt);
+        for (var k = 0; k < shards.length; k++) {
+          var p = shards[k];
+          p.dx += p.vx * dt; p.dy += p.vy * dt; p.rot += p.vr * dt;
+          p.vx *= drag; p.vy *= drag; p.vr *= Math.pow(0.5, dt);
+        }
+        if (e >= CRACK + BREAK) { phase = 2; }
+      } else if (phase === 2) {
+        // Hang: a slow weightless bob until the next click.
+        var tt = e / 1000;
+        for (var m = 0; m < shards.length; m++) {
+          var q = shards[m];
+          q.dy += Math.sin(tt * q.bobW + q.bobP) * q.bobA * dt;
+          q.rot += q.vr * 0.08 * dt;
+        }
+      } else if (phase === 3) {
+        // Magnetic reassembly: ease every shard from its captured pose to home.
+        homeT += dt;
+        var g = Math.min(1, homeT / 0.55);
+        var hold = Math.pow(1 - g, 3); // remaining offset: fast pull, gentle landing
+        for (var n = 0; n < shards.length; n++) {
+          var w = shards[n];
+          w.dx = w.hx * hold; w.dy = w.hy * hold; w.rot = w.hr * hold;
+        }
+        // CUT OVER as soon as the shards are visually home — the ease means that
+        // happens well before g==1, and holding the crack-web on a healed pane
+        // reads as a stall (Charles smoke, 2026-07-06). The real element returns
+        // in the same frame the canvas dies: no lingering mesh, no gap.
+        if (hold <= 0.02) { cleanup(); return; }
+        for (var d3 = 0; d3 < shards.length; d3++) {
+          // Glass fades with the pull so edge lines are gone by touchdown.
+          drawShard(shards[d3], Math.min(1, hold * 3));
+        }
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      for (var d = 0; d < shards.length; d++) { drawShard(shards[d], 1); }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  // SPARKLER: a white-hot spark travels along every glyph stroke, writing the
+  // equation in fire — embers spray off the moving tip, drift, and die as the
+  // letters cool into place. Handscribe's dashoffset draw-on, driven manually
+  // per frame so a body-canvas ember tip can ride the exact frontier (mapped
+  // through getScreenCTM); presentation attributes only on the existing
+  // <path>s — nothing is added to the inner <svg>.
+  function sparkler(el) {
+    if (el.__lxSparkler) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; } // reduced motion: leave it static
+    el.__lxSparkler = true;
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    var DRAW = 420, STAGGER = 70, FILL = 300, COOL = 700;
+    var glyphs = [];
+    paths.forEach(function (p, i) {
+      var len;
+      try { len = p.getTotalLength() || 100; } catch (e) { len = 100; }
+      p.style.stroke = '#ffb25e';
+      p.style.strokeWidth = '1.5';
+      p.style.fill = 'transparent';
+      p.style.strokeDasharray = len;
+      p.style.strokeDashoffset = len;
+      glyphs.push({ p: p, len: len, start: i * STAGGER, done: false });
+    });
+    var total = (glyphs.length - 1) * STAGGER + DRAW;
+
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var fil0 = el.style.filter, trans0 = el.style.transition;
+    el.style.filter = 'drop-shadow(0 0 7px rgba(255,150,60,0.65))';
+    var embers = [], raf = 0, timers = [], t0 = performance.now(), lastT = 0;
+
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove();
+      el.style.filter = fil0; el.style.transition = trans0;
+      el.__lxSparkler = false;
+    }
+
+    function tipAt(g, prog) {
+      // The draw frontier in page coordinates: dashoffset len→0 reveals from
+      // the path's start, so the visible tip is at length len*prog.
+      var pt, m;
+      try {
+        pt = g.p.getPointAtLength(g.len * prog);
+        m = g.p.getScreenCTM();
+      } catch (e) { return null; }
+      if (!m) { return null; }
+      return { x: m.a * pt.x + m.c * pt.y + m.e,
+               y: m.b * pt.x + m.d * pt.y + m.f };
+    }
+
+    var PALETTE = ['#ffffff', '#ffe9b0', '#ffc46a', '#ff9d3a', '#ff5f2e'];
+    function frame(now) {
+      var e = now - t0;
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+      lastT = now;
+      ctx.clearRect(0, 0, vw, vh);
+      ctx.globalCompositeOperation = 'lighter';
+      for (var i = 0; i < glyphs.length; i++) {
+        var g = glyphs[i];
+        var prog = Math.max(0, Math.min(1, (e - g.start) / DRAW));
+        if (prog <= 0) { continue; }
+        g.p.style.strokeDashoffset = String(g.len * (1 - prog));
+        if (prog >= 1 && !g.done) {
+          g.done = true;
+          // Cool the finished glyph: warm stroke fades as the ink fill takes.
+          (function (p) {
+            p.style.transition = 'fill ' + FILL + 'ms ease, stroke ' + FILL + 'ms ease';
+            p.style.fill = 'currentColor';
+            p.style.stroke = 'transparent';
+            timers.push(setTimeout(function () {
+              p.style.stroke = ''; p.style.strokeWidth = '';
+              p.style.strokeDasharray = ''; p.style.strokeDashoffset = '';
+              p.style.transition = ''; p.style.fill = '';
+            }, FILL + 80));
+          })(g.p);
+        }
+        if (prog < 1) {
+          var tip = tipAt(g, prog);
+          if (tip) {
+            // White-hot tip glow.
+            var tg = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, 7);
+            tg.addColorStop(0, 'rgba(255,255,255,0.95)');
+            tg.addColorStop(0.5, 'rgba(255,200,110,0.55)');
+            tg.addColorStop(1, 'rgba(255,140,40,0)');
+            ctx.fillStyle = tg;
+            ctx.beginPath(); ctx.arc(tip.x, tip.y, 7, 0, Math.PI * 2); ctx.fill();
+            // Spray a few embers off the tip.
+            for (var s = 0; s < 3; s++) {
+              var ang = Math.random() * Math.PI * 2;
+              var sp = 20 + Math.random() * 90;
+              embers.push({ x: tip.x, y: tip.y,
+                vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 35,
+                life: 0.5 + Math.random() * 0.6,
+                size: 0.6 + Math.random() * 1.4,
+                col: PALETTE[(Math.random() * PALETTE.length) | 0] });
+            }
+          }
+        }
+      }
+      // Integrate + draw the embers (light gravity, fade out).
+      var alive = 0;
+      for (var k = 0; k < embers.length; k++) {
+        var em = embers[k];
+        if (em.life <= 0) { continue; }
+        alive++;
+        em.x += em.vx * dt; em.y += em.vy * dt;
+        em.vy += 130 * dt; em.life -= dt * 1.1;
+        var a = Math.max(0, Math.min(1, em.life));
+        ctx.beginPath();
+        ctx.fillStyle = em.col;
+        ctx.globalAlpha = a;
+        ctx.arc(em.x, em.y, em.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (e > total + COOL && alive === 0) {
+        el.style.transition = 'filter 400ms ease';
+        el.style.filter = fil0 || 'none';
+        timers.push(setTimeout(cleanup, 420));
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  // QUANTUM: the equation sits in superposition — every glyph jitters fuzzily
+  // between ghost positions under a soft blur, until you OBSERVE it (hover):
+  // the wavefunction collapses crisp with a snap-flash. Idle-collapses on its
+  // own after a while. Inline transform/filter on the existing <path>s + a
+  // container flash; nothing is added to the inner <svg>.
+  function quantum(el) {
+    if (el.__lxQuantum) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxQuantum = true;
+    var IDLE_COLLAPSE = 12000;
+    var raf = 0, timers = [], t0 = performance.now(), collapsed = false;
+
+    function collapse() {
+      if (collapsed) { return; }
+      collapsed = true;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      paths.forEach(function (p) {
+        p.style.transition = 'transform 140ms cubic-bezier(.2,1.6,.4,1), filter 140ms ease';
+        p.style.transform = 'none';
+        p.style.filter = 'none';
+      });
+      // Observation snap-flash on the container.
+      var fil0 = el.style.filter, trans0 = el.style.transition;
+      el.style.transition = 'filter 90ms ease';
+      el.style.filter = 'brightness(1.9) drop-shadow(0 0 8px currentColor)';
+      setTimeout(function () {
+        el.style.filter = fil0 || 'none';
+        setTimeout(function () {
+          el.style.transition = trans0;
+          paths.forEach(function (p) {
+            p.style.transition = ''; p.style.transform = ''; p.style.filter = '';
+          });
+          el.__lxQuantum = false;
+        }, 200);
+      }, 110);
+      el.removeEventListener('mouseenter', collapse);
+    }
+
+    function frame(now) {
+      if (collapsed) { return; }
+      if (now - t0 > IDLE_COLLAPSE) { collapse(); return; }
+      for (var i = 0; i < paths.length; i++) {
+        var p = paths[i];
+        var dx = (Math.random() * 2 - 1) * 1.6;
+        var dy = (Math.random() * 2 - 1) * 1.2;
+        p.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)';
+        p.style.filter = 'blur(' + (0.4 + Math.random() * 0.5).toFixed(2) + 'px)'
+          + ' opacity(' + (0.72 + Math.random() * 0.28).toFixed(2) + ')';
+      }
+      // Superposition flickers at ~20fps, not every frame — fuzzier that way.
+      timers.push(setTimeout(function () { raf = requestAnimationFrame(frame); }, 50));
+    }
+    el.addEventListener('mouseenter', collapse);
+    raf = requestAnimationFrame(frame);
+  }
+
+  // TYPESET: letterpress — the glyphs stamp onto the page one by one in reading
+  // order, each pressed in with a satisfying squash. Inline opacity/transform on
+  // the existing <path>s (transform-box: fill-box so each squashes about its own
+  // centre); nothing is added to the inner <svg>.
+  function typeset(el) {
+    if (el.__lxTypeset) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxTypeset = true;
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    var STAGGER = 90, PRESS = 160;
+    paths.forEach(function (p) {
+      p.style.transformBox = 'fill-box';
+      p.style.transformOrigin = 'center';
+      p.style.opacity = '0';
+      p.style.transform = 'scale(1.35)';
+    });
+    var timers = [];
+    paths.forEach(function (p, i) {
+      timers.push(setTimeout(function () {
+        p.style.transition = 'opacity ' + PRESS + 'ms ease-out, transform '
+          + PRESS + 'ms cubic-bezier(.3,1.4,.5,1)';
+        p.style.opacity = '1';
+        p.style.transform = 'scale(1)';
+        timers.push(setTimeout(function () {
+          p.style.transition = ''; p.style.opacity = ''; p.style.transform = '';
+          p.style.transformBox = ''; p.style.transformOrigin = '';
+          if (i === paths.length - 1) { el.__lxTypeset = false; }
+        }, PRESS + 80));
+      }, i * STAGGER));
+    });
+  }
+
+  // CONSTELLATION: the equation first appears as a night-sky star map — points
+  // ignite along the glyph outlines, faint lines join near neighbours, the map
+  // twinkles, then the stars fuse into the crisp equation. Star positions are
+  // sampled read-only from the existing <path>s (getPointAtLength → screen via
+  // getScreenCTM); stars/lines live on a body canvas and only opacity is
+  // toggled on the paths — nothing is added to the inner <svg>.
+  function constellation(el) {
+    if (el.__lxConst) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxConst = true;
+    var stars = [];
+    paths.forEach(function (p) {
+      var len, m;
+      try { len = p.getTotalLength(); m = p.getScreenCTM(); } catch (e) { return; }
+      if (!len || !m) { return; }
+      var n = Math.max(3, Math.min(14, Math.round(len / 26)));
+      for (var i = 0; i < n; i++) {
+        var pt;
+        try { pt = p.getPointAtLength((i / n) * len); } catch (e) { continue; }
+        stars.push({ x: m.a * pt.x + m.c * pt.y + m.e,
+                     y: m.b * pt.x + m.d * pt.y + m.f,
+                     tw: Math.random() * 6.283,
+                     ignite: Math.random() * 700 });
+      }
+    });
+    if (!stars.length) { el.__lxConst = false; return; }
+    // Join each star to its 2 nearest neighbours (the constellation lines).
+    var links = [], seen = {};
+    stars.forEach(function (s, i) {
+      var best = [];
+      for (var j = 0; j < stars.length; j++) {
+        if (j === i) { continue; }
+        var dx = stars[j].x - s.x, dy = stars[j].y - s.y;
+        var d2 = dx * dx + dy * dy;
+        if (best.length < 2) { best.push([d2, j]); best.sort(function (a, b) { return a[0] - b[0]; }); }
+        else if (d2 < best[1][0]) { best[1] = [d2, j]; best.sort(function (a, b) { return a[0] - b[0]; }); }
+      }
+      best.forEach(function (b) {
+        var key = Math.min(i, b[1]) + ':' + Math.max(i, b[1]);
+        if (!seen[key] && b[0] < 42 * 42) { seen[key] = 1; links.push([i, b[1]]); }
+      });
+    });
+
+    var op0 = [], trans0 = [];
+    paths.forEach(function (p, i) {
+      op0[i] = p.style.opacity; trans0[i] = p.style.transition;
+      p.style.opacity = '0';
+    });
+    // The CSS pre-hide ([data-lx-fx-enter=constellation] { opacity: 0 }) kept the
+    // container invisible until this routine took over; the paths now carry the
+    // hide, so reveal the container for the star map.
+    el.style.opacity = '1';
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var IGNITE = 700, HOLD = 1500, FUSE = 700, END = IGNITE + HOLD + FUSE;
+    var raf = 0, timers = [], t0 = performance.now(), fusing = false;
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove();
+      paths.forEach(function (p, i) {
+        p.style.opacity = op0[i] || ''; p.style.transition = trans0[i] || '';
+      });
+      el.__lxConst = false;
+    }
+    function frame(now) {
+      var e = now - t0;
+      ctx.clearRect(0, 0, vw, vh);
+      var fade = e > IGNITE + HOLD ? Math.max(0, 1 - (e - IGNITE - HOLD) / FUSE) : 1;
+      // Constellation lines, faint and steady.
+      ctx.strokeStyle = 'rgba(150,190,255,' + (0.20 * fade).toFixed(3) + ')';
+      ctx.lineWidth = 0.6;
+      for (var l = 0; l < links.length; l++) {
+        var a = stars[links[l][0]], b = stars[links[l][1]];
+        if (e < a.ignite || e < b.ignite) { continue; }
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+      // The stars: ignite staggered, then twinkle.
+      for (var i = 0; i < stars.length; i++) {
+        var s = stars[i];
+        if (e < s.ignite) { continue; }
+        var born = Math.min(1, (e - s.ignite) / 180);
+        var tw = 0.55 + 0.45 * Math.sin(e / 340 + s.tw);
+        var alpha = born * tw * fade;
+        if (alpha <= 0.01) { continue; }
+        var g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 2.6);
+        g.addColorStop(0, 'rgba(255,255,255,' + alpha.toFixed(3) + ')');
+        g.addColorStop(0.5, 'rgba(190,215,255,' + (alpha * 0.55).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(150,190,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+      if (e > IGNITE + HOLD && !fusing) {
+        fusing = true; // the stars fuse: equation cross-fades in as the map dims
+        paths.forEach(function (p) {
+          p.style.transition = 'opacity ' + FUSE + 'ms ease';
+          p.style.opacity = '1';
+        });
+      }
+      if (e >= END) { cleanup(); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1151,6 +1722,11 @@
     if (name === 'diffusion') { diffusion(el); return; }
     if (name === 'refraction') { refraction(el); return; }
     if (name === 'teleport') { teleport(el); return; }
+    if (name === 'shatter') { shatter(el); return; }
+    if (name === 'sparkler') { sparkler(el); return; }
+    if (name === 'quantum') { quantum(el); return; }
+    if (name === 'typeset') { typeset(el); return; }
+    if (name === 'constellation') { constellation(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';

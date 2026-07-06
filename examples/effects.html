@@ -126,6 +126,7 @@
    (no flash-of-visible before the runtime wires). */
 .lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
 .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; }
+.lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
 
 @keyframes lx-boom {
   0%   { transform: scale(1); }
@@ -147,11 +148,34 @@
   50%      { filter: drop-shadow(0 0 12px var(--lx-glow-color, currentColor)); }
 }
 
+/* glitch: datamosh — the red/cyan channels rip apart, slice bands drop out and shear
+   sideways with static jitter, then everything snaps back pixel-perfect. Single-element
+   (filter + transform + clip-path on the container); the inner <svg> is never touched. */
+@keyframes lx-glitch {
+  0%   { transform: none; filter: none; }
+  8%   { transform: translate(-3px, 1px) skewX(-4deg);
+         filter: drop-shadow(3px 0 rgba(255, 0, 64, .9)) drop-shadow(-3px 0 rgba(0, 229, 255, .9)); }
+  16%  { transform: translate(2px, -1px); clip-path: inset(12% 0 55% 0);
+         filter: drop-shadow(-4px 0 rgba(255, 0, 64, .9)) drop-shadow(4px 0 rgba(0, 229, 255, .9)); }
+  24%  { transform: translate(-4px, 2px) skewX(6deg); clip-path: inset(58% 0 8% 0); }
+  32%  { transform: translate(3px, 0); clip-path: inset(30% 0 38% 0);
+         filter: drop-shadow(2px 0 rgba(255, 0, 64, .9)) drop-shadow(-2px 0 rgba(0, 229, 255, .9)); }
+  40%  { transform: translate(-2px, -2px) skewX(-8deg); }
+  55%  { transform: translate(1px, 1px);
+         filter: drop-shadow(-2px 0 rgba(255, 0, 64, .7)) drop-shadow(2px 0 rgba(0, 229, 255, .7)); }
+  70%  { transform: none; filter: none; }
+  74%  { transform: translate(-3px, 0) skewX(5deg);
+         filter: drop-shadow(4px 0 rgba(255, 0, 64, .8)) drop-shadow(-4px 0 rgba(0, 229, 255, .8)); }
+  78%  { transform: none; filter: none; }
+  100% { transform: none; filter: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* No motion; held-visible states stay legible. */
   .lx-math { animation: none !important; }
   .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
   .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
+  .lx-math[data-lx-fx-enter="constellation"] { opacity: 1; }
 }
 
 /* blueprint: the container becomes an engineer's drafting field — a deep cyan-blue ground
@@ -182,7 +206,7 @@
   // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
   // (boom|pulse|fade|glow|none). 'lightning' and 'storm' are special-cased
   // below: they are page-side body overlays, NOT keyframes on the element.
-  var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, none: 1 };
+  var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, glitch: 1, none: 1 };
   var reduced = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1308,6 +1332,577 @@
     raf = requestAnimationFrame(draw);
   }
 
+  // SHATTER: the equation cracks like glass — a bright crack-web flashes, the
+  // pane breaks into triangular shards that scatter outward and hang in zero-g,
+  // then the SECOND click magnetically reassembles them (a toggle). The ink is
+  // replayed onto a full-viewport body canvas (existing <path>/<rect> data via
+  // Path2D — read-only); the element itself just fades under the pane, and the
+  // inner <svg> is never touched.
+  function shatter(el) {
+    if (el.__lxShatter) { el.__lxShatter(); return; } // second click → reassemble
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var op0 = el.style.opacity, trans0 = el.style.transition;
+    if (reduced) {
+      // No motion: a quiet fade-out/fade-in toggle.
+      el.style.transition = 'opacity 200ms ease';
+      el.style.opacity = '0.25';
+      el.__lxShatter = function () {
+        el.style.opacity = op0 || '1';
+        el.style.transition = trans0;
+        el.__lxShatter = null;
+      };
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) { return; }
+    var dpr = window.devicePixelRatio || 1;
+    var sx = r.width / vb[2], sy = r.height / vb[3];
+
+    // Replay the ink (paths + rects, their own fills) onto an offscreen pane.
+    var pane = document.createElement('canvas');
+    pane.width = Math.max(1, Math.round(r.width * dpr));
+    pane.height = Math.max(1, Math.round(r.height * dpr));
+    var pctx = pane.getContext('2d');
+    pctx.scale(dpr * sx, dpr * sy);
+    pctx.translate(-vb[0], -vb[1]);
+    var ink = getComputedStyle(svg).color || '#000';
+    function fillOf(node) {
+      var f = node.getAttribute('fill');
+      return (!f || f === 'currentColor') ? ink : f;
+    }
+    Array.prototype.forEach.call(svg.querySelectorAll('path'), function (p) {
+      var d = p.getAttribute('d');
+      if (!d) { return; }
+      pctx.fillStyle = fillOf(p);
+      pctx.fill(new Path2D(d));
+    });
+    Array.prototype.forEach.call(svg.querySelectorAll('rect'), function (q) {
+      pctx.fillStyle = fillOf(q);
+      pctx.fillRect(+q.getAttribute('x') || 0, +q.getAttribute('y') || 0,
+        +q.getAttribute('width') || 0, +q.getAttribute('height') || 0);
+    });
+
+    // Jittered triangular shard mesh over the pane (overlay-local coords).
+    var CELL = 26, cols = Math.max(2, Math.ceil(r.width / CELL)),
+        rows = Math.max(2, Math.ceil(r.height / CELL));
+    var gx = [], gy = [];
+    for (var i = 0; i <= cols; i++) {
+      var jx = (i === 0 || i === cols) ? 0 : (Math.random() * 0.7 - 0.35) * (r.width / cols);
+      gx.push((i / cols) * r.width + jx);
+    }
+    for (var j = 0; j <= rows; j++) {
+      var jy = (j === 0 || j === rows) ? 0 : (Math.random() * 0.7 - 0.35) * (r.height / rows);
+      gy.push((j / rows) * r.height + jy);
+    }
+    var shards = [], ccx = r.width / 2, ccy = r.height / 2;
+    for (var cj = 0; cj < rows; cj++) {
+      for (var ci = 0; ci < cols; ci++) {
+        var x0 = gx[ci], x1 = gx[ci + 1], y0 = gy[cj], y1 = gy[cj + 1];
+        var tris = Math.random() < 0.5
+          ? [[[x0, y0], [x1, y0], [x1, y1]], [[x0, y0], [x1, y1], [x0, y1]]]
+          : [[[x0, y0], [x1, y0], [x0, y1]], [[x1, y0], [x1, y1], [x0, y1]]];
+        for (var t = 0; t < 2; t++) {
+          var tri = tris[t];
+          var mx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+          var my = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+          var ang = Math.atan2(my - ccy, mx - ccx) + (Math.random() * 0.6 - 0.3);
+          var speed = 90 + Math.random() * 260;
+          shards.push({ tri: tri, mx: mx, my: my,
+            dx: 0, dy: 0, rot: 0,
+            vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed - 30,
+            vr: (Math.random() * 2 - 1) * 2.4,
+            bobA: 1 + Math.random() * 1.6, bobW: 0.8 + Math.random() * 1.2,
+            bobP: Math.random() * 6.283 });
+        }
+      }
+    }
+
+    // Full-viewport overlay the shards fly across.
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var CRACK = 150, BREAK = 850;      // crack-flash, then scatter-to-rest
+    var phase = 0;                     // 0 crack, 1 scatter, 2 hang, 3 reassemble
+    var raf = 0, t0 = performance.now(), lastT = 0, homeT = 0;
+    el.style.transition = 'none';
+
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      canvas.remove();
+      el.style.opacity = op0 || '1';
+      el.style.transition = trans0;
+      el.__lxShatter = null;
+    }
+    el.__lxShatter = function () {
+      if (phase !== 2) { return; }
+      for (var i = 0; i < shards.length; i++) {
+        var s = shards[i];
+        s.hx = s.dx; s.hy = s.dy; s.hr = s.rot; // reassembly start pose
+      }
+      phase = 3; homeT = 0;
+    };
+
+    // glassFade (0..1) dims the pane tint + edge lines — 1 while broken/hanging,
+    // easing to 0 during reassembly so the crack-web never lingers on the
+    // healed equation (Charles smoke feedback 2026-07-06).
+    function drawShard(s, glassFade) {
+      ctx.save();
+      ctx.translate(r.left + s.mx + s.dx, r.top + s.my + s.dy);
+      ctx.rotate(s.rot);
+      ctx.beginPath();
+      ctx.moveTo(s.tri[0][0] - s.mx, s.tri[0][1] - s.my);
+      ctx.lineTo(s.tri[1][0] - s.mx, s.tri[1][1] - s.my);
+      ctx.lineTo(s.tri[2][0] - s.mx, s.tri[2][1] - s.my);
+      ctx.closePath();
+      // Glass body: clipped ink + a faint pane tint + a bright edge.
+      ctx.save();
+      ctx.clip();
+      if (glassFade > 0.01) {
+        ctx.fillStyle = 'rgba(190,225,255,' + (0.10 * glassFade).toFixed(3) + ')';
+        ctx.fill();
+      }
+      ctx.drawImage(pane, -s.mx, -s.my, r.width, r.height);
+      ctx.restore();
+      if (glassFade > 0.01) {
+        ctx.strokeStyle = 'rgba(220,240,255,' + (0.35 * glassFade).toFixed(3) + ')';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function frame(now) {
+      var e = now - t0;
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+      lastT = now;
+      ctx.clearRect(0, 0, vw, vh);
+      if (phase === 0) {
+        // Crack-web flash: the mesh edges light up over the still-visible pane.
+        var a = Math.min(1, e / 60);
+        ctx.strokeStyle = 'rgba(235,248,255,' + (0.85 * a).toFixed(3) + ')';
+        ctx.lineWidth = 1;
+        for (var i = 0; i < shards.length; i += 2) {
+          var s = shards[i];
+          ctx.beginPath();
+          ctx.moveTo(r.left + s.tri[0][0], r.top + s.tri[0][1]);
+          ctx.lineTo(r.left + s.tri[1][0], r.top + s.tri[1][1]);
+          ctx.lineTo(r.left + s.tri[2][0], r.top + s.tri[2][1]);
+          ctx.closePath();
+          ctx.stroke();
+        }
+        if (e >= CRACK) { phase = 1; el.style.opacity = '0'; }
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      if (phase === 1) {
+        // Zero-g scatter: pure drag decays the break impulse to a drift.
+        var drag = Math.pow(0.14, dt);
+        for (var k = 0; k < shards.length; k++) {
+          var p = shards[k];
+          p.dx += p.vx * dt; p.dy += p.vy * dt; p.rot += p.vr * dt;
+          p.vx *= drag; p.vy *= drag; p.vr *= Math.pow(0.5, dt);
+        }
+        if (e >= CRACK + BREAK) { phase = 2; }
+      } else if (phase === 2) {
+        // Hang: a slow weightless bob until the next click.
+        var tt = e / 1000;
+        for (var m = 0; m < shards.length; m++) {
+          var q = shards[m];
+          q.dy += Math.sin(tt * q.bobW + q.bobP) * q.bobA * dt;
+          q.rot += q.vr * 0.08 * dt;
+        }
+      } else if (phase === 3) {
+        // Magnetic reassembly: ease every shard from its captured pose to home.
+        homeT += dt;
+        var g = Math.min(1, homeT / 0.55);
+        var hold = Math.pow(1 - g, 3); // remaining offset: fast pull, gentle landing
+        for (var n = 0; n < shards.length; n++) {
+          var w = shards[n];
+          w.dx = w.hx * hold; w.dy = w.hy * hold; w.rot = w.hr * hold;
+        }
+        // CUT OVER as soon as the shards are visually home — the ease means that
+        // happens well before g==1, and holding the crack-web on a healed pane
+        // reads as a stall (Charles smoke, 2026-07-06). The real element returns
+        // in the same frame the canvas dies: no lingering mesh, no gap.
+        if (hold <= 0.02) { cleanup(); return; }
+        for (var d3 = 0; d3 < shards.length; d3++) {
+          // Glass fades with the pull so edge lines are gone by touchdown.
+          drawShard(shards[d3], Math.min(1, hold * 3));
+        }
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      for (var d = 0; d < shards.length; d++) { drawShard(shards[d], 1); }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  // SPARKLER: a white-hot spark travels along every glyph stroke, writing the
+  // equation in fire — embers spray off the moving tip, drift, and die as the
+  // letters cool into place. Handscribe's dashoffset draw-on, driven manually
+  // per frame so a body-canvas ember tip can ride the exact frontier (mapped
+  // through getScreenCTM); presentation attributes only on the existing
+  // <path>s — nothing is added to the inner <svg>.
+  function sparkler(el) {
+    if (el.__lxSparkler) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; } // reduced motion: leave it static
+    el.__lxSparkler = true;
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    var DRAW = 420, STAGGER = 70, FILL = 300, COOL = 700;
+    var glyphs = [];
+    paths.forEach(function (p, i) {
+      var len;
+      try { len = p.getTotalLength() || 100; } catch (e) { len = 100; }
+      p.style.stroke = '#ffb25e';
+      p.style.strokeWidth = '1.5';
+      p.style.fill = 'transparent';
+      p.style.strokeDasharray = len;
+      p.style.strokeDashoffset = len;
+      glyphs.push({ p: p, len: len, start: i * STAGGER, done: false });
+    });
+    var total = (glyphs.length - 1) * STAGGER + DRAW;
+
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var fil0 = el.style.filter, trans0 = el.style.transition;
+    el.style.filter = 'drop-shadow(0 0 7px rgba(255,150,60,0.65))';
+    var embers = [], raf = 0, timers = [], t0 = performance.now(), lastT = 0;
+
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove();
+      el.style.filter = fil0; el.style.transition = trans0;
+      el.__lxSparkler = false;
+    }
+
+    function tipAt(g, prog) {
+      // The draw frontier in page coordinates: dashoffset len→0 reveals from
+      // the path's start, so the visible tip is at length len*prog.
+      var pt, m;
+      try {
+        pt = g.p.getPointAtLength(g.len * prog);
+        m = g.p.getScreenCTM();
+      } catch (e) { return null; }
+      if (!m) { return null; }
+      return { x: m.a * pt.x + m.c * pt.y + m.e,
+               y: m.b * pt.x + m.d * pt.y + m.f };
+    }
+
+    var PALETTE = ['#ffffff', '#ffe9b0', '#ffc46a', '#ff9d3a', '#ff5f2e'];
+    function frame(now) {
+      var e = now - t0;
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+      lastT = now;
+      ctx.clearRect(0, 0, vw, vh);
+      ctx.globalCompositeOperation = 'lighter';
+      for (var i = 0; i < glyphs.length; i++) {
+        var g = glyphs[i];
+        var prog = Math.max(0, Math.min(1, (e - g.start) / DRAW));
+        if (prog <= 0) { continue; }
+        g.p.style.strokeDashoffset = String(g.len * (1 - prog));
+        if (prog >= 1 && !g.done) {
+          g.done = true;
+          // Cool the finished glyph: warm stroke fades as the ink fill takes.
+          (function (p) {
+            p.style.transition = 'fill ' + FILL + 'ms ease, stroke ' + FILL + 'ms ease';
+            p.style.fill = 'currentColor';
+            p.style.stroke = 'transparent';
+            timers.push(setTimeout(function () {
+              p.style.stroke = ''; p.style.strokeWidth = '';
+              p.style.strokeDasharray = ''; p.style.strokeDashoffset = '';
+              p.style.transition = ''; p.style.fill = '';
+            }, FILL + 80));
+          })(g.p);
+        }
+        if (prog < 1) {
+          var tip = tipAt(g, prog);
+          if (tip) {
+            // White-hot tip glow.
+            var tg = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, 7);
+            tg.addColorStop(0, 'rgba(255,255,255,0.95)');
+            tg.addColorStop(0.5, 'rgba(255,200,110,0.55)');
+            tg.addColorStop(1, 'rgba(255,140,40,0)');
+            ctx.fillStyle = tg;
+            ctx.beginPath(); ctx.arc(tip.x, tip.y, 7, 0, Math.PI * 2); ctx.fill();
+            // Spray a few embers off the tip.
+            for (var s = 0; s < 3; s++) {
+              var ang = Math.random() * Math.PI * 2;
+              var sp = 20 + Math.random() * 90;
+              embers.push({ x: tip.x, y: tip.y,
+                vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 35,
+                life: 0.5 + Math.random() * 0.6,
+                size: 0.6 + Math.random() * 1.4,
+                col: PALETTE[(Math.random() * PALETTE.length) | 0] });
+            }
+          }
+        }
+      }
+      // Integrate + draw the embers (light gravity, fade out).
+      var alive = 0;
+      for (var k = 0; k < embers.length; k++) {
+        var em = embers[k];
+        if (em.life <= 0) { continue; }
+        alive++;
+        em.x += em.vx * dt; em.y += em.vy * dt;
+        em.vy += 130 * dt; em.life -= dt * 1.1;
+        var a = Math.max(0, Math.min(1, em.life));
+        ctx.beginPath();
+        ctx.fillStyle = em.col;
+        ctx.globalAlpha = a;
+        ctx.arc(em.x, em.y, em.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (e > total + COOL && alive === 0) {
+        el.style.transition = 'filter 400ms ease';
+        el.style.filter = fil0 || 'none';
+        timers.push(setTimeout(cleanup, 420));
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  // QUANTUM: the equation sits in superposition — every glyph jitters fuzzily
+  // between ghost positions under a soft blur, until you OBSERVE it (hover):
+  // the wavefunction collapses crisp with a snap-flash. Idle-collapses on its
+  // own after a while. Inline transform/filter on the existing <path>s + a
+  // container flash; nothing is added to the inner <svg>.
+  function quantum(el) {
+    if (el.__lxQuantum) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxQuantum = true;
+    var IDLE_COLLAPSE = 12000;
+    var raf = 0, timers = [], t0 = performance.now(), collapsed = false;
+
+    function collapse() {
+      if (collapsed) { return; }
+      collapsed = true;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      paths.forEach(function (p) {
+        p.style.transition = 'transform 140ms cubic-bezier(.2,1.6,.4,1), filter 140ms ease';
+        p.style.transform = 'none';
+        p.style.filter = 'none';
+      });
+      // Observation snap-flash on the container.
+      var fil0 = el.style.filter, trans0 = el.style.transition;
+      el.style.transition = 'filter 90ms ease';
+      el.style.filter = 'brightness(1.9) drop-shadow(0 0 8px currentColor)';
+      setTimeout(function () {
+        el.style.filter = fil0 || 'none';
+        setTimeout(function () {
+          el.style.transition = trans0;
+          paths.forEach(function (p) {
+            p.style.transition = ''; p.style.transform = ''; p.style.filter = '';
+          });
+          el.__lxQuantum = false;
+        }, 200);
+      }, 110);
+      el.removeEventListener('mouseenter', collapse);
+    }
+
+    function frame(now) {
+      if (collapsed) { return; }
+      if (now - t0 > IDLE_COLLAPSE) { collapse(); return; }
+      for (var i = 0; i < paths.length; i++) {
+        var p = paths[i];
+        var dx = (Math.random() * 2 - 1) * 1.6;
+        var dy = (Math.random() * 2 - 1) * 1.2;
+        p.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)';
+        p.style.filter = 'blur(' + (0.4 + Math.random() * 0.5).toFixed(2) + 'px)'
+          + ' opacity(' + (0.72 + Math.random() * 0.28).toFixed(2) + ')';
+      }
+      // Superposition flickers at ~20fps, not every frame — fuzzier that way.
+      timers.push(setTimeout(function () { raf = requestAnimationFrame(frame); }, 50));
+    }
+    el.addEventListener('mouseenter', collapse);
+    raf = requestAnimationFrame(frame);
+  }
+
+  // TYPESET: letterpress — the glyphs stamp onto the page one by one in reading
+  // order, each pressed in with a satisfying squash. Inline opacity/transform on
+  // the existing <path>s (transform-box: fill-box so each squashes about its own
+  // centre); nothing is added to the inner <svg>.
+  function typeset(el) {
+    if (el.__lxTypeset) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxTypeset = true;
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    var STAGGER = 90, PRESS = 160;
+    paths.forEach(function (p) {
+      p.style.transformBox = 'fill-box';
+      p.style.transformOrigin = 'center';
+      p.style.opacity = '0';
+      p.style.transform = 'scale(1.35)';
+    });
+    var timers = [];
+    paths.forEach(function (p, i) {
+      timers.push(setTimeout(function () {
+        p.style.transition = 'opacity ' + PRESS + 'ms ease-out, transform '
+          + PRESS + 'ms cubic-bezier(.3,1.4,.5,1)';
+        p.style.opacity = '1';
+        p.style.transform = 'scale(1)';
+        timers.push(setTimeout(function () {
+          p.style.transition = ''; p.style.opacity = ''; p.style.transform = '';
+          p.style.transformBox = ''; p.style.transformOrigin = '';
+          if (i === paths.length - 1) { el.__lxTypeset = false; }
+        }, PRESS + 80));
+      }, i * STAGGER));
+    });
+  }
+
+  // CONSTELLATION: the equation first appears as a night-sky star map — points
+  // ignite along the glyph outlines, faint lines join near neighbours, the map
+  // twinkles, then the stars fuse into the crisp equation. Star positions are
+  // sampled read-only from the existing <path>s (getPointAtLength → screen via
+  // getScreenCTM); stars/lines live on a body canvas and only opacity is
+  // toggled on the paths — nothing is added to the inner <svg>.
+  function constellation(el) {
+    if (el.__lxConst) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxConst = true;
+    var stars = [];
+    paths.forEach(function (p) {
+      var len, m;
+      try { len = p.getTotalLength(); m = p.getScreenCTM(); } catch (e) { return; }
+      if (!len || !m) { return; }
+      var n = Math.max(3, Math.min(14, Math.round(len / 26)));
+      for (var i = 0; i < n; i++) {
+        var pt;
+        try { pt = p.getPointAtLength((i / n) * len); } catch (e) { continue; }
+        stars.push({ x: m.a * pt.x + m.c * pt.y + m.e,
+                     y: m.b * pt.x + m.d * pt.y + m.f,
+                     tw: Math.random() * 6.283,
+                     ignite: Math.random() * 700 });
+      }
+    });
+    if (!stars.length) { el.__lxConst = false; return; }
+    // Join each star to its 2 nearest neighbours (the constellation lines).
+    var links = [], seen = {};
+    stars.forEach(function (s, i) {
+      var best = [];
+      for (var j = 0; j < stars.length; j++) {
+        if (j === i) { continue; }
+        var dx = stars[j].x - s.x, dy = stars[j].y - s.y;
+        var d2 = dx * dx + dy * dy;
+        if (best.length < 2) { best.push([d2, j]); best.sort(function (a, b) { return a[0] - b[0]; }); }
+        else if (d2 < best[1][0]) { best[1] = [d2, j]; best.sort(function (a, b) { return a[0] - b[0]; }); }
+      }
+      best.forEach(function (b) {
+        var key = Math.min(i, b[1]) + ':' + Math.max(i, b[1]);
+        if (!seen[key] && b[0] < 42 * 42) { seen[key] = 1; links.push([i, b[1]]); }
+      });
+    });
+
+    var op0 = [], trans0 = [];
+    paths.forEach(function (p, i) {
+      op0[i] = p.style.opacity; trans0[i] = p.style.transition;
+      p.style.opacity = '0';
+    });
+    // The CSS pre-hide ([data-lx-fx-enter=constellation] { opacity: 0 }) kept the
+    // container invisible until this routine took over; the paths now carry the
+    // hide, so reveal the container for the star map.
+    el.style.opacity = '1';
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var IGNITE = 700, HOLD = 1500, FUSE = 700, END = IGNITE + HOLD + FUSE;
+    var raf = 0, timers = [], t0 = performance.now(), fusing = false;
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove();
+      paths.forEach(function (p, i) {
+        p.style.opacity = op0[i] || ''; p.style.transition = trans0[i] || '';
+      });
+      el.__lxConst = false;
+    }
+    function frame(now) {
+      var e = now - t0;
+      ctx.clearRect(0, 0, vw, vh);
+      var fade = e > IGNITE + HOLD ? Math.max(0, 1 - (e - IGNITE - HOLD) / FUSE) : 1;
+      // Constellation lines, faint and steady.
+      ctx.strokeStyle = 'rgba(150,190,255,' + (0.20 * fade).toFixed(3) + ')';
+      ctx.lineWidth = 0.6;
+      for (var l = 0; l < links.length; l++) {
+        var a = stars[links[l][0]], b = stars[links[l][1]];
+        if (e < a.ignite || e < b.ignite) { continue; }
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+      // The stars: ignite staggered, then twinkle.
+      for (var i = 0; i < stars.length; i++) {
+        var s = stars[i];
+        if (e < s.ignite) { continue; }
+        var born = Math.min(1, (e - s.ignite) / 180);
+        var tw = 0.55 + 0.45 * Math.sin(e / 340 + s.tw);
+        var alpha = born * tw * fade;
+        if (alpha <= 0.01) { continue; }
+        var g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 2.6);
+        g.addColorStop(0, 'rgba(255,255,255,' + alpha.toFixed(3) + ')');
+        g.addColorStop(0.5, 'rgba(190,215,255,' + (alpha * 0.55).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(150,190,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+      if (e > IGNITE + HOLD && !fusing) {
+        fusing = true; // the stars fuse: equation cross-fades in as the map dims
+        paths.forEach(function (p) {
+          p.style.transition = 'opacity ' + FUSE + 'ms ease';
+          p.style.opacity = '1';
+        });
+      }
+      if (e >= END) { cleanup(); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1328,6 +1923,11 @@
     if (name === 'diffusion') { diffusion(el); return; }
     if (name === 'refraction') { refraction(el); return; }
     if (name === 'teleport') { teleport(el); return; }
+    if (name === 'shatter') { shatter(el); return; }
+    if (name === 'sparkler') { sparkler(el); return; }
+    if (name === 'quantum') { quantum(el); return; }
+    if (name === 'typeset') { typeset(el); return; }
+    if (name === 'constellation') { constellation(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -1823,6 +2423,154 @@
             <span class="cap">fx.click=teleport — dematerializes into a particle beam, then re-coalesces</span>
             <code class="src">\lx[fx.click=teleport]{ \psi(x,t) }</code>
             <span class="hint">click — beam out, then back in</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-click="shatter"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.08 -34.432 364.1156 45.832" width="364.1156" height="45.832" role="img" aria-label="x squared - y squared = ( x - y ) ( x + y )">
+              <g fill="currentColor">
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(19.16 -14.4) scale(0.028 -0.028)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(43.5089 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(64.9978 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(84.3178 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(110.8889 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(150.8 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(165.08 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(193.1289 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(214.6178 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(233.9378 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(248.2178 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(262.4978 0) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(290.5467 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(328.2356 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(347.5556 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.click=shatter — cracks to glass shards that hang in zero-g, reassembles on the next click</span>
+            <code class="src">\lx[fx.click=shatter]{ x^2 - y^2 = (x-y)(x+y) }</code>
+            <span class="hint">click — shatter · click again — reassemble</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-hover="glitch"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.68 -31.44 247.32 41.28" width="247.32" height="41.28" role="img" aria-label="det ( A - λ I ) = 0">
+              <g fill="currentColor">
+                <path d="M514 18 L386 -5 L363 -5 L363 64 L359 64 Q331 39 292 15 Q254 -8 204 -8 Q148 -8 109 22 Q71 52 52 103 Q33 155 33 219 Q33 302 64 361 Q95 421 147 453 Q200 485 263 485 Q288 485 312 479 Q337 474 360 461 L360 592 Q360 625 352 635 Q345 645 316 645 Q309 645 299 644 Q290 643 290 643 L290 671 L416 706 L443 706 L443 107 Q443 68 454 56 Q465 45 493 45 L514 45 L514 18 Z M360 101 L360 365 Q354 396 331 420 Q308 445 261 445 Q198 445 159 399 Q120 353 120 258 Q120 155 153 109 Q187 64 251 64 Q286 64 310 73 Q334 83 360 101 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M415 143 L434 129 Q416 91 392 59 Q368 28 333 9 Q299 -10 247 -10 Q187 -10 138 18 Q90 47 62 102 Q34 158 34 238 Q34 322 62 376 Q91 431 139 458 Q187 485 245 485 Q327 485 377 428 Q427 371 431 266 L115 266 Q115 197 137 152 Q160 108 195 86 Q231 65 271 65 Q312 65 337 76 Q363 87 381 104 Q399 122 415 143 Z M114 303 L337 303 Q336 340 324 372 Q312 405 289 425 Q266 445 230 445 Q126 445 114 303 Z" transform="translate(21.56 0) scale(0.04 -0.04)"/>
+                <path d="M293 90 L312 74 Q293 47 276 28 Q260 10 240 0 Q220 -10 188 -10 Q138 -10 115 19 Q92 49 92 116 L92 426 L37 426 L37 449 Q72 471 97 508 Q123 546 150 610 L176 610 L175 468 L288 468 L288 426 L175 426 L175 144 Q175 91 184 70 Q194 49 223 49 Q247 49 260 59 Q274 69 293 90 Z" transform="translate(40.12 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(52.72 0) scale(0.04 -0.04)"/>
+                <path d="M714 0 L445 0 L445 30 Q460 30 476 32 Q492 34 503 42 Q514 50 514 67 Q514 78 510 92 Q507 107 497 129 L458 219 L202 219 L157 113 Q153 101 149 89 Q146 78 146 64 Q146 43 162 36 Q178 30 213 30 L213 0 L3 0 L3 30 Q31 30 48 39 Q65 48 81 75 Q97 103 121 160 L333 662 L374 662 L611 119 Q633 70 653 50 Q674 30 714 30 L714 0 Z M443 259 L333 539 L330 539 L217 259 L443 259 Z" transform="translate(67 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(104.6089 0) scale(0.04 -0.04)"/>
+                <path d="M293 558 Q310 467 320 382 Q330 297 346 214 Q359 151 379 109 Q400 67 435 67 Q458 67 473 75 Q489 84 504 103 L521 92 Q505 50 475 19 Q446 -11 406 -11 Q365 -11 341 21 Q318 54 307 111 Q294 179 291 246 Q288 313 280 385 L275 385 Q268 372 253 338 Q239 304 220 259 Q201 214 181 165 Q162 117 144 73 Q127 30 115 0 L18 0 L15 16 Q53 86 95 165 Q137 245 179 325 Q222 405 259 475 Q258 491 256 498 Q255 506 251 529 Q242 576 220 605 Q199 634 167 634 Q125 634 96 595 L79 603 Q97 648 122 677 Q148 706 194 706 Q228 706 246 685 Q265 665 275 631 Q285 598 293 558 Z" transform="translate(126.0978 0) scale(0.04 -0.04)"/>
+                <path d="M133 131 L133 525 Q133 564 128 586 Q123 609 102 618 Q82 627 34 627 L34 657 L322 657 L322 627 Q275 627 254 618 Q233 609 228 586 Q224 564 224 525 L224 131 Q224 88 230 66 Q236 45 257 37 Q278 30 322 30 L322 0 L34 0 L34 30 Q79 30 100 37 Q121 45 127 66 Q133 88 133 131 Z" transform="translate(146.3378 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(160.6178 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(186.0089 0) scale(0.04 -0.04)"/>
+                <path d="M468 317 Q468 253 455 194 Q443 135 416 89 Q390 43 348 16 Q306 -11 247 -11 Q187 -11 145 15 Q103 42 77 88 Q51 134 39 194 Q27 254 27 320 Q27 415 52 487 Q78 560 127 601 Q177 642 249 642 Q314 642 363 603 Q412 565 440 492 Q468 420 468 317 Z M371 311 Q371 463 339 535 Q308 608 246 608 Q187 608 155 536 Q123 464 123 315 Q123 170 155 97 Q187 25 247 25 Q306 25 338 96 Q371 167 371 311 Z" transform="translate(225.92 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.hover=glitch — the red/cyan channels rip apart, slices shear, then snap back</span>
+            <code class="src">\lx[fx.hover=glitch]{ \det(A - \lambda I) = 0 }</code>
+            <span class="hint">hover — datamosh</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="sparkler"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -59.24 238.4867 124.948" width="238.4867" height="124.948" role="img" aria-label="∮ from C of vector B ⋅ d vector l = μ sub 0 I">
+              <g fill="currentColor">
+                <path d="M25 285 Q25 390 60 477 Q96 564 160 627 Q224 690 310 725 Q396 760 496 761 Q519 898 548 1019 Q578 1140 617 1232 Q656 1324 708 1376 Q761 1429 828 1429 Q873 1429 902 1405 Q932 1382 932 1334 Q932 1288 907 1267 Q883 1247 858 1247 Q839 1247 827 1259 Q815 1272 815 1297 Q815 1337 848 1365 L848 1371 Q848 1371 839 1374 Q831 1378 814 1378 Q770 1378 737 1328 Q704 1278 680 1191 Q656 1104 638 990 Q620 877 606 751 Q716 730 800 666 Q885 603 933 505 Q982 408 982 285 Q982 179 944 91 Q907 3 840 -60 Q773 -124 685 -158 Q597 -193 495 -193 Q437 -545 353 -731 Q270 -917 143 -917 Q81 -917 53 -886 Q25 -855 25 -816 Q25 -772 45 -749 Q65 -727 93 -727 Q116 -727 127 -742 Q139 -757 139 -783 Q139 -805 132 -822 Q125 -840 115 -855 L115 -861 Q115 -861 122 -864 Q129 -868 144 -868 Q193 -868 229 -819 Q265 -771 292 -680 Q319 -590 340 -463 Q361 -337 380 -181 Q273 -158 193 -94 Q113 -31 69 66 Q25 163 25 285 Z M559 290 Q547 176 533 72 Q520 -31 506 -124 Q593 -122 666 -92 Q739 -62 792 -8 Q845 45 874 118 Q904 192 904 281 Q904 384 865 467 Q827 550 758 606 Q690 662 599 682 Q589 584 579 484 Q570 385 559 290 Z M103 281 Q103 185 138 104 Q174 23 238 -33 Q302 -89 389 -112 L431 259 Q443 366 456 476 Q470 586 486 692 Q373 689 286 636 Q200 583 151 491 Q103 400 103 281 Z" transform="translate(0 -0.08) scale(0.04 -0.04)"/>
+                <path d="M608 149 L632 128 Q592 67 527 28 Q462 -11 364 -11 Q261 -11 191 33 Q121 77 85 154 Q50 231 50 328 Q50 437 92 513 Q134 589 208 629 Q282 669 378 669 Q431 669 463 660 Q495 651 514 642 Q533 633 545 633 Q557 633 563 643 Q570 654 579 669 L609 669 L609 440 L575 440 Q559 538 507 582 Q456 626 379 626 Q271 626 212 549 Q154 472 154 338 Q154 238 184 175 Q215 112 269 82 Q323 52 393 52 Q462 52 514 77 Q566 103 608 149 Z" transform="translate(10.76 63.4) scale(0.028 -0.028)"/>
+                <path d="M409 350 L409 346 Q452 339 491 320 Q531 301 557 266 Q583 232 583 177 Q583 92 519 46 Q456 0 344 0 L36 0 L36 30 Q77 30 97 37 Q118 44 125 65 Q133 86 133 127 L133 536 Q133 576 125 595 Q118 615 97 621 Q77 627 36 627 L36 657 L306 657 Q440 657 495 616 Q551 575 551 501 Q551 434 511 400 Q471 367 409 350 Z M225 320 L225 40 Q261 37 297 37 Q329 37 361 41 Q393 45 419 58 Q446 72 462 99 Q478 127 478 175 Q478 232 451 263 Q425 295 383 307 Q342 320 295 320 L225 320 Z M225 362 L293 362 Q384 362 418 393 Q452 425 452 493 Q452 552 414 585 Q377 618 285 618 Q255 618 225 615 L225 362 Z" transform="translate(46.9467 0) scale(0.04 -0.04)"/>
+                <path d="M-3 718 L-3 705 L-145 580 L-162 600 L-127 636 Q-116 648 -109 656 Q-102 665 -102 675 Q-102 683 -109 685 Q-116 688 -127 688 L-438 688 L-438 735 L-127 735 Q-116 735 -109 737 Q-102 740 -102 748 Q-102 759 -109 767 Q-116 775 -127 787 L-162 823 L-145 843 L-3 718 Z" transform="translate(68.1667 -7.08) scale(0.04 -0.04)"/>
+                <path d="M208 259 Q208 234 190 215 Q172 197 147 197 Q122 197 103 216 Q85 236 85 259 Q85 282 103 301 Q122 320 147 320 Q172 320 190 302 Q208 284 208 259 Z" transform="translate(80.5556 0) scale(0.04 -0.04)"/>
+                <path d="M514 18 L386 -5 L363 -5 L363 64 L359 64 Q331 39 292 15 Q254 -8 204 -8 Q148 -8 109 22 Q71 52 52 103 Q33 155 33 219 Q33 302 64 361 Q95 421 147 453 Q200 485 263 485 Q288 485 312 479 Q337 474 360 461 L360 592 Q360 625 352 635 Q345 645 316 645 Q309 645 299 644 Q290 643 290 643 L290 671 L416 706 L443 706 L443 107 Q443 68 454 56 Q465 45 493 45 L514 45 L514 18 Z M360 101 L360 365 Q354 396 331 420 Q308 445 261 445 Q198 445 159 399 Q120 353 120 258 Q120 155 153 109 Q187 64 251 64 Q286 64 310 73 Q334 83 360 101 Z" transform="translate(101.1644 0) scale(0.04 -0.04)"/>
+                <path d="M260 29 L260 0 L30 0 L30 29 Q63 29 78 35 Q93 42 96 57 Q100 73 100 101 L100 603 Q100 634 88 640 Q77 646 58 646 Q45 646 35 645 Q26 644 26 644 L26 671 L158 706 L183 706 L183 101 Q183 72 187 56 Q192 41 208 35 Q224 29 260 29 Z" transform="translate(122.7244 0) scale(0.04 -0.04)"/>
+                <path d="M-3 718 L-3 705 L-145 580 L-162 600 L-127 636 Q-116 648 -109 656 Q-102 665 -102 675 Q-102 683 -109 685 Q-116 688 -127 688 L-438 688 L-438 735 L-127 735 Q-116 735 -109 737 Q-102 740 -102 748 Q-102 759 -109 767 Q-116 775 -127 787 L-162 823 L-145 843 L-3 718 Z" transform="translate(137.1444 -9.04) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(145.1556 0) scale(0.04 -0.04)"/>
+                <path d="M456 464 L413 217 Q413 213 414 198 Q415 183 416 172 Q420 115 435 89 Q450 64 478 64 Q502 64 515 76 Q529 88 540 103 L557 92 Q549 69 534 45 Q520 21 497 5 Q475 -10 442 -10 Q405 -10 391 13 Q378 37 372 72 Q370 87 367 105 Q365 124 361 164 L355 164 Q339 91 316 52 Q294 14 268 0 Q243 -13 218 -13 Q191 -13 172 1 Q154 16 142 35 Q131 55 124 69 L119 69 Q120 29 121 -8 Q122 -46 125 -89 Q129 -132 135 -191 L60 -217 L44 -214 Q45 -144 47 -86 Q50 -29 56 27 Q63 83 75 149 L74 470 L164 473 L168 465 L132 217 Q132 217 131 210 Q131 204 131 195 Q131 165 142 136 Q154 108 174 89 Q195 70 222 70 Q249 70 271 89 Q293 108 310 137 Q327 166 338 196 Q350 226 356 250 Q362 274 362 281 L365 470 L451 473 L456 464 Z" transform="translate(185.0667 0) scale(0.04 -0.04)"/>
+                <path d="M468 317 Q468 253 455 194 Q443 135 416 89 Q390 43 348 16 Q306 -11 247 -11 Q187 -11 145 15 Q103 42 77 88 Q51 134 39 194 Q27 254 27 320 Q27 415 52 487 Q78 560 127 601 Q177 642 249 642 Q314 642 363 603 Q412 565 440 492 Q468 420 468 317 Z M371 311 Q371 463 339 535 Q308 608 246 608 Q187 608 155 536 Q123 464 123 315 Q123 170 155 97 Q187 25 247 25 Q306 25 338 96 Q371 167 371 311 Z" transform="translate(207.1467 8.4) scale(0.028 -0.028)"/>
+                <path d="M133 131 L133 525 Q133 564 128 586 Q123 609 102 618 Q82 627 34 627 L34 657 L322 657 L322 627 Q275 627 254 618 Q233 609 228 586 Q224 564 224 525 L224 131 Q224 88 230 66 Q236 45 257 37 Q278 30 322 30 L322 0 L34 0 L34 30 Q79 30 100 37 Q121 45 127 66 Q133 88 133 131 Z" transform="translate(222.6067 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=sparkler — a white-hot spark writes the equation in fire, embers spraying off the tip</span>
+            <code class="src">\lx[fx.enter=sparkler]{ \oint_C \vec{B} \cdot d\vec{l} = \mu_0 I }</code>
+            <span class="hint">load — watch it burn in</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="quantum"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -36.04 156.9422 46.72" width="156.9422" height="46.72" role="img" aria-label="hat over H ψ = E ψ">
+              <g fill="currentColor">
+                <path d="M239 525 L239 357 L567 357 L567 525 Q567 564 562 586 Q557 609 536 618 Q516 627 470 627 L470 657 L756 657 L756 627 Q709 627 688 618 Q667 609 662 587 Q658 565 658 525 L658 131 Q658 88 663 66 Q669 44 690 37 Q711 30 756 30 L756 0 L470 0 L470 30 Q515 30 535 37 Q556 44 561 66 Q567 88 567 131 L567 318 L239 318 L239 131 Q239 87 244 65 Q250 44 271 37 Q292 30 337 30 L337 0 L50 0 L50 30 Q95 30 115 36 Q136 43 141 65 Q147 87 147 131 L147 525 Q147 564 142 586 Q137 609 116 618 Q96 627 50 627 L50 657 L337 657 L337 627 Q290 627 269 618 Q248 609 243 586 Q239 564 239 525 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M-89 521 L-127 521 L-230 619 L-332 521 L-371 521 L-263 674 L-197 674 L-89 521 Z" transform="translate(25.2 -7.08) scale(0.04 -0.04)"/>
+                <path d="M71 409 Q48 409 32 395 Q17 382 6 366 L-12 375 Q4 416 30 448 Q57 480 105 480 Q178 480 178 403 Q178 370 167 331 Q157 293 146 254 Q136 216 136 182 Q136 130 173 102 Q211 74 284 74 L293 505 L285 693 L376 695 L356 500 L342 79 Q407 88 443 117 Q479 146 493 186 Q508 226 508 269 Q508 330 495 369 Q483 409 467 432 Q451 456 438 469 L446 482 Q471 477 501 453 Q531 429 553 380 Q575 331 575 252 Q575 192 552 136 Q530 81 479 42 Q428 4 343 -7 L356 -191 L285 -217 L260 -214 L277 -11 Q183 -11 135 42 Q87 95 87 177 Q87 225 94 275 Q101 325 101 357 Q101 379 95 394 Q89 409 71 409 Z" transform="translate(31.08 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(66.9911 0) scale(0.04 -0.04)"/>
+                <path d="M598 186 L570 0 L36 0 L36 30 Q77 30 97 35 Q118 41 125 60 Q133 79 133 118 L133 535 Q133 573 125 593 Q118 613 97 620 Q77 627 36 627 L36 657 L561 657 L567 493 L535 493 Q528 543 513 568 Q499 594 466 603 Q434 612 372 612 L225 612 L225 358 L342 358 Q388 358 412 366 Q436 374 445 396 Q454 418 454 458 L486 458 L486 226 L454 226 Q454 267 445 287 Q436 307 412 313 Q388 319 342 319 L225 319 L225 44 L354 44 Q412 44 447 49 Q483 55 503 70 Q524 85 537 113 Q551 141 566 186 L598 186 Z" transform="translate(106.9022 0) scale(0.04 -0.04)"/>
+                <path d="M71 409 Q48 409 32 395 Q17 382 6 366 L-12 375 Q4 416 30 448 Q57 480 105 480 Q178 480 178 403 Q178 370 167 331 Q157 293 146 254 Q136 216 136 182 Q136 130 173 102 Q211 74 284 74 L293 505 L285 693 L376 695 L356 500 L342 79 Q407 88 443 117 Q479 146 493 186 Q508 226 508 269 Q508 330 495 369 Q483 409 467 432 Q451 456 438 469 L446 482 Q471 477 501 453 Q531 429 553 380 Q575 331 575 252 Q575 192 552 136 Q530 81 479 42 Q428 4 343 -7 L356 -191 L285 -217 L260 -214 L277 -11 Q183 -11 135 42 Q87 95 87 177 Q87 225 94 275 Q101 325 101 357 Q101 379 95 394 Q89 409 71 409 Z" transform="translate(131.9422 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=quantum — superposition: the glyphs jitter between ghost states until you observe them</span>
+            <code class="src">\lx[fx.enter=quantum]{ \hat{H}\psi = E\psi }</code>
+            <span class="hint">hover — collapse the wavefunction</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-click="typeset"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.32 -31.44 237.52 41.28" width="237.52" height="41.28" role="img" aria-label="Γ ( n ) = ( n - 1 ) !">
+              <g fill="currentColor">
+                <path d="M542 657 L549 474 L516 474 Q508 528 495 558 Q483 588 453 600 Q423 612 364 612 L224 612 L224 127 Q224 88 231 67 Q239 46 262 38 Q285 30 329 30 L329 0 L42 0 L42 30 Q82 30 101 38 Q121 46 127 67 Q133 89 133 127 L133 534 Q133 573 127 593 Q121 613 101 620 Q82 627 42 627 L42 657 L542 657 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(22.76 0) scale(0.04 -0.04)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(37.04 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(60.08 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(85.4711 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(125.3822 0) scale(0.04 -0.04)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(139.6622 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(171.5911 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(193.08 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(212.88 0) scale(0.04 -0.04)"/>
+                <path d="M123 170 L92 538 Q91 559 89 575 Q88 591 88 603 Q88 631 99 650 Q110 669 141 669 Q170 669 182 650 Q194 631 194 601 Q194 573 191 538 L158 170 L123 170 Z M201 49 Q201 26 185 9 Q170 -8 141 -8 Q112 -8 97 8 Q82 25 82 50 Q82 75 97 93 Q113 111 141 111 Q170 111 185 92 Q201 74 201 49 Z" transform="translate(227.16 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.click=typeset — letterpress: the glyphs stamp in one by one, reading order</span>
+            <code class="src">\lx[fx.click=typeset]{ \Gamma(n) = (n-1)! }</code>
+            <span class="hint">click — re-set the type</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="constellation"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-1.104 -63.14 188.5409 108.12" width="188.5409" height="108.12" role="img" aria-label="the sum from n = 1 to ∞ of the fraction 1 over n squared = the fraction π squared over 6">
+              <g fill="currentColor">
+                <path d="M1047 0 L968 -406 L15 -406 L15 -380 L526 280 L29 888 L29 919 L990 919 L1004 596 L959 596 Q949 682 929 733 Q909 785 875 811 Q842 838 791 847 Q740 856 666 856 L224 856 L224 851 L639 336 L639 316 L183 -278 L183 -284 L754 -284 Q811 -284 848 -266 Q886 -249 912 -214 Q938 -179 957 -125 Q977 -72 998 0 L1047 0 Z" transform="translate(2.834 -0.06) scale(0.04 -0.04)"/>
+                <path d="M878 227 Q878 190 864 150 Q851 110 825 76 Q799 42 761 21 Q724 0 675 0 Q613 0 565 39 Q517 78 470 148 Q436 78 383 39 Q330 0 256 0 Q212 0 170 21 Q129 43 102 88 Q75 134 75 205 Q75 276 97 321 Q119 367 151 393 Q183 419 216 429 Q249 440 271 440 Q309 440 341 430 Q373 420 409 388 Q446 356 494 290 Q518 333 543 366 Q569 400 604 420 Q640 440 692 440 Q738 440 780 415 Q823 391 850 343 Q878 296 878 227 Z M447 185 L447 188 Q392 280 342 330 Q292 380 239 380 Q211 380 187 363 Q164 346 150 318 Q137 291 137 258 Q137 215 154 175 Q171 136 202 111 Q234 86 279 86 Q325 86 357 103 Q389 120 411 143 Q433 167 447 185 Z M515 251 L515 248 Q570 157 616 108 Q662 60 714 60 Q743 60 766 76 Q790 93 803 121 Q817 149 817 182 Q817 229 800 268 Q783 307 751 330 Q720 354 674 354 Q629 354 599 337 Q569 320 549 296 Q530 273 515 251 Z" transform="translate(11.732 -48.82) scale(0.028 -0.028)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(0 42.98) scale(0.028 -0.028)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(16.128 42.98) scale(0.028 -0.028)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(36.288 42.98) scale(0.028 -0.028)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(66.1647 -25.6) scale(0.04 -0.04)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(56.8147 25.6) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(79.8547 15.52) scale(0.028 -0.028)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(106.4258 0) scale(0.04 -0.04)"/>
+                <path d="M571 455 L558 391 L438 391 Q435 373 430 335 Q426 298 422 255 Q419 212 419 175 Q419 122 432 91 Q446 61 477 61 Q504 61 518 69 Q532 78 542 88 L558 74 Q538 36 511 13 Q484 -9 438 -9 Q393 -9 372 24 Q352 57 352 106 Q352 147 359 196 Q366 245 376 295 Q387 346 395 391 L247 391 Q245 352 236 296 Q227 240 214 182 Q201 124 187 75 Q174 26 163 0 L69 0 L66 15 Q85 47 95 66 Q106 85 116 105 Q126 125 142 159 Q163 203 175 239 Q188 275 196 311 Q204 348 209 391 Q151 391 119 388 Q88 386 71 374 Q54 363 38 336 L18 346 Q38 415 87 443 Q136 471 214 471 L571 471 L571 455 Z" transform="translate(146.3369 -25.6) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(169.9769 -40) scale(0.028 -0.028)"/>
+                <path d="M415 646 L417 617 Q347 607 289 572 Q231 537 192 481 Q153 425 140 352 L147 351 Q178 381 208 397 Q238 413 277 413 Q359 413 408 357 Q457 301 457 203 Q457 101 405 44 Q354 -12 259 -12 Q185 -12 137 24 Q90 61 67 122 Q45 184 45 257 Q45 378 92 463 Q140 548 224 595 Q308 642 415 646 Z M370 195 Q370 263 339 309 Q309 355 247 355 Q218 355 192 343 Q167 332 151 306 Q135 280 135 236 Q135 174 149 126 Q163 78 191 50 Q220 23 263 23 Q313 23 341 61 Q370 100 370 195 Z" transform="translate(155.9869 25.6) scale(0.04 -0.04)"/>
+                <rect x="56.8147" y="-11.68" width="38.5" height="2.72"/>
+                <rect x="146.3369" y="-11.68" width="39.1" height="2.72"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=constellation — a star map ignites along the glyphs, then fuses into the equation</span>
+            <code class="src">\lx[fx.enter=constellation]{ \sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6} }</code>
+            <span class="hint">load — watch the stars fuse</span>
           </figcaption>
         </figure>
         <figure class="card">
