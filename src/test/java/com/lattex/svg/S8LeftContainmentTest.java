@@ -265,8 +265,10 @@ class S8LeftContainmentTest {
             "expected a large tag corpus from the battery, scanned only " + scannedTags);
     }
 
-    /** Audits one rendered SVG; appends any violations. Returns tags scanned. */
-    private static int auditOne(String latex, String svg, List<String> failures) {
+    /** Audits one rendered SVG; appends any violations. Returns tags scanned.
+     * Package-visible so {@link CorpusRenderSweepTest} sweeps the FULL corpus through
+     * the SAME auditor as this battery — one alphabet judge, no drift between them. */
+    static int auditOne(String latex, String svg, List<String> failures) {
         String lower = svg.toLowerCase(java.util.Locale.ROOT);
 
         // 1. No forbidden opening tags.
