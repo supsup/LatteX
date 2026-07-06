@@ -73,6 +73,28 @@
       + ') translate(' + (-c.x).toFixed(2) + 'px,' + (-c.y).toFixed(2) + 'px)';
   }
 
+  // ---- scroll-killable shows ------------------------------------------------
+  // Overlay effects are FIXED-position bodies anchored to the equation's
+  // trigger-time rect — scroll the page and the show plays over the wrong
+  // content (bolts strike a phantom, shards float over prose, a spotlight
+  // darkens nothing: Charles's smoke sweep, 2026-07-06). scrollKillable wraps
+  // an effect's teardown into an idempotent `die()` that ALSO fires on the
+  // first scroll: the normal end and the scroll-abort share one exit, pending
+  // frames/timers check die.dead() and park. Passive + capture so it hears
+  // scrolls in any container and never blocks the scroll itself.
+  function scrollKillable(teardown) {
+    var dead = false;
+    function die() {
+      if (dead) { return; }
+      dead = true;
+      window.removeEventListener('scroll', die, true);
+      teardown();
+    }
+    die.dead = function () { return dead; };
+    window.addEventListener('scroll', die, { capture: true, passive: true });
+    return die;
+  }
+
   // A jagged polyline from (x0,y0) to (x1,y1): interior points are pushed off
   // the straight line by a random perpendicular jitter, so every strike differs.
   function jagged(x0, y0, x1, y1, segs, jitter) {
@@ -159,18 +181,11 @@
     // The bolts converge on where the equation WAS at trigger time (fixed
     // overlay) — if the page scrolls the anchor is gone, so end the show
     // immediately rather than strike a phantom (Charles, 2026-07-06).
-    var dead = false;
-    function die() {
-      if (dead) { return; }
-      dead = true;
-      window.removeEventListener('scroll', die, true);
-      canvas.remove();
-    }
-    window.addEventListener('scroll', die, { capture: true, passive: true });
+    var die = scrollKillable(function () { canvas.remove(); });
 
     var t0 = performance.now();
     function frame(now) {
-      if (dead) { return; }
+      if (die.dead()) { return; }
       var e = now - t0;
       if (e < DRAW) { drawBolts(e / DRAW); requestAnimationFrame(frame); }        // draw in + flicker
       else if (e < DRAW + HOLD) { drawBolts(1); requestAnimationFrame(frame); }   // hold, still re-jagging
@@ -258,19 +273,16 @@
     var sctx = canvas.getContext('2d');
     sctx.scale(dpr, dpr);
 
-    // Idempotent teardown: reached by the normal fade-out, OR immediately on
-    // scroll — the darkness + bolts are fixed overlays anchored to where the
-    // equation WAS, so a scrolled page must get its lights back at once
-    // (Charles, 2026-07-06). `dead` also parks every pending strike/timer.
+    // Teardown: reached by the normal fade-out, OR immediately on scroll — the
+    // darkness + bolts are fixed overlays anchored to where the equation WAS,
+    // so a scrolled page must get its lights back at once (Charles,
+    // 2026-07-06). `dead` parks every pending strike frame/timer.
     var dead = false;
-    function cleanup() {
-      if (dead) { return; }
+    var cleanup = scrollKillable(function () {
       dead = true;
-      window.removeEventListener('scroll', cleanup, true);
       backdrop.remove(); flash.remove(); canvas.remove();
       el.style.filter = filter0; el.style.transition = trans0;
-    }
-    window.addEventListener('scroll', cleanup, { capture: true, passive: true });
+    });
 
     // Reduced motion: no darkening flurry, no strobing, no heat ramp. A brief
     // soft dim + one faint static arc + a soft STEADY glow, then restore.
@@ -641,68 +653,101 @@
   // TOWARD it and SHRINKS as it's drawn in (1/r² reach), then eases back out. rAF-driven;
   // only toggles transform on the existing paths (set while animating, cleared at rest).
   // Simple by design: no spiral, no spin, no overlay orb — just pull + shrink.
+  // GRAVWELL — the spiral black-hole + eclipse (Charles's redesign, 2026-07-06):
+  // armed on enter; CLICK ANYWHERE on the equation and that point becomes the
+  // well — an eclipse-like orb (dark disc + bright corona, a body overlay)
+  // opens there while EVERY glyph shrinks and SPIRALS into it, holds a dark
+  // beat, then spirals back out as the orb collapses. Click point maps to
+  // user space via the svg screen CTM; per-glyph motion is a user-space delta
+  // composed with placement (setPathDelta), spinning about the well while the
+  // radius and scale collapse. Scroll ends the show instantly (the orb is a
+  // fixed overlay). Nothing is ever added to the inner <svg>.
   function gravwell(el) {
     var svg = el.querySelector('svg');
     if (!svg || reduced) { return; }
     if (el.__lxWellArmed) { return; }
     el.__lxWellArmed = true;
     var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
-    if (paths.length < 2) { return; }
-    function centre(p) {
-      var b;
-      try { b = p.getBBox(); } catch (e) { return null; }
-      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-    }
-    var R0 = 46;       // reach: glyphs within ~this radius feel the well
-    var PULL = 0.6;    // fraction of the distance to the well a glyph closes at peak
-    var SHRINK = 0.6;  // how small a fully-pulled glyph gets
-    var IN = 260, HOLD = 110, BACK = 480;
-    var raf = 0;
-    paths.forEach(function (src) {
-      src.style.cursor = 'pointer';
-      src.addEventListener('click', function () {
-        var s = centre(src);
-        if (!s) { return; }
+    if (!paths.length) { return; }
+    var IN = 900, HOLD = 240, BACK = 520;
+    var TURNS = 1.35;   // how far each glyph swings around the well on the way in
+    var busy = false;
+    svg.style.cursor = 'pointer';
+    svg.addEventListener('click', function (ev) {
+      if (busy) { return; }
+      busy = true;
+
+      // The CLICK POINT is the well: map client → svg user space.
+      var well;
+      try {
+        var ctm = svg.getScreenCTM().inverse();
+        well = { x: ctm.a * ev.clientX + ctm.c * ev.clientY + ctm.e,
+                 y: ctm.b * ev.clientX + ctm.d * ev.clientY + ctm.f };
+      } catch (e) { busy = false; return; }
+      // user → screen scale, for sizing the overlay orb in page px.
+      var toScreen = svg.getScreenCTM();
+      var wellPx = { x: toScreen.a * well.x + toScreen.c * well.y + toScreen.e,
+                     y: toScreen.b * well.x + toScreen.d * well.y + toScreen.f };
+
+      var movers = [];
+      paths.forEach(function (p) {
+        var c = userCentre(p);
+        if (!c) { return; }
+        var dx = c.x - well.x, dy = c.y - well.y;
+        movers.push({ p: p, r0: Math.sqrt(dx * dx + dy * dy),
+                      a0: Math.atan2(dy, dx), cx: c.x, cy: c.y });
+      });
+      if (!movers.length) { busy = false; return; }
+
+      // The eclipse orb: a dark disc with a bright corona at the click point.
+      var orb = document.createElement('div');
+      var R = 26;
+      orb.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
+        + 'left:' + (wellPx.x - R) + 'px;top:' + (wellPx.y - R) + 'px;'
+        + 'width:' + (R * 2) + 'px;height:' + (R * 2) + 'px;border-radius:50%;'
+        + 'background:radial-gradient(circle, #05060a 0 58%, rgba(5,6,10,0.9) 62%, transparent 70%);'
+        + 'box-shadow:0 0 18px 4px rgba(255,244,214,0.85), 0 0 46px 10px rgba(255,214,140,0.35);'
+        + 'transform:scale(0.1);opacity:0;transition:transform 260ms ease, opacity 200ms ease;';
+      document.body.appendChild(orb);
+      requestAnimationFrame(function () { orb.style.transform = 'scale(1)'; orb.style.opacity = '1'; });
+
+      var raf = 0, t0 = performance.now();
+      var die = scrollKillable(function () {
         if (raf) { cancelAnimationFrame(raf); raf = 0; }
-        var movers = [];
-        paths.forEach(function (p) {
-          if (p === src) { return; }
-          var g = centre(p); if (!g) { return; }
-          var dx = s.x - g.x, dy = s.y - g.y;          // glyph → well
-          var r = Math.sqrt(dx * dx + dy * dy); if (r < 1e-3) { return; }
-          var fall = Math.min(1, (R0 * R0) / (r * r));
-          if (fall < 0.03) { return; }                 // too far to matter
-          p.style.transition = '';
-          movers.push({ p: p, dx: dx, dy: dy, fall: fall });
+        orb.remove();
+        movers.forEach(function (m) { clearPathDelta(m.p); m.p.style.opacity = ''; });
+        busy = false;
+      });
+
+      function frame(now) {
+        if (die.dead()) { return; }
+        var e = now - t0, k, phase;
+        if (e < IN) { var u = e / IN; k = u * u * (3 - 2 * u); phase = 0; }
+        else if (e < IN + HOLD) { k = 1; phase = 1; }
+        else {
+          var d = (e - IN - HOLD) / BACK;
+          if (d >= 1) { die(); return; }
+          k = 1 - d * d * (3 - 2 * d); phase = 2;
+        }
+        movers.forEach(function (m) {
+          var r = m.r0 * (1 - 0.96 * k);              // radius collapses into the well
+          var a = m.a0 + TURNS * 2 * Math.PI * k;     // ...while swinging around it
+          var nx = well.x + r * Math.cos(a);
+          var ny = well.y + r * Math.sin(a);
+          var sc = Math.max(0.06, 1 - 0.94 * k);      // shrink toward a point
+          m.p.style.opacity = String(Math.max(0.15, 1 - 0.75 * k));
+          setPathDelta(m.p, 'translate(' + (nx - m.cx).toFixed(2) + 'px,'
+            + (ny - m.cy).toFixed(2) + 'px) ' + pivotScaleDelta(m.p, sc.toFixed(3)));
         });
-        if (!movers.length) { return; }
-        var t0 = performance.now();
-        function frame(now) {
-          var e = now - t0, k;
-          if (e < IN) { var u = e / IN; k = u * u * (3 - 2 * u); }   // ease in
-          else if (e < IN + HOLD) { k = 1; }                        // hold at the well
-          else {
-            var d = (e - IN - HOLD) / BACK;
-            if (d >= 1) {                              // done → pristine at rest
-              movers.forEach(function (m) { clearPathDelta(m.p); });
-              raf = 0; return;
-            }
-            k = 1 - d * d * (3 - 2 * d);               // ease back out
-          }
-          movers.forEach(function (m) {
-            var pull = m.fall * k;                     // 0..1 depth into the well
-            var tx = m.dx * PULL * pull;               // slide toward the well
-            var ty = m.dy * PULL * pull;
-            var sc = 1 - SHRINK * pull;                // shrink as drawn in
-            // Composes with placement: slide in user space, shrink about the
-            // glyph's own centre (pivotScaleDelta replaces the old fill-box pivot).
-            setPathDelta(m.p, 'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2)
-              + 'px) ' + pivotScaleDelta(m.p, sc.toFixed(3)));
-          });
-          raf = requestAnimationFrame(frame);
+        if (phase === 1) {                            // dark beat: the orb pulses
+          orb.style.transform = 'scale(' + (1 + 0.08 * Math.sin(e / 40)).toFixed(3) + ')';
+        }
+        if (phase === 2 && e > IN + HOLD + BACK * 0.5) {
+          orb.style.opacity = '0'; orb.style.transform = 'scale(0.15)'; // orb collapses
         }
         raf = requestAnimationFrame(frame);
-      });
+      }
+      raf = requestAnimationFrame(frame);
     });
   }
 
@@ -753,15 +798,14 @@
         v: 0.30 + Math.random() * 0.45, lastRow: -999 });
     }
     var raf = 0, timers = [], done = false;
-    function stop() {
-      if (done) { return; }
+    var stop = scrollKillable(function () { // scroll ends the rain at once
       done = true;
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       timers.forEach(clearTimeout); timers.length = 0;
       canvas.remove();
       el.style.position = pos0;
       el.style.isolation = iso0;
-    }
+    });
     var t0 = performance.now(), RAIN = 2000;
     function frame(now) {
       if (done) { return; }
@@ -844,11 +888,11 @@
     var GRAV = 220, DRAG = 0.86;
     var LIFE = 900, DETONATE = 170;
     var raf = 0, timers = [], t0 = 0, lastT = 0;
-    function cleanup() {
+    var cleanup = scrollKillable(function () { // + ends on scroll
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       timers.forEach(clearTimeout); timers.length = 0;
       canvas.remove(); restore();
-    }
+    });
     function frame(now) {
       var e = now - t0;
       var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
@@ -1162,12 +1206,12 @@
     el.style.filter = 'drop-shadow(0 0 6px ' + color + ')';
     el.style.opacity = '0';
     var raf = 0, inStarted = false, t0 = performance.now();
-    function cleanup() {
+    var cleanup = scrollKillable(function () { // + ends on scroll
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       timers.forEach(clearTimeout); timers.length = 0;
       canvas.remove();
       restore();
-    }
+    });
     function draw(now) {
       var t = now - t0;
       if (t >= OUT + HOLD && !inStarted) {
@@ -1309,13 +1353,18 @@
     var raf = 0, t0 = performance.now(), lastT = 0, homeT = 0;
     el.style.transition = 'none';
 
-    function cleanup() {
+    // Reached by reassembly's touchdown OR immediately on scroll — the shards
+    // hang INDEFINITELY on a fixed canvas anchored to the equation's
+    // trigger-time position, so a scrolled page floats glass over the wrong
+    // content (Charles, 2026-07-06). Scroll mid-shatter = the equation simply
+    // returns whole, instantly.
+    var cleanup = scrollKillable(function () {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       canvas.remove();
       el.style.opacity = op0 || '1';
       el.style.transition = trans0;
       el.__lxShatter = null;
-    }
+    });
     el.__lxShatter = function () {
       if (phase !== 2) { return; }
       for (var i = 0; i < shards.length; i++) {
@@ -1466,13 +1515,13 @@
     el.style.filter = 'drop-shadow(0 0 7px rgba(255,150,60,0.65))';
     var embers = [], raf = 0, timers = [], t0 = performance.now(), lastT = 0;
 
-    function cleanup() {
+    var cleanup = scrollKillable(function () { // + ends on scroll
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       timers.forEach(clearTimeout); timers.length = 0;
       canvas.remove();
       el.style.filter = fil0; el.style.transition = trans0;
       el.__lxSparkler = false;
-    }
+    });
 
     function tipAt(g, prog) {
       // The draw frontier in page coordinates: dashoffset len→0 reveals from
@@ -1730,7 +1779,12 @@
 
     var IGNITE = 700, HOLD = 1500, FUSE = 700, END = IGNITE + HOLD + FUSE;
     var raf = 0, timers = [], t0 = performance.now(), fusing = false;
-    function cleanup() {
+    // Reached by the normal fuse-out OR immediately on scroll — the star map is
+    // a fixed canvas sampled at trigger time, so scrolling leaves an
+    // after-image at the equation's OLD position (Charles, 2026-07-06). On
+    // teardown the paths restore to visible, so a scroll mid-show simply fuses
+    // the equation in early.
+    var cleanup = scrollKillable(function () {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       timers.forEach(clearTimeout); timers.length = 0;
       canvas.remove();
@@ -1738,8 +1792,9 @@
         p.style.opacity = op0[i] || ''; p.style.transition = trans0[i] || '';
       });
       el.__lxConst = false;
-    }
+    });
     function frame(now) {
+      if (cleanup.dead()) { return; }
       var e = now - t0;
       ctx.clearRect(0, 0, vw, vh);
       var fade = e > IGNITE + HOLD ? Math.max(0, 1 - (e - IGNITE - HOLD) / FUSE) : 1;
