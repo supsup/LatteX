@@ -156,15 +156,28 @@
       }
     }
 
+    // The bolts converge on where the equation WAS at trigger time (fixed
+    // overlay) — if the page scrolls the anchor is gone, so end the show
+    // immediately rather than strike a phantom (Charles, 2026-07-06).
+    var dead = false;
+    function die() {
+      if (dead) { return; }
+      dead = true;
+      window.removeEventListener('scroll', die, true);
+      canvas.remove();
+    }
+    window.addEventListener('scroll', die, { capture: true, passive: true });
+
     var t0 = performance.now();
     function frame(now) {
+      if (dead) { return; }
       var e = now - t0;
       if (e < DRAW) { drawBolts(e / DRAW); requestAnimationFrame(frame); }        // draw in + flicker
       else if (e < DRAW + HOLD) { drawBolts(1); requestAnimationFrame(frame); }   // hold, still re-jagging
       else if (e < DRAW + HOLD + FADE) {                                            // fade the whole overlay
         canvas.style.opacity = String(1 - (e - DRAW - HOLD) / FADE);
         requestAnimationFrame(frame);
-      } else { canvas.remove(); }
+      } else { die(); }
     }
     requestAnimationFrame(frame);
   }
@@ -245,10 +258,19 @@
     var sctx = canvas.getContext('2d');
     sctx.scale(dpr, dpr);
 
+    // Idempotent teardown: reached by the normal fade-out, OR immediately on
+    // scroll — the darkness + bolts are fixed overlays anchored to where the
+    // equation WAS, so a scrolled page must get its lights back at once
+    // (Charles, 2026-07-06). `dead` also parks every pending strike/timer.
+    var dead = false;
     function cleanup() {
+      if (dead) { return; }
+      dead = true;
+      window.removeEventListener('scroll', cleanup, true);
       backdrop.remove(); flash.remove(); canvas.remove();
       el.style.filter = filter0; el.style.transition = trans0;
     }
+    window.addEventListener('scroll', cleanup, { capture: true, passive: true });
 
     // Reduced motion: no darkening flurry, no strobing, no heat ramp. A brief
     // soft dim + one faint static arc + a soft STEADY glow, then restore.
@@ -273,6 +295,7 @@
     function strike(level, done) {
       var DRAW = 130, t0 = performance.now();
       function frame(now) {
+        if (dead) { return; } // scrolled away mid-strike: overlays already gone
         var p = Math.min(1, (now - t0) / DRAW);
         sctx.clearRect(0, 0, vw, vh);
         sctx.strokeStyle = boltColor; sctx.shadowColor = boltGlow; sctx.shadowBlur = 16;
@@ -288,6 +311,7 @@
         flash.style.opacity = '1';
         el.style.filter = heatFilter(level); // charge pulses the math hotter
         setTimeout(function () {
+          if (dead) { return; } // never re-heat the equation after teardown
           backdrop.style.setProperty('--lx-dark', '0.94'); // settle back to dark
           flash.style.opacity = '0';
           sctx.clearRect(0, 0, vw, vh);
@@ -303,6 +327,7 @@
     var LEVELS = [0.45, 0.72, 1.0]; // subtle → hot → white-hot climax
     var i = 0;
     function next() {
+      if (dead) { return; }
       if (i >= LEVELS.length) {
         backdrop.style.transition = 'opacity 400ms ease';
         canvas.style.transition = 'opacity 400ms ease';
