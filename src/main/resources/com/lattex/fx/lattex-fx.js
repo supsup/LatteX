@@ -43,11 +43,18 @@
     return p.__lxPlace;
   }
   function setPathDelta(p, deltaCss) {
+    // The SVG transform ATTRIBUTE applies about the user-space origin (0,0);
+    // the CSS transform PROPERTY applies about transform-origin, which for SVG
+    // defaults to 50% 50% OF THE VIEWBOX — replaying the placement through CSS
+    // without pinning the origin scales the equation about its centre and
+    // scrunches every glyph into a bar (Charles's smoke, round 2). Pin it.
+    p.style.transformOrigin = '0px 0px';
     var place = placement(p);
     p.style.transform = place ? deltaCss + ' ' + place.css : deltaCss;
   }
   function clearPathDelta(p) {
     p.style.transform = '';
+    p.style.transformOrigin = '';
   }
   /** The glyph's centre in USER space (local bbox pushed through its placement). */
   function userCentre(p) {
