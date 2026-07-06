@@ -31,6 +31,10 @@ repositories {
 // LatteX ships ZERO runtime dependencies — the whole point. Test-scope only.
 dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    // BrewShot: the real-browser harness (extracted FROM this repo's fx tests,
+    // now vendored back as its own jar - github.com/supsup/BrewShot). Test
+    // scope only; the zero-runtime-dependencies promise is untouched.
+    testImplementation(files("libs/brewshot-0.1.0.jar"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

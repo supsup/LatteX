@@ -1,5 +1,8 @@
 package com.lattex.harness;
 
+import com.brewshot.BrewShot;
+import com.brewshot.MiniJson;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -30,7 +33,7 @@ import org.junit.jupiter.api.Test;
  * <p>Skips (does not fail) when no local Chrome exists or the example page has
  * not been generated (EffectsPageTest/ThreadPreviewPageTest write them).
  */
-class CdpEffectsPageTest {
+class BrewShotEffectsPageTest {
 
     /** JS audit: any glyph path whose box exceeds ~2x its svg box is a blob. */
     private static final String BLOB_AUDIT = """
@@ -58,15 +61,15 @@ class CdpEffectsPageTest {
 
     @Test
     void effectsPageRendersWithoutBlobsAndWritesReferenceScreenshot() throws Exception {
-        assumeTrue(CdpChrome.available(), "no local Chrome; skipping browser pin");
+        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
         Path page = examples().resolve("effects.html");
         assumeTrue(Files.exists(page), "examples/effects.html not generated");
         assumeTrue(Files.readString(page).contains("data-lx-fx-overlay"),
             "stale examples/effects.html (predates the current runtime) — "
                 + "full-suite runs regenerate it first (class ordering)");
 
-        try (CdpChrome chrome = CdpChrome.launch(1200, 900)) {
-            chrome.navigate(page.toUri().toString());
+        try (BrewShot chrome = BrewShot.launch(1200, 900)) {
+            chrome.open(page.toUri().toString());
 
             // Audit twice: early (enter effects mid-animation — deltas active,
             // so the compose path is genuinely exercised) and settled.
@@ -92,12 +95,12 @@ class CdpEffectsPageTest {
 
     @Test
     void threadPreviewScreenshotAlongsideItsHtml() throws Exception {
-        assumeTrue(CdpChrome.available(), "no local Chrome; skipping browser pin");
+        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
         Path page = examples().resolve("thread-preview.html");
         assumeTrue(Files.exists(page), "examples/thread-preview.html not generated");
 
-        try (CdpChrome chrome = CdpChrome.launch(900, 700)) {
-            chrome.navigate(page.toUri().toString());
+        try (BrewShot chrome = BrewShot.launch(900, 700)) {
+            chrome.open(page.toUri().toString());
             chrome.settle(300);
             // Arm the thread emphasis on the first mapped glyph so the reference
             // image shows the effect doing its job, not just resting math.
