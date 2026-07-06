@@ -285,14 +285,24 @@
   // scrolls in any container and never blocks the scroll itself.
   function scrollKillable(teardown) {
     var dead = false;
+    // Baseline the viewport at arming: browsers fire spurious/restoration
+    // 'scroll' events at page load (killing fx.enter shows at birth — Charles:
+    // "sparkler seems to not always load"), so only a REAL movement of the
+    // viewport (>4px from the position the show started at) ends the show.
+    var x0 = window.pageXOffset, y0 = window.pageYOffset;
+    function onScroll() {
+      if (Math.abs(window.pageXOffset - x0) < 4
+          && Math.abs(window.pageYOffset - y0) < 4) { return; }
+      die();
+    }
     function die() {
       if (dead) { return; }
       dead = true;
-      window.removeEventListener('scroll', die, true);
+      window.removeEventListener('scroll', onScroll, true);
       teardown();
     }
     die.dead = function () { return dead; };
-    window.addEventListener('scroll', die, { capture: true, passive: true });
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
     return die;
   }
 
@@ -1721,6 +1731,15 @@
       timers.forEach(clearTimeout); timers.length = 0;
       canvas.remove();
       el.style.filter = fil0; el.style.transition = trans0;
+      // Mid-draw glyphs are stroke-dashed with a transparent fill — a scroll
+      // teardown here must restore every path to the pristine filled glyph or
+      // the equation stays half-invisible (unlike the pure-overlay effects).
+      glyphs.forEach(function (g) {
+        var p = g.p;
+        p.style.stroke = ''; p.style.strokeWidth = '';
+        p.style.strokeDasharray = ''; p.style.strokeDashoffset = '';
+        p.style.transition = ''; p.style.fill = '';
+      });
       el.__lxSparkler = false;
     });
 
