@@ -5,7 +5,7 @@
   // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
   // (boom|pulse|fade|glow|none). 'lightning' and 'storm' are special-cased
   // below: they are page-side body overlays, NOT keyframes on the element.
-  var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, none: 1 };
+  var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, glitch: 1, none: 1 };
   var reduced = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1131,6 +1131,204 @@
     raf = requestAnimationFrame(draw);
   }
 
+  // SHATTER: the equation cracks like glass — a bright crack-web flashes, the
+  // pane breaks into triangular shards that scatter outward and hang in zero-g,
+  // then the SECOND click magnetically reassembles them (a toggle). The ink is
+  // replayed onto a full-viewport body canvas (existing <path>/<rect> data via
+  // Path2D — read-only); the element itself just fades under the pane, and the
+  // inner <svg> is never touched.
+  function shatter(el) {
+    if (el.__lxShatter) { el.__lxShatter(); return; } // second click → reassemble
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var op0 = el.style.opacity, trans0 = el.style.transition;
+    if (reduced) {
+      // No motion: a quiet fade-out/fade-in toggle.
+      el.style.transition = 'opacity 200ms ease';
+      el.style.opacity = '0.25';
+      el.__lxShatter = function () {
+        el.style.opacity = op0 || '1';
+        el.style.transition = trans0;
+        el.__lxShatter = null;
+      };
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) { return; }
+    var dpr = window.devicePixelRatio || 1;
+    var sx = r.width / vb[2], sy = r.height / vb[3];
+
+    // Replay the ink (paths + rects, their own fills) onto an offscreen pane.
+    var pane = document.createElement('canvas');
+    pane.width = Math.max(1, Math.round(r.width * dpr));
+    pane.height = Math.max(1, Math.round(r.height * dpr));
+    var pctx = pane.getContext('2d');
+    pctx.scale(dpr * sx, dpr * sy);
+    pctx.translate(-vb[0], -vb[1]);
+    var ink = getComputedStyle(svg).color || '#000';
+    function fillOf(node) {
+      var f = node.getAttribute('fill');
+      return (!f || f === 'currentColor') ? ink : f;
+    }
+    Array.prototype.forEach.call(svg.querySelectorAll('path'), function (p) {
+      var d = p.getAttribute('d');
+      if (!d) { return; }
+      pctx.fillStyle = fillOf(p);
+      pctx.fill(new Path2D(d));
+    });
+    Array.prototype.forEach.call(svg.querySelectorAll('rect'), function (q) {
+      pctx.fillStyle = fillOf(q);
+      pctx.fillRect(+q.getAttribute('x') || 0, +q.getAttribute('y') || 0,
+        +q.getAttribute('width') || 0, +q.getAttribute('height') || 0);
+    });
+
+    // Jittered triangular shard mesh over the pane (overlay-local coords).
+    var CELL = 26, cols = Math.max(2, Math.ceil(r.width / CELL)),
+        rows = Math.max(2, Math.ceil(r.height / CELL));
+    var gx = [], gy = [];
+    for (var i = 0; i <= cols; i++) {
+      var jx = (i === 0 || i === cols) ? 0 : (Math.random() * 0.7 - 0.35) * (r.width / cols);
+      gx.push((i / cols) * r.width + jx);
+    }
+    for (var j = 0; j <= rows; j++) {
+      var jy = (j === 0 || j === rows) ? 0 : (Math.random() * 0.7 - 0.35) * (r.height / rows);
+      gy.push((j / rows) * r.height + jy);
+    }
+    var shards = [], ccx = r.width / 2, ccy = r.height / 2;
+    for (var cj = 0; cj < rows; cj++) {
+      for (var ci = 0; ci < cols; ci++) {
+        var x0 = gx[ci], x1 = gx[ci + 1], y0 = gy[cj], y1 = gy[cj + 1];
+        var tris = Math.random() < 0.5
+          ? [[[x0, y0], [x1, y0], [x1, y1]], [[x0, y0], [x1, y1], [x0, y1]]]
+          : [[[x0, y0], [x1, y0], [x0, y1]], [[x1, y0], [x1, y1], [x0, y1]]];
+        for (var t = 0; t < 2; t++) {
+          var tri = tris[t];
+          var mx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+          var my = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+          var ang = Math.atan2(my - ccy, mx - ccx) + (Math.random() * 0.6 - 0.3);
+          var speed = 90 + Math.random() * 260;
+          shards.push({ tri: tri, mx: mx, my: my,
+            dx: 0, dy: 0, rot: 0,
+            vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed - 30,
+            vr: (Math.random() * 2 - 1) * 2.4,
+            bobA: 1 + Math.random() * 1.6, bobW: 0.8 + Math.random() * 1.2,
+            bobP: Math.random() * 6.283 });
+        }
+      }
+    }
+
+    // Full-viewport overlay the shards fly across.
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var CRACK = 150, BREAK = 850;      // crack-flash, then scatter-to-rest
+    var phase = 0;                     // 0 crack, 1 scatter, 2 hang, 3 reassemble
+    var raf = 0, t0 = performance.now(), lastT = 0, homeT = 0;
+    el.style.transition = 'none';
+
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      canvas.remove();
+      el.style.opacity = op0 || '1';
+      el.style.transition = trans0;
+      el.__lxShatter = null;
+    }
+    el.__lxShatter = function () {
+      if (phase !== 2) { return; }
+      for (var i = 0; i < shards.length; i++) {
+        var s = shards[i];
+        s.hx = s.dx; s.hy = s.dy; s.hr = s.rot; // reassembly start pose
+      }
+      phase = 3; homeT = 0;
+    };
+
+    function drawShard(s) {
+      ctx.save();
+      ctx.translate(r.left + s.mx + s.dx, r.top + s.my + s.dy);
+      ctx.rotate(s.rot);
+      ctx.beginPath();
+      ctx.moveTo(s.tri[0][0] - s.mx, s.tri[0][1] - s.my);
+      ctx.lineTo(s.tri[1][0] - s.mx, s.tri[1][1] - s.my);
+      ctx.lineTo(s.tri[2][0] - s.mx, s.tri[2][1] - s.my);
+      ctx.closePath();
+      // Glass body: clipped ink + a faint pane tint + a bright edge.
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = 'rgba(190,225,255,0.10)';
+      ctx.fill();
+      ctx.drawImage(pane, -s.mx, -s.my, r.width, r.height);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(220,240,255,0.35)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function frame(now) {
+      var e = now - t0;
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+      lastT = now;
+      ctx.clearRect(0, 0, vw, vh);
+      if (phase === 0) {
+        // Crack-web flash: the mesh edges light up over the still-visible pane.
+        var a = Math.min(1, e / 60);
+        ctx.strokeStyle = 'rgba(235,248,255,' + (0.85 * a).toFixed(3) + ')';
+        ctx.lineWidth = 1;
+        for (var i = 0; i < shards.length; i += 2) {
+          var s = shards[i];
+          ctx.beginPath();
+          ctx.moveTo(r.left + s.tri[0][0], r.top + s.tri[0][1]);
+          ctx.lineTo(r.left + s.tri[1][0], r.top + s.tri[1][1]);
+          ctx.lineTo(r.left + s.tri[2][0], r.top + s.tri[2][1]);
+          ctx.closePath();
+          ctx.stroke();
+        }
+        if (e >= CRACK) { phase = 1; el.style.opacity = '0'; }
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      if (phase === 1) {
+        // Zero-g scatter: pure drag decays the break impulse to a drift.
+        var drag = Math.pow(0.14, dt);
+        for (var k = 0; k < shards.length; k++) {
+          var p = shards[k];
+          p.dx += p.vx * dt; p.dy += p.vy * dt; p.rot += p.vr * dt;
+          p.vx *= drag; p.vy *= drag; p.vr *= Math.pow(0.5, dt);
+        }
+        if (e >= CRACK + BREAK) { phase = 2; }
+      } else if (phase === 2) {
+        // Hang: a slow weightless bob until the next click.
+        var tt = e / 1000;
+        for (var m = 0; m < shards.length; m++) {
+          var q = shards[m];
+          q.dy += Math.sin(tt * q.bobW + q.bobP) * q.bobA * dt;
+          q.rot += q.vr * 0.08 * dt;
+        }
+      } else if (phase === 3) {
+        // Magnetic reassembly: ease every shard from its captured pose to home.
+        homeT += dt;
+        var g = Math.min(1, homeT / 0.65);
+        var hold = Math.pow(1 - g, 3); // remaining offset: fast pull, gentle landing
+        for (var n = 0; n < shards.length; n++) {
+          var w = shards[n];
+          w.dx = w.hx * hold; w.dy = w.hy * hold; w.rot = w.hr * hold;
+        }
+        if (g >= 1) { cleanup(); return; }
+      }
+      for (var d = 0; d < shards.length; d++) { drawShard(shards[d]); }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1151,6 +1349,7 @@
     if (name === 'diffusion') { diffusion(el); return; }
     if (name === 'refraction') { refraction(el); return; }
     if (name === 'teleport') { teleport(el); return; }
+    if (name === 'shatter') { shatter(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';

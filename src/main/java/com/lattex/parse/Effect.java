@@ -137,6 +137,23 @@ public enum Effect {
      * particle field; it adds no element to the inner {@code <svg>}.
      */
     TELEPORT,
+    /**
+     * SHATTER: the equation cracks like glass — a bright crack-web flashes, the pane
+     * breaks into triangular shards that scatter and hang in zero-g, and the next
+     * click magnetically reassembles them (a toggle). Page-side JS routine: it replays
+     * the existing inner-{@code <svg>} ink onto a body-level {@code <canvas>} overlay
+     * and animates shards of it while the container only fades under the pane; it adds
+     * no element to the inner {@code <svg>}.
+     */
+    SHATTER,
+    /**
+     * GLITCH: datamosh — the red/cyan channels rip apart, slice bands drop out and
+     * shear sideways with static jitter, then everything snaps back pixel-perfect.
+     * Unlike the JS routines this is a pure CSS keyframe on the container
+     * ({@code filter}/{@code transform}/{@code clip-path}); nothing reaches the inner
+     * {@code <svg>}.
+     */
+    GLITCH,
     /** Explicitly no effect. */
     NONE;
 
@@ -172,12 +189,15 @@ public enum Effect {
             case "diffusion" -> DIFFUSION;
             case "refraction" -> REFRACTION;
             case "teleport" -> TELEPORT;
+            case "shatter" -> SHATTER;
+            case "glitch" -> GLITCH;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
                     + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
-                    + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport|none)");
+                    + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
+                    + "|shatter|glitch|none)");
         };
     }
 

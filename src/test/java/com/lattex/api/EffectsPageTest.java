@@ -121,6 +121,12 @@ class EffectsPageTest {
         new Fx("\\lx[fx.click=teleport]{ \\psi(x,t) }",
             "fx.click=teleport — dematerializes into a particle beam, then re-coalesces",
             "click — beam out, then back in"),
+        new Fx("\\lx[fx.click=shatter]{ x^2 - y^2 = (x-y)(x+y) }",
+            "fx.click=shatter — cracks to glass shards that hang in zero-g, reassembles on the next click",
+            "click — shatter · click again — reassemble"),
+        new Fx("\\lx[fx.hover=glitch]{ \\det(A - \\lambda I) = 0 }",
+            "fx.hover=glitch — the red/cyan channels rip apart, slices shear, then snap back",
+            "hover — datamosh"),
         new Fx("\\lx[fx.enter=fade, fx.hover=pulse, fx.click=boom, fx.duration=400ms]"
             + "{ \\int_0^\\infty e^{-x}\\,dx }",
             "all three — fade in, pulse on hover, boom on click", "load · hover · click"));

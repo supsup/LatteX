@@ -147,6 +147,28 @@
   50%      { filter: drop-shadow(0 0 12px var(--lx-glow-color, currentColor)); }
 }
 
+/* glitch: datamosh — the red/cyan channels rip apart, slice bands drop out and shear
+   sideways with static jitter, then everything snaps back pixel-perfect. Single-element
+   (filter + transform + clip-path on the container); the inner <svg> is never touched. */
+@keyframes lx-glitch {
+  0%   { transform: none; filter: none; }
+  8%   { transform: translate(-3px, 1px) skewX(-4deg);
+         filter: drop-shadow(3px 0 rgba(255, 0, 64, .9)) drop-shadow(-3px 0 rgba(0, 229, 255, .9)); }
+  16%  { transform: translate(2px, -1px); clip-path: inset(12% 0 55% 0);
+         filter: drop-shadow(-4px 0 rgba(255, 0, 64, .9)) drop-shadow(4px 0 rgba(0, 229, 255, .9)); }
+  24%  { transform: translate(-4px, 2px) skewX(6deg); clip-path: inset(58% 0 8% 0); }
+  32%  { transform: translate(3px, 0); clip-path: inset(30% 0 38% 0);
+         filter: drop-shadow(2px 0 rgba(255, 0, 64, .9)) drop-shadow(-2px 0 rgba(0, 229, 255, .9)); }
+  40%  { transform: translate(-2px, -2px) skewX(-8deg); }
+  55%  { transform: translate(1px, 1px);
+         filter: drop-shadow(-2px 0 rgba(255, 0, 64, .7)) drop-shadow(2px 0 rgba(0, 229, 255, .7)); }
+  70%  { transform: none; filter: none; }
+  74%  { transform: translate(-3px, 0) skewX(5deg);
+         filter: drop-shadow(4px 0 rgba(255, 0, 64, .8)) drop-shadow(-4px 0 rgba(0, 229, 255, .8)); }
+  78%  { transform: none; filter: none; }
+  100% { transform: none; filter: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* No motion; held-visible states stay legible. */
   .lx-math { animation: none !important; }
@@ -182,7 +204,7 @@
   // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
   // (boom|pulse|fade|glow|none). 'lightning' and 'storm' are special-cased
   // below: they are page-side body overlays, NOT keyframes on the element.
-  var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, none: 1 };
+  var VOCAB = { boom: 1, pulse: 1, fade: 1, glow: 1, glitch: 1, none: 1 };
   var reduced = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1308,6 +1330,204 @@
     raf = requestAnimationFrame(draw);
   }
 
+  // SHATTER: the equation cracks like glass — a bright crack-web flashes, the
+  // pane breaks into triangular shards that scatter outward and hang in zero-g,
+  // then the SECOND click magnetically reassembles them (a toggle). The ink is
+  // replayed onto a full-viewport body canvas (existing <path>/<rect> data via
+  // Path2D — read-only); the element itself just fades under the pane, and the
+  // inner <svg> is never touched.
+  function shatter(el) {
+    if (el.__lxShatter) { el.__lxShatter(); return; } // second click → reassemble
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var op0 = el.style.opacity, trans0 = el.style.transition;
+    if (reduced) {
+      // No motion: a quiet fade-out/fade-in toggle.
+      el.style.transition = 'opacity 200ms ease';
+      el.style.opacity = '0.25';
+      el.__lxShatter = function () {
+        el.style.opacity = op0 || '1';
+        el.style.transition = trans0;
+        el.__lxShatter = null;
+      };
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || !(vb[2] > 0) || !(vb[3] > 0)) { return; }
+    var dpr = window.devicePixelRatio || 1;
+    var sx = r.width / vb[2], sy = r.height / vb[3];
+
+    // Replay the ink (paths + rects, their own fills) onto an offscreen pane.
+    var pane = document.createElement('canvas');
+    pane.width = Math.max(1, Math.round(r.width * dpr));
+    pane.height = Math.max(1, Math.round(r.height * dpr));
+    var pctx = pane.getContext('2d');
+    pctx.scale(dpr * sx, dpr * sy);
+    pctx.translate(-vb[0], -vb[1]);
+    var ink = getComputedStyle(svg).color || '#000';
+    function fillOf(node) {
+      var f = node.getAttribute('fill');
+      return (!f || f === 'currentColor') ? ink : f;
+    }
+    Array.prototype.forEach.call(svg.querySelectorAll('path'), function (p) {
+      var d = p.getAttribute('d');
+      if (!d) { return; }
+      pctx.fillStyle = fillOf(p);
+      pctx.fill(new Path2D(d));
+    });
+    Array.prototype.forEach.call(svg.querySelectorAll('rect'), function (q) {
+      pctx.fillStyle = fillOf(q);
+      pctx.fillRect(+q.getAttribute('x') || 0, +q.getAttribute('y') || 0,
+        +q.getAttribute('width') || 0, +q.getAttribute('height') || 0);
+    });
+
+    // Jittered triangular shard mesh over the pane (overlay-local coords).
+    var CELL = 26, cols = Math.max(2, Math.ceil(r.width / CELL)),
+        rows = Math.max(2, Math.ceil(r.height / CELL));
+    var gx = [], gy = [];
+    for (var i = 0; i <= cols; i++) {
+      var jx = (i === 0 || i === cols) ? 0 : (Math.random() * 0.7 - 0.35) * (r.width / cols);
+      gx.push((i / cols) * r.width + jx);
+    }
+    for (var j = 0; j <= rows; j++) {
+      var jy = (j === 0 || j === rows) ? 0 : (Math.random() * 0.7 - 0.35) * (r.height / rows);
+      gy.push((j / rows) * r.height + jy);
+    }
+    var shards = [], ccx = r.width / 2, ccy = r.height / 2;
+    for (var cj = 0; cj < rows; cj++) {
+      for (var ci = 0; ci < cols; ci++) {
+        var x0 = gx[ci], x1 = gx[ci + 1], y0 = gy[cj], y1 = gy[cj + 1];
+        var tris = Math.random() < 0.5
+          ? [[[x0, y0], [x1, y0], [x1, y1]], [[x0, y0], [x1, y1], [x0, y1]]]
+          : [[[x0, y0], [x1, y0], [x0, y1]], [[x1, y0], [x1, y1], [x0, y1]]];
+        for (var t = 0; t < 2; t++) {
+          var tri = tris[t];
+          var mx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+          var my = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+          var ang = Math.atan2(my - ccy, mx - ccx) + (Math.random() * 0.6 - 0.3);
+          var speed = 90 + Math.random() * 260;
+          shards.push({ tri: tri, mx: mx, my: my,
+            dx: 0, dy: 0, rot: 0,
+            vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed - 30,
+            vr: (Math.random() * 2 - 1) * 2.4,
+            bobA: 1 + Math.random() * 1.6, bobW: 0.8 + Math.random() * 1.2,
+            bobP: Math.random() * 6.283 });
+        }
+      }
+    }
+
+    // Full-viewport overlay the shards fly across.
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var CRACK = 150, BREAK = 850;      // crack-flash, then scatter-to-rest
+    var phase = 0;                     // 0 crack, 1 scatter, 2 hang, 3 reassemble
+    var raf = 0, t0 = performance.now(), lastT = 0, homeT = 0;
+    el.style.transition = 'none';
+
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      canvas.remove();
+      el.style.opacity = op0 || '1';
+      el.style.transition = trans0;
+      el.__lxShatter = null;
+    }
+    el.__lxShatter = function () {
+      if (phase !== 2) { return; }
+      for (var i = 0; i < shards.length; i++) {
+        var s = shards[i];
+        s.hx = s.dx; s.hy = s.dy; s.hr = s.rot; // reassembly start pose
+      }
+      phase = 3; homeT = 0;
+    };
+
+    function drawShard(s) {
+      ctx.save();
+      ctx.translate(r.left + s.mx + s.dx, r.top + s.my + s.dy);
+      ctx.rotate(s.rot);
+      ctx.beginPath();
+      ctx.moveTo(s.tri[0][0] - s.mx, s.tri[0][1] - s.my);
+      ctx.lineTo(s.tri[1][0] - s.mx, s.tri[1][1] - s.my);
+      ctx.lineTo(s.tri[2][0] - s.mx, s.tri[2][1] - s.my);
+      ctx.closePath();
+      // Glass body: clipped ink + a faint pane tint + a bright edge.
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = 'rgba(190,225,255,0.10)';
+      ctx.fill();
+      ctx.drawImage(pane, -s.mx, -s.my, r.width, r.height);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(220,240,255,0.35)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function frame(now) {
+      var e = now - t0;
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016;
+      lastT = now;
+      ctx.clearRect(0, 0, vw, vh);
+      if (phase === 0) {
+        // Crack-web flash: the mesh edges light up over the still-visible pane.
+        var a = Math.min(1, e / 60);
+        ctx.strokeStyle = 'rgba(235,248,255,' + (0.85 * a).toFixed(3) + ')';
+        ctx.lineWidth = 1;
+        for (var i = 0; i < shards.length; i += 2) {
+          var s = shards[i];
+          ctx.beginPath();
+          ctx.moveTo(r.left + s.tri[0][0], r.top + s.tri[0][1]);
+          ctx.lineTo(r.left + s.tri[1][0], r.top + s.tri[1][1]);
+          ctx.lineTo(r.left + s.tri[2][0], r.top + s.tri[2][1]);
+          ctx.closePath();
+          ctx.stroke();
+        }
+        if (e >= CRACK) { phase = 1; el.style.opacity = '0'; }
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      if (phase === 1) {
+        // Zero-g scatter: pure drag decays the break impulse to a drift.
+        var drag = Math.pow(0.14, dt);
+        for (var k = 0; k < shards.length; k++) {
+          var p = shards[k];
+          p.dx += p.vx * dt; p.dy += p.vy * dt; p.rot += p.vr * dt;
+          p.vx *= drag; p.vy *= drag; p.vr *= Math.pow(0.5, dt);
+        }
+        if (e >= CRACK + BREAK) { phase = 2; }
+      } else if (phase === 2) {
+        // Hang: a slow weightless bob until the next click.
+        var tt = e / 1000;
+        for (var m = 0; m < shards.length; m++) {
+          var q = shards[m];
+          q.dy += Math.sin(tt * q.bobW + q.bobP) * q.bobA * dt;
+          q.rot += q.vr * 0.08 * dt;
+        }
+      } else if (phase === 3) {
+        // Magnetic reassembly: ease every shard from its captured pose to home.
+        homeT += dt;
+        var g = Math.min(1, homeT / 0.65);
+        var hold = Math.pow(1 - g, 3); // remaining offset: fast pull, gentle landing
+        for (var n = 0; n < shards.length; n++) {
+          var w = shards[n];
+          w.dx = w.hx * hold; w.dy = w.hy * hold; w.rot = w.hr * hold;
+        }
+        if (g >= 1) { cleanup(); return; }
+      }
+      for (var d = 0; d < shards.length; d++) { drawShard(shards[d]); }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1328,6 +1548,7 @@
     if (name === 'diffusion') { diffusion(el); return; }
     if (name === 'refraction') { refraction(el); return; }
     if (name === 'teleport') { teleport(el); return; }
+    if (name === 'shatter') { shatter(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -1823,6 +2044,59 @@
             <span class="cap">fx.click=teleport — dematerializes into a particle beam, then re-coalesces</span>
             <code class="src">\lx[fx.click=teleport]{ \psi(x,t) }</code>
             <span class="hint">click — beam out, then back in</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-click="shatter"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.08 -34.432 364.1156 45.832" width="364.1156" height="45.832" role="img" aria-label="x squared - y squared = ( x - y ) ( x + y )">
+              <g fill="currentColor">
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(19.16 -14.4) scale(0.028 -0.028)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(43.5089 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(64.9978 0) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(84.3178 -14.4) scale(0.028 -0.028)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(110.8889 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(150.8 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(165.08 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(193.1289 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(214.6178 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(233.9378 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(248.2178 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(262.4978 0) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(290.5467 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(328.2356 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(347.5556 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.click=shatter — cracks to glass shards that hang in zero-g, reassembles on the next click</span>
+            <code class="src">\lx[fx.click=shatter]{ x^2 - y^2 = (x-y)(x+y) }</code>
+            <span class="hint">click — shatter · click again — reassemble</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-hover="glitch"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.68 -31.44 247.32 41.28" width="247.32" height="41.28" role="img" aria-label="det ( A - λ I ) = 0">
+              <g fill="currentColor">
+                <path d="M514 18 L386 -5 L363 -5 L363 64 L359 64 Q331 39 292 15 Q254 -8 204 -8 Q148 -8 109 22 Q71 52 52 103 Q33 155 33 219 Q33 302 64 361 Q95 421 147 453 Q200 485 263 485 Q288 485 312 479 Q337 474 360 461 L360 592 Q360 625 352 635 Q345 645 316 645 Q309 645 299 644 Q290 643 290 643 L290 671 L416 706 L443 706 L443 107 Q443 68 454 56 Q465 45 493 45 L514 45 L514 18 Z M360 101 L360 365 Q354 396 331 420 Q308 445 261 445 Q198 445 159 399 Q120 353 120 258 Q120 155 153 109 Q187 64 251 64 Q286 64 310 73 Q334 83 360 101 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M415 143 L434 129 Q416 91 392 59 Q368 28 333 9 Q299 -10 247 -10 Q187 -10 138 18 Q90 47 62 102 Q34 158 34 238 Q34 322 62 376 Q91 431 139 458 Q187 485 245 485 Q327 485 377 428 Q427 371 431 266 L115 266 Q115 197 137 152 Q160 108 195 86 Q231 65 271 65 Q312 65 337 76 Q363 87 381 104 Q399 122 415 143 Z M114 303 L337 303 Q336 340 324 372 Q312 405 289 425 Q266 445 230 445 Q126 445 114 303 Z" transform="translate(21.56 0) scale(0.04 -0.04)"/>
+                <path d="M293 90 L312 74 Q293 47 276 28 Q260 10 240 0 Q220 -10 188 -10 Q138 -10 115 19 Q92 49 92 116 L92 426 L37 426 L37 449 Q72 471 97 508 Q123 546 150 610 L176 610 L175 468 L288 468 L288 426 L175 426 L175 144 Q175 91 184 70 Q194 49 223 49 Q247 49 260 59 Q274 69 293 90 Z" transform="translate(40.12 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(52.72 0) scale(0.04 -0.04)"/>
+                <path d="M714 0 L445 0 L445 30 Q460 30 476 32 Q492 34 503 42 Q514 50 514 67 Q514 78 510 92 Q507 107 497 129 L458 219 L202 219 L157 113 Q153 101 149 89 Q146 78 146 64 Q146 43 162 36 Q178 30 213 30 L213 0 L3 0 L3 30 Q31 30 48 39 Q65 48 81 75 Q97 103 121 160 L333 662 L374 662 L611 119 Q633 70 653 50 Q674 30 714 30 L714 0 Z M443 259 L333 539 L330 539 L217 259 L443 259 Z" transform="translate(67 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(104.6089 0) scale(0.04 -0.04)"/>
+                <path d="M293 558 Q310 467 320 382 Q330 297 346 214 Q359 151 379 109 Q400 67 435 67 Q458 67 473 75 Q489 84 504 103 L521 92 Q505 50 475 19 Q446 -11 406 -11 Q365 -11 341 21 Q318 54 307 111 Q294 179 291 246 Q288 313 280 385 L275 385 Q268 372 253 338 Q239 304 220 259 Q201 214 181 165 Q162 117 144 73 Q127 30 115 0 L18 0 L15 16 Q53 86 95 165 Q137 245 179 325 Q222 405 259 475 Q258 491 256 498 Q255 506 251 529 Q242 576 220 605 Q199 634 167 634 Q125 634 96 595 L79 603 Q97 648 122 677 Q148 706 194 706 Q228 706 246 685 Q265 665 275 631 Q285 598 293 558 Z" transform="translate(126.0978 0) scale(0.04 -0.04)"/>
+                <path d="M133 131 L133 525 Q133 564 128 586 Q123 609 102 618 Q82 627 34 627 L34 657 L322 657 L322 627 Q275 627 254 618 Q233 609 228 586 Q224 564 224 525 L224 131 Q224 88 230 66 Q236 45 257 37 Q278 30 322 30 L322 0 L34 0 L34 30 Q79 30 100 37 Q121 45 127 66 Q133 88 133 131 Z" transform="translate(146.3378 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(160.6178 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(186.0089 0) scale(0.04 -0.04)"/>
+                <path d="M468 317 Q468 253 455 194 Q443 135 416 89 Q390 43 348 16 Q306 -11 247 -11 Q187 -11 145 15 Q103 42 77 88 Q51 134 39 194 Q27 254 27 320 Q27 415 52 487 Q78 560 127 601 Q177 642 249 642 Q314 642 363 603 Q412 565 440 492 Q468 420 468 317 Z M371 311 Q371 463 339 535 Q308 608 246 608 Q187 608 155 536 Q123 464 123 315 Q123 170 155 97 Q187 25 247 25 Q306 25 338 96 Q371 167 371 311 Z" transform="translate(225.92 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.hover=glitch — the red/cyan channels rip apart, slices shear, then snap back</span>
+            <code class="src">\lx[fx.hover=glitch]{ \det(A - \lambda I) = 0 }</code>
+            <span class="hint">hover — datamosh</span>
           </figcaption>
         </figure>
         <figure class="card">
