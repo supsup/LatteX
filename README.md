@@ -24,18 +24,27 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 ## Status
 
-Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, and delimiters to SVG today. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, `fx` effects, and a click action menu (Copy / Graph) are built too. (These currently live on review branches, merging to the mainline soon.) See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, and delimiters to SVG today. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **25-effect** `fx` layer are on the mainline as of **0.2.0**, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
 ## The fx layer is OPTIONAL
 
-The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, and 16 more) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations:
+The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, shatter, sparkler, and 20 more) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations.
+
+On the JVM, read the assets straight off the API:
 
 ```java
 LatteX.fxRuntimeJs()   // the runtime — serve as /js/lattex-fx.js, or inline in a trusted <script>
 LatteX.fxStylesCss()   // the styles — serve as /css/lattex-fx.css, or inline in a <style>
 ```
 
-Both are jar resources (`com/lattex/fx/lattex-fx.{js,css}`); a consumer gets them from the jar it already depends on — no separately-managed asset. Drop them into a page and the effects light up; leave them out and the math is exactly as safe/static as before. Browse the whole catalogue live in `examples/effects.html`.
+Not on the JVM? They're plain jar resources — extract them at build time in any stack:
+
+```bash
+unzip -p lattex-0.2.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
+unzip -p lattex-0.2.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
+```
+
+Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the whole catalogue live in `examples/effects.html`.
 
 ## Build
 

@@ -206,9 +206,59 @@ and no runtime JS** (unlike MathJax/KaTeX in the browser). For a site baking
 *untrusted contributor* markdown, "math in → safe static SVG out, no runtime, no
 sanitize" is the structural win a client-side renderer can't offer.
 
-**Status: Built via the CLI (S7).** The `lattex` binary — `--inline` for the prose
-split, `--batch` to amortize a page's many spans — is what all of these call;
-dedicated first-party SSG plugins are **future** (see the status legend).
+### Sam wants the effects too — the receipt
+
+Everything above stays true with the fx layer OFF — and one day a writer types
+`\lx[fx.hover=glow]{E=mc^2}` anyway (the effects catalogue advertises itself).
+**Know the default:** in this recipe the math still renders and the effect is
+*silently ignored* — fx never reaches the SVG; it rides a wrapper this pipeline
+doesn't emit. That's a safe degrade, not an error. If Sam *wants* the animations,
+here is the integration receipt, stack-agnostic — this is exactly the sequence a
+real production `/docs` integration ran, minus its framework:
+
+1. **Get the two assets out of the jar you render with — at build time.**
+   They're plain jar resources, no JVM needed:
+   ```bash
+   unzip -p lattex-0.2.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
+   unzip -p lattex-0.2.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
+   ```
+   Extract from the **same jar version** every build — a cached/vendored copy is
+   how the runtime and the renderer drift apart (the class of bug that bites
+   months later, silently).
+2. **Include both tags on pages that carry effects** — together or not at all,
+   and `defer` the script:
+   ```html
+   <link href="/css/lattex-fx.css" rel="stylesheet">
+   <script src="/js/lattex-fx.js" defer></script>
+   ```
+   Never ship the css alone: it pre-hides `fx.enter` equations for the js to
+   reveal — css-without-js leaves them invisible. (No inline JS, so a strict
+   `script-src 'self'` CSP needs no nonce.)
+3. **Emit the wrapper the runtime reads.** The effects live as attributes on a
+   container *around* the SVG — `<span class="lx-math" data-lx-fx-hover="glow">…svg…</span>`.
+   On the JVM, `LatteX.renderStyledHtml(latex)` emits it (or `fxContainerAttrs(latex)`
+   returns just the validated attribute string if you own your own wrapper).
+   From a **non-JVM SSG** there is no CLI flag for this yet (a known gap — the
+   binary emits bare SVG), but the runtime only reads *attributes*; it doesn't
+   care who wrote them. A Hugo shortcode / 11ty filter can stamp the wrapper
+   itself: `class="lx-math"` plus any of `data-lx-fx-enter|hover|click` (an
+   effect name from the catalogue), `data-lx-fx-duration` (`400ms`), and
+   `data-lx-fx-glow-color` (`#hex` or `currentColor`). If your authors are
+   untrusted, validate those values against the catalogue's closed vocabulary —
+   when LatteX writes them it does that validation for you at parse time.
+4. **If your pipeline sanitizes HTML** (rehype-sanitize and friends), allow-list
+   the wrapper: `class` on `span`/`div` plus the five `data-lx-fx-*` attributes —
+   or your sanitizer strips the effects as silently as step 0 ignored them.
+
+Skip all four and Sam's original promise holds: static math, zero runtime. Do
+them and the same pages get the full catalogue — with JavaScript off, readers
+still get perfect static math.
+
+**Status: Built via the CLI (S7); fx via the receipt above.** The `lattex`
+binary — `--inline` for the prose split, `--batch` to amortize a page's many
+spans — is what all of these call; dedicated first-party SSG plugins and a CLI
+flag that emits the fx wrapper (`--styled-html`) are **future** (see the status
+legend).
 
 ---
 
