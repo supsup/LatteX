@@ -162,6 +162,54 @@ public final class LatteX {
         StringBuilder sb = new StringBuilder("<span class=\"lx-math\"");
         sem.intentValue().ifPresent(v -> sb.append(" data-lx-intent=\"").append(v).append('"'));
         sem.conceptValue().ifPresent(v -> sb.append(" data-lx-concept=\"").append(v).append('"'));
+        // The fx half rides the SAME stamping source as fxContainerAttrs — one
+        // producer, so the two public shapes cannot drift.
+        sb.append(fxAttrs(fx));
+        // data.* attributes (keys already identifier-validated) — iterated in sorted
+        // key order so the generated HTML is deterministic regardless of the source
+        // map's iteration order (a HashMap/Map.of view is randomized per JVM run).
+        for (Map.Entry<String, String> e : new java.util.TreeMap<>(sem.data()).entrySet()) {
+            sb.append(" data-lx-").append(e.getKey()).append("=\"").append(e.getValue()).append('"');
+        }
+        // a11y label (already HTML-escaped by the parser).
+        sem.a11yLabelValue().ifPresent(v -> sb.append(" aria-label=\"").append(v).append('"'));
+        return sb.append('>').toString();
+    }
+
+    /**
+     * The author's validated {@code \lx[fx.*]} annotations for {@code latex} as a
+     * container-attribute string — the <strong>fx-stamp seam</strong> for a consumer
+     * that owns its <em>own</em> wrapper (the container contract's pinned Producer API;
+     * Stafficy's {@code /docs} math seam is the reference consumer).
+     *
+     * <p>Returns {@code ""} when the source carries no top-level {@code \lx[fx.*]}
+     * annotations, else a <em>leading-space-prefixed</em> run of only the five
+     * {@code data-lx-fx-*} attributes (enter/hover/click/duration/glow-color, in that
+     * order) — never {@code data-lx-intent}/{@code concept}/{@code data.*}/
+     * {@code aria-*}, which ride {@link #renderStyledHtml}'s own container instead.
+     * Every value is parse-time validated (effects are the closed {@code Effect}
+     * vocabulary, duration matches {@code \d{1,5}ms}, glow-color is
+     * {@code currentColor} or a canonical hex literal), so no raw author string
+     * reaches an attribute.
+     *
+     * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
+     * @return {@code ""} or a leading-space-prefixed {@code data-lx-fx-*} attribute run
+     * @throws MathSyntaxException if {@code latex} does not parse
+     */
+    public static String fxContainerAttrs(String latex) {
+        MathNode node = MathParser.parse(latex);
+        EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+        return fxAttrs(fx);
+    }
+
+    /**
+     * The shared fx-attribute stamping source consumed by BOTH {@link #openTag} and
+     * {@link #fxContainerAttrs} — one producer, so the wrapper form and the seam form
+     * cannot drift. Emits only the container contract's five {@code data-lx-fx-*}
+     * attributes, each value validated at parse time.
+     */
+    private static String fxAttrs(EffectSpec fx) {
+        StringBuilder sb = new StringBuilder();
         // fx triggers, in a stable enter/hover/click order.
         for (Trigger t : Trigger.values()) {
             fx.effect(t).ifPresent(e ->
@@ -175,15 +223,7 @@ public final class LatteX {
         // it rides the container exactly like the other fx.* metadata.
         fx.glowColorValue().ifPresent(c ->
             sb.append(" data-lx-fx-glow-color=\"").append(c.svgValue()).append('"'));
-        // data.* attributes (keys already identifier-validated) — iterated in sorted
-        // key order so the generated HTML is deterministic regardless of the source
-        // map's iteration order (a HashMap/Map.of view is randomized per JVM run).
-        for (Map.Entry<String, String> e : new java.util.TreeMap<>(sem.data()).entrySet()) {
-            sb.append(" data-lx-").append(e.getKey()).append("=\"").append(e.getValue()).append('"');
-        }
-        // a11y label (already HTML-escaped by the parser).
-        sem.a11yLabelValue().ifPresent(v -> sb.append(" aria-label=\"").append(v).append('"'));
-        return sb.append('>').toString();
+        return sb.toString();
     }
 
     /** A plain-language accessibility label for a math tree. */
