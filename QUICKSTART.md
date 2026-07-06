@@ -98,7 +98,7 @@ is validated and carried on the *container*, not baked into the sanitized SVG.
 
 \lx[style.mathstyle=text]{ e^{i\pi} + 1 = 0 }
 
-\lx[fx.hover=grow, fx.duration=250ms, intent=function, a11y.label="quadratic"]{ x^2 }
+\lx[fx.hover=glow, fx.duration=250ms, intent=function, a11y.label="quadratic"]{ x^2 }
 ```
 
 The key set:
@@ -108,7 +108,7 @@ The key set:
 | `style.scale` | `sm` (0.8), `md` (1.0), `lg` (1.4), or a bounded number like `1.4` |
 | `style.color` | `currentColor`, or a `#rgb` / `#rrggbb` hex literal |
 | `style.mathstyle` | `display` \| `text` \| `script` \| `scriptscript` |
-| `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `grow` \| `none` |
+| `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `none` — see `examples/effects.html` live |
 | `fx.duration` | a `<n>ms` value, e.g. `250ms` |
 | `intent` / `concept` | a lowercase identifier (`^[a-z][a-z0-9_]*$`), e.g. `function` |
 | `a11y.label` | free-text accessibility label (HTML-escaped) |
