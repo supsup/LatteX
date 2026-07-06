@@ -512,7 +512,7 @@
     var icy = 'brightness(1.14) saturate(0.6) sepia(0.18) hue-rotate(165deg)';
     var trans0 = el.style.transition;
     if (reduced) {
-      el.style.filter = icy + ' drop-shadow(0 0 4px #cfeaff)';
+      el.style.filter = icy + ' drop-shadow(0 0 4px ' + gleam + ')';
       return;
     }
     var r = el.getBoundingClientRect();
@@ -521,16 +521,20 @@
       + 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;'
       + 'height:' + r.height + 'px;opacity:0.85;mix-blend-mode:screen;'
       + 'clip-path:inset(0 100% 0 0);transition:clip-path 900ms ease;'
-      + 'background:linear-gradient(115deg, rgba(207,234,255,0.55) 0%,'
-      + ' rgba(255,255,255,0.35) 45%, rgba(160,205,245,0.5) 100%),'
-      + ' repeating-linear-gradient(60deg, rgba(255,255,255,0.12) 0 6px,'
+      // Frost tint derives from gleam (the author's fx.glow-color, else the
+      // equation's own ink) — the old hardcoded ice-blue vanished on white
+      // backgrounds (Charles, 2026-07-06). color-mix keeps it translucent.
+      + 'background:linear-gradient(115deg, color-mix(in srgb, ' + gleam + ' 45%, transparent) 0%,'
+      + ' color-mix(in srgb, ' + gleam + ' 18%, transparent) 45%,'
+      + ' color-mix(in srgb, ' + gleam + ' 38%, transparent) 100%),'
+      + ' repeating-linear-gradient(60deg, color-mix(in srgb, ' + gleam + ' 14%, transparent) 0 6px,'
       + ' rgba(255,255,255,0) 6px 13px);';
     document.body.appendChild(pane);
     el.style.transition = 'filter 900ms ease';
     el.style.filter = icy + ' blur(1.4px) drop-shadow(0 0 5px ' + gleam + ')';
     requestAnimationFrame(function () {
       pane.style.clipPath = 'inset(0 0 0 0)';
-      el.style.filter = icy + ' blur(0px) drop-shadow(0 0 6px #d6f0ff)';
+      el.style.filter = icy + ' blur(0px) drop-shadow(0 0 6px ' + gleam + ')';
     });
     var motes = [];
     for (var i = 0; i < 7; i++) {
@@ -542,7 +546,7 @@
         s.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483647;'
           + 'left:' + px + 'px;top:' + py + 'px;width:' + sz + 'px;height:' + sz
           + 'px;margin:' + (-sz / 2) + 'px 0 0 ' + (-sz / 2) + 'px;border-radius:50%;'
-          + 'background:#fff;box-shadow:0 0 6px 2px #cfeaff;opacity:0;'
+          + 'background:color-mix(in srgb, ' + gleam + ' 35%, #fff);box-shadow:0 0 6px 2px ' + gleam + ';opacity:0;'
           + 'transform:scale(0.2);transition:transform 260ms ease, opacity 260ms ease;';
         document.body.appendChild(s);
         motes.push(s);
@@ -558,7 +562,7 @@
       pane.remove();
       motes.forEach(function (m) { m.remove(); });
       el.style.transition = 'filter 500ms ease';
-      el.style.filter = 'brightness(1.05) saturate(0.85) drop-shadow(0 0 3px #cfeaff)';
+      el.style.filter = 'brightness(1.05) saturate(0.85) drop-shadow(0 0 3px ' + gleam + ')';
       setTimeout(function () { el.style.transition = trans0; }, 520);
     }, 1300);
   }
