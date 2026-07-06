@@ -242,6 +242,19 @@ public final class CdpChrome implements AutoCloseable {
         Files.write(out, Base64.getDecoder().decode(b64));
     }
 
+    /**
+     * Clipped PNG of a page-coordinate rectangle (e.g. one card), as bytes —
+     * the frame primitive for animation capture (GIF assembly).
+     */
+    public byte[] screenshotClip(double x, double y, double width, double height) {
+        Map<String, Object> r = command("Page.captureScreenshot",
+            "{\"format\":\"png\",\"captureBeyondViewport\":true,\"clip\":{"
+                + "\"x\":" + x + ",\"y\":" + y
+                + ",\"width\":" + width + ",\"height\":" + height
+                + ",\"scale\":1}}");
+        return Base64.getDecoder().decode((String) r.get("data"));
+    }
+
     @Override
     public void close() {
         try { ws.sendClose(WebSocket.NORMAL_CLOSURE, "done").join(); }
