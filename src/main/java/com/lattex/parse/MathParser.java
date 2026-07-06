@@ -67,6 +67,26 @@ import com.lattex.parse.Symbols.Sym;
  */
 public final class MathParser {
 
+    // ------------------------------------------------------------------
+    // Parse-time DoS guards
+    // ------------------------------------------------------------------
+    // The parser is unbounded recursive descent, and its input is
+    // adversary-reachable (an author's LaTeX flows in via the '\lx' macro).
+    // Without these caps, a pathological input such as "{".repeat(200000)
+    // overflows the JVM stack and throws a raw StackOverflowError — an Error,
+    // NOT a RuntimeException, so it escapes the caller's `catch (RuntimeException)`
+    // guards and crashes the render thread. Both caps instead throw
+    // MathSyntaxException (a caught RuntimeException) with a clear message.
+
+    /** Maximum accepted source length, in {@code char}s. */
+    static final int MAX_SOURCE_LENGTH = 100_000;
+
+    /** Maximum recursive nesting depth (groups, arguments, scripts, fences). */
+    static final int MAX_DEPTH = 512;
+
+    /** Current recursion depth; guarded against {@link #MAX_DEPTH} in {@link #parseNucleus}. */
+    private int depth;
+
     // Lexer
     // ------------------------------------------------------------------
     enum Kind { CHAR, COMMAND, TEXT, LBRACE, RBRACE, SUP, SUB, EOF }
@@ -234,6 +254,11 @@ public final class MathParser {
     public static MathNode parse(String latex) {
         if (latex == null) {
             throw new MathSyntaxException("input must not be null");
+        }
+        if (latex.length() > MAX_SOURCE_LENGTH) {
+            throw new MathSyntaxException(
+                "input too long: " + latex.length() + " chars exceeds the "
+                    + MAX_SOURCE_LENGTH + "-char limit");
         }
         if (LxOptionsParser.looksLikeTopLevelLx(latex)) {
             return LxOptionsParser.parseLx(latex.strip());
@@ -452,6 +477,23 @@ public final class MathParser {
 
     /** A single nucleus (no trailing scripts). */
     private MathNode parseNucleus() {
+        // Depth guard: parseNucleus is the universal chokepoint of the recursive
+        // descent — every nested group, argument, script and fence bottoms out
+        // through here — so bounding it here bounds the whole recursion and turns
+        // a stack-overflowing input into a caught MathSyntaxException.
+        if (++depth > MAX_DEPTH) {
+            depth--;
+            throw new MathSyntaxException(
+                "nesting too deep: exceeds the " + MAX_DEPTH + "-level limit");
+        }
+        try {
+            return parseNucleusInner();
+        } finally {
+            depth--;
+        }
+    }
+
+    private MathNode parseNucleusInner() {
         Token t = peek();
         return switch (t.kind()) {
             case LBRACE -> parseGroup();
