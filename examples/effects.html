@@ -439,6 +439,7 @@
     // transparent hole over the element), pulsed on each strike so the night
     // "lights up" without washing out the spotlit equation.
     var flash = document.createElement('div');
+    flash.setAttribute('data-lx-fx-overlay', 'lightning');
     flash.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
       + 'z-index:2147483646;opacity:0;transition:opacity 70ms ease;background:'
       + 'radial-gradient(circle ' + (spot + 40) + 'px at ' + cx + 'px ' + cy + 'px,'
@@ -621,6 +622,7 @@
     }
     el.style.filter = aberr(1.2);
     var scan = document.createElement('div');
+    scan.setAttribute('data-lx-fx-overlay', 'hologram');
     scan.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;'
       + 'mix-blend-mode:screen;background:repeating-linear-gradient(0deg,'
       + ' rgba(95,232,255,.14) 0px, rgba(95,232,255,.14) 1px,'
@@ -751,6 +753,7 @@
     }
     var r = el.getBoundingClientRect();
     var pane = document.createElement('div');
+    pane.setAttribute('data-lx-fx-overlay', 'crystallize');
     pane.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;'
       + 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;'
       + 'height:' + r.height + 'px;opacity:0.85;mix-blend-mode:screen;'
@@ -1216,6 +1219,7 @@
     var FALL = 84, DROP = 260, SPLAT = 210, BLOOM = 440;
     var dSize = 15;
     var drop = document.createElement('div');
+    drop.setAttribute('data-lx-fx-overlay', 'inkdrop');
     drop.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483646;background:' + ink
       + ';left:' + (cx - dSize / 2) + 'px;top:' + (cy - dSize / 2 - FALL) + 'px;'
       + 'width:' + dSize + 'px;height:' + dSize + 'px;opacity:.94;'
