@@ -4,6 +4,20 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## 0.2.1 · 2026-07-06 — the smoke-sweep: placement-safe effects, scroll-aware shows & `thread`
+
+### `thread` — the first *semantic* effect (26th in the catalogue)
+Hover any glyph and every other occurrence of the same source token lights up (optically bolded) while the rest of the equation recedes — `x` threads with the `x` in `x²`. Driven by the `data-lx-glyphmap` container sidecar (validated against the pinned contract grammar); **inert until a glyph map is present** — automatic stamping ships with the layout `codePoint` threading.
+
+### Effects fixed by live operator smoke-testing (all found by Charles in one afternoon)
+- **Placement-safe per-glyph motion**: `quantum`, `typeset`, `wobble`, `gravwell` set CSS transforms on glyph paths, which *replaced* each path's placement attribute and rendered glyphs as font-unit-sized blobs. A shared primitive now composes user-space deltas with the placement (with `transform-origin` pinned to the SVG attribute's semantics).
+- **Scroll ends the show**: fixed-overlay effects (`lightning`, `storm`, `shatter`, `constellation`, `matrixrain`, `supernova`, `teleport`, `sparkler`) played over the wrong content after a scroll — hanging glass, star-map after-images, a page left dark. One `scrollKillable` teardown now ends any of them the moment the viewport truly moves (with a threshold so browser load-time scroll events can't kill an enter-effect at birth).
+- **`gravwell` redesigned** (Charles's spec): click *anywhere* on the equation — that point becomes the well: an eclipse orb opens (dark disc, bright corona) and **every** glyph shrinks and spirals into it, holds a dark beat, then spirals back out as the orb collapses.
+- **`crystallize` visible on white**: the frost now derives from `fx.glow-color` (or the equation's own ink) instead of a hardcoded ice-blue that vanished on light backgrounds.
+- **`sparkler`** restores mid-draw glyphs if torn down early — an interrupted burn can never leave the equation half-invisible.
+
+---
+
 ## 2026-07-06 — six new fx effects & the effect drift-guard
 
 ### New effects (19 → 25)
