@@ -19,6 +19,53 @@
     return ink || '#e6a24c';
   }
 
+  // ---- placement-composing path transforms ---------------------------------
+  // Every glyph <path> carries its PLACEMENT as an SVG transform ATTRIBUTE
+  // ('translate(tx ty) scale(s -s)': font design units → user units). The CSS
+  // transform PROPERTY replaces that attribute wholesale, so a per-path effect
+  // that sets style.transform naively strips the placement and re-renders the
+  // glyph as a font-unit-sized blob (Charles's smoke, 2026-07-06). Per-path
+  // effects therefore express motion as a USER-SPACE delta and COMPOSE it in
+  // front of the placement via setPathDelta; pivotScaleDelta builds a scale
+  // about the glyph's own user-space centre (replacing the transform-box
+  // pattern, which suffers the same stomp). clearPathDelta restores the
+  // attribute's rule. Paths without a placement attribute pass deltas through.
+  function placement(p) {
+    if (p.__lxPlace === undefined) {
+      var m = /translate\(\s*([-\d.eE]+)[\s,]+([-\d.eE]+)\s*\)\s*scale\(\s*([-\d.eE]+)(?:[\s,]+([-\d.eE]+))?\s*\)/
+        .exec(p.getAttribute('transform') || '');
+      p.__lxPlace = m ? {
+        css: 'translate(' + m[1] + 'px,' + m[2] + 'px) scale(' + m[3] + ',' + (m[4] || m[3]) + ')',
+        tx: parseFloat(m[1]), ty: parseFloat(m[2]),
+        sx: parseFloat(m[3]), sy: parseFloat(m[4] || m[3])
+      } : null;
+    }
+    return p.__lxPlace;
+  }
+  function setPathDelta(p, deltaCss) {
+    var place = placement(p);
+    p.style.transform = place ? deltaCss + ' ' + place.css : deltaCss;
+  }
+  function clearPathDelta(p) {
+    p.style.transform = '';
+  }
+  /** The glyph's centre in USER space (local bbox pushed through its placement). */
+  function userCentre(p) {
+    var b;
+    try { b = p.getBBox(); } catch (e) { return null; }
+    var cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+    var place = placement(p);
+    if (!place) { return { x: cx, y: cy }; }
+    return { x: place.tx + place.sx * cx, y: place.ty + place.sy * cy };
+  }
+  /** A scale-about-the-glyph's-own-centre delta (user space). */
+  function pivotScaleDelta(p, k) {
+    var c = userCentre(p);
+    if (!c) { return 'scale(' + k + ')'; }
+    return 'translate(' + c.x.toFixed(2) + 'px,' + c.y.toFixed(2) + 'px) scale(' + k
+      + ') translate(' + (-c.x).toFixed(2) + 'px,' + (-c.y).toFixed(2) + 'px)';
+  }
+
   // A jagged polyline from (x0,y0) to (x1,y1): interior points are pushed off
   // the straight line by a random perpendicular jitter, so every strike differs.
   function jagged(x0, y0, x1, y1, segs, jitter) {
@@ -546,10 +593,10 @@
         var t0 = performance.now();
         function step(now) {
           var t = (now - t0) / DUR;                // 0..1
-          if (t >= 1) { p.style.transform = ''; return; }   // pristine at rest
+          if (t >= 1) { clearPathDelta(p); return; }   // pristine at rest
           var env = (1 - t) * (1 - t);             // ease-out decay envelope
           var ty = -Math.sin(t * freq * Math.PI * 2) * wobbleAmp * env;
-          p.style.transform = 'translateY(' + ty.toFixed(2) + 'px)';
+          setPathDelta(p, 'translateY(' + ty.toFixed(2) + 'px)'); // composes with placement
           requestAnimationFrame(step);
         }
         requestAnimationFrame(step);
@@ -593,8 +640,6 @@
           var r = Math.sqrt(dx * dx + dy * dy); if (r < 1e-3) { return; }
           var fall = Math.min(1, (R0 * R0) / (r * r));
           if (fall < 0.03) { return; }                 // too far to matter
-          p.style.transformBox = 'fill-box';
-          p.style.transformOrigin = 'center';
           p.style.transition = '';
           movers.push({ p: p, dx: dx, dy: dy, fall: fall });
         });
@@ -607,11 +652,7 @@
           else {
             var d = (e - IN - HOLD) / BACK;
             if (d >= 1) {                              // done → pristine at rest
-              movers.forEach(function (m) {
-                m.p.style.transform = '';
-                m.p.style.transformBox = '';
-                m.p.style.transformOrigin = '';
-              });
+              movers.forEach(function (m) { clearPathDelta(m.p); });
               raf = 0; return;
             }
             k = 1 - d * d * (3 - 2 * d);               // ease back out
@@ -621,8 +662,10 @@
             var tx = m.dx * PULL * pull;               // slide toward the well
             var ty = m.dy * PULL * pull;
             var sc = 1 - SHRINK * pull;                // shrink as drawn in
-            m.p.style.transform = 'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2)
-              + 'px) scale(' + sc.toFixed(3) + ')';
+            // Composes with placement: slide in user space, shrink about the
+            // glyph's own centre (pivotScaleDelta replaces the old fill-box pivot).
+            setPathDelta(m.p, 'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2)
+              + 'px) ' + pivotScaleDelta(m.p, sc.toFixed(3)));
           });
           raf = requestAnimationFrame(frame);
         }
@@ -1510,7 +1553,9 @@
       timers.forEach(clearTimeout); timers.length = 0;
       paths.forEach(function (p) {
         p.style.transition = 'transform 140ms cubic-bezier(.2,1.6,.4,1), filter 140ms ease';
-        p.style.transform = 'none';
+        // Snap home = zero DELTA composed with placement — never 'none', which
+        // would strip the placement attribute and blob the glyph mid-collapse.
+        setPathDelta(p, 'translate(0px,0px)');
         p.style.filter = 'none';
       });
       // Observation snap-flash on the container.
@@ -1537,7 +1582,7 @@
         var p = paths[i];
         var dx = (Math.random() * 2 - 1) * 1.6;
         var dy = (Math.random() * 2 - 1) * 1.2;
-        p.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)';
+        setPathDelta(p, 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)');
         p.style.filter = 'blur(' + (0.4 + Math.random() * 0.5).toFixed(2) + 'px)'
           + ' opacity(' + (0.72 + Math.random() * 0.28).toFixed(2) + ')';
       }
@@ -1563,11 +1608,11 @@
       try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
     });
     var STAGGER = 90, PRESS = 160;
+    // Pivot-scale about each glyph's own user-space centre, composed with its
+    // placement (the transform-box pattern stomps the placement attribute).
     paths.forEach(function (p) {
-      p.style.transformBox = 'fill-box';
-      p.style.transformOrigin = 'center';
       p.style.opacity = '0';
-      p.style.transform = 'scale(1.35)';
+      setPathDelta(p, pivotScaleDelta(p, 1.35));
     });
     var timers = [];
     paths.forEach(function (p, i) {
@@ -1575,10 +1620,10 @@
         p.style.transition = 'opacity ' + PRESS + 'ms ease-out, transform '
           + PRESS + 'ms cubic-bezier(.3,1.4,.5,1)';
         p.style.opacity = '1';
-        p.style.transform = 'scale(1)';
+        setPathDelta(p, pivotScaleDelta(p, 1));
         timers.push(setTimeout(function () {
-          p.style.transition = ''; p.style.opacity = ''; p.style.transform = '';
-          p.style.transformBox = ''; p.style.transformOrigin = '';
+          p.style.transition = ''; p.style.opacity = '';
+          clearPathDelta(p);
           if (i === paths.length - 1) { el.__lxTypeset = false; }
         }, PRESS + 80));
       }, i * STAGGER));
