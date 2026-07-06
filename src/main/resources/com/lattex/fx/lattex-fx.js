@@ -1250,7 +1250,10 @@
       phase = 3; homeT = 0;
     };
 
-    function drawShard(s) {
+    // glassFade (0..1) dims the pane tint + edge lines — 1 while broken/hanging,
+    // easing to 0 during reassembly so the crack-web never lingers on the
+    // healed equation (Charles smoke feedback 2026-07-06).
+    function drawShard(s, glassFade) {
       ctx.save();
       ctx.translate(r.left + s.mx + s.dx, r.top + s.my + s.dy);
       ctx.rotate(s.rot);
@@ -1262,13 +1265,17 @@
       // Glass body: clipped ink + a faint pane tint + a bright edge.
       ctx.save();
       ctx.clip();
-      ctx.fillStyle = 'rgba(190,225,255,0.10)';
-      ctx.fill();
+      if (glassFade > 0.01) {
+        ctx.fillStyle = 'rgba(190,225,255,' + (0.10 * glassFade).toFixed(3) + ')';
+        ctx.fill();
+      }
       ctx.drawImage(pane, -s.mx, -s.my, r.width, r.height);
       ctx.restore();
-      ctx.strokeStyle = 'rgba(220,240,255,0.35)';
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
+      if (glassFade > 0.01) {
+        ctx.strokeStyle = 'rgba(220,240,255,' + (0.35 * glassFade).toFixed(3) + ')';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -1315,15 +1322,25 @@
       } else if (phase === 3) {
         // Magnetic reassembly: ease every shard from its captured pose to home.
         homeT += dt;
-        var g = Math.min(1, homeT / 0.65);
+        var g = Math.min(1, homeT / 0.55);
         var hold = Math.pow(1 - g, 3); // remaining offset: fast pull, gentle landing
         for (var n = 0; n < shards.length; n++) {
           var w = shards[n];
           w.dx = w.hx * hold; w.dy = w.hy * hold; w.rot = w.hr * hold;
         }
-        if (g >= 1) { cleanup(); return; }
+        // CUT OVER as soon as the shards are visually home — the ease means that
+        // happens well before g==1, and holding the crack-web on a healed pane
+        // reads as a stall (Charles smoke, 2026-07-06). The real element returns
+        // in the same frame the canvas dies: no lingering mesh, no gap.
+        if (hold <= 0.02) { cleanup(); return; }
+        for (var d3 = 0; d3 < shards.length; d3++) {
+          // Glass fades with the pull so edge lines are gone by touchdown.
+          drawShard(shards[d3], Math.min(1, hold * 3));
+        }
+        raf = requestAnimationFrame(frame);
+        return;
       }
-      for (var d = 0; d < shards.length; d++) { drawShard(shards[d]); }
+      for (var d = 0; d < shards.length; d++) { drawShard(shards[d], 1); }
       raf = requestAnimationFrame(frame);
     }
     raf = requestAnimationFrame(frame);
