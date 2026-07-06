@@ -1,15 +1,20 @@
 # LatteX — the fx gallery
 
-Auto-generated visual references, captured by [BrewShot](https://github.com/supsup/BrewShot)
-(the real-browser harness these tests run on) every full suite run. They are
-**references, not goldens** — effects randomize, so frames differ run to run;
-what a change here means is "the render changed," which is exactly what a
-reviewer should look at.
+Every image here is captured fresh by [BrewShot](https://github.com/supsup/BrewShot)
+(the real-browser harness these tests run on) each time the full suite runs.
 
-Every image on this page is also a **test artifact**: the same captures carry
-build-failing assertions (glyph boxes can't exceed 2× their SVG mid-animation,
-triggers must produce changing frames, overlays must tear down on scroll).
-The gallery is the receipts; the suite is the proof.
+**These images are for your eyes, not for machines to diff.** The effects
+randomize on purpose — glitch's flicker, shatter's shard paths — so two runs
+never produce the same pixels, and that's fine. When one of these images
+changes in a diff, it isn't a failure; it's an invitation: *the render
+changed — take a look and decide if you like what you see.*
+
+The machines still stand guard, just elsewhere: the same captures carry
+build-failing checks for the things that are wrong in every run (a glyph
+ballooning past 2× its equation, a hover that does nothing, an overlay that
+survives scrolling away). So by the time an image reaches this page, it can't
+be broken — only different. Whether *different* is *better* is the one call
+that stays human.
 
 ---
 
