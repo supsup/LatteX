@@ -1568,6 +1568,123 @@
     });
   }
 
+  // CONSTELLATION: the equation first appears as a night-sky star map — points
+  // ignite along the glyph outlines, faint lines join near neighbours, the map
+  // twinkles, then the stars fuse into the crisp equation. Star positions are
+  // sampled read-only from the existing <path>s (getPointAtLength → screen via
+  // getScreenCTM); stars/lines live on a body canvas and only opacity is
+  // toggled on the paths — nothing is added to the inner <svg>.
+  function constellation(el) {
+    if (el.__lxConst) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxConst = true;
+    var stars = [];
+    paths.forEach(function (p) {
+      var len, m;
+      try { len = p.getTotalLength(); m = p.getScreenCTM(); } catch (e) { return; }
+      if (!len || !m) { return; }
+      var n = Math.max(3, Math.min(14, Math.round(len / 26)));
+      for (var i = 0; i < n; i++) {
+        var pt;
+        try { pt = p.getPointAtLength((i / n) * len); } catch (e) { continue; }
+        stars.push({ x: m.a * pt.x + m.c * pt.y + m.e,
+                     y: m.b * pt.x + m.d * pt.y + m.f,
+                     tw: Math.random() * 6.283,
+                     ignite: Math.random() * 700 });
+      }
+    });
+    if (!stars.length) { el.__lxConst = false; return; }
+    // Join each star to its 2 nearest neighbours (the constellation lines).
+    var links = [], seen = {};
+    stars.forEach(function (s, i) {
+      var best = [];
+      for (var j = 0; j < stars.length; j++) {
+        if (j === i) { continue; }
+        var dx = stars[j].x - s.x, dy = stars[j].y - s.y;
+        var d2 = dx * dx + dy * dy;
+        if (best.length < 2) { best.push([d2, j]); best.sort(function (a, b) { return a[0] - b[0]; }); }
+        else if (d2 < best[1][0]) { best[1] = [d2, j]; best.sort(function (a, b) { return a[0] - b[0]; }); }
+      }
+      best.forEach(function (b) {
+        var key = Math.min(i, b[1]) + ':' + Math.max(i, b[1]);
+        if (!seen[key] && b[0] < 42 * 42) { seen[key] = 1; links.push([i, b[1]]); }
+      });
+    });
+
+    var op0 = [], trans0 = [];
+    paths.forEach(function (p, i) {
+      op0[i] = p.style.opacity; trans0[i] = p.style.transition;
+      p.style.opacity = '0';
+    });
+    // The CSS pre-hide ([data-lx-fx-enter=constellation] { opacity: 0 }) kept the
+    // container invisible until this routine took over; the paths now carry the
+    // hide, so reveal the container for the star map.
+    el.style.opacity = '1';
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(vw * dpr);
+    canvas.height = Math.round(vh * dpr);
+    canvas.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483647;';
+    document.body.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    var IGNITE = 700, HOLD = 1500, FUSE = 700, END = IGNITE + HOLD + FUSE;
+    var raf = 0, timers = [], t0 = performance.now(), fusing = false;
+    function cleanup() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      canvas.remove();
+      paths.forEach(function (p, i) {
+        p.style.opacity = op0[i] || ''; p.style.transition = trans0[i] || '';
+      });
+      el.__lxConst = false;
+    }
+    function frame(now) {
+      var e = now - t0;
+      ctx.clearRect(0, 0, vw, vh);
+      var fade = e > IGNITE + HOLD ? Math.max(0, 1 - (e - IGNITE - HOLD) / FUSE) : 1;
+      // Constellation lines, faint and steady.
+      ctx.strokeStyle = 'rgba(150,190,255,' + (0.20 * fade).toFixed(3) + ')';
+      ctx.lineWidth = 0.6;
+      for (var l = 0; l < links.length; l++) {
+        var a = stars[links[l][0]], b = stars[links[l][1]];
+        if (e < a.ignite || e < b.ignite) { continue; }
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+      // The stars: ignite staggered, then twinkle.
+      for (var i = 0; i < stars.length; i++) {
+        var s = stars[i];
+        if (e < s.ignite) { continue; }
+        var born = Math.min(1, (e - s.ignite) / 180);
+        var tw = 0.55 + 0.45 * Math.sin(e / 340 + s.tw);
+        var alpha = born * tw * fade;
+        if (alpha <= 0.01) { continue; }
+        var g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 2.6);
+        g.addColorStop(0, 'rgba(255,255,255,' + alpha.toFixed(3) + ')');
+        g.addColorStop(0.5, 'rgba(190,215,255,' + (alpha * 0.55).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(150,190,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(s.x, s.y, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+      if (e > IGNITE + HOLD && !fusing) {
+        fusing = true; // the stars fuse: equation cross-fades in as the map dims
+        paths.forEach(function (p) {
+          p.style.transition = 'opacity ' + FUSE + 'ms ease';
+          p.style.opacity = '1';
+        });
+      }
+      if (e >= END) { cleanup(); return; }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1592,6 +1709,7 @@
     if (name === 'sparkler') { sparkler(el); return; }
     if (name === 'quantum') { quantum(el); return; }
     if (name === 'typeset') { typeset(el); return; }
+    if (name === 'constellation') { constellation(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';

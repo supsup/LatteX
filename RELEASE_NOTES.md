@@ -4,14 +4,15 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## 2026-07-06 — five new fx effects & the effect drift-guard
+## 2026-07-06 — six new fx effects & the effect drift-guard
 
-### New effects (19 → 24)
+### New effects (19 → 25)
 - **`shatter`** *(click toggle)* — the equation cracks like glass: a crack-web flashes, shards scatter and hang in zero-g, and the next click magnetically reassembles them.
 - **`sparkler`** — a white-hot spark writes the equation in fire, embers spraying off the moving tip as the letters cool into place.
 - **`quantum`** — superposition: the glyphs jitter fuzzily between ghost states until you *observe* them (hover) and the wavefunction collapses with a snap-flash.
 - **`glitch`** — datamosh: the red/cyan channels rip apart, slice bands shear, then everything snaps back pixel-perfect (pure CSS keyframe).
 - **`typeset`** — letterpress: the glyphs stamp onto the page one by one in reading order, each pressed in with a squash.
+- **`constellation`** — a night-sky star map ignites along the glyph outlines, faint lines join the stars, then the map fuses into the crisp equation.
 
 All five hold the containment contract — the effects ride the container, existing-`<path>` presentation attributes, or body-level overlays; nothing is ever added to the inner `<svg>`. `prefers-reduced-motion` degrades each to a static or minimal state.
 > `\lx[fx.click=shatter]{ x^2-y^2=(x-y)(x+y) }` &nbsp;·&nbsp; `\lx[fx.enter=sparkler]{ \oint_C \vec{B}\cdot d\vec{l} = \mu_0 I }`
@@ -19,7 +20,7 @@ All five hold the containment contract — the effects ride the container, exist
 ### Effect drift-guard
 `EffectRuntimeParityTest` pins the `Effect` enum ↔ fx-runtime ↔ CSS agreement as a build-failing invariant, in both directions: an enum entry with no runtime handler (which would silently no-op on the page), a runtime handler no author can reach, or a keyframe effect without its `@keyframes` block each fail the build.
 
-**Browse it:** `examples/effects.html` shows all 24 effects live.
+**Browse it:** `examples/effects.html` shows all 25 effects live.
 
 ---
 

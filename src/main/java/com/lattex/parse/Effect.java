@@ -179,6 +179,16 @@ public enum Effect {
      * element to the inner {@code <svg>}.
      */
     TYPESET,
+    /**
+     * CONSTELLATION: the equation first appears as a night-sky star map — points
+     * ignite along the glyph outlines, faint lines join near neighbours, the map
+     * twinkles, then the stars fuse into the crisp equation. Page-side JS routine:
+     * star positions are sampled read-only from the existing {@code <path>}s, the
+     * stars/lines live on a pointer-events-none body {@code <canvas>}, and only
+     * {@code opacity} is toggled on the paths; it adds no element to the inner
+     * {@code <svg>}.
+     */
+    CONSTELLATION,
     /** Explicitly no effect. */
     NONE;
 
@@ -219,13 +229,14 @@ public enum Effect {
             case "sparkler" -> SPARKLER;
             case "quantum" -> QUANTUM;
             case "typeset" -> TYPESET;
+            case "constellation" -> CONSTELLATION;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
                     + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
                     + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
-                    + "|shatter|glitch|sparkler|quantum|typeset|none)");
+                    + "|shatter|glitch|sparkler|quantum|typeset|constellation|none)");
         };
     }
 

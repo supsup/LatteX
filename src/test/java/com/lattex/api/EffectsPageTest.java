@@ -136,6 +136,9 @@ class EffectsPageTest {
         new Fx("\\lx[fx.click=typeset]{ \\Gamma(n) = (n-1)! }",
             "fx.click=typeset — letterpress: the glyphs stamp in one by one, reading order",
             "click — re-set the type"),
+        new Fx("\\lx[fx.enter=constellation]{ \\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6} }",
+            "fx.enter=constellation — a star map ignites along the glyphs, then fuses into the equation",
+            "load — watch the stars fuse"),
         new Fx("\\lx[fx.enter=fade, fx.hover=pulse, fx.click=boom, fx.duration=400ms]"
             + "{ \\int_0^\\infty e^{-x}\\,dx }",
             "all three — fade in, pulse on hover, boom on click", "load · hover · click"));

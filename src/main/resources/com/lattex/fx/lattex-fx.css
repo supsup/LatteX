@@ -10,6 +10,7 @@
    (no flash-of-visible before the runtime wires). */
 .lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
 .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; }
+.lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
 
 @keyframes lx-boom {
   0%   { transform: scale(1); }
@@ -58,6 +59,7 @@
   .lx-math { animation: none !important; }
   .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
   .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
+  .lx-math[data-lx-fx-enter="constellation"] { opacity: 1; }
 }
 
 /* blueprint: the container becomes an engineer's drafting field — a deep cyan-blue ground
