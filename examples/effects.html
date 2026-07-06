@@ -1670,6 +1670,103 @@
     raf = requestAnimationFrame(frame);
   }
 
+  // QUANTUM: the equation sits in superposition — every glyph jitters fuzzily
+  // between ghost positions under a soft blur, until you OBSERVE it (hover):
+  // the wavefunction collapses crisp with a snap-flash. Idle-collapses on its
+  // own after a while. Inline transform/filter on the existing <path>s + a
+  // container flash; nothing is added to the inner <svg>.
+  function quantum(el) {
+    if (el.__lxQuantum) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxQuantum = true;
+    var IDLE_COLLAPSE = 12000;
+    var raf = 0, timers = [], t0 = performance.now(), collapsed = false;
+
+    function collapse() {
+      if (collapsed) { return; }
+      collapsed = true;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      paths.forEach(function (p) {
+        p.style.transition = 'transform 140ms cubic-bezier(.2,1.6,.4,1), filter 140ms ease';
+        p.style.transform = 'none';
+        p.style.filter = 'none';
+      });
+      // Observation snap-flash on the container.
+      var fil0 = el.style.filter, trans0 = el.style.transition;
+      el.style.transition = 'filter 90ms ease';
+      el.style.filter = 'brightness(1.9) drop-shadow(0 0 8px currentColor)';
+      setTimeout(function () {
+        el.style.filter = fil0 || 'none';
+        setTimeout(function () {
+          el.style.transition = trans0;
+          paths.forEach(function (p) {
+            p.style.transition = ''; p.style.transform = ''; p.style.filter = '';
+          });
+          el.__lxQuantum = false;
+        }, 200);
+      }, 110);
+      el.removeEventListener('mouseenter', collapse);
+    }
+
+    function frame(now) {
+      if (collapsed) { return; }
+      if (now - t0 > IDLE_COLLAPSE) { collapse(); return; }
+      for (var i = 0; i < paths.length; i++) {
+        var p = paths[i];
+        var dx = (Math.random() * 2 - 1) * 1.6;
+        var dy = (Math.random() * 2 - 1) * 1.2;
+        p.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)';
+        p.style.filter = 'blur(' + (0.4 + Math.random() * 0.5).toFixed(2) + 'px)'
+          + ' opacity(' + (0.72 + Math.random() * 0.28).toFixed(2) + ')';
+      }
+      // Superposition flickers at ~20fps, not every frame — fuzzier that way.
+      timers.push(setTimeout(function () { raf = requestAnimationFrame(frame); }, 50));
+    }
+    el.addEventListener('mouseenter', collapse);
+    raf = requestAnimationFrame(frame);
+  }
+
+  // TYPESET: letterpress — the glyphs stamp onto the page one by one in reading
+  // order, each pressed in with a satisfying squash. Inline opacity/transform on
+  // the existing <path>s (transform-box: fill-box so each squashes about its own
+  // centre); nothing is added to the inner <svg>.
+  function typeset(el) {
+    if (el.__lxTypeset) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxTypeset = true;
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    var STAGGER = 90, PRESS = 160;
+    paths.forEach(function (p) {
+      p.style.transformBox = 'fill-box';
+      p.style.transformOrigin = 'center';
+      p.style.opacity = '0';
+      p.style.transform = 'scale(1.35)';
+    });
+    var timers = [];
+    paths.forEach(function (p, i) {
+      timers.push(setTimeout(function () {
+        p.style.transition = 'opacity ' + PRESS + 'ms ease-out, transform '
+          + PRESS + 'ms cubic-bezier(.3,1.4,.5,1)';
+        p.style.opacity = '1';
+        p.style.transform = 'scale(1)';
+        timers.push(setTimeout(function () {
+          p.style.transition = ''; p.style.opacity = ''; p.style.transform = '';
+          p.style.transformBox = ''; p.style.transformOrigin = '';
+          if (i === paths.length - 1) { el.__lxTypeset = false; }
+        }, PRESS + 80));
+      }, i * STAGGER));
+    });
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1692,6 +1789,8 @@
     if (name === 'teleport') { teleport(el); return; }
     if (name === 'shatter') { shatter(el); return; }
     if (name === 'sparkler') { sparkler(el); return; }
+    if (name === 'quantum') { quantum(el); return; }
+    if (name === 'typeset') { typeset(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -2265,6 +2364,49 @@
             <span class="cap">fx.enter=sparkler — a white-hot spark writes the equation in fire, embers spraying off the tip</span>
             <code class="src">\lx[fx.enter=sparkler]{ \oint_C \vec{B} \cdot d\vec{l} = \mu_0 I }</code>
             <span class="hint">load — watch it burn in</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="quantum"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -36.04 156.9422 46.72" width="156.9422" height="46.72" role="img" aria-label="hat over H ψ = E ψ">
+              <g fill="currentColor">
+                <path d="M239 525 L239 357 L567 357 L567 525 Q567 564 562 586 Q557 609 536 618 Q516 627 470 627 L470 657 L756 657 L756 627 Q709 627 688 618 Q667 609 662 587 Q658 565 658 525 L658 131 Q658 88 663 66 Q669 44 690 37 Q711 30 756 30 L756 0 L470 0 L470 30 Q515 30 535 37 Q556 44 561 66 Q567 88 567 131 L567 318 L239 318 L239 131 Q239 87 244 65 Q250 44 271 37 Q292 30 337 30 L337 0 L50 0 L50 30 Q95 30 115 36 Q136 43 141 65 Q147 87 147 131 L147 525 Q147 564 142 586 Q137 609 116 618 Q96 627 50 627 L50 657 L337 657 L337 627 Q290 627 269 618 Q248 609 243 586 Q239 564 239 525 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M-89 521 L-127 521 L-230 619 L-332 521 L-371 521 L-263 674 L-197 674 L-89 521 Z" transform="translate(25.2 -7.08) scale(0.04 -0.04)"/>
+                <path d="M71 409 Q48 409 32 395 Q17 382 6 366 L-12 375 Q4 416 30 448 Q57 480 105 480 Q178 480 178 403 Q178 370 167 331 Q157 293 146 254 Q136 216 136 182 Q136 130 173 102 Q211 74 284 74 L293 505 L285 693 L376 695 L356 500 L342 79 Q407 88 443 117 Q479 146 493 186 Q508 226 508 269 Q508 330 495 369 Q483 409 467 432 Q451 456 438 469 L446 482 Q471 477 501 453 Q531 429 553 380 Q575 331 575 252 Q575 192 552 136 Q530 81 479 42 Q428 4 343 -7 L356 -191 L285 -217 L260 -214 L277 -11 Q183 -11 135 42 Q87 95 87 177 Q87 225 94 275 Q101 325 101 357 Q101 379 95 394 Q89 409 71 409 Z" transform="translate(31.08 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(66.9911 0) scale(0.04 -0.04)"/>
+                <path d="M598 186 L570 0 L36 0 L36 30 Q77 30 97 35 Q118 41 125 60 Q133 79 133 118 L133 535 Q133 573 125 593 Q118 613 97 620 Q77 627 36 627 L36 657 L561 657 L567 493 L535 493 Q528 543 513 568 Q499 594 466 603 Q434 612 372 612 L225 612 L225 358 L342 358 Q388 358 412 366 Q436 374 445 396 Q454 418 454 458 L486 458 L486 226 L454 226 Q454 267 445 287 Q436 307 412 313 Q388 319 342 319 L225 319 L225 44 L354 44 Q412 44 447 49 Q483 55 503 70 Q524 85 537 113 Q551 141 566 186 L598 186 Z" transform="translate(106.9022 0) scale(0.04 -0.04)"/>
+                <path d="M71 409 Q48 409 32 395 Q17 382 6 366 L-12 375 Q4 416 30 448 Q57 480 105 480 Q178 480 178 403 Q178 370 167 331 Q157 293 146 254 Q136 216 136 182 Q136 130 173 102 Q211 74 284 74 L293 505 L285 693 L376 695 L356 500 L342 79 Q407 88 443 117 Q479 146 493 186 Q508 226 508 269 Q508 330 495 369 Q483 409 467 432 Q451 456 438 469 L446 482 Q471 477 501 453 Q531 429 553 380 Q575 331 575 252 Q575 192 552 136 Q530 81 479 42 Q428 4 343 -7 L356 -191 L285 -217 L260 -214 L277 -11 Q183 -11 135 42 Q87 95 87 177 Q87 225 94 275 Q101 325 101 357 Q101 379 95 394 Q89 409 71 409 Z" transform="translate(131.9422 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=quantum — superposition: the glyphs jitter between ghost states until you observe them</span>
+            <code class="src">\lx[fx.enter=quantum]{ \hat{H}\psi = E\psi }</code>
+            <span class="hint">hover — collapse the wavefunction</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-click="typeset"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.32 -31.44 237.52 41.28" width="237.52" height="41.28" role="img" aria-label="Γ ( n ) = ( n - 1 ) !">
+              <g fill="currentColor">
+                <path d="M542 657 L549 474 L516 474 Q508 528 495 558 Q483 588 453 600 Q423 612 364 612 L224 612 L224 127 Q224 88 231 67 Q239 46 262 38 Q285 30 329 30 L329 0 L42 0 L42 30 Q82 30 101 38 Q121 46 127 67 Q133 89 133 127 L133 534 Q133 573 127 593 Q121 613 101 620 Q82 627 42 627 L42 657 L542 657 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(22.76 0) scale(0.04 -0.04)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(37.04 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(60.08 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(85.4711 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(125.3822 0) scale(0.04 -0.04)"/>
+                <path d="M481 307 L481 101 Q481 73 485 57 Q490 41 506 34 Q522 28 555 28 L555 0 L324 0 L324 28 Q360 28 375 34 Q391 41 394 57 Q398 73 398 101 L398 282 Q398 342 384 372 Q371 402 350 411 Q329 421 306 421 Q266 421 237 399 Q208 378 185 358 L185 101 Q185 73 189 57 Q193 41 209 34 Q225 28 261 28 L261 0 L32 0 L32 28 Q66 28 80 34 Q95 41 98 57 Q102 73 102 101 L102 382 Q102 409 91 417 Q80 426 60 426 Q47 426 40 425 Q33 424 33 424 L33 453 L160 482 L183 482 L182 401 L186 401 Q227 437 263 461 Q300 485 347 485 Q415 485 448 439 Q481 393 481 307 Z" transform="translate(139.6622 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(171.5911 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(193.08 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(212.88 0) scale(0.04 -0.04)"/>
+                <path d="M123 170 L92 538 Q91 559 89 575 Q88 591 88 603 Q88 631 99 650 Q110 669 141 669 Q170 669 182 650 Q194 631 194 601 Q194 573 191 538 L158 170 L123 170 Z M201 49 Q201 26 185 9 Q170 -8 141 -8 Q112 -8 97 8 Q82 25 82 50 Q82 75 97 93 Q113 111 141 111 Q170 111 185 92 Q201 74 201 49 Z" transform="translate(227.16 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.click=typeset — letterpress: the glyphs stamp in one by one, reading order</span>
+            <code class="src">\lx[fx.click=typeset]{ \Gamma(n) = (n-1)! }</code>
+            <span class="hint">click — re-set the type</span>
           </figcaption>
         </figure>
         <figure class="card">

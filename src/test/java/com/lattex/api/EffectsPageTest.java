@@ -130,6 +130,12 @@ class EffectsPageTest {
         new Fx("\\lx[fx.enter=sparkler]{ \\oint_C \\vec{B} \\cdot d\\vec{l} = \\mu_0 I }",
             "fx.enter=sparkler — a white-hot spark writes the equation in fire, embers spraying off the tip",
             "load — watch it burn in"),
+        new Fx("\\lx[fx.enter=quantum]{ \\hat{H}\\psi = E\\psi }",
+            "fx.enter=quantum — superposition: the glyphs jitter between ghost states until you observe them",
+            "hover — collapse the wavefunction"),
+        new Fx("\\lx[fx.click=typeset]{ \\Gamma(n) = (n-1)! }",
+            "fx.click=typeset — letterpress: the glyphs stamp in one by one, reading order",
+            "click — re-set the type"),
         new Fx("\\lx[fx.enter=fade, fx.hover=pulse, fx.click=boom, fx.duration=400ms]"
             + "{ \\int_0^\\infty e^{-x}\\,dx }",
             "all three — fade in, pulse on hover, boom on click", "load · hover · click"));

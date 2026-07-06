@@ -163,6 +163,22 @@ public enum Effect {
      * no element to the inner {@code <svg>}.
      */
     SPARKLER,
+    /**
+     * QUANTUM: the equation sits in superposition — every glyph jitters fuzzily between
+     * ghost positions under a soft blur until you OBSERVE it (hover), when the
+     * wavefunction collapses crisp with a snap-flash (idle-collapses on its own after a
+     * while). Page-side JS routine: inline {@code transform}/{@code filter} on the
+     * existing {@code <path>}s plus a container flash; it adds no element to the inner
+     * {@code <svg>}.
+     */
+    QUANTUM,
+    /**
+     * TYPESET: letterpress — the glyphs stamp onto the page one by one in reading order,
+     * each pressed in with a satisfying squash. Page-side JS routine: staggered inline
+     * {@code opacity}/{@code transform} on the existing {@code <path>}s; it adds no
+     * element to the inner {@code <svg>}.
+     */
+    TYPESET,
     /** Explicitly no effect. */
     NONE;
 
@@ -201,13 +217,15 @@ public enum Effect {
             case "shatter" -> SHATTER;
             case "glitch" -> GLITCH;
             case "sparkler" -> SPARKLER;
+            case "quantum" -> QUANTUM;
+            case "typeset" -> TYPESET;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
                     + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
                     + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
-                    + "|shatter|glitch|sparkler|none)");
+                    + "|shatter|glitch|sparkler|quantum|typeset|none)");
         };
     }
 

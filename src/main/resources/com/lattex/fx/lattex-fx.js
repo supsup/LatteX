@@ -1471,6 +1471,103 @@
     raf = requestAnimationFrame(frame);
   }
 
+  // QUANTUM: the equation sits in superposition — every glyph jitters fuzzily
+  // between ghost positions under a soft blur, until you OBSERVE it (hover):
+  // the wavefunction collapses crisp with a snap-flash. Idle-collapses on its
+  // own after a while. Inline transform/filter on the existing <path>s + a
+  // container flash; nothing is added to the inner <svg>.
+  function quantum(el) {
+    if (el.__lxQuantum) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxQuantum = true;
+    var IDLE_COLLAPSE = 12000;
+    var raf = 0, timers = [], t0 = performance.now(), collapsed = false;
+
+    function collapse() {
+      if (collapsed) { return; }
+      collapsed = true;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      timers.forEach(clearTimeout); timers.length = 0;
+      paths.forEach(function (p) {
+        p.style.transition = 'transform 140ms cubic-bezier(.2,1.6,.4,1), filter 140ms ease';
+        p.style.transform = 'none';
+        p.style.filter = 'none';
+      });
+      // Observation snap-flash on the container.
+      var fil0 = el.style.filter, trans0 = el.style.transition;
+      el.style.transition = 'filter 90ms ease';
+      el.style.filter = 'brightness(1.9) drop-shadow(0 0 8px currentColor)';
+      setTimeout(function () {
+        el.style.filter = fil0 || 'none';
+        setTimeout(function () {
+          el.style.transition = trans0;
+          paths.forEach(function (p) {
+            p.style.transition = ''; p.style.transform = ''; p.style.filter = '';
+          });
+          el.__lxQuantum = false;
+        }, 200);
+      }, 110);
+      el.removeEventListener('mouseenter', collapse);
+    }
+
+    function frame(now) {
+      if (collapsed) { return; }
+      if (now - t0 > IDLE_COLLAPSE) { collapse(); return; }
+      for (var i = 0; i < paths.length; i++) {
+        var p = paths[i];
+        var dx = (Math.random() * 2 - 1) * 1.6;
+        var dy = (Math.random() * 2 - 1) * 1.2;
+        p.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)';
+        p.style.filter = 'blur(' + (0.4 + Math.random() * 0.5).toFixed(2) + 'px)'
+          + ' opacity(' + (0.72 + Math.random() * 0.28).toFixed(2) + ')';
+      }
+      // Superposition flickers at ~20fps, not every frame — fuzzier that way.
+      timers.push(setTimeout(function () { raf = requestAnimationFrame(frame); }, 50));
+    }
+    el.addEventListener('mouseenter', collapse);
+    raf = requestAnimationFrame(frame);
+  }
+
+  // TYPESET: letterpress — the glyphs stamp onto the page one by one in reading
+  // order, each pressed in with a satisfying squash. Inline opacity/transform on
+  // the existing <path>s (transform-box: fill-box so each squashes about its own
+  // centre); nothing is added to the inner <svg>.
+  function typeset(el) {
+    if (el.__lxTypeset) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    if (!paths.length || reduced) { return; }
+    el.__lxTypeset = true;
+    paths.sort(function (a, b) {
+      try { return a.getBBox().x - b.getBBox().x; } catch (e) { return 0; }
+    });
+    var STAGGER = 90, PRESS = 160;
+    paths.forEach(function (p) {
+      p.style.transformBox = 'fill-box';
+      p.style.transformOrigin = 'center';
+      p.style.opacity = '0';
+      p.style.transform = 'scale(1.35)';
+    });
+    var timers = [];
+    paths.forEach(function (p, i) {
+      timers.push(setTimeout(function () {
+        p.style.transition = 'opacity ' + PRESS + 'ms ease-out, transform '
+          + PRESS + 'ms cubic-bezier(.3,1.4,.5,1)';
+        p.style.opacity = '1';
+        p.style.transform = 'scale(1)';
+        timers.push(setTimeout(function () {
+          p.style.transition = ''; p.style.opacity = ''; p.style.transform = '';
+          p.style.transformBox = ''; p.style.transformOrigin = '';
+          if (i === paths.length - 1) { el.__lxTypeset = false; }
+        }, PRESS + 80));
+      }, i * STAGGER));
+    });
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -1493,6 +1590,8 @@
     if (name === 'teleport') { teleport(el); return; }
     if (name === 'shatter') { shatter(el); return; }
     if (name === 'sparkler') { sparkler(el); return; }
+    if (name === 'quantum') { quantum(el); return; }
+    if (name === 'typeset') { typeset(el); return; }
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
