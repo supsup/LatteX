@@ -1,0 +1,31 @@
+# LatteX CI — every push/PR runs the FULL gate: build (incl. javadoc, the
+# release path), the whole test suite, and — because GitHub runners ship
+# Chrome — the BrewShot real-browser pins (blob audit, fx lifecycle, GIF
+# liveness) that laptop-less-Chrome environments assume-skip.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Build + full suite (javadoc, containment, corpus, browser pins)
+        run: ./gradlew build --no-daemon
+      - name: Upload visual references (gallery artifacts)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: examples-gallery
+          path: |
+            examples/*.png
+            examples/*.gif
+          if-no-files-found: ignore
+          retention-days: 14
