@@ -85,6 +85,11 @@ class BrewShotEffectsPageTest {
             assertEquals(List.of(), settled,
                 "glyph blobs after settle (placement or origin pin regressed?)");
 
+            // The page must render with ZERO uncaught JS exceptions — the fx
+            // runtime is 2000 lines of browser JS; this is its error telemetry.
+            org.junit.jupiter.api.Assertions.assertEquals(java.util.List.of(), chrome.errors(),
+                "fx runtime threw on the effects page");
+
             // Non-vacuity: the audit must actually have scanned a real page.
             Object svgCount = chrome.eval(
                 "document.querySelectorAll('.lx-math svg').length");

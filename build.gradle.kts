@@ -34,7 +34,7 @@ dependencies {
     // BrewShot: the real-browser harness (extracted FROM this repo's fx tests,
     // now vendored back as its own jar - github.com/supsup/BrewShot). Test
     // scope only; the zero-runtime-dependencies promise is untouched.
-    testImplementation(files("libs/brewshot-0.1.0.jar"))
+    testImplementation(files("libs/brewshot-0.2.0.jar"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
