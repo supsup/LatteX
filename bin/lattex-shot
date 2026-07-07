@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# lattex-shot — render a LaTeX math expression to a tightly-cropped PNG.
+#
+# Pipeline: LatteX renders the math to self-contained SVG (with exact width/height
+# metrics), we wrap it in a minimal HTML shell scaled with a CSS transform, and
+# BrewShot screenshots the exact page — no whitespace-trim guesswork, no external
+# raster deps. This is the raster backend LatteX's README gestures at, as glue.
+#
+# Usage:
+#   lattex-shot '\int_0^\infty e^{-x}dx = \sqrt{\pi}' -o eq.png
+#   echo '\frac{a}{b}' | lattex-shot - -o frac.png
+#
+# Flags:
+#   -o FILE        output PNG path            (default: lattex.png)
+#   --scale N      vector scale factor        (default: 3 — crisp/@3x; it's SVG,
+#                  so a larger scale is more pixels, not upscaling)
+#   --bg COLOR     background CSS color        (default: #ffffff; use 'transparent')
+#   --color COLOR  the math ink color         (default: #111111)
+#   --pad PX       padding around the ink      (default: 16, at scale=1)
+#
+# Env: LATTEX_JAR (the lattex jar) and BREWSHOT (the brewshot binary/jar) override
+#      autodiscovery.
+set -euo pipefail
+
+scale=3 bg="#ffffff" ink="#111111" pad=16 out="lattex.png" latex=""
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    --scale) scale="$2"; shift 2 ;;
+    --bg) bg="$2"; shift 2 ;;
+    --color) ink="$2"; shift 2 ;;
+    --pad) pad="$2"; shift 2 ;;
+    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -) latex="$(cat)"; shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+[ -z "$latex" ] && [ ${#args[@]} -gt 0 ] && latex="${args[0]}"
+[ -z "$latex" ] && { echo "lattex-shot: no LaTeX given (pass an arg or '-' for stdin)" >&2; exit 2; }
+
+# --- locate the tools -----------------------------------------------------------
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+jar="${LATTEX_JAR:-$(ls "$here"/build/libs/lattex-*.jar 2>/dev/null | head -1)}"
+[ -z "$jar" ] || [ ! -f "$jar" ] && { echo "lattex-shot: no lattex jar (set LATTEX_JAR or run ./gradlew jar)" >&2; exit 3; }
+brew="${BREWSHOT:-$(command -v brewshot || true)}"
+[ -z "$brew" ] && { echo "lattex-shot: no brewshot (set BREWSHOT to the binary or jar)" >&2; exit 3; }
+brewcmd=("$brew"); case "$brew" in *.jar) brewcmd=(java -jar "$brew") ;; esac
+
+# --- render + measure -----------------------------------------------------------
+svg="$(java -jar "$jar" "$latex")"
+[ -z "$svg" ] || ! printf '%s' "$svg" | grep -q '<path' && { echo "lattex-shot: nothing rendered" >&2; exit 4; }
+
+# --- wrap: scale with a CSS transform (NOT an SVG width/height rewrite — that
+#     black-blocks some placement-composed paths). The .w box carries the padding
+#     and the scale; we then clip the shot to its rendered bounds, so the crop is
+#     exact regardless of any trailing glyph advance. Temp DIR with a fixed *.html
+#     name so Chrome opens it as text/html (mktemp's suffix would kill the ext). --
+tmpdir="$(mktemp -d)"
+tmp="$tmpdir/shot.html"
+trap 'rm -rf "$tmpdir"' EXIT
+{
+  printf '<!doctype html><meta charset=utf-8><style>'
+  printf 'html,body{margin:0;background:%s;color:%s}' "$bg" "$ink"
+  printf '.w{display:inline-block;transform:scale(%s);transform-origin:top left;padding:%dpx;font-size:0}</style>' "$scale" "$pad"
+  printf '<div class="w">%s</div>' "$svg"
+} > "$tmp"
+
+# Clip to the scaled div's box: getBoundingClientRect() already reflects the
+# transform, so this is the exact visual extent (padding included), tightly cropped.
+clip='(function(){var r=document.querySelector(".w").getBoundingClientRect();return {x:r.left,y:r.top,w:r.width,h:r.height};})()'
+"${brewcmd[@]}" "$tmp" -o "$out" --size 6000x4000 --settle 300 --clip-js "$clip" >/dev/null
+echo "lattex-shot: wrote $out"

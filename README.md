@@ -59,6 +59,28 @@ unzip -p lattex-0.3.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
 
 Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the whole catalogue live in `examples/effects.html` — or see it without building anything: **[the fx gallery](examples/GALLERY.md)** has real-browser screenshots and GIFs of the effects in motion, captured by [BrewShot](https://github.com/supsup/BrewShot) on every full test run.
 
+## PNG export — `bin/lattex-shot`
+
+SVG is the native output, but sometimes you need a raster (Slack, a GitHub issue
+body, slides, an LMS upload). `bin/lattex-shot` is the raster backend this README's
+Design section gestures at — as glue, not a new dependency: LatteX renders the math
+to SVG with exact metrics, and [BrewShot](https://github.com/supsup/BrewShot)
+screenshots it, tightly cropped.
+
+```bash
+./gradlew jar                                     # build the lattex jar first
+bin/lattex-shot '\int_0^\infty e^{-x}dx = 1' -o eq.png
+echo '\frac{a}{b}' | bin/lattex-shot - -o frac.png     # or pipe via stdin
+bin/lattex-shot 'E = mc^2' --scale 4 --bg transparent -o hero.png
+```
+
+Flags: `-o FILE`, `--scale N` (it's SVG, so a bigger scale is *more pixels*, not
+upscaling), `--bg COLOR`, `--color COLOR` (the ink), `--pad PX`. It finds the jar in
+`build/libs/` and `brewshot` on your `PATH`; override with `LATTEX_JAR` / `BREWSHOT`.
+The scale is a CSS transform (not an SVG width rewrite, which mis-composes some
+placement-transformed glyphs), and the crop clips to the rendered box — so no
+whitespace-trim guesswork.
+
 ## Build
 
 ```bash
