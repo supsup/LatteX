@@ -121,6 +121,7 @@ public final class LayoutEngine {
             case TextRun textRun -> textRunBox(textRun, ctx);
             case Matrix matrix -> matrixBox(matrix, ctx);
             case MathNode.Stack stack -> stackBox(stack, ctx);
+            case MathNode.XArrow xArrow -> xArrowBox(xArrow, ctx);
             // A top-level \lx wrapper: its RenderOptions (scale / mathStyle / color)
             // are applied at the render entry by seeding the LayoutContext + the
             // emitter fill, so here we simply lay out the wrapped body. (\lx is
@@ -431,6 +432,9 @@ public final class LayoutEngine {
                 case STACKREL -> MathClass.REL;
                 case OVERSET, UNDERSET -> classOf(st.base());
             };
+            // An extensible labelled arrow spaces exactly like the plain arrow
+            // relation it stretches (amsmath: xrightarrow is a mathrel).
+            case MathNode.XArrow _ -> MathClass.REL;
             case Spacing _ -> null;           // classless glue (handled by caller)
             case StyledMath sm -> classOf(sm.body()); // wrapper is transparent to spacing
         };
@@ -849,13 +853,13 @@ public final class LayoutEngine {
                 }
             }
             case OVERBRACE -> {
-                up.add(horizontalBraceBox(ctx, 0x23DE, baseBox.width()));
+                up.add(horizontalStretchBox(ctx, 0x23DE, baseBox.width()));
                 if (aboveBox != null) {
                     up.add(aboveBox);
                 }
             }
             case UNDERBRACE -> {
-                down.add(horizontalBraceBox(ctx, 0x23DF, baseBox.width()));
+                down.add(horizontalStretchBox(ctx, 0x23DF, baseBox.width()));
                 if (belowBox != null) {
                     down.add(belowBox);
                 }
@@ -893,18 +897,21 @@ public final class LayoutEngine {
     }
 
     /**
-     * Builds a horizontally-stretched brace ({@code U+23DE}/{@code U+23DF}) sized to
+     * Builds a horizontally-stretched glyph — a brace ({@code U+23DE}/{@code U+23DF})
+     * or an extensible arrow ({@code U+2192}/{@code U+2190}) — sized to at least
      * {@code targetWidth} (user units) via the OpenType MATH horizontal glyph
      * construction — the same {@link #stretchHorizontal} machinery a wide accent
      * ({@code \widehat}) uses — returned as a {@link Box} whose glyphs sit on the
-     * baseline (ink from {@code yMin}..{@code yMax}). No drawn geometry: the brace is
-     * an honest font glyph (single variant or assembled parts).
+     * baseline (ink from {@code yMin}..{@code yMax}). No drawn geometry: the result
+     * is an honest font glyph (single variant or assembled parts), and it is never
+     * smaller than the glyph's natural size (the smallest adequate variant IS the
+     * base glyph when the target is narrower than it).
      */
-    private static Box horizontalBraceBox(LayoutContext ctx, int braceCp, double targetWidth) {
+    private static Box horizontalStretchBox(LayoutContext ctx, int glyphCp, double targetWidth) {
         SfntFont font = ctx.font();
         double scale = ctx.scale();
         List<AccentPiece> pieces = new ArrayList<>();
-        stretchHorizontal(font, font.glyphId(braceCp), targetWidth / scale, pieces);
+        stretchHorizontal(font, font.glyphId(glyphCp), targetWidth / scale, pieces);
 
         List<PositionedGlyph> glyphs = new ArrayList<>();
         double inkYMax = Double.NEGATIVE_INFINITY;
@@ -919,12 +926,75 @@ public final class LayoutEngine {
                 inkYMin = Math.min(inkYMin, o.yMin() * scale);
             }
         }
-        if (inkYMax < inkYMin) { // defensive: brace glyph had no ink
+        if (inkYMax < inkYMin) { // defensive: stretched glyph had no ink
             inkYMax = 0.0;
             inkYMin = 0.0;
         }
         return new Box(glyphs, List.of(), maxRight,
             Math.max(0.0, inkYMax), Math.max(0.0, -inkYMin));
+    }
+
+    // ------------------------------------------------------------------
+    // XArrow — amsmath's extensible labelled arrow (xrightarrow / xleftarrow,
+    // written without the backslash). The INVERSE of the brace stacks above:
+    // a brace stretches the decoration to the base width, while here the base
+    // (the arrow, U+2192 / U+2190 via the same OpenType MATH horizontal
+    // construction) stretches until the script-size labels fit over/under it
+    // with side padding — never shorter than the arrow's natural length. The
+    // arrow's glyphs sit on the baseline exactly as the plain arrow atom does,
+    // so the shaft lies at its designed axis height; labels are centred with
+    // the same stackGapMin clearance the stack mechanism uses.
+    // ------------------------------------------------------------------
+
+    /** Side padding, in mu, between an arrow label's edge and the arrow's tips. */
+    private static final double XARROW_SIDE_PAD_MU = 5.0;
+
+    private static Box xArrowBox(MathNode.XArrow xa, LayoutContext ctx) {
+        SfntFont font = ctx.font();
+        var c = ctx.constants();
+        double scale = ctx.scale();
+        boolean display = ctx.style().isDisplay();
+        double gap = (display ? c.stackDisplayStyleGapMin() : c.stackGapMin()) * scale;
+
+        // Labels at script size, like a stack's above/below marks.
+        Box aboveBox = layoutBox(xa.above(), ctx.superscript());
+        Box belowBox = xa.below() == null ? null : layoutBox(xa.below(), ctx.subscript());
+
+        double labelWidth = aboveBox.width();
+        if (belowBox != null) {
+            labelWidth = Math.max(labelWidth, belowBox.width());
+        }
+
+        // Stretch target: the widest label plus side padding, but at least the
+        // arrow's natural advance (the label-width term is what makes the arrow
+        // grow under a long label — dropping it collapses the stretch).
+        int arrowCp = xa.left() ? 0x2190 : 0x2192;
+        double natural = font.advanceWidth(font.glyphId(arrowCp)) * scale;
+        double pad = XARROW_SIDE_PAD_MU * ctx.mu();
+        double target = Math.max(natural, labelWidth) + 2.0 * pad;
+        Box arrowBox = horizontalStretchBox(ctx, arrowCp, target);
+
+        double width = Math.max(arrowBox.width(), labelWidth);
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        arrowBox.drawInto(glyphs, rules, (width - arrowBox.width()) / 2.0, 0.0);
+
+        // Above label: its ink bottom clears the arrow's ink top by the stack gap.
+        double top = -arrowBox.height();
+        double aboveBaseline = top - gap - aboveBox.depth();
+        aboveBox.drawInto(glyphs, rules, (width - aboveBox.width()) / 2.0, aboveBaseline);
+        top = aboveBaseline - aboveBox.height();
+
+        // Below label: its ink top clears the arrow's ink bottom by the stack gap.
+        double bottom = arrowBox.depth();
+        if (belowBox != null) {
+            double belowBaseline = bottom + gap + belowBox.height();
+            belowBox.drawInto(glyphs, rules, (width - belowBox.width()) / 2.0, belowBaseline);
+            bottom = belowBaseline + belowBox.depth();
+        }
+
+        return new Box(glyphs, rules, width, Math.max(0.0, -top), Math.max(0.0, bottom));
     }
 
     // ------------------------------------------------------------------

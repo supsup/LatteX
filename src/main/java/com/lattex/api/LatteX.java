@@ -296,6 +296,13 @@ public final class LatteX {
                     case UNDERSET -> base + " under " + describe(st.below());
                 };
             }
+            case MathNode.XArrow xa -> {
+                String dir = xa.left() ? "left" : "right";
+                yield xa.below() == null
+                    ? dir + " arrow labelled " + describe(xa.above())
+                    : dir + " arrow labelled " + describe(xa.above())
+                        + " over " + describe(xa.below());
+            }
             case StyledMath sm -> describe(sm.body()); // the wrapper is transparent to a11y
         };
     }

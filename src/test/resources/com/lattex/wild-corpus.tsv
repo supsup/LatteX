@@ -154,8 +154,8 @@ OK	stats-ml	D	f(x; \alpha, \beta) = \frac{\Gamma(\alpha + \beta)}{\Gamma(\alpha)
 OK	stats-ml	D	t = \frac{\bar{x} - \mu_0}{s / \sqrt{n}}
 OK	stats-ml	I	\bar{x} \pm 1.96 \frac{\sigma}{\sqrt{n}}
 OK	stats-ml	D	\chi^2 = \sum_{i=1}^{k} \frac{(O_i - E_i)^2}{E_i}
-GAP	stats-ml	D	\sqrt{n}\,(\bar{X}_n - \mu) \xrightarrow{d} \mathcal{N}(0, \sigma^2)
-GAP	stats-ml	D	\bar{X}_n \xrightarrow{a.s.} \mu \quad \text{as } n \to \infty
+OK	stats-ml	D	\sqrt{n}\,(\bar{X}_n - \mu) \xrightarrow{d} \mathcal{N}(0, \sigma^2)
+OK	stats-ml	D	\bar{X}_n \xrightarrow{a.s.} \mu \quad \text{as } n \to \infty
 OK	stats-ml	D	P(|X - \mu| \geq k\sigma) \leq \frac{1}{k^2}
 OK	stats-ml	D	P\left( \left| \frac{1}{n} \sum_{i=1}^{n} X_i - \mathbb{E}[X] \right| \geq \epsilon \right) \leq 2 \exp\left( -2n\epsilon^2 \right)
 OK	stats-ml	D	f(\mathbb{E}[X]) \leq \mathbb{E}[f(X)]
@@ -434,11 +434,11 @@ OK	structured-envs	D	\mathcal{L}(\theta,\phi;x) = \underbrace{\mathbb{E}_{q_\phi
 OK	structured-envs	D	\overbrace{1 + 2 + \cdots + n}^{=\,n(n+1)/2}
 OK	structured-envs	D	\sum_{\substack{i = 1, \dots, m \\ j = 1, \dots, n}} a_{ij} b_{ji}
 OK	structured-envs	D	\sum_{\substack{p \le x \\ p\ \mathrm{prime}}} \frac{1}{p} = \log\log x + M + o(1)
-GAP	structured-envs	D	X_n \xrightarrow{d} X, \qquad Y_n \xrightarrow{\ p\ } c
-GAP	structured-envs	D	\mathrm{CaCO_3} \xrightarrow{\ \Delta\ } \mathrm{CaO} + \mathrm{CO_2}
-GAP	structured-envs	D	0 \longrightarrow A \xrightarrow{\ f\ } B \xrightarrow{\ g\ } C \longrightarrow 0
+OK	structured-envs	D	X_n \xrightarrow{d} X, \qquad Y_n \xrightarrow{\ p\ } c
+OK	structured-envs	D	\mathrm{CaCO_3} \xrightarrow{\ \Delta\ } \mathrm{CaO} + \mathrm{CO_2}
+OK	structured-envs	D	0 \longrightarrow A \xrightarrow{\ f\ } B \xrightarrow{\ g\ } C \longrightarrow 0
 OK	structured-envs	D	f(x) \stackrel{\text{def}}{=} \limsup_{n \to \infty} f_n(x)
-GAP	structured-envs	D	A \xrightarrow[T \to \infty]{n \to \infty} B
+OK	structured-envs	D	A \xrightarrow[T \to \infty]{n \to \infty} B
 OK	structured-envs	D	|x| = \begin{cases} x, & x \ge 0 \\ -x, & x < 0 \end{cases}
 OK	structured-envs	D	f(n) = \begin{cases} n/2, & \text{if } n \text{ is even} \\ 3n+1, & \text{if } n \text{ is odd} \end{cases}
 OK	structured-envs	D	\delta_{ij} = \begin{cases} 1 & \text{if } i = j, \\ 0 & \text{if } i \ne j. \end{cases}
@@ -461,7 +461,7 @@ OK	structured-envs	D	\mathbf{x} = \begin{bmatrix} x_1 \\ x_2 \\ \vdots \\ x_n \e
 GAP	structured-envs	D	\frac{\partial(u,v)}{\partial(x,y)} = \begin{vmatrix} \dfrac{\partial u}{\partial x} & \dfrac{\partial u}{\partial y} \\[8pt] \dfrac{\partial v}{\partial x} & \dfrac{\partial v}{\partial y} \end{vmatrix}
 OK	structured-envs	D	\begin{vmatrix} 1 & x_1 & x_1^2 \\ 1 & x_2 & x_2^2 \\ 1 & x_3 & x_3^2 \end{vmatrix} = (x_2 - x_1)(x_3 - x_1)(x_3 - x_2)
 OK	structured-envs	D	\mathbf{x}^{\top} A \mathbf{x} = \begin{pmatrix} x & y \end{pmatrix} \begin{pmatrix} a & b \\ b & c \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix}
-GAP	structured-envs	D	\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix} \xrightarrow{R_2 \to R_2 - 3R_1} \begin{bmatrix} 1 & 2 \\ 0 & -2 \end{bmatrix}
+OK	structured-envs	D	\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix} \xrightarrow{R_2 \to R_2 - 3R_1} \begin{bmatrix} 1 & 2 \\ 0 & -2 \end{bmatrix}
 OK	structured-envs	D	x = \frac{\begin{vmatrix} e & b \\ f & d \end{vmatrix}}{\begin{vmatrix} a & b \\ c & d \end{vmatrix}}, \qquad y = \frac{\begin{vmatrix} a & e \\ c & f \end{vmatrix}}{\begin{vmatrix} a & b \\ c & d \end{vmatrix}}
 OK	structured-envs	D	H(f) = \begin{bmatrix} \frac{\partial^2 f}{\partial x^2} & \frac{\partial^2 f}{\partial x\,\partial y} \\ \frac{\partial^2 f}{\partial y\,\partial x} & \frac{\partial^2 f}{\partial y^2} \end{bmatrix}
 OK	structured-envs	D	\begin{align} \nabla \cdot \mathbf{E} &= \frac{\rho}{\varepsilon_0} \\ \nabla \cdot \mathbf{B} &= 0 \\ \nabla \times \mathbf{E} &= -\frac{\partial \mathbf{B}}{\partial t} \\ \nabla \times \mathbf{B} &= \mu_0 \mathbf{J} + \mu_0 \varepsilon_0 \frac{\partial \mathbf{E}}{\partial t} \end{align}
@@ -478,7 +478,7 @@ OK	structured-envs	D	\begin{gather*} \nabla \cdot \mathbf{u} = 0 \\ \rho \left( 
 OK	structured-envs	D	\begin{multline} \sum_{k=1}^{100} k = 1 + 2 + 3 + \cdots + 98 \\ + 99 + 100 = 5050 \end{multline}
 OK	structured-envs	D	\begin{split} f(x) &= \sum_{n=0}^{\infty} \frac{f^{(n)}(0)}{n!} x^n \\ &= f(0) + f'(0)x + \frac{f''(0)}{2}x^2 + \cdots \end{split}
 GAP	structured-envs	D	\begin{alignat}{2} 2x + 3y &= 7, &\qquad x - y &= 1 \\ 4x - y &= 3, &\qquad 2x + y &= 5 \end{alignat}
-GAP	structured-envs	D	\begin{array}{ccc} X & \stackrel{f}{\longrightarrow} & Y \\ \downarrow & & \downarrow \\ X/{\sim} & \xrightarrow{\bar{f}} & Y/{\sim} \end{array}
+OK	structured-envs	D	\begin{array}{ccc} X & \stackrel{f}{\longrightarrow} & Y \\ \downarrow & & \downarrow \\ X/{\sim} & \xrightarrow{\bar{f}} & Y/{\sim} \end{array}
 OK	structured-envs	D	\begin{array}{c|cc} & B & B^c \\ \hline A & 0.2 & 0.3 \\ A^c & 0.1 & 0.4 \end{array}
 OK	structured-envs	D	\begin{align*} \log(xy) &= \log x + \log y \\ \log(x/y) &= \log x - \log y \\ \log x^n &= n \log x \end{align*}
 OK	structured-envs	D	\begin{align} a_{n+1} &= a_n + d && \text{(arithmetic)} \\ g_{n+1} &= g_n \cdot r && \text{(geometric)} \end{align}

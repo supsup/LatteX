@@ -638,6 +638,20 @@ public final class MathParser {
                 MathNode base = parseArgument("\\overbrace argument");
                 return new MathNode.Stack(base, null, null, MathNode.StackKind.OVERBRACE);
             }
+            case "xrightarrow", "xleftarrow" -> {
+                // amsmath's extensible labelled arrow: an optional [below] label
+                // FIRST, then the required {above} label. The '[' is only taken as
+                // the optional argument when a matching ']' closes it (lookahead);
+                // an unclosed '[' belongs to the following content.
+                MathNode below = null;
+                if (peek().kind() == Kind.CHAR && peek().codePoint() == '['
+                        && hasMatchingRBracket()) {
+                    next(); // consume '['
+                    below = normalizeOptionalLabel(parseUntilRBracket());
+                }
+                MathNode above = parseArgument("\\" + name + " label");
+                return new MathNode.XArrow(above, below, name.equals("xleftarrow"));
+            }
             case "substack" -> {
                 return parseSubstack();
             }
@@ -822,6 +836,49 @@ public final class MathParser {
             items.add(parseComponent());
         }
         return wrap(items);
+    }
+
+    /**
+     * Lookahead for an optional-bracket argument: with the cursor ON a {@code '['}
+     * token, scans forward for a {@code ']'} at brace depth 0 (a {@code ']'} inside
+     * a {@code {...}} group belongs to that group, exactly as
+     * {@link #parseUntilRBracket} would consume it). Stops without a match at end
+     * of input or when the enclosing group closes, so an unclosed {@code '['} is
+     * left to be read as ordinary content.
+     */
+    private boolean hasMatchingRBracket() {
+        int braceDepth = 0;
+        for (int i = p + 1; i < tokens.size(); i++) {
+            Token t = tokens.get(i);
+            switch (t.kind()) {
+                case LBRACE -> braceDepth++;
+                case RBRACE -> {
+                    if (--braceDepth < 0) {
+                        return false; // the enclosing group closed first
+                    }
+                }
+                case CHAR -> {
+                    if (braceDepth == 0 && t.codePoint() == ']') {
+                        return true;
+                    }
+                }
+                case EOF -> {
+                    return false;
+                }
+                default -> {
+                    // other tokens neither open nor close the bracket scan
+                }
+            }
+        }
+        return false;
+    }
+
+    /** An empty optional label ({@code []}) reads as no label at all. */
+    private static MathNode normalizeOptionalLabel(MathNode label) {
+        if (label instanceof MathList(var items) && items.isEmpty()) {
+            return null;
+        }
+        return label;
     }
 
     /** Parses a {@code \sqrt} optional index, consuming the closing {@code ']'}. */

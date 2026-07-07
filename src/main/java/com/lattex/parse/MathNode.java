@@ -754,4 +754,37 @@ public sealed interface MathNode {
             return new Stack(base, above, newBelow, kind);
         }
     }
+
+    /**
+     * An extensible labelled arrow — amsmath's {@code xrightarrow[below]{above}}
+     * and {@code xleftarrow} (written here without the backslash). The inverse of
+     * the {@link Stack} brace kinds: where a brace stretches a <em>decoration</em>
+     * to the base width, the extensible arrow stretches the <em>base</em> (the
+     * arrow itself, via the OpenType MATH horizontal glyph construction) until the
+     * script-size labels fit over/under it with side padding — but never shorter
+     * than the arrow's natural length.
+     *
+     * <p>The arrow is not user content, so it is synthesized in layout rather than
+     * stored as a base node here; that inversion of the {@code Stack} invariant
+     * (base = user content) is why this is its own small record and not a sixth
+     * {@code StackKind}. The result has implied class {@link MathClass#REL},
+     * exactly like a plain {@code rightarrow} relation, and the arrow sits on the
+     * math axis exactly as the plain arrow glyph does.
+     *
+     * @param above the required label set at script size over the arrow
+     * @param below the optional {@code [...]} label under the arrow, or {@code null}
+     * @param left  whether the arrow points left ({@code xleftarrow})
+     */
+    record XArrow(MathNode above, MathNode below, boolean left) implements MathNode {
+        public XArrow {
+            if (above == null) {
+                throw new IllegalArgumentException("XArrow above label must not be null");
+            }
+        }
+
+        /** The label under the arrow, if present. */
+        public Optional<MathNode> belowLabel() {
+            return Optional.ofNullable(below);
+        }
+    }
 }
