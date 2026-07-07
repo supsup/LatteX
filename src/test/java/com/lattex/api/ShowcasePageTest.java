@@ -56,7 +56,11 @@ class ShowcasePageTest {
         new Item("The stack mechanism — \\underbrace, new in 0.3.0",
             "\\underbrace{1 + 2 + \\dots + n}_{n \\text{ terms}} = \\frac{n(n+1)}{2}"),
         new Item("Multi-line conditions — \\substack, new in 0.3.0",
-            "\\sum_{\\substack{0 \\le i \\le n \\\\ i \\text{ odd}}} i^2"));
+            "\\sum_{\\substack{0 \\le i \\le n \\\\ i \\text{ odd}}} i^2"),
+        new Item("A labelled definition — \\stackrel, new in 0.3.0",
+            "f(x) \\stackrel{\\text{def}}{=} \\limsup_{n \\to \\infty} f_n(x)"),
+        new Item("A commutative diagram — \\xrightarrow over an array, new in 0.3.1",
+            "\\begin{array}{ccc} X & \\stackrel{f}{\\longrightarrow} & Y \\\\ \\downarrow & & \\downarrow \\\\ X/{\\sim} & \\xrightarrow{\\bar{f}} & Y/{\\sim} \\end{array}"));
 
     @Test
     void writesShowcasePage() throws IOException {
@@ -96,7 +100,7 @@ class ShowcasePageTest {
             <p class="lede">A curated tour of the wild-corpus pass-set: every formula
             on this page is regression-locked by the coverage ratchet, so the page
             can never advertise something a change broke. Current wild coverage:
-            449/484 real-world formulas (92.8%).</p>
+            457/484 real-world formulas (94.4%).</p>
             """ + cards + "</main></body></html>\n";
         Path out = Path.of("examples", "showcase.html");
         Files.createDirectories(out.getParent());
