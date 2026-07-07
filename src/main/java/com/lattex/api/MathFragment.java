@@ -18,7 +18,10 @@ package com.lattex.api;
  * @param innerSvg  the positioned {@code <g>/<path>/<rect>} markup (no {@code
  *                  <svg>} wrapper, no aria), each element carrying its own {@code
  *                  transform}/{@code fill} exactly as {@link LatteX#render} emits it
- * @param widthPx   the horizontal advance — the fragment's ink width (maxX-minX)
+ * @param widthPx   the fragment's tight INK width (maxX-minX) — NOT an advance with
+ *                  side-bearing, so a consumer composing MULTIPLE fragments inline
+ *                  gets ink-touching (add its own spacing); for a single embedded
+ *                  fragment (math-in-labels) this is exactly the box width to reserve
  * @param heightPx  the ink extent ABOVE the baseline (a non-negative magnitude)
  * @param depthPx   the ink extent BELOW the baseline (a non-negative magnitude)
  */
