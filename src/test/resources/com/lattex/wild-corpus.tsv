@@ -39,7 +39,7 @@ OK	calculus-physics	I	\left(\frac{\partial S}{\partial V}\right)_T
 OK	calculus-physics	D	\forall \varepsilon > 0\ \exists \delta > 0 : 0 < |x-a| < \delta \implies |f(x)-L| < \varepsilon
 OK	calculus-physics	D	\int_{-\infty}^{\infty} \delta(x-a)\,f(x)\,dx = f(a)
 OK	calculus-physics	D	\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\, e^{-2\pi i x \xi}\,dx
-GAP	calculus-physics	D	\underbrace{x + x + \cdots + x}_{n\text{ times}} = nx
+OK	calculus-physics	D	\underbrace{x + x + \cdots + x}_{n\text{ times}} = nx
 OK	calculus-physics	D	f''(x) \begin{cases} > 0 & \text{concave up} \\ < 0 & \text{concave down} \end{cases}
 OK	calculus-physics	D	\nabla f = \frac{\partial f}{\partial x}\,\hat{\imath} + \frac{\partial f}{\partial y}\,\hat{\jmath} + \frac{\partial f}{\partial z}\,\hat{k}
 OK	calculus-physics	D	\nabla^2 \phi = 0
@@ -90,12 +90,12 @@ OK	calculus-physics	D	|\psi\rangle = \sum_n c_n |n\rangle, \qquad c_n = \langle 
 OK	calculus-physics	D	\langle x | p \rangle = \frac{1}{\sqrt{2\pi\hbar}}\, e^{ipx/\hbar}
 OK	calculus-physics	D	|\psi(t)\rangle = e^{-i\hat{H}t/\hbar}\,|\psi(0)\rangle
 OK	calculus-physics	D	\rho = \sum_i p_i\, |\psi_i\rangle\langle\psi_i|, \qquad \langle\hat{A}\rangle = \operatorname{Tr}(\rho\hat{A})
-GAP	calculus-physics	D	E_n^{(2)} = \sum_{\substack{m \\ m \neq n}} \frac{|\langle m|H'|n\rangle|^2}{E_n^{(0)} - E_m^{(0)}}
+OK	calculus-physics	D	E_n^{(2)} = \sum_{\substack{m \\ m \neq n}} \frac{|\langle m|H'|n\rangle|^2}{E_n^{(0)} - E_m^{(0)}}
 OK	calculus-physics	D	j = \frac{\hbar}{2mi}\left(\psi^*\frac{\partial\psi}{\partial x} - \psi\frac{\partial\psi^*}{\partial x}\right)
 OK	calculus-physics	D	\frac{d\langle x\rangle}{dt} = \frac{\langle p \rangle}{m}
 OK	calculus-physics	D	\sigma_y = \begin{pmatrix} 0 & -i \\ i & 0 \end{pmatrix}
 OK	calculus-physics	D	\langle x_f | e^{-i\hat{H}T/\hbar} | x_i \rangle = \int \mathcal{D}x(t)\, e^{iS[x]/\hbar}
-GAP	calculus-physics	D	\hat{H} = \underbrace{\frac{\hat{p}^2}{2m}}_{\text{kinetic}} + \underbrace{V(\hat{x})}_{\text{potential}}
+OK	calculus-physics	D	\hat{H} = \underbrace{\frac{\hat{p}^2}{2m}}_{\text{kinetic}} + \underbrace{V(\hat{x})}_{\text{potential}}
 OK	calculus-physics	D	\alpha = \frac{e^2}{4\pi\epsilon_0 \hbar c} \approx \frac{1}{137}
 OK	calculus-physics	D	B_\nu(T) = \frac{2h\nu^3}{c^2}\,\frac{1}{e^{h\nu/k_B T} - 1}
 OK	calculus-physics	D	Z = \sum_i e^{-\beta E_i}, \qquad \beta = \frac{1}{k_B T}
@@ -123,7 +123,7 @@ OK	calculus-physics	D	\langle\psi|\psi\rangle = \int_{-\infty}^{\infty}\!|\psi(x
 OK	calculus-physics	I	\operatorname{sinc}(x) = \frac{\sin x}{x}
 OK	calculus-physics	I	Y_\ell^m(\theta, \phi)
 OK	calculus-physics	D	e^{i\pi} + 1 = 0
-GAP	calculus-physics	D	\sum_{\substack{i,j \\ i \neq j}} J_{ij}\, S_i S_j
+OK	calculus-physics	D	\sum_{\substack{i,j \\ i \neq j}} J_{ij}\, S_i S_j
 OK	calculus-physics	D	\int_0^{2\pi}\!\!\int_0^\pi\!\!\int_0^R \rho(r)\, r^2 \sin\theta\,dr\,d\theta\,d\phi
 OK	stats-ml	I	\theta^*
 OK	stats-ml	I	\hat{y}_i
@@ -135,7 +135,7 @@ OK	stats-ml	I	p(y \mid x; \theta)
 OK	stats-ml	I	X \sim \mathcal{N}(\mu, \sigma^2)
 OK	stats-ml	I	\mathcal{O}(nd^2)
 OK	stats-ml	I	O(n \log n)
-GAP	stats-ml	I	x_1, \ldots, x_n \overset{\text{i.i.d.}}{\sim} p(x)
+OK	stats-ml	I	x_1, \ldots, x_n \overset{\text{i.i.d.}}{\sim} p(x)
 OK	stats-ml	I	\epsilon \sim \mathcal{N}(0, I)
 OK	stats-ml	I	d_{\text{model}} = 512
 OK	stats-ml	I	\eta = 3 \times 10^{-4}
@@ -191,7 +191,7 @@ OK	stats-ml	D	\min_G \max_D V(D, G) = \mathbb{E}_{x \sim p_{\text{data}}(x)}[\lo
 GAP	stats-ml	D	\log p_\theta(x) \geq \mathbb{E}_{q_\phi(z \mid x)}\left[ \log p_\theta(x \mid z) \right] - D_{\mathrm{KL}}\left( q_\phi(z \mid x) \,\|\, p(z) \right) \tag{1}
 OK	stats-ml	D	z = \mu + \sigma \odot \epsilon, \quad \epsilon \sim \mathcal{N}(0, \mathbf{I})
 OK	stats-ml	D	q(x_t \mid x_{t-1}) = \mathcal{N}\left( x_t; \sqrt{1 - \beta_t}\, x_{t-1},\; \beta_t \mathbf{I} \right)
-GAP	stats-ml	D	\mathcal{L} = \underbrace{\mathbb{E}_{q(z \mid x)}[\log p(x \mid z)]}_{\text{reconstruction}} - \underbrace{D_{\mathrm{KL}}(q(z \mid x) \,\|\, p(z))}_{\text{regularization}}
+OK	stats-ml	D	\mathcal{L} = \underbrace{\mathbb{E}_{q(z \mid x)}[\log p(x \mid z)]}_{\text{reconstruction}} - \underbrace{D_{\mathrm{KL}}(q(z \mid x) \,\|\, p(z))}_{\text{regularization}}
 OK	stats-ml	D	\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t \mid s_t)\, R(\tau) \right]
 OK	stats-ml	D	V^\pi(s) = \mathbb{E}_\pi\left[ r_{t+1} + \gamma V^\pi(s_{t+1}) \mid s_t = s \right]
 OK	stats-ml	D	Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(s, a) \right]
@@ -210,7 +210,7 @@ OK	stats-ml	D	S = \frac{1}{n-1} \sum_{i=1}^{n} (x_i - \bar{x})(x_i - \bar{x})^\t
 OK	stats-ml	D	\mathrm{PPL}(W) = \exp\left( -\frac{1}{N} \sum_{i=1}^{N} \log p(w_i \mid w_{<i}) \right)
 OK	stats-ml	D	F_1 = 2 \cdot \frac{\text{precision} \cdot \text{recall}}{\text{precision} + \text{recall}}
 OK	stats-ml	D	\hat{R}(h) = \frac{1}{n} \sum_{i=1}^{n} \mathbb{1}\{h(x_i) \neq y_i\}
-GAP	stats-ml	D	\sum_{\substack{1 \le i \le n \\ i \neq j}} w_{ij} x_j
+OK	stats-ml	D	\sum_{\substack{1 \le i \le n \\ i \neq j}} w_{ij} x_j
 OK	stats-ml	D	\alpha(x, x') = \min\left( 1, \frac{\pi(x')\, q(x \mid x')}{\pi(x)\, q(x' \mid x)} \right)
 OK	stats-ml	D	\hat{\mu}_{\mathrm{MC}} = \frac{1}{N} \sum_{i=1}^{N} f(x^{(i)}), \qquad x^{(i)} \sim p(x)
 OK	stats-ml	D	\mathbb{E}_{p}[f(x)] = \mathbb{E}_{q}\!\left[ f(x) \frac{p(x)}{q(x)} \right]
@@ -219,8 +219,8 @@ OK	stats-ml	D	f(x_k) - f(x^*) \leq \frac{L \|x_0 - x^*\|^2}{2k}
 OK	stats-ml	D	\|\nabla f(x) - \nabla f(y)\| \leq L \|x - y\|
 OK	stats-ml	D	\frac{\partial \mathcal{L}}{\partial w_{ij}} = \frac{\partial \mathcal{L}}{\partial a_j} \frac{\partial a_j}{\partial z_j} \frac{\partial z_j}{\partial w_{ij}}
 OK	stats-ml	D	\begin{aligned} f_t &= \sigma(W_f \cdot [h_{t-1}, x_t] + b_f) \\ i_t &= \sigma(W_i \cdot [h_{t-1}, x_t] + b_i) \\ o_t &= \sigma(W_o \cdot [h_{t-1}, x_t] + b_o) \end{aligned}
-GAP	stats-ml	D	\mathbb{E}\left[ (y - \hat{f}(x))^2 \right] = \underbrace{\left( \mathbb{E}[\hat{f}(x)] - f(x) \right)^2}_{\text{Bias}^2} + \underbrace{\operatorname{Var}(\hat{f}(x))}_{\text{Variance}} + \sigma^2
-GAP	stats-ml	D	\overbrace{x + x + \cdots + x}^{n \text{ times}}
+OK	stats-ml	D	\mathbb{E}\left[ (y - \hat{f}(x))^2 \right] = \underbrace{\left( \mathbb{E}[\hat{f}(x)] - f(x) \right)^2}_{\text{Bias}^2} + \underbrace{\operatorname{Var}(\hat{f}(x))}_{\text{Variance}} + \sigma^2
+OK	stats-ml	D	\overbrace{x + x + \cdots + x}^{n \text{ times}}
 OK	stats-ml	D	w \leftarrow w - \eta \left( \nabla_w \mathcal{L}(w) + \lambda w \right)
 OK	algebra-discrete	I	n \in \mathbb{N}
 OK	algebra-discrete	I	f \colon A \to B
@@ -253,7 +253,7 @@ OK	algebra-discrete	D	\mu(n) = \begin{cases} 1 & \text{if } n = 1 \\ (-1)^k & \t
 OK	algebra-discrete	D	g(n) = \sum_{d \mid n} f(d) \quad \Longleftrightarrow \quad f(n) = \sum_{d \mid n} \mu(d)\, g\!\left(\frac{n}{d}\right)
 OK	algebra-discrete	D	\zeta(s) = \sum_{n=1}^{\infty} \frac{1}{n^{s}} = \prod_{p\ \text{prime}} \frac{1}{1 - p^{-s}}
 OK	algebra-discrete	D	\pi(x) \sim \frac{x}{\ln x} \quad (x \to \infty)
-GAP	algebra-discrete	D	\sum_{\substack{p \le x \\ p \text{ prime}}} \frac{1}{p} = \ln \ln x + M + o(1)
+OK	algebra-discrete	D	\sum_{\substack{p \le x \\ p \text{ prime}}} \frac{1}{p} = \ln \ln x + M + o(1)
 OK	algebra-discrete	D	n = p_1^{e_1} p_2^{e_2} \cdots p_k^{e_k}
 OK	algebra-discrete	D	\operatorname{lcm}(a, b) = \frac{ab}{\gcd(a, b)}
 OK	algebra-discrete	D	ax + by = \gcd(a, b) \quad \text{for some } x, y \in \mathbb{Z}
@@ -298,8 +298,8 @@ OK	algebra-discrete	I	r = \text{rotation through } \frac{360^\circ}{n}
 OK	algebra-discrete	D	\operatorname{Aut}(\mathbb{Z}/n\mathbb{Z}) \cong (\mathbb{Z}/n\mathbb{Z})^{\times}
 OK	algebra-discrete	D	\begin{pmatrix} a & b \\ c & d \end{pmatrix} \in \mathrm{SL}_2(\mathbb{Z}), \qquad ad - bc = 1
 OK	algebra-discrete	D	\det \begin{pmatrix} 1 & x_1 & x_1^2 & \cdots & x_1^{n-1} \\ 1 & x_2 & x_2^2 & \cdots & x_2^{n-1} \\ \vdots & \vdots & \vdots & \ddots & \vdots \\ 1 & x_n & x_n^2 & \cdots & x_n^{n-1} \end{pmatrix} = \prod_{1 \le i < j \le n} (x_j - x_i)
-GAP	algebra-discrete	D	\underbrace{1 + 1 + \cdots + 1}_{n\ \text{times}} = n
-GAP	algebra-discrete	D	a^n = \overbrace{a \cdot a \cdots a}^{n\ \text{factors}}
+OK	algebra-discrete	D	\underbrace{1 + 1 + \cdots + 1}_{n\ \text{times}} = n
+OK	algebra-discrete	D	a^n = \overbrace{a \cdot a \cdots a}^{n\ \text{factors}}
 GAP	algebra-discrete	D	\sum_{\substack{1 \le k \le n \\ \gcd(k, n) = 1}} k = \tfrac{1}{2} n \varphi(n)
 OK	algebra-discrete	D	\begin{align*} \gcd(252, 105) &= \gcd(105, 42) \\ &= \gcd(42, 21) \\ &= \gcd(21, 0) = 21 \end{align*}
 OK	algebra-discrete	D	\begin{align} \sum_{k=0}^{n} k \binom{n}{k} &= \sum_{k=1}^{n} n \binom{n-1}{k-1} \\ &= n \sum_{j=0}^{n-1} \binom{n-1}{j} \\ &= n \, 2^{n-1} \end{align}
@@ -374,9 +374,9 @@ OK	wiki-textbook	D	\mathbf{a} \times \mathbf{b} = \begin{vmatrix} \mathbf{i} & \
 OK	wiki-textbook	D	\mathbf{a} \cdot \mathbf{b} = \|\mathbf{a}\|\,\|\mathbf{b}\|\cos\theta
 OK	wiki-textbook	I	A\mathbf{x} = \boldsymbol{\lambda}\mathbf{x}
 OK	wiki-textbook	D	I_3 = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix}
-GAP	wiki-textbook	D	x^n = \underbrace{x \cdot x \cdots x}_{n \text{ times}}
-GAP	wiki-textbook	D	\overbrace{1 + 2 + \cdots + 100}^{=5050}
-GAP	wiki-textbook	D	\sum_{\substack{1 \le i \le n \\ i \ne j}} a_i
+OK	wiki-textbook	D	x^n = \underbrace{x \cdot x \cdots x}_{n \text{ times}}
+OK	wiki-textbook	D	\overbrace{1 + 2 + \cdots + 100}^{=5050}
+OK	wiki-textbook	D	\sum_{\substack{1 \le i \le n \\ i \ne j}} a_i
 OK	wiki-textbook	D	a^2 + b^2 = c^2
 OK	wiki-textbook	D	d = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}
 OK	wiki-textbook	D	m = \frac{y_2 - y_1}{x_2 - x_1}
@@ -429,15 +429,15 @@ OK	structured-envs	D	f(x) = \frac{1}{\sigma\sqrt{2\pi}}\, e^{-\frac{1}{2}\left(\
 GAP	structured-envs	D	E = mc^2 \tag{1}
 GAP	structured-envs	D	u_t + u\,u_x = \nu\,u_{xx} \tag{3.2}
 GAP	structured-envs	D	\int_\Omega \nabla u \cdot \nabla v \,dx = \int_\Omega f v \,dx \tag{$*$}
-GAP	structured-envs	D	\underbrace{x + x + \cdots + x}_{n\ \text{times}} = nx
-GAP	structured-envs	D	\mathcal{L}(\theta,\phi;x) = \underbrace{\mathbb{E}_{q_\phi(z|x)}\left[\log p_\theta(x \mid z)\right]}_{\text{reconstruction}} - \underbrace{D_{\mathrm{KL}}\left(q_\phi(z \mid x)\,\|\,p(z)\right)}_{\text{regularization}}
-GAP	structured-envs	D	\overbrace{1 + 2 + \cdots + n}^{=\,n(n+1)/2}
-GAP	structured-envs	D	\sum_{\substack{i = 1, \dots, m \\ j = 1, \dots, n}} a_{ij} b_{ji}
-GAP	structured-envs	D	\sum_{\substack{p \le x \\ p\ \mathrm{prime}}} \frac{1}{p} = \log\log x + M + o(1)
+OK	structured-envs	D	\underbrace{x + x + \cdots + x}_{n\ \text{times}} = nx
+OK	structured-envs	D	\mathcal{L}(\theta,\phi;x) = \underbrace{\mathbb{E}_{q_\phi(z|x)}\left[\log p_\theta(x \mid z)\right]}_{\text{reconstruction}} - \underbrace{D_{\mathrm{KL}}\left(q_\phi(z \mid x)\,\|\,p(z)\right)}_{\text{regularization}}
+OK	structured-envs	D	\overbrace{1 + 2 + \cdots + n}^{=\,n(n+1)/2}
+OK	structured-envs	D	\sum_{\substack{i = 1, \dots, m \\ j = 1, \dots, n}} a_{ij} b_{ji}
+OK	structured-envs	D	\sum_{\substack{p \le x \\ p\ \mathrm{prime}}} \frac{1}{p} = \log\log x + M + o(1)
 GAP	structured-envs	D	X_n \xrightarrow{d} X, \qquad Y_n \xrightarrow{\ p\ } c
 GAP	structured-envs	D	\mathrm{CaCO_3} \xrightarrow{\ \Delta\ } \mathrm{CaO} + \mathrm{CO_2}
 GAP	structured-envs	D	0 \longrightarrow A \xrightarrow{\ f\ } B \xrightarrow{\ g\ } C \longrightarrow 0
-GAP	structured-envs	D	f(x) \stackrel{\text{def}}{=} \limsup_{n \to \infty} f_n(x)
+OK	structured-envs	D	f(x) \stackrel{\text{def}}{=} \limsup_{n \to \infty} f_n(x)
 GAP	structured-envs	D	A \xrightarrow[T \to \infty]{n \to \infty} B
 OK	structured-envs	D	|x| = \begin{cases} x, & x \ge 0 \\ -x, & x < 0 \end{cases}
 OK	structured-envs	D	f(n) = \begin{cases} n/2, & \text{if } n \text{ is even} \\ 3n+1, & \text{if } n \text{ is odd} \end{cases}

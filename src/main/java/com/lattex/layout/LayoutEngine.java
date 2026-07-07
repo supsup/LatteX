@@ -120,6 +120,7 @@ public final class LayoutEngine {
             case OperatorName opName -> operatorNameBox(opName, ctx);
             case TextRun textRun -> textRunBox(textRun, ctx);
             case Matrix matrix -> matrixBox(matrix, ctx);
+            case MathNode.Stack stack -> stackBox(stack, ctx);
             // A top-level \lx wrapper: its RenderOptions (scale / mathStyle / color)
             // are applied at the render entry by seeding the LayoutContext + the
             // emitter fill, so here we simply lay out the wrapped body. (\lx is
@@ -422,6 +423,14 @@ public final class LayoutEngine {
             // A delimited grid behaves as an Inner sub-formula (like \left..\right);
             // a bare grid (matrix/array with no fence) behaves as an Ord atom.
             case Matrix m -> m.hasDelimiters() ? MathClass.INNER : MathClass.ORD;
+            // A brace stack behaves as an Ord atom in a row (so a following binary op
+            // keeps its binary spacing); \stackrel is Rel (TeXbook); \overset/\\underset
+            // keep the base's own class.
+            case MathNode.Stack st -> switch (st.kind()) {
+                case UNDERBRACE, OVERBRACE -> MathClass.ORD;
+                case STACKREL -> MathClass.REL;
+                case OVERSET, UNDERSET -> classOf(st.base());
+            };
             case Spacing _ -> null;           // classless glue (handled by caller)
             case StyledMath sm -> classOf(sm.body()); // wrapper is transparent to spacing
         };
@@ -803,6 +812,122 @@ public final class LayoutEngine {
     }
 
     // ------------------------------------------------------------------
+    // Stack — a base with material set above and/or below it: the shared mechanism
+    // behind \\underbrace/\overbrace (a horizontally-stretched brace plus a
+    // script-size label), \stackrel/\overset (a script-size mark over the base) and
+    // \\underset (under it). Clean-room from Knuth's TeXbook: \stackrel is a \mathop
+    // carrying a limit script; \\underbrace is a \mathop whose brace decorates the
+    // base with the label attached as a limit. Every layer is centred over the base
+    // and separated by the OpenType MATH stackGapMin (stackDisplayStyleGapMin in
+    // display), the same stack* family the rule-less fraction (\atop/\binom) uses.
+    // ------------------------------------------------------------------
+
+    private static Box stackBox(MathNode.Stack st, LayoutContext ctx) {
+        var c = ctx.constants();
+        double scale = ctx.scale();
+        boolean display = ctx.style().isDisplay();
+        double gap = (display ? c.stackDisplayStyleGapMin() : c.stackGapMin()) * scale;
+
+        Box baseBox = layoutBox(st.base(), ctx);
+        // The above/below marks (and the brace labels) are set at script size.
+        Box aboveBox = st.above() == null ? null : layoutBox(st.above(), ctx.superscript());
+        Box belowBox = st.below() == null ? null : layoutBox(st.below(), ctx.subscript());
+
+        // Layers stacked outward from the base, nearest-first. The brace kinds insert
+        // a stretched curly bracket (U+23DE over / U+23DF under) between base and label.
+        List<Box> up = new ArrayList<>();
+        List<Box> down = new ArrayList<>();
+        switch (st.kind()) {
+            case OVERSET, STACKREL -> {
+                if (aboveBox != null) {
+                    up.add(aboveBox);
+                }
+            }
+            case UNDERSET -> {
+                if (belowBox != null) {
+                    down.add(belowBox);
+                }
+            }
+            case OVERBRACE -> {
+                up.add(horizontalBraceBox(ctx, 0x23DE, baseBox.width()));
+                if (aboveBox != null) {
+                    up.add(aboveBox);
+                }
+            }
+            case UNDERBRACE -> {
+                down.add(horizontalBraceBox(ctx, 0x23DF, baseBox.width()));
+                if (belowBox != null) {
+                    down.add(belowBox);
+                }
+            }
+        }
+
+        double width = baseBox.width();
+        for (Box b : up) {
+            width = Math.max(width, b.width());
+        }
+        for (Box b : down) {
+            width = Math.max(width, b.width());
+        }
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        baseBox.drawInto(glyphs, rules, (width - baseBox.width()) / 2.0, 0.0);
+
+        // Going up: each layer's ink bottom sits `gap` above the current top boundary.
+        double runUp = -baseBox.height();
+        for (Box layer : up) {
+            double layerBaseline = runUp - gap - layer.depth(); // stack-gap application (above)
+            layer.drawInto(glyphs, rules, (width - layer.width()) / 2.0, layerBaseline);
+            runUp = layerBaseline - layer.height();
+        }
+        // Going down: each layer's ink top sits `gap` below the current bottom boundary.
+        double runDown = baseBox.depth();
+        for (Box layer : down) {
+            double layerBaseline = runDown + gap + layer.height(); // stack-gap application (below)
+            layer.drawInto(glyphs, rules, (width - layer.width()) / 2.0, layerBaseline);
+            runDown = layerBaseline + layer.depth();
+        }
+
+        return new Box(glyphs, rules, width, Math.max(0.0, -runUp), Math.max(0.0, runDown));
+    }
+
+    /**
+     * Builds a horizontally-stretched brace ({@code U+23DE}/{@code U+23DF}) sized to
+     * {@code targetWidth} (user units) via the OpenType MATH horizontal glyph
+     * construction — the same {@link #stretchHorizontal} machinery a wide accent
+     * ({@code \widehat}) uses — returned as a {@link Box} whose glyphs sit on the
+     * baseline (ink from {@code yMin}..{@code yMax}). No drawn geometry: the brace is
+     * an honest font glyph (single variant or assembled parts).
+     */
+    private static Box horizontalBraceBox(LayoutContext ctx, int braceCp, double targetWidth) {
+        SfntFont font = ctx.font();
+        double scale = ctx.scale();
+        List<AccentPiece> pieces = new ArrayList<>();
+        stretchHorizontal(font, font.glyphId(braceCp), targetWidth / scale, pieces);
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        double inkYMax = Double.NEGATIVE_INFINITY;
+        double inkYMin = Double.POSITIVE_INFINITY;
+        double maxRight = 0.0;
+        for (AccentPiece p : pieces) {
+            GlyphOutline o = font.outline(p.gid());
+            glyphs.add(new PositionedGlyph(p.gid(), p.dx() * scale, 0.0, scale));
+            maxRight = Math.max(maxRight, (p.dx() + font.advanceWidth(p.gid())) * scale);
+            if (!o.isEmpty()) {
+                inkYMax = Math.max(inkYMax, o.yMax() * scale);
+                inkYMin = Math.min(inkYMin, o.yMin() * scale);
+            }
+        }
+        if (inkYMax < inkYMin) { // defensive: brace glyph had no ink
+            inkYMax = 0.0;
+            inkYMin = 0.0;
+        }
+        return new Box(glyphs, List.of(), maxRight,
+            Math.max(0.0, inkYMax), Math.max(0.0, -inkYMin));
+    }
+
+    // ------------------------------------------------------------------
     // Fenced — a \left..\right sub-formula whose delimiters are stretched to
     // span the body and centred on the math axis (reuses the stretchy-glyph
     // machinery below, exactly as the radical surd does).
@@ -886,7 +1011,7 @@ public final class LayoutEngine {
         // smallmatrix two down (script); aligned-equation environments keep each
         // equation in display style (full-size fractions, big-op limits), un-cramped.
         MathStyle cellStyle = switch (mx.kind()) {
-            case SMALL -> MathStyle.SCRIPT;
+            case SMALL, SUBSTACK -> MathStyle.SCRIPT;
             case ALIGN, GATHER, MULTLINE -> MathStyle.DISPLAY;
             default -> MathStyle.TEXT;
         };
@@ -914,7 +1039,7 @@ public final class LayoutEngine {
         // 2. Vertical stacking: row 0's baseline at local y=0, each subsequent row a
         // pitch of (prev depth + inter-row gap + this height) below.
         double interRowGap = switch (mx.kind()) {
-            case SMALL -> 0.15 * em;
+            case SMALL, SUBSTACK -> 0.15 * em;
             case ALIGN, GATHER, MULTLINE -> 0.5 * em;   // matrix gap + \jot breathing room
             default -> 0.3 * em;
         };
@@ -941,6 +1066,8 @@ public final class LayoutEngine {
             case ARRAY -> { edgeGap = 0.5 * em; colGap = 1.0 * em; }     // \arraycolsep = 5pt
             case CASES -> { edgeGap = 0.18 * em; colGap = 1.0 * em; }    // \quad between columns
             case SMALL -> { edgeGap = 0.1 * em; colGap = 0.3 * em; }
+            // A substack is a bare single column used as a limit; no edge padding.
+            case SUBSTACK -> { edgeGap = 0.0; colGap = 0.0; }
             case MATRIX -> { edgeGap = 0.18 * em; colGap = 0.5 * em; }
             // Aligned-equation environments flush to the outer margin (no edge gap);
             // ALIGN's inter-column gaps are set per-boundary below, GATHER has a
