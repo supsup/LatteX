@@ -33,11 +33,11 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 - **Zero runtime dependencies, framework-free.** No Spring, no anything. A JPMS module you drop in and call. The glyphs come from a bundled OFL math font (STIX Two Math), emitted as SVG `<path>`s — so there are no fonts to load in the browser either.
 - **SVG-native, inline-capable.** Output is a minimal, sanitizer-friendly SVG subset — only `<svg>`/`<g>`/`<path>`/`<rect>`, with glyphs as inline filled `<path>`s (no `<text>`/`<use>`/`<defs>`/`<script>`). The renderer exposes each expression's height and depth so inline math sits correctly on the text baseline.
 - **Native-image clean.** No reflection; ships GraalVM reachability metadata, and an optional standalone `lattex` native CLI.
-- **Design-for-both, ship SVG.** A layout core + pluggable output backends (mirroring TeX's own `dvisvgm`/`dvipng` driver split): SVG today, an optional raster backend later.
+- **Design-for-both, ship SVG.** A layout core + pluggable output backends (mirroring TeX's own `dvisvgm`/`dvipng` driver split): SVG natively, with **[`bin/lattex-shot`](#png-export--binlattex-shot)** for a tightly-cropped **PNG** raster (as glue over [BrewShot](https://github.com/supsup/BrewShot), no new dependency).
 
 ## Status
 
-Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, and stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`) to SVG today — **92.8% of the wild corpus** as of **0.3.0**. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **26-effect** `fx` layer are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), and per-subterm color (`\color`/`\textcolor`) to SVG today — **96.5% of the wild corpus** as of **0.4.0**. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **26-effect** `fx` layer are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
 ## The fx layer is OPTIONAL
 
@@ -53,8 +53,8 @@ LatteX.fxStylesCss()   // the styles — serve as /css/lattex-fx.css, or inline 
 Not on the JVM? They're plain jar resources — extract them at build time in any stack:
 
 ```bash
-unzip -p lattex-0.3.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
-unzip -p lattex-0.3.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
+unzip -p lattex-0.4.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
+unzip -p lattex-0.4.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
 ```
 
 Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the whole catalogue live in `examples/effects.html` — or see it without building anything: **[the fx gallery](examples/GALLERY.md)** has real-browser screenshots and GIFs of the effects in motion, captured by [BrewShot](https://github.com/supsup/BrewShot) on every full test run.
