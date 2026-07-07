@@ -267,6 +267,12 @@ public final class MathVariant {
                 yield new MathNode.Matrix(restyled, mx.columnAligns(), mx.columnRules(),
                     mx.rowRules(), mx.leftDelim(), mx.rightDelim(), mx.kind());
             }
+            // A stack: restyle the base and any above/below marks, preserving the kind.
+            case MathNode.Stack st -> new MathNode.Stack(
+                apply(style, st.base()),
+                st.above() == null ? null : apply(style, st.above()),
+                st.below() == null ? null : apply(style, st.below()),
+                st.kind());
             // A \lx wrapper is top-level-only (nested \lx is rejected by the parser),
             // so this arm is unreachable in practice; restyle the body for totality.
             case StyledMath sm -> new StyledMath(

@@ -285,6 +285,17 @@ public final class LatteX {
             case OperatorName(var name, _) -> name;
             case TextRun(var text, _) -> text;
             case Matrix m -> describeMatrix(m);
+            case MathNode.Stack st -> {
+                String base = describe(st.base());
+                yield switch (st.kind()) {
+                    case UNDERBRACE -> st.below() == null ? base + " under a brace"
+                        : base + " under a brace, labelled " + describe(st.below());
+                    case OVERBRACE -> st.above() == null ? base + " under an overbrace"
+                        : base + " with an overbrace labelled " + describe(st.above());
+                    case STACKREL, OVERSET -> describe(st.above()) + " over " + base;
+                    case UNDERSET -> base + " under " + describe(st.below());
+                };
+            }
             case StyledMath sm -> describe(sm.body()); // the wrapper is transparent to a11y
         };
     }

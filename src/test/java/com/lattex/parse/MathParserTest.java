@@ -108,6 +108,17 @@ class MathParserTest {
                 }
                 yield sb.append(')').toString();
             }
+            case MathNode.Stack st -> {
+                StringBuilder sb = new StringBuilder("Stk[").append(st.kind()).append("](")
+                    .append(pp(st.base()));
+                if (st.above() != null) {
+                    sb.append(",^").append(pp(st.above()));
+                }
+                if (st.below() != null) {
+                    sb.append(",_").append(pp(st.below()));
+                }
+                yield sb.append(')').toString();
+            }
             case MathNode.StyledMath sm -> "Lx(" + pp(sm.body()) + ")";
         };
     }
@@ -506,5 +517,65 @@ class MathParserTest {
     void badDelimiter() {
         assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("\\left x \\right y"));
+    }
+
+    // ------------------------------------------------------------------
+    // Stack mechanism: \\underbrace \overbrace \stackrel \overset \\underset
+    // (a base with material above/below) and \substack (single-column grid).
+    // ------------------------------------------------------------------
+
+    @Test
+    void oversetPutsAnnotationAbove() {
+        // \overset{above}{base}: base keeps its class, annotation in ^ slot.
+        assertEquals("Stk[OVERSET](A(=,REL),^A(a,ORD))",
+            pp(MathParser.parse("\\overset{a}{=}")));
+    }
+
+    @Test
+    void undersetPutsAnnotationBelow() {
+        assertEquals("Stk[UNDERSET](A(y,ORD),_A(x,ORD))",
+            pp(MathParser.parse("\\underset{x}{y}")));
+    }
+
+    @Test
+    void stackrelIsAStackKind() {
+        assertEquals("Stk[STACKREL](A(=,REL),^Txt[ROMAN](def))",
+            pp(MathParser.parse("\\stackrel{\\text{def}}{=}")));
+    }
+
+    @Test
+    void underbraceTakesSubscriptLabelAsUnderMark() {
+        // The _ label is attached as an under-limit into the below slot.
+        assertEquals("Stk[UNDERBRACE](L(A(a,ORD) A(b,ORD)),_A(n,ORD))",
+            pp(MathParser.parse("\\underbrace{ab}_{n}")));
+    }
+
+    @Test
+    void overbraceTakesSuperscriptLabelAsOverMark() {
+        assertEquals("Stk[OVERBRACE](L(A(a,ORD) A(b,ORD)),^A(n,ORD))",
+            pp(MathParser.parse("\\overbrace{ab}^{n}")));
+    }
+
+    @Test
+    void bareUnderbraceHasNoLabel() {
+        assertEquals("Stk[UNDERBRACE](A(x,ORD))",
+            pp(MathParser.parse("\\underbrace{x}")));
+    }
+
+    @Test
+    void substackIsASingleColumnCentredGrid() {
+        assertEquals("Mat[SUBSTACK](A(a,ORD)\\\\A(b,ORD))",
+            pp(MathParser.parse("\\substack{a\\\\b}")));
+    }
+
+    @Test
+    void substackNeedsABraceArgument() {
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\substack a"));
+    }
+
+    @Test
+    void overbraceRejectsDoubleLabel() {
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\overbrace{x}^{a}^{b}"));
     }
 }

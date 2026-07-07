@@ -329,7 +329,45 @@ public final class MathParser {
         if (nucleus instanceof Atom op && op.mathClass() == MathClass.OP) {
             return parseBigOperator(op);
         }
+        // \\underbrace/\overbrace take their label as a following limit script
+        // (^ above the brace, _ below it), exactly as a large operator takes limits.
+        if (nucleus instanceof MathNode.Stack st && st.takesLimitLabel()) {
+            return parseStackLabel(st);
+        }
         return parseScripts(nucleus);
+    }
+
+    /**
+     * Attaches a {@code \\underbrace}/{@code \overbrace} label from a following
+     * {@code ^} (above the brace) and/or {@code _} (below it), mirroring
+     * {@link #parseBigOperator}'s limit loop. The label sits at script size in
+     * layout. A bare {@code \\underbrace{x}} with no script is left label-less.
+     */
+    private MathNode parseStackLabel(MathNode.Stack st) {
+        MathNode.Stack out = st;
+        while (true) {
+            Kind k = peek().kind();
+            if (k == Kind.SUP) {
+                if (out.above() != null) {
+                    throw new MathSyntaxException("Double superscript on \\" + braceCommand(st));
+                }
+                next();
+                out = out.withAbove(parseScriptArg("brace label"));
+            } else if (k == Kind.SUB) {
+                if (out.below() != null) {
+                    throw new MathSyntaxException("Double subscript on \\" + braceCommand(st));
+                }
+                next();
+                out = out.withBelow(parseScriptArg("brace label"));
+            } else {
+                break;
+            }
+        }
+        return out;
+    }
+
+    private static String braceCommand(MathNode.Stack st) {
+        return st.kind() == MathNode.StackKind.OVERBRACE ? "overbrace" : "underbrace";
     }
 
     /**
@@ -571,6 +609,38 @@ public final class MathParser {
                 MathNode radicand = parseArgument("\\sqrt argument");
                 return new Radical(radicand, index);
             }
+            case "overset" -> {
+                // \overset{above}{base}: above at script size over the base, base
+                // keeps its class (TeXbook \overset). Arguments read eagerly.
+                MathNode above = parseArgument("\\overset annotation");
+                MathNode base = parseArgument("\\overset base");
+                return new MathNode.Stack(base, above, null, MathNode.StackKind.OVERSET);
+            }
+            case "underset" -> {
+                MathNode below = parseArgument("\\underset annotation");
+                MathNode base = parseArgument("\\underset base");
+                return new MathNode.Stack(base, null, below, MathNode.StackKind.UNDERSET);
+            }
+            case "stackrel" -> {
+                // \stackrel{above}{rel}: like \overset but the result is class Rel.
+                MathNode above = parseArgument("\\stackrel annotation");
+                MathNode base = parseArgument("\\stackrel base");
+                return new MathNode.Stack(base, above, null, MathNode.StackKind.STACKREL);
+            }
+            case "underbrace" -> {
+                // The braced expression; its _ label is attached later as a limit
+                // (see parseComponent -> parseStackLabel), so the brace stack can be
+                // written bare (\\underbrace{x}) or labelled (\\underbrace{x}_{n}).
+                MathNode base = parseArgument("\\underbrace argument");
+                return new MathNode.Stack(base, null, null, MathNode.StackKind.UNDERBRACE);
+            }
+            case "overbrace" -> {
+                MathNode base = parseArgument("\\overbrace argument");
+                return new MathNode.Stack(base, null, null, MathNode.StackKind.OVERBRACE);
+            }
+            case "substack" -> {
+                return parseSubstack();
+            }
             case "phantom" -> {
                 // Occupies the content's full box (width + height + depth), no ink.
                 return new Phantom(parseGroup(), true, true);
@@ -687,6 +757,54 @@ public final class MathParser {
                 throw new MathSyntaxException("Unknown command: \\" + name);
             }
         }
+    }
+
+    /**
+     * Parses {@code \substack{row \\ row \\ ...}} into a single-column, centred,
+     * script-size grid (a {@link Matrix} of {@link MatrixKind#SUBSTACK}). Clean-room
+     * from the TeXbook: {@code \substack} is a one-column {@code \halign} set in
+     * script style with a tightened baseline, used to stack several conditions under
+     * a big-operator limit ({@code \sum_{\substack{i<j \\ i \ne k}}}). Rows are
+     * {@code \\}-separated; each row is an ordinary math list.
+     */
+    private MathNode parseSubstack() {
+        if (peek().kind() != Kind.LBRACE) {
+            throw new MathSyntaxException(
+                "\\substack expects a '{...}' argument but found " + describe(peek()));
+        }
+        next(); // consume '{'
+        List<List<MathNode>> rows = new ArrayList<>();
+        List<MathNode> row = new ArrayList<>();
+        while (true) {
+            Token t = peek();
+            if (t.kind() == Kind.RBRACE) {
+                next(); // consume '}'
+                break;
+            }
+            if (t.kind() == Kind.EOF) {
+                throw new MathSyntaxException("Unbalanced brace in \\substack argument");
+            }
+            if (isCommand(t, "\\") || isCommand(t, "cr")) {
+                next();
+                rows.add(List.of(wrap(row)));
+                row = new ArrayList<>();
+                continue;
+            }
+            row.add(parseComponent());
+        }
+        // A trailing row (content after the last \\, or the sole row) — a bare
+        // trailing \\ adds no phantom row, matching LaTeX's \halign.
+        if (!row.isEmpty() || rows.isEmpty()) {
+            rows.add(List.of(wrap(row)));
+        }
+        List<ColumnAlign> aligns = List.of(ColumnAlign.CENTER);
+        List<Integer> vlines = List.of(0, 0);
+        List<RowRule> rowRules = new ArrayList<>(rows.size() + 1);
+        for (int i = 0; i <= rows.size(); i++) {
+            rowRules.add(RowRule.NONE);
+        }
+        return new Matrix(rows, aligns, vlines, rowRules,
+            Fenced.NULL_DELIMITER, Fenced.NULL_DELIMITER, MatrixKind.SUBSTACK);
     }
 
     /** Parses the body of {@code \left..\right}, consuming the {@code \right}. */

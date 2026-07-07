@@ -554,6 +554,12 @@ public sealed interface MathNode {
         MATRIX,
         /** {@code smallmatrix} — cells in script style, tight spacing. */
         SMALL,
+        /**
+         * {@code \substack{a\\b}} — a single centred column set in script style with a
+         * tightened baseline and no edge padding, used to stack conditions under a
+         * big-operator limit.
+         */
+        SUBSTACK,
         /** {@code array} — user column spec (l/c/r + {@code |} rules), {@code \hline}s. */
         ARRAY,
         /** {@code cases} — a left brace over two left-aligned columns, wide gap. */
@@ -641,6 +647,111 @@ public sealed interface MathNode {
         /** The number of columns in the (rectangular) grid. */
         public int columnCount() {
             return columnAligns.size();
+        }
+    }
+
+    /**
+     * The kind of a {@link Stack} — a base with material set above and/or below it,
+     * the shared clean-room mechanism behind five LaTeX commands. Selects both the
+     * implied math class of the result and whether a horizontally-stretched brace
+     * is drawn between the base and its label.
+     */
+    enum StackKind {
+        /**
+         * {@code \\underbrace{base}_{label}} — a curly brace (U+23DF, stretched to the
+         * base width via the OpenType MATH horizontal construction) under the base,
+         * with the {@code _} label at script size below the brace. Implied class Ord.
+         */
+        UNDERBRACE,
+        /**
+         * {@code \overbrace{base}^{label}} — a curly brace (U+23DE, horizontally
+         * stretched) over the base, with the {@code ^} label at script size above the
+         * brace. Implied class Ord.
+         */
+        OVERBRACE,
+        /**
+         * {@code \stackrel{above}{base}} — {@code above} at script size over a
+         * relation base (TeXbook: {@code \mathrel{\mathop{base}\limits^{above}}}). The
+         * result has implied class Rel, regardless of the base's own class.
+         */
+        STACKREL,
+        /**
+         * {@code \overset{above}{base}} — like {@link #STACKREL} but the result keeps
+         * the base's own math class.
+         */
+        OVERSET,
+        /**
+         * {@code \\underset{below}{base}} — {@code below} at script size under the base;
+         * the result keeps the base's own math class.
+         */
+        UNDERSET
+    }
+
+    /**
+     * A base with material stacked <em>above</em> and/or <em>below</em> it — the
+     * shared layout mechanism behind {@code \\underbrace}/{@code \overbrace} (a
+     * stretched brace plus a script-size label), {@code \stackrel}/{@code \overset}
+     * (a script-size mark over the base), and {@code \\underset} (a mark under it).
+     * Clean-room from Knuth's TeXbook: {@code \stackrel} and friends are a
+     * {@code \mathop} carrying limit-style scripts, and {@code \\underbrace} is a
+     * {@code \mathop} whose brace is an over/under-line-like decoration with the
+     * label attached as a limit.
+     *
+     * <p>{@link #above} and {@link #below} are optional (nullable) — a bare
+     * {@code \\underbrace{x}} carries neither until its {@code _} label is attached
+     * during parsing (the brace kinds take their label as a limit script, exactly as
+     * a {@link BigOperator} takes its limits). {@link #kind} selects the implied math
+     * class (see {@link #impliedClass()}) and whether a brace is drawn.
+     *
+     * @param base  the nucleus the material stacks around (set at the current style)
+     * @param above the mark stacked above, at script size, or {@code null}
+     * @param below the mark stacked below, at script size, or {@code null}
+     * @param kind  the stack flavour
+     */
+    record Stack(MathNode base, MathNode above, MathNode below, StackKind kind)
+            implements MathNode {
+        public Stack {
+            if (base == null) {
+                throw new IllegalArgumentException("Stack base must not be null");
+            }
+            if (kind == null) {
+                throw new IllegalArgumentException("Stack kind must not be null");
+            }
+        }
+
+        /** The mark stacked above the base, if present. */
+        public Optional<MathNode> aboveMark() {
+            return Optional.ofNullable(above);
+        }
+
+        /** The mark stacked below the base, if present. */
+        public Optional<MathNode> belowMark() {
+            return Optional.ofNullable(below);
+        }
+
+        /** Whether a horizontally-stretched brace is drawn (the brace kinds). */
+        public boolean hasBrace() {
+            return kind == StackKind.UNDERBRACE || kind == StackKind.OVERBRACE;
+        }
+
+        /**
+         * Whether this stack takes its label as a following {@code ^}/{@code _} limit
+         * script (the brace kinds), the way a large operator takes its limits. The
+         * {@code \stackrel}/{@code \overset}/{@code \\underset} kinds instead read both
+         * arguments eagerly at parse time, so they never take a trailing script.
+         */
+        public boolean takesLimitLabel() {
+            return hasBrace();
+        }
+
+        /** With {@code above} replaced (used to attach a brace kind's {@code ^} label). */
+        public Stack withAbove(MathNode newAbove) {
+            return new Stack(base, newAbove, below, kind);
+        }
+
+        /** With {@code below} replaced (used to attach a brace kind's {@code _} label). */
+        public Stack withBelow(MathNode newBelow) {
+            return new Stack(base, above, newBelow, kind);
         }
     }
 }
