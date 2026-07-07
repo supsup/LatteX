@@ -86,10 +86,12 @@ class XArrowLayoutTest {
         double xarrow = width("\\xrightarrow{d}");
         assertTrue(xarrow > natural,
             "xrightarrow{d} must exceed the natural arrow (" + natural + "), got " + xarrow);
-        // Even an empty label never shrinks the arrow below its natural length.
+        // Even an empty label never shrinks the arrow below its natural length —
+        // and it is STRICTLY wider, by the side padding (2*pad), so a mutant that
+        // drops the padding is caught (Conf lens lattex/66: >= was vacuous).
         double bare = width("\\xrightarrow{}");
-        assertTrue(bare >= natural,
-            "a bare xrightarrow{} is never shorter than the natural arrow ("
+        assertTrue(bare > natural,
+            "a bare xrightarrow{} is padded strictly wider than the natural arrow ("
                 + natural + "), got " + bare);
     }
 
