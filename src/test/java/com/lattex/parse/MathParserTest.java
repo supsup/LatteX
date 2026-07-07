@@ -145,6 +145,48 @@ class MathParserTest {
     }
 
     @Test
+    void primeIsRaisedSuperscript() {
+        // Math-mode ' is TeX's ^{\prime}: a superscript holding the prime glyph
+        // (U+2032 ′), NOT a baseline apostrophe.
+        assertEquals("SS(A(f,ORD),^A(U+2032,ORD))", pp(MathParser.parse("f'")));
+    }
+
+    @Test
+    void primesStackInSourceOrder() {
+        // A run of primes accumulates into ONE superscript, in source order.
+        assertEquals("SS(A(f,ORD),^L(A(U+2032,ORD) A(U+2032,ORD)))",
+            pp(MathParser.parse("f''")));
+    }
+
+    @Test
+    void primeThenExplicitSuperscriptMerge() {
+        // f'^2 : prime and the explicit superscript merge, prime first.
+        assertEquals("SS(A(f,ORD),^L(A(U+2032,ORD) A(2,ORD)))",
+            pp(MathParser.parse("f'^2")));
+    }
+
+    @Test
+    void explicitSuperscriptThenPrimeMerge() {
+        // f^{2}' : explicit superscript then prime, source order — NOT a double
+        // superscript error.
+        assertEquals("SS(A(f,ORD),^L(A(2,ORD) A(U+2032,ORD)))",
+            pp(MathParser.parse("f^{2}'")));
+    }
+
+    @Test
+    void primeWithSubscript() {
+        // f'_2 : prime is the superscript, _2 the subscript.
+        assertEquals("SS(A(f,ORD),^A(U+2032,ORD),_A(2,ORD))",
+            pp(MathParser.parse("f'_2")));
+    }
+
+    @Test
+    void twoExplicitSuperscriptsStillThrow() {
+        // Primes merge with one ^, but two explicit carets still error.
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("f^2^3"));
+    }
+
+    @Test
     void fraction() {
         assertEquals("Frac(L(A(a,ORD) A(+,BIN) A(b,ORD)),A(c,ORD))",
             pp(MathParser.parse("\\frac{a+b}{c}")));

@@ -332,18 +332,32 @@ public final class MathParser {
         return parseScripts(nucleus);
     }
 
-    /** Attaches an optional {@code ^}/{@code _} pair to an ordinary nucleus. */
+    /**
+     * Attaches an optional {@code ^}/{@code _} pair to an ordinary nucleus.
+     *
+     * <p>A math-mode {@code '} is TeX's {@code ^{\prime}}: it contributes a
+     * prime glyph ({@code U+2032 ′}) to the superscript. Primes accumulate in
+     * source order and merge with a single explicit {@code ^} into one
+     * superscript, so {@code f'} → sup {@code ′}, {@code f''} → sup
+     * {@code (′ ′)}, {@code f'^2} → sup {@code (′ 2)}, {@code f^{2}'} → sup
+     * {@code (2 ′)}. Two explicit carets still error as a double superscript.
+     */
     private MathNode parseScripts(MathNode base) {
-        MathNode sup = null;
+        List<MathNode> supItems = new ArrayList<>();
+        boolean explicitSup = false;
         MathNode sub = null;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.SUP) {
-                if (sup != null) {
+            if (k == Kind.CHAR && peek().codePoint() == '\'') {
+                next();
+                supItems.add(new Atom(0x2032, MathClass.ORD));
+            } else if (k == Kind.SUP) {
+                if (explicitSup) {
                     throw new MathSyntaxException("Double superscript ('^' after '^')");
                 }
                 next();
-                sup = parseScriptArg("superscript");
+                explicitSup = true;
+                supItems.add(parseScriptArg("superscript"));
             } else if (k == Kind.SUB) {
                 if (sub != null) {
                     throw new MathSyntaxException("Double subscript ('_' after '_')");
@@ -354,6 +368,7 @@ public final class MathParser {
                 break;
             }
         }
+        MathNode sup = supItems.isEmpty() ? null : wrap(supItems);
         if (sup == null && sub == null) {
             return base;
         }
