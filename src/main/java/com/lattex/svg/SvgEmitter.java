@@ -60,35 +60,81 @@ public final class SvgEmitter {
             .append(" role=\"img\"")
             .append(" aria-label=\"").append(escape(ariaLabel)).append("\">\n");
 
-        svg.append("  <g fill=\"").append(fill).append("\">\n");
+        emitInner(svg, layout, font, fill, 0.0, 0.0);
+        svg.append("</svg>");
+        return svg.toString();
+    }
+
+    /**
+     * Emits the INNER markup for a laid-out formula as an embeddable fragment —
+     * the {@code <g>/<path>/<rect>} elements WITHOUT the surrounding {@code <svg>}
+     * wrapper, viewBox, or aria — using the default black fill.
+     *
+     * @see #emitFragment(Layout, SfntFont, String)
+     */
+    public static String emitFragment(Layout layout, SfntFont font) {
+        return emitFragment(layout, font, GLYPH_FILL);
+    }
+
+    /**
+     * Emits the INNER markup for a laid-out formula as an embeddable fragment: the
+     * same positioned {@code <g>/<path>/<rect>} elements {@link #emit} produces, but
+     * WITHOUT the {@code <svg>} wrapper / viewBox / aria, and re-based so the
+     * fragment's local origin {@code (0,0)} is the LEFT END OF THE BASELINE — x=0 at
+     * the left ink edge ({@code minX}), y=0 at the baseline (already the layout
+     * origin). Coordinates are shifted by {@code -minX} in x (none in y); the glyph
+     * {@code <path d>} data is unchanged, so the fragment paints glyphs and rules
+     * IDENTICALLY to {@link #emit} (no forked emit path). Stays within the same
+     * {@code g/path/rect} alphabet.
+     *
+     * @param fill the default group {@code fill} value (an allow-listed literal); a
+     *             per-glyph {@code \color}/{@code \textcolor} override still wins.
+     */
+    public static String emitFragment(Layout layout, SfntFont font, String fill) {
+        StringBuilder out = new StringBuilder();
+        // Re-base x so the left ink edge lands at x=0; the baseline is already y=0.
+        emitInner(out, layout, font, fill, -layout.minX(), 0.0);
+        return out.toString();
+    }
+
+    /**
+     * The shared inner-element emission consumed by BOTH {@link #emit} (wrapped in
+     * {@code <svg>}) and {@link #emitFragment} (bare) — one producer, so the full
+     * document and the embeddable fragment cannot diverge in how they paint glyphs
+     * and rules. Each glyph/rule is translated by {@code (dx, dy)} on top of its
+     * laid-out position; the per-glyph outline {@code d} and every {@code fill}
+     * (default group fill + {@code \color}/{@code \textcolor} overrides) are emitted
+     * unchanged.
+     */
+    static void emitInner(StringBuilder out, Layout layout, SfntFont font, String fill,
+                          double dx, double dy) {
+        out.append("  <g fill=\"").append(fill).append("\">\n");
         for (PositionedGlyph g : layout.glyphs()) {
             String d = GlyphPath.toPathData(font.outline(g.glyphId()));
             if (d.isEmpty()) {
                 continue; // whitespace / inkless glyph
             }
-            svg.append("    <path d=\"").append(d).append("\"");
+            out.append("    <path d=\"").append(d).append("\"");
             if (g.color() != null) {
                 // \color/\textcolor override; svgValue() is an allow-listed fill literal.
-                svg.append(" fill=\"").append(g.color().svgValue()).append("\"");
+                out.append(" fill=\"").append(g.color().svgValue()).append("\"");
             }
-            svg.append(" transform=\"translate(")
-                .append(num(g.originX())).append(' ').append(num(g.baselineY()))
+            out.append(" transform=\"translate(")
+                .append(num(g.originX() + dx)).append(' ').append(num(g.baselineY() + dy))
                 .append(") scale(").append(num(g.scale())).append(' ').append(num(-g.scale()))
                 .append(")\"/>\n");
         }
         for (Rule r : layout.rules()) {
-            svg.append("    <rect x=\"").append(num(r.x())).append("\"")
-                .append(" y=\"").append(num(r.y())).append("\"")
+            out.append("    <rect x=\"").append(num(r.x() + dx)).append("\"")
+                .append(" y=\"").append(num(r.y() + dy)).append("\"")
                 .append(" width=\"").append(num(r.width())).append("\"")
                 .append(" height=\"").append(num(r.height())).append("\"");
             if (r.color() != null) {
-                svg.append(" fill=\"").append(r.color().svgValue()).append("\"");
+                out.append(" fill=\"").append(r.color().svgValue()).append("\"");
             }
-            svg.append("/>\n");
+            out.append("/>\n");
         }
-        svg.append("  </g>\n");
-        svg.append("</svg>");
-        return svg.toString();
+        out.append("  </g>\n");
     }
 
     /** Locale-independent compact number: integers plain, else up to 4 dp. */
