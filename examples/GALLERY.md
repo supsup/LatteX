@@ -1,5 +1,8 @@
 # LatteX — the fx gallery
 
+*(Looking for the math itself rather than the effects? The renderer tour is
+[showcase.html](showcase.html) — every formula on it ratchet-locked.)*
+
 Every image here is captured fresh by [BrewShot](https://github.com/supsup/BrewShot)
 (the real-browser harness these tests run on) each time the full suite runs.
 
