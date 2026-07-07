@@ -701,7 +701,7 @@ public sealed interface MathNode {
      * {@code \\underbrace{x}} carries neither until its {@code _} label is attached
      * during parsing (the brace kinds take their label as a limit script, exactly as
      * a {@link BigOperator} takes its limits). {@link #kind} selects the implied math
-     * class (see {@link #impliedClass()}) and whether a brace is drawn.
+     * class and whether a brace is drawn.
      *
      * @param base  the nucleus the material stacks around (set at the current style)
      * @param above the mark stacked above, at script size, or {@code null}
