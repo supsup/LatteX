@@ -219,8 +219,8 @@ real production `/docs` integration ran, minus its framework:
 1. **Get the two assets out of the jar you render with — at build time.**
    They're plain jar resources, no JVM needed:
    ```bash
-   unzip -p lattex-0.2.1.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
-   unzip -p lattex-0.2.1.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
+   unzip -p lattex-0.3.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
+   unzip -p lattex-0.3.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
    ```
    Extract from the **same jar version** every build — a cached/vendored copy is
    how the runtime and the renderer drift apart (the class of bug that bites

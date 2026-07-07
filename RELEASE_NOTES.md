@@ -4,6 +4,22 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## 0.3.0 · 2026-07-07 — the stack mechanism: real assembled braces & stacked annotations
+
+One mechanism closed the largest remaining fidelity gap in the wild corpus — **wild render coverage 88.4% → 92.8%**, 21 `GAP → OK` ratchet flips from a single primitive:
+
+- **`\underbrace` / `\overbrace`** — the horizontal brace is *real*, not drawn geometry: STIX exposes `HorizGlyphVariants`/assembly for U+23DE / U+23DF, and the brace rides the same `stretchHorizontal` path as `\widehat` (correct assembly at every width). A following `_` / `^` feeds the annotation slot beneath/above the brace.
+- **`\substack`** — a single-column stacked argument (`MatrixKind.SUBSTACK`); it *is* a one-column `halign`, so it reuses the matrix machinery. Textbook rendering inside `\sum` limits.
+- **`\stackrel` / `\overset` / `\underset`** — a base with a scriptstyle annotation stacked above/below, with TeXbook classes: braces are ORD, `\stackrel` is REL, `\overset`/`\underset` inherit the base's class (spacing stays correct in context).
+
+All ride the shared `Stack(base, above, below, kind)` node + `stackBox`; the annotation-routing mirrors `parseBigOperator` (an `Op`-like `_`/`^` binding). BrewShot-verified: `\underbrace`/`\overbrace` assemblies stretch correctly and `\substack`-in-limits reads as the textbook. A gap-term-delete mutant fails the clearance test (the stack spacing is under test, not vacuous).
+
+> `\underbrace{a_0 + a_1 + \dots + a_n}_{n+1\ \text{terms}}` &nbsp;·&nbsp; `\sum_{\substack{0 \le i \le n \\ i\ \text{odd}}} i` &nbsp;·&nbsp; `A \stackrel{\text{def}}{=} B`
+
+Everything from 0.2.1 (the 26-effect fx catalogue, `thread`, placement-safe motion) ships unchanged. The full wild-corpus ratchet + CI gate (GitHub Actions, incl. javadoc + BrewShot pins) guards this cut.
+
+---
+
 ## 0.2.1 · 2026-07-06 — the smoke-sweep: placement-safe effects, scroll-aware shows & `thread`
 
 ### `thread` — the first *semantic* effect (26th in the catalogue)

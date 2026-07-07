@@ -31,7 +31,7 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 ## Status
 
-Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, and delimiters to SVG today. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **25-effect** `fx` layer are on the mainline as of **0.2.0**, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, and stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`) to SVG today — **92.8% of the wild corpus** as of **0.3.0**. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **26-effect** `fx` layer are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
 ## The fx layer is OPTIONAL
 
@@ -47,8 +47,8 @@ LatteX.fxStylesCss()   // the styles — serve as /css/lattex-fx.css, or inline 
 Not on the JVM? They're plain jar resources — extract them at build time in any stack:
 
 ```bash
-unzip -p lattex-0.2.1.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
-unzip -p lattex-0.2.1.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
+unzip -p lattex-0.3.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
+unzip -p lattex-0.3.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
 ```
 
 Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the whole catalogue live in `examples/effects.html` — or see it without building anything: **[the fx gallery](examples/GALLERY.md)** has real-browser screenshots and GIFs of the effects in motion, captured by [BrewShot](https://github.com/supsup/BrewShot) on every full test run.
