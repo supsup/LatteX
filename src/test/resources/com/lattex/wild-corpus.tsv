@@ -54,7 +54,7 @@ OK	calculus-physics	D	\mathbf{F} = m\mathbf{a} = m\frac{d^2\mathbf{r}}{dt^2}
 OK	calculus-physics	D	F = G\frac{m_1 m_2}{r^2}
 OK	calculus-physics	D	T^2 = \frac{4\pi^2}{GM}a^3
 OK	calculus-physics	D	W = \int_C \mathbf{F}\cdot d\mathbf{r}
-GAP	calculus-physics	D	W_{\text{net}} = \Delta K = \tfrac{1}{2}mv_f^2 - \tfrac{1}{2}mv_i^2
+OK	calculus-physics	D	W_{\text{net}} = \Delta K = \tfrac{1}{2}mv_f^2 - \tfrac{1}{2}mv_i^2
 OK	calculus-physics	D	T = \frac{1}{2}m\left(\dot{x}^2 + \dot{y}^2 + \dot{z}^2\right)
 OK	calculus-physics	D	\frac{d}{dt}\left(\frac{\partial L}{\partial \dot{q}_i}\right) - \frac{\partial L}{\partial q_i} = 0
 OK	calculus-physics	D	H = \sum_i p_i \dot{q}_i - L
@@ -269,7 +269,7 @@ OK	algebra-discrete	D	\sum_{n \ge 0} F_n x^n = \frac{x}{1 - x - x^2}
 OK	algebra-discrete	D	A'(x) = \sum_{n \ge 1} n a_n x^{n-1}
 OK	algebra-discrete	D	\left| \bigcup_{i=1}^{n} A_i \right| = \sum_{\emptyset \neq J \subseteq \{1, \dots, n\}} (-1)^{|J|+1} \left| \bigcap_{j \in J} A_j \right|
 OK	algebra-discrete	I	E = \{ n \in \mathbb{Z} \mid n = 2k \text{ for some } k \in \mathbb{Z} \}
-GAP	algebra-discrete	I	\mathbb{Q} = \left\{ \tfrac{p}{q} : p, q \in \mathbb{Z},\ q \ne 0 \right\}
+OK	algebra-discrete	I	\mathbb{Q} = \left\{ \tfrac{p}{q} : p, q \in \mathbb{Z},\ q \ne 0 \right\}
 OK	algebra-discrete	D	\neg (p \land q) \equiv \neg p \lor \neg q
 GAP	algebra-discrete	D	\forall x\, \forall y\, \bigl( x < y \implies \exists z\, (x < z \land z < y) \bigr)
 OK	algebra-discrete	D	x \oplus y = (x \lor y) \land \neg (x \land y)
@@ -300,7 +300,7 @@ OK	algebra-discrete	D	\begin{pmatrix} a & b \\ c & d \end{pmatrix} \in \mathrm{S
 OK	algebra-discrete	D	\det \begin{pmatrix} 1 & x_1 & x_1^2 & \cdots & x_1^{n-1} \\ 1 & x_2 & x_2^2 & \cdots & x_2^{n-1} \\ \vdots & \vdots & \vdots & \ddots & \vdots \\ 1 & x_n & x_n^2 & \cdots & x_n^{n-1} \end{pmatrix} = \prod_{1 \le i < j \le n} (x_j - x_i)
 OK	algebra-discrete	D	\underbrace{1 + 1 + \cdots + 1}_{n\ \text{times}} = n
 OK	algebra-discrete	D	a^n = \overbrace{a \cdot a \cdots a}^{n\ \text{factors}}
-GAP	algebra-discrete	D	\sum_{\substack{1 \le k \le n \\ \gcd(k, n) = 1}} k = \tfrac{1}{2} n \varphi(n)
+OK	algebra-discrete	D	\sum_{\substack{1 \le k \le n \\ \gcd(k, n) = 1}} k = \tfrac{1}{2} n \varphi(n)
 OK	algebra-discrete	D	\begin{align*} \gcd(252, 105) &= \gcd(105, 42) \\ &= \gcd(42, 21) \\ &= \gcd(21, 0) = 21 \end{align*}
 OK	algebra-discrete	D	\begin{align} \sum_{k=0}^{n} k \binom{n}{k} &= \sum_{k=1}^{n} n \binom{n-1}{k-1} \\ &= n \sum_{j=0}^{n-1} \binom{n-1}{j} \\ &= n \, 2^{n-1} \end{align}
 OK	algebra-discrete	I	\mathbf{x} = (x_1, \ldots, x_n) \in \mathbb{F}_2^{n}
@@ -321,7 +321,7 @@ OK	wiki-textbook	D	\frac{a}{\sin A} = \frac{b}{\sin B} = \frac{c}{\sin C} = 2R
 OK	wiki-textbook	D	\sin(\alpha \pm \beta) = \sin\alpha\cos\beta \pm \cos\alpha\sin\beta
 OK	wiki-textbook	D	\tan(\alpha + \beta) = \frac{\tan\alpha + \tan\beta}{1 - \tan\alpha\tan\beta}
 OK	wiki-textbook	D	\cos 2\theta = \cos^2\theta - \sin^2\theta = 2\cos^2\theta - 1 = 1 - 2\sin^2\theta
-GAP	wiki-textbook	I	\sin 30^\circ = \tfrac{1}{2}
+OK	wiki-textbook	I	\sin 30^\circ = \tfrac{1}{2}
 OK	wiki-textbook	I	180^\circ = \pi \text{ radians}
 OK	wiki-textbook	D	\tan\theta = \frac{\sin\theta}{\cos\theta}, \quad \cos\theta \neq 0
 OK	wiki-textbook	D	\sigma = \sqrt{\frac{1}{N}\sum_{i=1}^N (x_i - \mu)^2}
@@ -334,7 +334,7 @@ OK	wiki-textbook	D	z = \frac{x - \mu}{\sigma}
 OK	wiki-textbook	D	\chi^2 = \sum_{i=1}^{n} \frac{(O_i - E_i)^2}{E_i}
 OK	wiki-textbook	I	\bar{x} \pm z^{*}\frac{\sigma}{\sqrt{n}}
 OK	wiki-textbook	D	r = \frac{\sum_{i=1}^n (x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum_{i=1}^n (x_i - \bar{x})^2}\,\sqrt{\sum_{i=1}^n (y_i - \bar{y})^2}}
-GAP	wiki-textbook	I	P(\text{rolling a six}) = \tfrac{1}{6}
+OK	wiki-textbook	I	P(\text{rolling a six}) = \tfrac{1}{6}
 OK	wiki-textbook	D	\operatorname{E}[X] = \sum_{i=1}^{\infty} x_i\, p_i
 OK	wiki-textbook	D	f(x) = \sum_{n=0}^{\infty} \frac{f^{(n)}(a)}{n!}\,(x-a)^n
 OK	wiki-textbook	D	e^x = 1 + x + \frac{x^2}{2!} + \frac{x^3}{3!} + \cdots = \sum_{n=0}^{\infty} \frac{x^n}{n!}
@@ -383,8 +383,8 @@ OK	wiki-textbook	D	m = \frac{y_2 - y_1}{x_2 - x_1}
 OK	wiki-textbook	I	y = mx + b
 OK	wiki-textbook	D	(x - h)^2 + (y - k)^2 = r^2
 OK	wiki-textbook	D	\frac{x^2}{a^2} + \frac{y^2}{b^2} = 1
-GAP	wiki-textbook	D	A = \sqrt{s(s-a)(s-b)(s-c)}, \quad s = \tfrac{1}{2}(a+b+c)
-GAP	wiki-textbook	I	V = \tfrac{4}{3}\pi r^3
+OK	wiki-textbook	D	A = \sqrt{s(s-a)(s-b)(s-c)}, \quad s = \tfrac{1}{2}(a+b+c)
+OK	wiki-textbook	I	V = \tfrac{4}{3}\pi r^3
 OK	wiki-textbook	D	a^2 - b^2 = (a+b)(a-b)
 OK	wiki-textbook	D	a^{m/n} = \sqrt[n]{a^m} = \left(\sqrt[n]{a}\right)^{m}
 OK	wiki-textbook	D	\log_b x = \frac{\log_k x}{\log_k b}
@@ -397,7 +397,7 @@ OK	wiki-textbook	I	\{\, x \in \mathbb{R} : x > 0 \,\}
 OK	wiki-textbook	D	(\cos\theta + i\sin\theta)^n = \cos n\theta + i\sin n\theta
 OK	wiki-textbook	D	|z| = \sqrt{x^2 + y^2}, \qquad z = x + iy
 OK	wiki-textbook	I	c = 299\,792\,458\ \mathrm{m/s}
-GAP	wiki-textbook	I	E_k = \tfrac{1}{2}mv^2
+OK	wiki-textbook	I	E_k = \tfrac{1}{2}mv^2
 OK	wiki-textbook	D	PV = nRT
 OK	wiki-textbook	D	\text{pH} = -\log_{10}\left[\text{H}^{+}\right]
 OK	wiki-textbook	D	N(t) = N_0 \left(\frac{1}{2}\right)^{t/t_{1/2}}
@@ -442,7 +442,7 @@ OK	structured-envs	D	A \xrightarrow[T \to \infty]{n \to \infty} B
 OK	structured-envs	D	|x| = \begin{cases} x, & x \ge 0 \\ -x, & x < 0 \end{cases}
 OK	structured-envs	D	f(n) = \begin{cases} n/2, & \text{if } n \text{ is even} \\ 3n+1, & \text{if } n \text{ is odd} \end{cases}
 OK	structured-envs	D	\delta_{ij} = \begin{cases} 1 & \text{if } i = j, \\ 0 & \text{if } i \ne j. \end{cases}
-GAP	structured-envs	D	F(x) = \begin{cases} 0, & x < a \\ \dfrac{x-a}{b-a}, & a \le x \le b \\ 1, & x > b \end{cases}
+OK	structured-envs	D	F(x) = \begin{cases} 0, & x < a \\ \dfrac{x-a}{b-a}, & a \le x \le b \\ 1, & x > b \end{cases}
 OK	structured-envs	D	\left(\frac{a}{p}\right) = \begin{cases} 1 & \text{if } a \text{ is a quadratic residue mod } p, \\ -1 & \text{if } a \text{ is a non-residue mod } p, \\ 0 & \text{if } p \mid a. \end{cases}
 OK	structured-envs	D	\begin{cases} u_t = \alpha^2 u_{xx}, & 0 < x < L,\; t > 0, \\ u(0,t) = u(L,t) = 0, & t > 0, \\ u(x,0) = f(x), & 0 \le x \le L. \end{cases}
 OK	structured-envs	D	\begin{cases} 2x + 3y = 7 \\ x - y = 1 \end{cases}
@@ -458,7 +458,7 @@ OK	structured-envs	D	D = \begin{pmatrix} \lambda_1 & & 0 \\ & \ddots & \\ 0 & & 
 OK	structured-envs	I	\left(\begin{smallmatrix} 1 & 1 \\ 0 & 1 \end{smallmatrix}\right)
 OK	structured-envs	D	\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix} = \begin{pmatrix} x + 2y \\ 3x + 4y \end{pmatrix}
 OK	structured-envs	D	\mathbf{x} = \begin{bmatrix} x_1 \\ x_2 \\ \vdots \\ x_n \end{bmatrix}
-GAP	structured-envs	D	\frac{\partial(u,v)}{\partial(x,y)} = \begin{vmatrix} \dfrac{\partial u}{\partial x} & \dfrac{\partial u}{\partial y} \\[8pt] \dfrac{\partial v}{\partial x} & \dfrac{\partial v}{\partial y} \end{vmatrix}
+OK	structured-envs	D	\frac{\partial(u,v)}{\partial(x,y)} = \begin{vmatrix} \dfrac{\partial u}{\partial x} & \dfrac{\partial u}{\partial y} \\[8pt] \dfrac{\partial v}{\partial x} & \dfrac{\partial v}{\partial y} \end{vmatrix}
 OK	structured-envs	D	\begin{vmatrix} 1 & x_1 & x_1^2 \\ 1 & x_2 & x_2^2 \\ 1 & x_3 & x_3^2 \end{vmatrix} = (x_2 - x_1)(x_3 - x_1)(x_3 - x_2)
 OK	structured-envs	D	\mathbf{x}^{\top} A \mathbf{x} = \begin{pmatrix} x & y \end{pmatrix} \begin{pmatrix} a & b \\ b & c \end{pmatrix} \begin{pmatrix} x \\ y \end{pmatrix}
 OK	structured-envs	D	\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix} \xrightarrow{R_2 \to R_2 - 3R_1} \begin{bmatrix} 1 & 2 \\ 0 & -2 \end{bmatrix}

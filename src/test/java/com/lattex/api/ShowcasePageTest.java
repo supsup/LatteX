@@ -100,7 +100,7 @@ class ShowcasePageTest {
             <p class="lede">A curated tour of the wild-corpus pass-set: every formula
             on this page is regression-locked by the coverage ratchet, so the page
             can never advertise something a change broke. Current wild coverage:
-            457/484 real-world formulas (94.4%).</p>
+            467/484 real-world formulas (96.5%).</p>
             """ + cards + "</main></body></html>\n";
         Path out = Path.of("examples", "showcase.html");
         Files.createDirectories(out.getParent());

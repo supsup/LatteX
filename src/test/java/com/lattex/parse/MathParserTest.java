@@ -316,6 +316,22 @@ class MathParserTest {
     }
 
     @Test
+    void dfracAndTfracForceTheirStyle() {
+        // The ruled-fraction siblings of \dbinom/\tbinom: \dfrac pins DISPLAY, \tfrac
+        // pins TEXT, regardless of surrounding style (a full-size fraction inline, or a
+        // small one in display math). \dfrac == \cfrac's styling minus the continued framing.
+        Fraction d = assertInstanceOf(Fraction.class, MathParser.parse("\\dfrac{1}{2}"));
+        assertTrue(d.hasRule(), "\\dfrac keeps the fraction rule");
+        assertEquals(MathNode.FractionStyle.DISPLAY, d.fractionStyle());
+        assertEquals("Frac[DISPLAY](A(1,ORD),A(2,ORD))", pp(d));
+
+        Fraction t = assertInstanceOf(Fraction.class, MathParser.parse("\\tfrac{1}{2}"));
+        assertTrue(t.hasRule(), "\\tfrac keeps the fraction rule");
+        assertEquals(MathNode.FractionStyle.TEXT, t.fractionStyle());
+        assertEquals("Frac[TEXT](A(1,ORD),A(2,ORD))", pp(t));
+    }
+
+    @Test
     void greekAndRelations() {
         assertEquals(
             "L(A(U+03B1,ORD) A(+,BIN) A(U+03B2,ORD) A(U+2264,REL) A(U+03B3,ORD))",

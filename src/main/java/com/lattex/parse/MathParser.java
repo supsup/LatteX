@@ -591,6 +591,23 @@ public final class MathParser {
                 MathNode den = parseArgument("\\cfrac denominator");
                 return new Fraction(num, den, true, MathNode.FractionStyle.DISPLAY);
             }
+            case "dfrac" -> {
+                // Display-style ruled fraction: \dfrac forces \displaystyle regardless
+                // of context (a full-size fraction even inside inline math) — the
+                // amsmath sibling of \tfrac. Same styling as \cfrac without the
+                // continued-fraction framing.
+                MathNode num = parseArgument("\\dfrac numerator");
+                MathNode den = parseArgument("\\dfrac denominator");
+                return new Fraction(num, den, true, MathNode.FractionStyle.DISPLAY);
+            }
+            case "tfrac" -> {
+                // Text-style ruled fraction: \tfrac forces \textstyle (a small,
+                // inline-sized fraction even in display math). The \frac whose style
+                // is pinned to TEXT, mirroring \tbinom for the binom family.
+                MathNode num = parseArgument("\\tfrac numerator");
+                MathNode den = parseArgument("\\tfrac denominator");
+                return new Fraction(num, den, true, MathNode.FractionStyle.TEXT);
+            }
             case "binom" -> {
                 return binom(MathNode.FractionStyle.INHERIT);
             }

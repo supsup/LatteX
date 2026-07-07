@@ -14,7 +14,7 @@ String svg = com.lattex.api.LatteX.render("\\frac{a+b}{c}");
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
-ratchet: 457/484 real-world formulas, 94.4%, and only allowed to go up). For the
+ratchet: 467/484 real-world formulas, 96.5%, and only allowed to go up). For the
 fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
 26 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
 captured previews (every effect as its own looping GIF).
