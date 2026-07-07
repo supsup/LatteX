@@ -66,8 +66,12 @@ public final class SvgEmitter {
             if (d.isEmpty()) {
                 continue; // whitespace / inkless glyph
             }
-            svg.append("    <path d=\"").append(d).append("\"")
-                .append(" transform=\"translate(")
+            svg.append("    <path d=\"").append(d).append("\"");
+            if (g.color() != null) {
+                // \color/\textcolor override; svgValue() is an allow-listed fill literal.
+                svg.append(" fill=\"").append(g.color().svgValue()).append("\"");
+            }
+            svg.append(" transform=\"translate(")
                 .append(num(g.originX())).append(' ').append(num(g.baselineY()))
                 .append(") scale(").append(num(g.scale())).append(' ').append(num(-g.scale()))
                 .append(")\"/>\n");
@@ -76,7 +80,11 @@ public final class SvgEmitter {
             svg.append("    <rect x=\"").append(num(r.x())).append("\"")
                 .append(" y=\"").append(num(r.y())).append("\"")
                 .append(" width=\"").append(num(r.width())).append("\"")
-                .append(" height=\"").append(num(r.height())).append("\"/>\n");
+                .append(" height=\"").append(num(r.height())).append("\"");
+            if (r.color() != null) {
+                svg.append(" fill=\"").append(r.color().svgValue()).append("\"");
+            }
+            svg.append("/>\n");
         }
         svg.append("  </g>\n");
         svg.append("</svg>");

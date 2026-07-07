@@ -262,6 +262,7 @@ public final class LatteX {
                 ? "the square root of " + describe(radicand)
                 : "the " + describe(index) + "th root of " + describe(radicand);
             case Spacing _ -> "";
+            case MathNode.Colored c -> describe(c.body()); // color is presentation; speak the content
             case Phantom _ -> ""; // invisible: reserves space, reads as nothing
             case BigOperator(var op, var lower, var upper, _) -> {
                 StringBuilder sb = new StringBuilder(operatorName(op.codePoint()));

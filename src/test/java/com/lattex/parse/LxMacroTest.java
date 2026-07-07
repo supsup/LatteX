@@ -217,7 +217,7 @@ class LxMacroTest {
 
     @Test
     void invalidValuesFailLoud() {
-        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\lx[style.color=red]{ x }"));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\lx[style.color=notacolor]{ x }"));
         assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\lx[style.scale=huge]{ x }"));
         assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("\\lx[style.mathstyle=bogus]{ x }"));

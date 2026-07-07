@@ -1,6 +1,7 @@
 package com.lattex.api;
 
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -26,6 +27,25 @@ public sealed interface Color permits Color.CurrentColor, Color.Hex {
 
     /** Anchored: exactly {@code #} followed by 6 or 3 hex digits, nothing else. */
     Pattern HEX_PATTERN = Pattern.compile("^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$");
+
+    /**
+     * Named colors accepted by {@code \color}/{@code \textcolor} — the xcolor base
+     * set plus common CSS names, each resolved to a canonical {@link Hex}. Matched
+     * case-insensitively. A name is just a shorthand for a known-good hex, so it
+     * introduces no new fill value beyond what {@code #rrggbb} already allows.
+     */
+    Map<String, Hex> NAMED = Map.ofEntries(
+        Map.entry("red", new Hex("#ff0000")), Map.entry("green", new Hex("#00ff00")),
+        Map.entry("blue", new Hex("#0000ff")), Map.entry("cyan", new Hex("#00ffff")),
+        Map.entry("magenta", new Hex("#ff00ff")), Map.entry("yellow", new Hex("#ffff00")),
+        Map.entry("black", new Hex("#000000")), Map.entry("white", new Hex("#ffffff")),
+        Map.entry("gray", new Hex("#808080")), Map.entry("grey", new Hex("#808080")),
+        Map.entry("darkgray", new Hex("#a9a9a9")), Map.entry("lightgray", new Hex("#d3d3d3")),
+        Map.entry("orange", new Hex("#ffa500")), Map.entry("purple", new Hex("#800080")),
+        Map.entry("brown", new Hex("#a52a2a")), Map.entry("pink", new Hex("#ffc0cb")),
+        Map.entry("olive", new Hex("#808000")), Map.entry("teal", new Hex("#008080")),
+        Map.entry("violet", new Hex("#ee82ee")), Map.entry("lime", new Hex("#00ff00")),
+        Map.entry("navy", new Hex("#000080")), Map.entry("maroon", new Hex("#800000")));
 
     /** The shared {@code currentColor} sentinel. */
     CurrentColor CURRENT = new CurrentColor();
@@ -96,9 +116,13 @@ public sealed interface Color permits Color.CurrentColor, Color.Hex {
         if (s.equalsIgnoreCase("currentColor")) {
             return CURRENT;
         }
+        Hex named = NAMED.get(s.toLowerCase(Locale.ROOT));
+        if (named != null) {
+            return named;
+        }
         if (!HEX_PATTERN.matcher(s).matches()) {
             throw new IllegalArgumentException(
-                "invalid color: \"" + raw + "\" (expected \"currentColor\" or #rgb / #rrggbb)");
+                "invalid color: \"" + raw + "\" (expected a name like \"red\", \"currentColor\", or #rgb / #rrggbb)");
         }
         String digits = s.substring(1).toLowerCase(Locale.ROOT);
         if (digits.length() == 3) {

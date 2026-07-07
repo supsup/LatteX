@@ -93,7 +93,8 @@ class RenderOptionsTest {
     @Test
     void colorRejectsGarbage() {
         assertThrows(IllegalArgumentException.class, () -> Color.parse(null));
-        assertThrows(IllegalArgumentException.class, () -> Color.parse("red"));
+        // Named colors (red, blue, …) now resolve — see namedColorsResolveToHex below.
+        assertThrows(IllegalArgumentException.class, () -> Color.parse("notacolor"));
         assertThrows(IllegalArgumentException.class, () -> Color.parse("#12"));
         assertThrows(IllegalArgumentException.class, () -> Color.parse("#12345"));
         assertThrows(IllegalArgumentException.class, () -> Color.parse("#1234567"));
@@ -102,6 +103,17 @@ class RenderOptionsTest {
         // A Hex can never hold a non-canonical value.
         assertThrows(IllegalArgumentException.class, () -> new Color.Hex("#ABCDEF"));
         assertThrows(IllegalArgumentException.class, () -> new Color.Hex("#abc"));
+    }
+
+    @Test
+    void namedColorsResolveToHex() {
+        // \color/\textcolor names route through Color.parse to an allow-listed hex —
+        // a name is just a shorthand, no new fill value beyond what #rrggbb allows.
+        assertEquals("#ff0000", Color.parse("red").svgValue());
+        assertEquals("#0000ff", Color.parse("Blue").svgValue());   // case-insensitive
+        assertEquals("#808080", Color.parse("gray").svgValue());
+        assertEquals("#808080", Color.parse("grey").svgValue());
+        assertEquals("currentColor", Color.parse("currentColor").svgValue());
     }
 
     // ---- parseMathStyle ----
