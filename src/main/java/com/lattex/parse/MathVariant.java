@@ -273,6 +273,12 @@ public final class MathVariant {
                 st.above() == null ? null : apply(style, st.above()),
                 st.below() == null ? null : apply(style, st.below()),
                 st.kind());
+            // An extensible arrow: restyle its labels (the arrow itself is a glyph
+            // synthesized in layout, not a restylable atom).
+            case MathNode.XArrow xa -> new MathNode.XArrow(
+                apply(style, xa.above()),
+                xa.below() == null ? null : apply(style, xa.below()),
+                xa.left());
             // A \lx wrapper is top-level-only (nested \lx is rejected by the parser),
             // so this arm is unreachable in practice; restyle the body for totality.
             case StyledMath sm -> new StyledMath(

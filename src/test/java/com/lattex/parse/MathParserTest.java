@@ -119,6 +119,14 @@ class MathParserTest {
                 }
                 yield sb.append(')').toString();
             }
+            case MathNode.XArrow xa -> {
+                StringBuilder sb = new StringBuilder("XArr[")
+                    .append(xa.left() ? "L" : "R").append("](^").append(pp(xa.above()));
+                if (xa.below() != null) {
+                    sb.append(",_").append(pp(xa.below()));
+                }
+                yield sb.append(')').toString();
+            }
             case MathNode.StyledMath sm -> "Lx(" + pp(sm.body()) + ")";
         };
     }
