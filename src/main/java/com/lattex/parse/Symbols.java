@@ -455,6 +455,9 @@ final class Symbols {
         m.put("Longleftarrow", new Sym(0x27F8, MathClass.REL));  // ⟸
         m.put("Longrightarrow", new Sym(0x27F9, MathClass.REL)); // ⟹
         m.put("Longleftrightarrow", new Sym(0x27FA, MathClass.REL)); // ⟺
+        // Logic aliases real authors write (wild-corpus GAP tier):
+        m.put("implies", new Sym(0x27F9, MathClass.REL)); // ⟹ = \Longrightarrow
+        m.put("iff", new Sym(0x27FA, MathClass.REL));     // ⟺ = \Longleftrightarrow
         m.put("nearrow", new Sym(0x2197, MathClass.REL));    // ↗
         m.put("searrow", new Sym(0x2198, MathClass.REL));    // ↘
         m.put("swarrow", new Sym(0x2199, MathClass.REL));    // ↙
@@ -549,6 +552,12 @@ final class Symbols {
         m.put("cdots", new Sym(0x22EF, MathClass.INNER)); // ⋯
         m.put("ldots", new Sym(0x2026, MathClass.INNER)); // …
         m.put("dots", new Sym(0x2026, MathClass.INNER));  // … alias
+        // amsmath's semantic dots family (wild-corpus GAP tier): binary/rel
+        // contexts get centered dots, comma/list contexts baseline dots.
+        m.put("dotsb", new Sym(0x22EF, MathClass.INNER)); // ⋯ (between operators)
+        m.put("dotsi", new Sym(0x22EF, MathClass.INNER)); // ⋯ (between integrals)
+        m.put("dotsc", new Sym(0x2026, MathClass.INNER)); // … (between commas)
+        m.put("dotso", new Sym(0x2026, MathClass.INNER)); // … (other)
         m.put("vdots", new Sym(0x22EE, MathClass.ORD));   // ⋮
         m.put("ddots", new Sym(0x22F1, MathClass.ORD));   // ⋱
 
