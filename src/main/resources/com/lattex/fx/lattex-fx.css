@@ -6,11 +6,15 @@
 
 .lx-math { display: inline-block; transform-origin: center center; }
 
-/* enter=fade / enter=inkdrop start hidden so the JS reveal has somewhere to come from
-   (no flash-of-visible before the runtime wires). */
-.lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
-.lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; }
-.lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
+/* enter=fade / enter=inkdrop / enter=constellation start hidden so the JS reveal has
+   somewhere to come from (no flash-of-visible before the runtime wires). The hides are
+   keyed on html.lx-fx — a root marker the RUNTIME stamps as its first act — so a page
+   that loads this CSS but never runs the JS (blocked/failed/disabled) shows the math
+   plainly with effects inert, instead of hiding it forever (the CSS-only-invisibility
+   hole; every pre-hide added for a future enter effect MUST use this prefix). */
+html.lx-fx .lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
+html.lx-fx .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; }
+html.lx-fx .lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
 
 @keyframes lx-boom {
   0%   { transform: scale(1); }
@@ -55,11 +59,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* No motion; held-visible states stay legible. */
+  /* No motion; held-visible states stay legible. Same html.lx-fx-prefixed shape as
+     the hides (equal specificity + later in the cascade = the reset wins). */
   .lx-math { animation: none !important; }
-  .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
-  .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
-  .lx-math[data-lx-fx-enter="constellation"] { opacity: 1; }
+  html.lx-fx .lx-math[data-lx-fx-enter="fade"] { opacity: 1; }
+  html.lx-fx .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 1; }
+  html.lx-fx .lx-math[data-lx-fx-enter="constellation"] { opacity: 1; }
 }
 
 /* blueprint: the container becomes an engineer's drafting field — a deep cyan-blue ground

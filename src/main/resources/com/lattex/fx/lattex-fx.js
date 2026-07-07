@@ -2,6 +2,12 @@
    \lx effects. Self-contained, no deps, CSP-friendly (one external script). The math renders
    without this; include it (+ lattex-fx.css) only if you want the effects. */
 (function () {
+  // FIRST ACT: stamp the root marker the stylesheet's enter-hide rules key on
+  // (html.lx-fx ... { opacity: 0 }). CSS loaded without this runtime running
+  // then hides nothing — the math shows plainly with effects inert, instead of
+  // the CSS-only-invisibility hole where enter-effect equations vanish forever.
+  document.documentElement.classList.add('lx-fx');
+
   // CSS-keyframe effect vocabulary — mirrors the Effect enum's keyframe half
   // (boom|pulse|fade|glow|none). 'lightning' and 'storm' are special-cased
   // below: they are page-side body overlays, NOT keyframes on the element.
