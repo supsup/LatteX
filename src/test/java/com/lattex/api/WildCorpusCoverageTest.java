@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -13,42 +15,56 @@ import org.junit.jupiter.api.Test;
  * structured environments — 2026-07-06 sweep), exactly as authors write them,
  * deliberately UNSANITIZED toward what LatteX supports.
  *
- * <p>The assertion is a RATCHET, not a target: coverage may only go UP. A
- * change that silently drops wild coverage (a parser regression, an
- * over-eager validation) fails here with the newly-broken formulas listed.
- * When a feature lands, re-run, read the new OK count, and RAISE THE FLOOR in
- * the same commit — that's the feature's receipt.
+ * <p>Each row carries a STATUS: {@code OK} (rendered at sweep time — the
+ * PASS-SET) or {@code GAP} (a known failure, the feature roadmap). The pins:
  *
- * <p>Current floor: 417/484 (86%). The 67 known failures are the objective
- * feature roadmap (see the 2026-07-06 coverage report): one shared mechanism
- * (stack-above/below: underbrace/overbrace/substack/overset/stackrel) covers
- * 23 of them; tfrac/dfrac/displaystyle 11; pmod/bmod 8; tag 7; xrightarrow 7.
+ * <ul>
+ *   <li><b>Every OK row must still render</b> — a regression fails NAMING the
+ *       newly-broken formulas. (A bare count-floor had a swap hole: break 5
+ *       old + fix 5 new = same count = green. Fixpoint, lattex/47.)</li>
+ *   <li><b>GAP rows may flip to OK</b> — that's a feature landing. Flip the
+ *       status in the same commit; the flipped rows join the pass-set and can
+ *       never silently regress again. That status-flip IS the ratchet.</li>
+ * </ul>
  */
 class WildCorpusCoverageTest {
 
-    private static final int FLOOR = 417;
-
     @Test
-    void wildCoverageNeverRegresses() throws Exception {
-        int ok = 0;
-        java.util.List<String> newlyBroken = new java.util.ArrayList<>();
+    void everyPassSetFormulaStillRenders() throws Exception {
+        List<String> broken = new ArrayList<>();
+        int okRows = 0;
+        int newlyRendering = 0;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(
                 getClass().getResourceAsStream("/com/lattex/wild-corpus.tsv"),
                 StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
-                String[] p = line.split("\t", 3);
-                if (p.length < 3) { continue; }
+                String[] p = line.split("\t", 4);
+                if (p.length < 4) { continue; }
+                boolean renders;
                 try {
-                    String svg = LatteX.render(p[2]);
-                    if (svg != null && svg.contains("<path")) { ok++; }
-                } catch (Throwable expectedForKnownGaps) {
-                    // failures are fine — only the COUNT is pinned
+                    String svg = LatteX.render(p[3]);
+                    renders = svg != null && svg.contains("<path");
+                } catch (Throwable t) {
+                    renders = false;
+                }
+                if ("OK".equals(p[0])) {
+                    okRows++;
+                    if (!renders) { broken.add(p[3]); }
+                } else if (renders) {
+                    newlyRendering++; // a GAP closed — flip its status to OK!
                 }
             }
         }
-        assertTrue(ok >= FLOOR, "wild-corpus coverage regressed: " + ok + " OK, floor is "
-            + FLOOR + " — a change broke formulas that used to render. Run the corpus "
-            + "locally to list them; if you LANDED a feature, raise the floor instead.");
+        assertTrue(okRows >= 417, "pass-set shrank in the TSV itself: " + okRows
+            + " OK rows (started at 417) — statuses may only flip GAP->OK");
+        assertTrue(broken.isEmpty(), broken.size()
+            + " previously-rendering formulas REGRESSED:\n  "
+            + String.join("\n  ", broken.subList(0, Math.min(10, broken.size())))
+            + (broken.size() > 10 ? "\n  ... and " + (broken.size() - 10) + " more" : ""));
+        if (newlyRendering > 0) {
+            System.out.println("wild-corpus: " + newlyRendering + " GAP row(s) now render"
+                + " — flip their status to OK to ratchet them into the pass-set.");
+        }
     }
 }
