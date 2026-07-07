@@ -129,7 +129,7 @@ PARSES-NOW	align	\begin{multline*}\int_0^1 f\\=\frac{1}{2}\end{multline*}	starre
 PARSES-NOW	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — \lim (under-limits in display) + roman \exp
 PARSES-NOW	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — roman named operators with beside scripts
 PARSES-NOW	named-op	\frac{d}{dx}(kg(x))	derivative operator built from primitives
-NEEDS-PARSER-NODE	named-op	x\equiv a\pmod{b}	modulo — needs \pmod node
+PARSES-NOW	named-op	x\equiv a\pmod{b}	modulo — \pmod landed 2026-07-07 (wild-corpus trivial tier)
 PARSES-NOW	named-op	\boldsymbol{\beta}=(\beta_1,\beta_2,\ldots,\beta_n)	bold beta vector — \boldsymbol remaps to bold math-alphanumeric (incl. Greek)
 PARSES-NOW	named-op	\top	top symbol
 PARSES-NOW	named-op	\bot	bottom symbol

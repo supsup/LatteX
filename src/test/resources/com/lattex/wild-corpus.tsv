@@ -36,7 +36,7 @@ OK	calculus-physics	D	s = \int_a^b \sqrt{1 + \left(\frac{dy}{dx}\right)^2}\,dx
 GAP	calculus-physics	D	\int_1^e \frac{dx}{x} = \ln x \Big|_1^e = 1
 OK	calculus-physics	I	\left.\frac{df}{dx}\right|_{x=0}
 OK	calculus-physics	I	\left(\frac{\partial S}{\partial V}\right)_T
-GAP	calculus-physics	D	\forall \varepsilon > 0\ \exists \delta > 0 : 0 < |x-a| < \delta \implies |f(x)-L| < \varepsilon
+OK	calculus-physics	D	\forall \varepsilon > 0\ \exists \delta > 0 : 0 < |x-a| < \delta \implies |f(x)-L| < \varepsilon
 OK	calculus-physics	D	\int_{-\infty}^{\infty} \delta(x-a)\,f(x)\,dx = f(a)
 OK	calculus-physics	D	\hat{f}(\xi) = \int_{-\infty}^{\infty} f(x)\, e^{-2\pi i x \xi}\,dx
 GAP	calculus-physics	D	\underbrace{x + x + \cdots + x}_{n\text{ times}} = nx
@@ -224,12 +224,12 @@ GAP	stats-ml	D	\overbrace{x + x + \cdots + x}^{n \text{ times}}
 OK	stats-ml	D	w \leftarrow w - \eta \left( \nabla_w \mathcal{L}(w) + \lambda w \right)
 OK	algebra-discrete	I	n \in \mathbb{N}
 OK	algebra-discrete	I	f \colon A \to B
-GAP	algebra-discrete	I	a \equiv b \pmod{m}
+OK	algebra-discrete	I	a \equiv b \pmod{m}
 OK	algebra-discrete	I	\mathbb{Z}/n\mathbb{Z}
 OK	algebra-discrete	I	N \trianglelefteq G
 OK	algebra-discrete	I	|\mathbb{Q}| = \aleph_0
 OK	algebra-discrete	I	a_1, a_2, \ldots, a_n
-GAP	algebra-discrete	I	x_1 + x_2 + \dotsb + x_n
+OK	algebra-discrete	I	x_1 + x_2 + \dotsb + x_n
 OK	algebra-discrete	I	\mathbb{F}_p[x]/(f(x))
 OK	algebra-discrete	I	3\text{SAT} \le_{\mathrm{p}} \text{CLIQUE}
 OK	algebra-discrete	I	\lfloor \log_2 n \rfloor + 1 \text{ bits}
@@ -244,9 +244,9 @@ GAP	algebra-discrete	D	{n \brace k} = k {n-1 \brace k} + {n-1 \brace k-1}
 OK	algebra-discrete	D	n! \sim \sqrt{2\pi n}\,\left(\frac{n}{e}\right)^{n}
 OK	algebra-discrete	D	H_n = \sum_{k=1}^{n} \frac{1}{k} = \ln n + \gamma + O(1/n)
 OK	algebra-discrete	D	\lfloor x \rfloor \le x < \lfloor x \rfloor + 1
-GAP	algebra-discrete	D	q = \left\lfloor \frac{a}{b} \right\rfloor, \qquad r = a \bmod b
-GAP	algebra-discrete	D	a^{p-1} \equiv 1 \pmod{p}
-GAP	algebra-discrete	D	a^{\varphi(n)} \equiv 1 \pmod{n} \quad \text{if } \gcd(a, n) = 1
+OK	algebra-discrete	D	q = \left\lfloor \frac{a}{b} \right\rfloor, \qquad r = a \bmod b
+OK	algebra-discrete	D	a^{p-1} \equiv 1 \pmod{p}
+OK	algebra-discrete	D	a^{\varphi(n)} \equiv 1 \pmod{n} \quad \text{if } \gcd(a, n) = 1
 OK	algebra-discrete	D	\varphi(n) = n \prod_{p \mid n} \left(1 - \frac{1}{p}\right)
 OK	algebra-discrete	D	\sum_{d \mid n} \varphi(d) = n
 OK	algebra-discrete	D	\mu(n) = \begin{cases} 1 & \text{if } n = 1 \\ (-1)^k & \text{if } n \text{ is a product of } k \text{ distinct primes} \\ 0 & \text{if } p^2 \mid n \text{ for some prime } p \end{cases}
@@ -257,7 +257,7 @@ GAP	algebra-discrete	D	\sum_{\substack{p \le x \\ p \text{ prime}}} \frac{1}{p} 
 OK	algebra-discrete	D	n = p_1^{e_1} p_2^{e_2} \cdots p_k^{e_k}
 OK	algebra-discrete	D	\operatorname{lcm}(a, b) = \frac{ab}{\gcd(a, b)}
 OK	algebra-discrete	D	ax + by = \gcd(a, b) \quad \text{for some } x, y \in \mathbb{Z}
-GAP	algebra-discrete	D	x \equiv a_1 \pmod{m_1}, \quad x \equiv a_2 \pmod{m_2}, \quad \ldots, \quad x \equiv a_r \pmod{m_r}
+OK	algebra-discrete	D	x \equiv a_1 \pmod{m_1}, \quad x \equiv a_2 \pmod{m_2}, \quad \ldots, \quad x \equiv a_r \pmod{m_r}
 OK	algebra-discrete	D	\left(\frac{a}{p}\right) = \begin{cases} 1 & \text{if } a \text{ is a quadratic residue mod } p \text{ and } p \nmid a \\ -1 & \text{if } a \text{ is a quadratic non-residue mod } p \\ 0 & \text{if } p \mid a \end{cases}
 OK	algebra-discrete	D	\left(\frac{p}{q}\right)\left(\frac{q}{p}\right) = (-1)^{\frac{p-1}{2} \cdot \frac{q-1}{2}}
 OK	algebra-discrete	D	\sqrt{2} = 1 + \cfrac{1}{2 + \cfrac{1}{2 + \cfrac{1}{2 + \cdots}}}
@@ -279,7 +279,7 @@ OK	algebra-discrete	D	L = \{\, w \in \{0,1\}^* \mid w \text{ contains an even nu
 OK	algebra-discrete	D	s = xyz, \quad |y| > 0, \quad |xy| \le p, \quad xy^i z \in A \ \text{for each } i \ge 0
 OK	algebra-discrete	D	\mathsf{P} \subseteq \mathsf{NP} \subseteq \mathsf{PSPACE} \subseteq \mathsf{EXPTIME}
 OK	algebra-discrete	D	O(g(n)) = \{ f(n) : \text{there exist positive constants } c \text{ and } n_0 \text{ such that } 0 \le f(n) \le c g(n) \text{ for all } n \ge n_0 \}
-GAP	algebra-discrete	D	f(n) = o(g(n)) \iff \lim_{n \to \infty} \frac{f(n)}{g(n)} = 0
+OK	algebra-discrete	D	f(n) = o(g(n)) \iff \lim_{n \to \infty} \frac{f(n)}{g(n)} = 0
 OK	algebra-discrete	D	T(n) = \begin{cases} \Theta(n^{\log_b a}) & \text{if } f(n) = O(n^{\log_b a - \epsilon}) \\ \Theta(n^{\log_b a} \lg n) & \text{if } f(n) = \Theta(n^{\log_b a}) \\ \Theta(f(n)) & \text{if } f(n) = \Omega(n^{\log_b a + \epsilon}) \end{cases}
 OK	algebra-discrete	D	T(n) = \begin{cases} \Theta(1) & \text{if } n = 1, \\ 2T(n/2) + \Theta(n) & \text{if } n > 1. \end{cases}
 OK	algebra-discrete	D	T(n) = 2T\!\left(\lfloor n/2 \rfloor\right) + \Theta(n)
@@ -292,7 +292,7 @@ OK	algebra-discrete	D	A = \begin{bmatrix} 0 & 1 & 1 \\ 1 & 0 & 1 \\ 1 & 1 & 0 \e
 OK	algebra-discrete	D	|G| = [G : H]\,|H|
 OK	algebra-discrete	D	|G| = |Z(G)| + \sum_{i=1}^{r} [G : C_G(x_i)]
 OK	algebra-discrete	D	G/\ker \varphi \cong \operatorname{im} \varphi
-GAP	algebra-discrete	D	n_p \equiv 1 \pmod{p} \quad \text{and} \quad n_p \mid m
+OK	algebra-discrete	D	n_p \equiv 1 \pmod{p} \quad \text{and} \quad n_p \mid m
 OK	algebra-discrete	D	D_n = \langle r, s \mid r^n = s^2 = 1,\ s r s^{-1} = r^{-1} \rangle
 OK	algebra-discrete	I	r = \text{rotation through } \frac{360^\circ}{n}
 OK	algebra-discrete	D	\operatorname{Aut}(\mathbb{Z}/n\mathbb{Z}) \cong (\mathbb{Z}/n\mathbb{Z})^{\times}
@@ -391,8 +391,8 @@ OK	wiki-textbook	D	\log_b x = \frac{\log_k x}{\log_k b}
 OK	wiki-textbook	I	\ln(xy) = \ln x + \ln y
 OK	wiki-textbook	D	\frac{a+b}{2} \geq \sqrt{ab}
 OK	wiki-textbook	D	\left( \sum_{i=1}^n u_i v_i \right)^{\!2} \leq \left( \sum_{i=1}^n u_i^2 \right) \left( \sum_{i=1}^n v_i^2 \right)
-GAP	wiki-textbook	I	a \equiv b \pmod{n}
-GAP	wiki-textbook	I	\gcd(a, b) = \gcd(b,\ a \bmod b)
+OK	wiki-textbook	I	a \equiv b \pmod{n}
+OK	wiki-textbook	I	\gcd(a, b) = \gcd(b,\ a \bmod b)
 OK	wiki-textbook	I	\{\, x \in \mathbb{R} : x > 0 \,\}
 OK	wiki-textbook	D	(\cos\theta + i\sin\theta)^n = \cos n\theta + i\sin n\theta
 OK	wiki-textbook	D	|z| = \sqrt{x^2 + y^2}, \qquad z = x + iy

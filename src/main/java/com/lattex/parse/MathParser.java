@@ -652,6 +652,23 @@ public final class MathParser {
                     return new Accent(name, base, accent.codePoint(),
                         accent.stretchy(), accent.under());
                 }
+                // The mod family (wild-corpus GAP tier). \bmod is the binary
+                // "mod" word (a mathbin in TeX; the upright operator word is the
+                // dominant visual, so OperatorName's roman rendering fits);
+                // \pmod{m} typesets "(mod m)" with a leading 18mu, per TeX.
+                if (name.equals("bmod")) {
+                    return new OperatorName("mod", false);
+                }
+                if (name.equals("pmod")) {
+                    MathNode arg = parseGroup();
+                    return new MathList(List.of(
+                        new Spacing(18.0),
+                        new Atom('(', MathClass.OPEN),
+                        new OperatorName("mod", false),
+                        new Spacing(6.0),
+                        arg,
+                        new Atom(')', MathClass.CLOSE)));
+                }
                 // Large operator?
                 Sym big = BIG_OPERATORS.get(name);
                 if (big != null) {
