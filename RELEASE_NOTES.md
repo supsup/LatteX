@@ -4,6 +4,22 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## 0.4.0 · 2026-07-07 — extensible arrows, style-pinned fractions, per-subterm color & a PNG export
+
+The fidelity push continues — **wild render coverage 92.8% → 96.5%**:
+
+- **`\xrightarrow` / `\xleftarrow`** — extensible labelled arrows that stretch to their label(s): `A \xrightarrow{f} B`, `X \xrightarrow[\text{below}]{\text{above}} Y`. The inverse of the stack mechanism (there the brace sizes to the base; here the arrow sizes to its label), routed through the same OpenType-MATH horizontal-stretch machinery. Powers real commutative diagrams.
+- **`\dfrac` / `\tfrac`** — style-pinned ruled fractions: `\dfrac` forces display style (a full-size fraction even inline), `\tfrac` forces text style (a small one even in display math) — the `\frac` siblings of `\dbinom`/`\tbinom`. Closed the entire `\tfrac`/`\dfrac` wild-corpus gap cluster (+10 rows).
+- **`\color` / `\textcolor`** — per-subterm color: `\textcolor{red}{x^2}`, and a named palette (`red`, `blue`, `gray`, … — xcolor base + CSS) alongside `#rrggbb`. Layout-transparent (zero geometry effect); an inner color wins over an outer one; the fraction bar colors too. Names resolve to a hardcoded hex and an unknown name is a parse error — no new fill value beyond what `#rrggbb` already allowed.
+
+### `bin/lattex-shot` — LaTeX → PNG
+SVG is the native output, but sometimes you need a raster. `bin/lattex-shot` renders a LaTeX expression to a tightly-cropped PNG — LatteX's SVG + [BrewShot](https://github.com/supsup/BrewShot), as glue (no new dependency). `echo '\frac{a}{b}' | bin/lattex-shot - -o eq.png`. See the README's **PNG export** section.
+
+### The fx catalogue, in motion
+`examples/GALLERY.md` is now the full **23-effect motion catalogue** — every `\lx[fx.*]` effect isolated and captured as its own looping GIF (via BrewShot's element-targeted `recordGifElement`), each one playing itself.
+
+---
+
 ## 0.3.0 · 2026-07-07 — the stack mechanism: real assembled braces & stacked annotations
 
 One mechanism closed the largest remaining fidelity gap in the wild corpus — **wild render coverage 88.4% → 92.8%**, 21 `GAP → OK` ratchet flips from a single primitive:
