@@ -15,7 +15,9 @@ String svg = com.lattex.api.LatteX.render("\\frac{a+b}{c}");
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
 ratchet: 449/484 real-world formulas, 92.8%, and only allowed to go up). For the
-fx layer in motion, **[the fx gallery](examples/GALLERY.md)**.
+fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
+26 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
+captured previews.
 
 ![A scroll through the LatteX showcase — the definition of the derivative, Euler's identity, the Basel problem, a Gaussian integral, the curl determinant, a piecewise cases block, an aligned derivation, and the 0.3.0 stack mechanism (underbrace + substack), every formula rendered to self-contained SVG](examples/showcase.gif)
 
