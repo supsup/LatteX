@@ -3,6 +3,10 @@
 *(Looking for the math itself rather than the effects? The renderer tour is
 [showcase.html](showcase.html) — every formula on it ratchet-locked.)*
 
+*(Want **every** effect in one place, each as its own looping GIF? See
+**[fx-catalogue.md](fx-catalogue.md)** — the full 23-effect motion catalogue,
+captured with BrewShot's element-targeted `recordGifElement`.)*
+
 Every image here is captured fresh by [BrewShot](https://github.com/supsup/BrewShot)
 (the real-browser harness these tests run on) each time the full suite runs.
 
