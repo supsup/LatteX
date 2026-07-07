@@ -67,7 +67,8 @@ final class MainTest {
     void versionExitsZero() {
         Result r = invoke("--version");
         assertEquals(0, r.code());
-        assertTrue(r.out().startsWith("lattex "));
+        assertTrue(r.out().trim().equals("lattex 0.2.1"),
+            "CLI version must match the artifact version (Lattice, lattex/42): " + r.out());
     }
 
     @Test

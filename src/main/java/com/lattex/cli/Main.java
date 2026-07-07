@@ -31,7 +31,7 @@ import java.nio.file.Path;
 public final class Main {
 
     /** Kept in step with the library artifact version. */
-    private static final String VERSION = "0.1.0";
+    private static final String VERSION = "0.2.1"; // MUST track build.gradle.kts version (MainTest pins it)
 
     private static final String USAGE = """
         lattex — render LaTeX math to a self-contained SVG (LatteX %s)

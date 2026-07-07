@@ -42,7 +42,7 @@ final class LxOptionsParser {
 
         String optionsRaw = "";
         if (pos < n && s.charAt(pos) == '[') {
-            int close = findClose(s, pos, '[', ']', "\\lx [ options ]");
+            int close = findClose(s, pos, '[', ']', "\\lx [ options ]", true);
             optionsRaw = s.substring(pos + 1, close);
             pos = skipWs(s, close + 1);
         }
@@ -51,7 +51,7 @@ final class LxOptionsParser {
             throw new MathSyntaxException(
                 "\\lx requires a { body }: expected '{' after the \\lx options");
         }
-        int bodyClose = findClose(s, pos, '{', '}', "\\lx { body }");
+        int bodyClose = findClose(s, pos, '{', '}', "\\lx { body }", false);
         String body = s.substring(pos + 1, bodyClose);
         pos = skipWs(s, bodyClose + 1);
         if (pos != n) {
@@ -71,7 +71,15 @@ final class LxOptionsParser {
      * quoted value or a {@code \}} in the LaTeX body does not close early).
      * Handles one level of {@code open}/{@code close} nesting for the body braces.
      */
-    private static int findClose(String s, int open, char opener, char closer, String what) {
+    /**
+     * Find the matching closer. {@code quoteAware} applies ONLY to the
+     * {@code [options]} mini-language, where double quotes delimit values and
+     * may enclose brackets. The math BODY must scan with it OFF: a quote there
+     * is ordinary content (\text{"}, primes-adjacent typography), and treating
+     * it as a delimiter made \lx{"} falsely "unterminated" (Lattice, lattex/42).
+     */
+    private static int findClose(String s, int open, char opener, char closer, String what,
+                                 boolean quoteAware) {
         int depth = 0;
         boolean inQuote = false;
         for (int i = open; i < s.length(); i++) {
@@ -80,7 +88,7 @@ final class LxOptionsParser {
                 i++; // skip the escaped char (e.g. \{ \} \" in the body)
                 continue;
             }
-            if (c == '"') {
+            if (quoteAware && c == '"') {
                 inQuote = !inQuote;
                 continue;
             }
