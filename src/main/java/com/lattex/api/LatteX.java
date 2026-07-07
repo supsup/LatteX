@@ -123,6 +123,56 @@ public final class LatteX {
     }
 
     /**
+     * Render a LaTeX math expression to an embeddable {@link MathFragment} — the
+     * INNER markup plus box metrics, for a consumer that composes the math inline
+     * on a shared baseline (a diagram renderer drawing math-in-labels).
+     *
+     * <p>Unlike {@link #render(String)} / {@link #renderInline(String)} — which
+     * return a full self-contained {@code <svg>} document — this returns the bare
+     * positioned {@code <g>/<path>/<rect>} markup (no {@code <svg>} wrapper, no
+     * viewBox, no aria), re-based so the fragment's local origin {@code (0,0)} is
+     * the LEFT END OF THE BASELINE: x=0 at the left ink edge, y=0 on the baseline
+     * (in SVG y-down space, ink above the baseline has negative y). The consumer
+     * drops {@link MathFragment#innerSvg()} inside its own {@code <g transform>} at
+     * the target baseline point and advances by {@link MathFragment#widthPx()}.
+     *
+     * <p>The fragment paints glyphs and rules IDENTICALLY to {@link #render(String)}
+     * — both go through the same {@code SvgEmitter} inner-emit path, so there is no
+     * forked emit. The default fill is opaque black; a per-subterm {@code \color}/
+     * {@code \textcolor} override is preserved on the {@code <path>}/{@code <rect>}.
+     * The metrics are the tight ink box at {@code fontSizePx}:
+     * {@link MathFragment#widthPx()} is {@code layout.width()},
+     * {@link MathFragment#heightPx()} the above-baseline extent, and
+     * {@link MathFragment#depthPx()} the below-baseline extent.
+     *
+     * @param latex      the LaTeX math source (without surrounding {@code $} delimiters)
+     * @param fontSizePx the base font size in user units (px at 1:1)
+     * @return the laid-out {@link MathFragment}
+     * @throws com.lattex.parse.MathSyntaxException if {@code latex} does not parse —
+     *         same error behavior as {@link #render(String)}; the consumer catches it
+     */
+    public static MathFragment renderFragment(String latex, double fontSizePx) {
+        MathNode node = MathParser.parse(latex);
+        // A top-level \lx wrapper is transparent here: render the body; the wrapper's
+        // container metadata rides the consumer's own wrapper, not the fragment.
+        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
+
+        SfntFont font = FontHolder.FONT;
+        LayoutContext ctx = new LayoutContext(font, font.mathConstants(), fontSizePx);
+        Layout layout = LayoutEngine.layout(body, ctx);
+
+        String inner = SvgEmitter.emitFragment(layout, font);
+        // The baseline is y=0 in layout space; above-baseline ink has negative y
+        // (SVG y-down), below-baseline positive. So heightPx (above) is the magnitude
+        // of minY and depthPx (below) is maxY — clamped so an all-below/all-above box
+        // never yields a negative extent.
+        double width = layout.width();
+        double height = Math.max(0.0, -layout.minY());
+        double depth = Math.max(0.0, layout.maxY());
+        return new MathFragment(inner, width, height, depth);
+    }
+
+    /**
      * Render an {@code \lx}-annotated formula to an HTML fragment: the styled inner
      * {@code <svg>} wrapped in a trusted {@code <span class="lx-math">} container
      * that carries the macro's effect and semantic annotations as {@code data-lx-*}
