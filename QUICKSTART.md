@@ -22,6 +22,14 @@ filled `<path>`s (never `<text>`, `<use>`, `<defs>`, `<script>`, or external
 a standard sanitizer allow-list. The math font (**STIX Two Math**, OFL) is bundled,
 so there are no web fonts to load either. Apache-2.0.
 
+**What it can render:** measured, not claimed — 428 of 484 real-world formulas
+(88%) from the wild corpus render clean, regression-locked by a coverage
+ratchet that only moves up. Browse the tour: **[examples/showcase.html]
+(examples/showcase.html)** (highlights incl. matrices, cases, align, bra-ket,
+and the mod/logic/dots families); the full command inventory is the generated
+[examples/symbol-index.html](examples/symbol-index.html), and the parse-tier
+ledger is [examples/corpus.md](examples/corpus.md).
+
 ## 2. Render one expression
 
 The whole core is one call. Give it LaTeX (no surrounding `$` delimiters), get back

@@ -1,6 +1,5 @@
 package com.lattex.api;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -10,563 +9,94 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Generates {@code examples/showcase.html} — the LatteX landing page. A single,
- * self-contained, browser-openable page whose every piece of math is rendered
- * live through {@link LatteX#render(String)}, so the showcase can never drift
- * from the actual emitter: it is regenerated (and asserted) on every build,
- * exactly like {@link S8SpecimenGalleryTest} and {@link GalleryPageTest}.
+ * Generates {@code examples/showcase.html} — "what LatteX renders", a curated
+ * tour of the pass-set: bread-and-butter through structured environments,
+ * including the newest arrivals (the trivial-macro tier). Every formula here
+ * is ALSO in the wild-corpus pass-set, so the page can never advertise
+ * something a regression broke: the ratchet guards the marketing.
  *
- * <p>Design direction — "Ink &amp; Amber": a cool deep-slate neutral with a
- * slight blue bias and a single warm amber accent (a nod to the "Latte" in the
- * name without lapsing into cream). Editorial type hierarchy; the rendered math
- * is the star and is given room. Theme-aware (light + dark via
- * {@code prefers-color-scheme}); the glyph paths are filled with
- * {@code currentColor}, so they inherit the container's theme-aware ink color —
- * no invert filter needed.
- *
- * <p>No parser/layout/emitter code is touched — this is pure presentation over
- * the public render API. All SVGs are self-contained (the emitter's minimal
- * {@code svg/g/path/rect} alphabet), so the page embeds no external assets.
+ * <p>Regenerated every suite run (the effects.html pattern); the committed
+ * copy is the browsable artifact.
  */
 class ShowcasePageTest {
 
-    /** One rendered equation: LaTeX source + a human label/caption. */
-    private record Eq(String latex, String label) {
-    }
+    private record Item(String caption, String latex) { }
 
-    // --- Hero: one large, gorgeous equation. A limit showpiece — the compound-
-    // interest definition of e — now that named operators (\lim) have landed. ---
-    private static final String HERO_EQ =
-        "\\lim_{n \\to \\infty} \\left( 1 + \\frac{1}{n} \\right)^{n} = e";
-
-    // --- Section 2: hero examples spanning the renderer's freshly-expanded range:
-    // classics alongside limits, accents, text-in-math, and font-variant alphabets. ---
-    private static final List<Eq> HERO_GRID = List.of(
-        new Eq("x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}", "The quadratic formula"),
-        new Eq("e^{i\\pi} + 1 = 0", "Euler's identity"),
-        new Eq("\\sin^2\\theta + \\cos^2\\theta = 1", "Named operators, upright"),
-        new Eq("\\mathcal{L}\\{f\\}(s) = \\int_0^\\infty e^{-st} f(t)\\,dt", "A \\mathcal transform"),
-        new Eq("\\nabla \\times \\vec{F} = \\vec{0}", "An accented vector identity"),
-        new Eq("\\hat{p} = \\frac{x}{n}, \\quad x \\in \\mathbb{N}", "Accents & \\mathbb sets"),
-        new Eq("n! = \\prod_{k=1}^{n} k \\quad \\text{for } n \\ge 0", "Text inside math"),
-        new Eq("\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}", "A summation identity"),
-        new Eq("\\oint_{\\partial S} \\vec{E} \\cdot d\\vec{A} = \\frac{Q}{\\varepsilon_0}", "A contour integral"),
-        new Eq("\\sqrt[3]{x^2 + y^2}", "An indexed radical"),
-        new Eq("\\frac{1}{1 + \\frac{1}{1 + \\frac{1}{x}}}", "A continued fraction"),
-        new Eq("\\left( \\sum_{k=0}^{n} \\frac{x^k}{k} \\right)", "Auto-scaled delimiters"));
-
-    /** A rendered showpiece where the caption points at a newly-landed feature. */
-    private record Feat(String latex, String label) {
-    }
-
-    // --- Section 2b: a compact "what's new" band spotlighting the fresh coverage. ---
-    private static final List<Feat> WHATS_NEW = List.of(
-        new Feat("\\widehat{ABC}", "Wide, stretchy accents"),
-        new Feat("\\overrightarrow{PQ}", "Vector arrows over a base"),
-        new Feat("\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1", "Named operators with limits"),
-        new Feat("\\det\\!\\left( A - \\lambda I \\right)", "\\det, \\log, \\gcd, \\operatorname"),
-        new Feat("\\text{if } n \\text{ even}", "Upright text runs, spaces kept"),
-        new Feat("\\mathbb{R} \\subset \\mathbb{C}", "Blackboard-bold alphabet"),
-        new Feat("\\mathcal{F}, \\mathcal{L}, \\mathcal{H}", "Calligraphic alphabet"),
-        new Feat("\\mathfrak{g}, \\mathfrak{sl}_2", "Fraktur alphabet"));
-
-    // --- Section 2c: the environment family — matrices, cases, and the aligned /
-    // multi-line equation environments, each a live 2-D layout. ---
-    private static final List<Eq> ENVIRONMENTS = List.of(
-        new Eq("\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}", "A 2×2 matrix"),
-        new Eq("\\begin{vmatrix} a & b \\\\ c & d \\end{vmatrix} = ad - bc", "A determinant"),
-        new Eq("|x| = \\begin{cases} x & x \\ge 0 \\\\ -x & x < 0 \\end{cases}", "A piecewise definition"),
-        new Eq("A = \\begin{pmatrix} a_{11} & \\cdots & a_{1n} \\\\ \\vdots & \\ddots & \\vdots \\\\ a_{m1} & \\cdots & a_{mn} \\end{pmatrix}", "A matrix with dots"),
-        new Eq("\\begin{align} (a+b)^2 &= a^2 + 2ab + b^2 \\\\ (a-b)^2 &= a^2 - 2ab + b^2 \\end{align}", "align — lined up on the ="),
-        new Eq("\\begin{gather} a = b \\\\ x + y = z \\end{gather}", "gather — centred lines"),
-        new Eq("\\begin{multline} a + b + c + d \\\\ + e + f + g \\\\ + h + i + j \\end{multline}", "multline — first left, last right"));
-
-    /** A named strip of single-symbol specimens (macro name below each glyph). */
-    private record Strip(String title, List<String> macros) {
-    }
-
-    // --- Section 3: a dense sampling of the 250+ symbol table. ---
-    private static final List<Strip> STRIPS = List.of(
-        new Strip("Relations", List.of(
-            "leq", "geq", "neq", "approx", "equiv", "cong", "sim", "propto",
-            "subset", "supset", "subseteq", "supseteq", "in", "ni", "prec", "succ")),
-        new Strip("Operators", List.of(
-            "times", "cdot", "pm", "mp", "div", "ast", "star", "oplus",
-            "otimes", "ominus", "odot", "cap", "cup", "wedge", "vee", "setminus")),
-        new Strip("Arrows", List.of(
-            "to", "gets", "leftrightarrow", "Rightarrow", "Leftarrow", "Leftrightarrow",
-            "mapsto", "hookrightarrow", "longrightarrow", "uparrow", "downarrow",
-            "nearrow", "searrow", "rightsquigarrow", "twoheadrightarrow", "rightleftharpoons")),
-        new Strip("Greek — lowercase", List.of(
-            "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
-            "lambda", "mu", "nu", "xi", "pi", "rho", "sigma", "tau", "phi", "chi",
-            "psi", "omega")),
-        new Strip("Greek — uppercase", List.of(
-            "Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Phi", "Psi", "Omega")),
-        new Strip("Big operators", List.of(
-            "sum", "prod", "coprod", "int", "oint", "bigcup", "bigcap", "bigsqcup",
-            "bigvee", "bigwedge", "bigodot", "bigotimes", "bigoplus", "biguplus")),
-        new Strip("Symbols", List.of(
-            "infty", "partial", "nabla", "forall", "exists", "nexists", "emptyset",
-            "aleph", "hbar", "ell", "wp", "Re", "Im", "top", "bot", "angle",
-            "flat", "sharp", "clubsuit", "spadesuit")));
+    private static final List<Item> TOUR = List.of(
+        new Item("The definition of the derivative",
+            "\\lim_{h\\to 0}\\frac{f(x+h)-f(x)}{h}"),
+        new Item("Euler, obligatory",
+            "e^{i\\pi} + 1 = 0"),
+        new Item("The Basel problem",
+            "\\sum_{n=1}^\\infty \\frac{1}{n^2} = \\frac{\\pi^2}{6}"),
+        new Item("A Gaussian integral",
+            "\\int_{-\\infty}^{\\infty} e^{-ax^2}\\,dx = \\sqrt{\\frac{\\pi}{a}}"),
+        new Item("Taylor series",
+            "f(x) = \\sum_{n=0}^{\\infty} \\frac{f^{(n)}(a)}{n!}(x-a)^n"),
+        new Item("Bayes' theorem",
+            "P(A \\mid B) = \\frac{P(B \\mid A)\\,P(A)}{P(B)}"),
+        new Item("A matrix determinant (curl mnemonic)",
+            "\\nabla\\times\\mathbf{F} = \\begin{vmatrix} \\hat{\\mathbf{i}} & \\hat{\\mathbf{j}} & \\hat{\\mathbf{k}} \\\\ \\frac{\\partial}{\\partial x} & \\frac{\\partial}{\\partial y} & \\frac{\\partial}{\\partial z} \\\\ F_x & F_y & F_z \\end{vmatrix}"),
+        new Item("A piecewise definition (cases)",
+            "|x| = \\begin{cases} x & \\text{if } x \\ge 0 \\\\ -x & \\text{if } x < 0 \\end{cases}"),
+        new Item("An aligned derivation",
+            "\\begin{align} (x+1)^2 &= x^2 + 2x + 1 \\\\ &= x(x+2) + 1 \\end{align}"),
+        new Item("Quantum bra-ket",
+            "\\langle m|n\\rangle = \\delta_{mn}"),
+        new Item("Fermat's little theorem — \\pmod, new tonight",
+            "a^{p-1} \\equiv 1 \\pmod{p}"),
+        new Item("Euclid's algorithm — \\bmod, new tonight",
+            "\\gcd(a, b) = \\gcd(b,\\ a \\bmod b)"),
+        new Item("Little-o — \\iff, new tonight",
+            "f = o(g) \\iff \\lim_{n \\to \\infty} \\frac{f(n)}{g(n)} = 0"),
+        new Item("Semantic dots — \\dotsb vs \\dotsc, new tonight",
+            "x_1 + x_2 + \\dotsb + x_n \\quad \\text{vs} \\quad x_1, x_2, \\dotsc, x_n"),
+        new Item("The expectation every ML paper opens with",
+            "\\mathbb{E}[X] = \\sum_{i=1}^{n} x_i \\, p(x_i)"));
 
     @Test
     void writesShowcasePage() throws IOException {
-        int svgCount = 0;
-
-        // Hero.
-        String heroSvg = LatteX.render(HERO_EQ);
-        svgCount++;
-
-        // Hero grid.
-        StringBuilder gridCells = new StringBuilder();
-        for (Eq eq : HERO_GRID) {
-            String svg = LatteX.render(eq.latex());
-            gridCells.append(gridCell(eq.label(), eq.latex(), svg)).append('\n');
-            svgCount++;
+        StringBuilder cards = new StringBuilder();
+        for (Item item : TOUR) {
+            String svg = LatteX.render(item.latex());
+            assertTrue(svg.contains("<path"), "showcase item must render: " + item.latex());
+            cards.append("<figure class=\"card\"><div class=\"render\">").append(svg)
+                .append("</div><figcaption>").append(item.caption())
+                .append("</figcaption><code>")
+                .append(item.latex().replace("&", "&amp;").replace("<", "&lt;"))
+                .append("</code></figure>\n");
         }
-
-        // "What's new" spotlight band.
-        StringBuilder newCells = new StringBuilder();
-        for (Feat f : WHATS_NEW) {
-            String svg = LatteX.render(f.latex());
-            newCells.append(gridCell(f.label(), f.latex(), svg)).append('\n');
-            svgCount++;
-        }
-
-        // Environment family (matrices / cases / aligned + multi-line equations).
-        StringBuilder envCells = new StringBuilder();
-        for (Eq eq : ENVIRONMENTS) {
-            String svg = LatteX.render(eq.latex());
-            envCells.append(gridCell(eq.label(), eq.latex(), svg)).append('\n');
-            svgCount++;
-        }
-
-        // Symbol strips.
-        StringBuilder strips = new StringBuilder();
-        for (Strip strip : STRIPS) {
-            StringBuilder tiles = new StringBuilder();
-            for (String macro : strip.macros()) {
-                String svg = LatteX.render("\\" + macro);
-                tiles.append(symbolTile(macro, svg)).append('\n');
-                svgCount++;
-            }
-            strips.append(strip(strip.title(), tiles.toString()));
-        }
-
-        String html = page(heroSvg, gridCells.toString(), newCells.toString(),
-            envCells.toString(), strips.toString());
+        String page = """
+            <!doctype html>
+            <html lang="en"><head><meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>LatteX — what it renders</title>
+            <style>
+              body { font-family: system-ui, sans-serif; background: #f4f5f7;
+                     margin: 0; padding: 2.5rem 1.5rem; color: #171a1f; }
+              main { max-width: 880px; margin: 0 auto; }
+              h1 { font-size: 1.7rem; } p.lede { color: #5b6570; max-width: 60ch; }
+              .card { background: #fff; border: 1px solid #e0e4e8; border-radius: 10px;
+                      padding: 1.2rem 1.4rem; margin: 0.9rem 0; }
+              .render { overflow-x: auto; padding: 0.4rem 0; }
+              figcaption { color: #5b6570; font-size: 0.85rem; margin-top: 0.5rem; }
+              code { display: block; margin-top: 0.4rem; font-size: 0.72rem;
+                     color: #8a939d; overflow-x: auto; }
+              @media (prefers-color-scheme: dark) {
+                body { background: #0e1116; color: #e9ecf1; }
+                .card { background: #161a20; border-color: #262c34; }
+                .render svg { color: #e9ecf1; }
+              }
+            </style></head><body><main>
+            <h1>LatteX — what it renders</h1>
+            <p class="lede">A curated tour of the wild-corpus pass-set: every formula
+            on this page is regression-locked by the coverage ratchet, so the page
+            can never advertise something a change broke. Current wild coverage:
+            428/484 real-world formulas (88%).</p>
+            """ + cards + "</main></body></html>\n";
         Path out = Path.of("examples", "showcase.html");
         Files.createDirectories(out.getParent());
-        Files.writeString(out, html);
-
-        // Golden-output assertions: the page really embeds every live SVG.
-        String written = Files.readString(out);
-        assertTrue(Files.size(out) > 0, "showcase.html non-empty");
-        assertTrue(written.contains("<svg"), "showcase embeds SVGs");
-        assertEquals(svgCount, countOccurrences(written, "<svg"),
-            "one rendered SVG per hero + grid + symbol specimen");
-        assertTrue(written.contains("gallery-specimen.html"),
-            "links to the full specimen gallery");
-        assertTrue(svgCount >= 60,
-            "a broad showcase (hero + 8 examples + a dense symbol strip), got " + svgCount);
-    }
-
-    // -------------------------------------------------------------------------
-    // HTML fragments (self-contained, single file, no external assets).
-    // -------------------------------------------------------------------------
-
-    private static String gridCell(String label, String latex, String svg) {
-        return """
-                <figure class="card">
-                  <div class="render">
-            %s
-                  </div>
-                  <figcaption>
-                    <span class="cap">%s</span>
-                    <code class="src">%s</code>
-                  </figcaption>
-                </figure>""".formatted(indent(svg, "        "), escapeHtml(label), escapeHtml(latex));
-    }
-
-    private static String symbolTile(String macro, String svg) {
-        return """
-                <figure class="glyph" title="\\%s">
-                  <div class="render">
-            %s
-                  </div>
-                  <code>\\%s</code>
-                </figure>""".formatted(escapeHtml(macro), indent(svg, "        "), escapeHtml(macro));
-    }
-
-    private static String strip(String title, String tiles) {
-        return """
-            <section class="strip">
-              <h3>%s</h3>
-              <div class="glyphs">
-            %s
-              </div>
-            </section>
-            """.formatted(escapeHtml(title), indentBlock(tiles, "    "));
-    }
-
-    private static String page(String heroSvg, String gridCells, String newCells,
-            String envCells, String strips) {
-        return """
-            <!doctype html>
-            <html lang="en">
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>LatteX — clean-room LaTeX to SVG math</title>
-              %s
-            </head>
-            <body>
-              <main>
-
-                <section class="hero">
-                  <p class="eyebrow">clean-room · pure Java 25 · zero dependencies</p>
-                  <h1 class="wordmark">Latte<span class="x">X</span></h1>
-                  <p class="tagline">Clean-room LaTeX&nbsp;&rarr;&nbsp;SVG math, sanitizer-safe by construction.</p>
-                  <div class="hero-eq">
-                    <div class="render">
-            %s
-                    </div>
-                    <code class="hero-src">%s</code>
-                  </div>
-                </section>
-
-                <section class="band">
-                  <header class="band-head">
-                    <h2>It renders real math</h2>
-                    <p>Every equation here was drawn live by the pipeline — font&rarr;parse&rarr;layout&rarr;SVG —
-                       for this page. Fractions, roots, scripts, big operators, auto-scaled delimiters,
-                       accents, named operators, text runs, and math alphabets. Nothing is a screenshot.</p>
-                  </header>
-                  <div class="grid">
-            %s
-                  </div>
-                </section>
-
-                <section class="band">
-                  <header class="band-head">
-                    <h2>Freshly landed</h2>
-                    <p>Accents (glyph &amp; stretchy), named operators with limits, upright
-                       <code>\\text</code> runs, and the font-variant alphabets
-                       (<code>\\mathbb</code>, <code>\\mathcal</code>, <code>\\mathfrak</code>) — all now
-                       rendered by the same safe pipeline.</p>
-                  </header>
-                  <div class="grid">
-            %s
-                  </div>
-                </section>
-
-                <section class="band">
-                  <header class="band-head">
-                    <h2>Matrices &amp; multi-line equations</h2>
-                    <p>Whole 2-D layouts, drawn live: the matrix family and <code>cases</code>, and the
-                       aligned / multi-line equation environments — <code>align</code> lines up on the
-                       relation, <code>gather</code> centres each line, and <code>multline</code> sets
-                       the first line flush-left and the last flush-right.</p>
-                  </header>
-                  <div class="grid">
-            %s
-                  </div>
-                </section>
-
-                <section class="band">
-                  <header class="band-head">
-                    <h2>250&plus; symbols</h2>
-                    <p>Relations, operators, arrows, Greek, big operators, and more — a taste of the
-                       table below. See the full <a href="gallery-specimen.html">specimen gallery</a>.</p>
-                  </header>
-            %s
-                </section>
-
-                <section class="band">
-                  <header class="band-head">
-                    <h2>Why it's different</h2>
-                  </header>
-                  <div class="cards">
-                    <article class="feature">
-                      <h3>Sanitizer-safe by construction</h3>
-                      <p>Output is a minimal alphabet — only <code>svg</code>, <code>g</code>,
-                         <code>path</code>, and <code>rect</code>. No scripts, no <code>text</code>,
-                         no external refs, no <code>data:</code> URIs. A build-time containment
-                         test keeps it honest.</p>
-                    </article>
-                    <article class="feature">
-                      <h3>Zero dependencies · pure Java 25</h3>
-                      <p>No TeX install, no headless browser, no native math library. Just the JDK
-                         and a bundled OFL math font parsed in-process. Deterministic, offline,
-                         reproducible.</p>
-                    </article>
-                    <article class="feature">
-                      <h3>Native CLI</h3>
-                      <p>A GraalVM-built <code>lattex</code> binary takes LaTeX on argv or stdin and
-                         writes SVG to stdout — shell out from any language, or fall back to the JVM.</p>
-                    </article>
-                    <article class="feature">
-                      <h3>Semantic <code>\\lx</code> layer <span class="soon">coming</span></h3>
-                      <p>A forthcoming semantic markup layer and interactive affordances build on the
-                         same safe substrate — richer meaning, still zero new attack surface.</p>
-                    </article>
-                  </div>
-                </section>
-
-                <footer class="foot">
-                  <p class="foot-mark">Latte<span class="x">X</span></p>
-                  <nav>
-                    <a href="../QUICKSTART.md">Quickstart</a>
-                    <a href="../RELEASE_NOTES.md">Release notes</a>
-                    <a href="../README.md">Readme</a>
-                    <a href="gallery-specimen.html">Specimen gallery</a>
-                  </nav>
-                  <p class="foot-fine">Rendered live from LaTeX · STIX Two Math (OFL) · clean-room pipeline</p>
-                </footer>
-
-              </main>
-            </body>
-            </html>
-            """.formatted(STYLE, indent(heroSvg, "        "), escapeHtml(HERO_EQ),
-                indentBlock(gridCells, "    "), indentBlock(newCells, "    "),
-                indentBlock(envCells, "    "), indentBlock(strips, "    "));
-    }
-
-    // -------------------------------------------------------------------------
-    // Style. Kept as a raw constant (never run through String.formatted) so its
-    // many literal '%' need no doubling.
-    // -------------------------------------------------------------------------
-    private static final String STYLE = """
-        <style>
-          :root {
-            color-scheme: light dark;
-            --bg:      #eceef1;
-            --bg-2:    #e3e6ea;
-            --panel:   #ffffff;
-            --ink:     #171a1f;
-            --muted:   #5b6570;
-            --faint:   #8a939d;
-            --line:    #d8dce1;
-            --accent:  #b9761b;
-            --accent-2:#d68a2a;
-            --chip:    #f1f3f5;
-            --chip-line:#e0e4e8;
-            --shadow: 0 1px 2px rgba(20,24,30,.04), 0 8px 30px rgba(20,24,30,.06);
-          }
-          @media (prefers-color-scheme: dark) {
-            :root {
-              --bg:      #0e1116;
-              --bg-2:    #0a0d11;
-              --panel:   #161a20;
-              --ink:     #e9ecf1;
-              --muted:   #97a1ad;
-              --faint:   #6b7480;
-              --line:    #262c34;
-              --accent:  #e6a24c;
-              --accent-2:#f0b96b;
-              --chip:    #1b2027;
-              --chip-line:#2a313a;
-              --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px rgba(0,0,0,.45);
-            }
-          }
-          :root[data-theme="light"] {
-            color-scheme: light;
-            --bg:#eceef1; --bg-2:#e3e6ea; --panel:#ffffff; --ink:#171a1f;
-            --muted:#5b6570; --faint:#8a939d; --line:#d8dce1;
-            --accent:#b9761b; --accent-2:#d68a2a; --chip:#f1f3f5; --chip-line:#e0e4e8;
-            --shadow: 0 1px 2px rgba(20,24,30,.04), 0 8px 30px rgba(20,24,30,.06);
-          }
-          :root[data-theme="dark"] {
-            color-scheme: dark;
-            --bg:#0e1116; --bg-2:#0a0d11; --panel:#161a20; --ink:#e9ecf1;
-            --muted:#97a1ad; --faint:#6b7480; --line:#262c34;
-            --accent:#e6a24c; --accent-2:#f0b96b; --chip:#1b2027; --chip-line:#2a313a;
-            --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px rgba(0,0,0,.45);
-          }
-
-          * { box-sizing: border-box; }
-          html { -webkit-text-size-adjust: 100%; }
-          body {
-            margin: 0;
-            background:
-              radial-gradient(1200px 620px at 50% -8%, var(--bg) 0%, var(--bg-2) 62%, var(--bg-2) 100%);
-            color: var(--ink);
-            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-            line-height: 1.55;
-            -webkit-font-smoothing: antialiased;
-          }
-          main { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem 6rem; overflow-x: hidden; }
-          code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-          a { color: var(--accent); text-decoration: none; }
-          a:hover { text-decoration: underline; }
-
-          /* All rendered glyph SVGs fill with currentColor, so they inherit the
-             container's theme-aware ink color — dark ink in light mode, light ink
-             in dark mode. No invert filter (that would double-flip). */
-          .render { display: flex; align-items: center; justify-content: center; width: 100%; color: var(--ink); }
-          .render svg {
-            display: block; width: auto; height: auto; max-width: 100%;
-          }
-
-          /* ---- Hero ---- */
-          .hero { text-align: center; padding: 5.5rem 0 3.5rem; }
-          .eyebrow {
-            font-family: ui-monospace, monospace; font-size: .72rem; letter-spacing: .24em;
-            text-transform: uppercase; color: var(--accent); margin: 0 0 1.4rem;
-          }
-          .wordmark {
-            font-size: clamp(3.4rem, 12vw, 6.5rem); font-weight: 800; letter-spacing: -.045em;
-            line-height: .95; margin: 0; color: var(--ink);
-          }
-          .wordmark .x {
-            background: linear-gradient(160deg, var(--accent-2), var(--accent));
-            -webkit-background-clip: text; background-clip: text; color: transparent;
-          }
-          .tagline {
-            max-width: 40ch; margin: 1.1rem auto 0; color: var(--muted);
-            font-size: clamp(1rem, 2.1vw, 1.2rem);
-          }
-          .hero-eq {
-            margin: 3rem auto 0; max-width: 760px;
-            background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
-            box-shadow: var(--shadow); padding: 2.75rem 2rem 1.75rem;
-            display: flex; flex-direction: column; align-items: center; gap: 1.5rem;
-          }
-          .hero-eq .render { overflow-x: auto; }
-          .hero-eq .render svg { height: clamp(58px, 11vw, 104px); }
-          .hero-src {
-            font-size: .78rem; color: var(--faint); background: var(--chip);
-            border: 1px solid var(--chip-line); border-radius: 7px; padding: .35rem .7rem;
-            max-width: 100%; overflow-x: auto; white-space: nowrap;
-          }
-
-          /* ---- Bands / section headers ---- */
-          .band { margin-top: 4.5rem; }
-          .band-head { max-width: 60ch; margin: 0 0 1.8rem; }
-          .band-head h2 { font-size: 1.55rem; letter-spacing: -.02em; margin: 0 0 .5rem; }
-          .band-head p { margin: 0; color: var(--muted); font-size: 1rem; }
-
-          /* ---- Hero grid (8 examples) ---- */
-          .grid {
-            display: grid; gap: 1rem;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-          }
-          .card {
-            margin: 0; display: flex; flex-direction: column; gap: 1.25rem;
-            background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-            padding: 1.75rem 1.25rem 1.1rem; box-shadow: var(--shadow);
-            transition: border-color .16s ease, transform .16s ease;
-          }
-          .card:hover { border-color: var(--accent); transform: translateY(-3px); }
-          .card .render { flex: 1; min-height: 92px; overflow-x: auto; }
-          .card .render svg { max-height: 92px; }
-          .card figcaption { display: flex; flex-direction: column; gap: .55rem; align-items: flex-start; }
-          .card .cap { font-size: .9rem; font-weight: 600; color: var(--ink); }
-          .card .src {
-            font-size: .72rem; color: var(--muted); background: var(--chip);
-            border: 1px solid var(--chip-line); border-radius: 6px; padding: .28rem .5rem;
-            max-width: 100%; overflow-x: auto; white-space: nowrap;
-          }
-
-          /* ---- Symbol strips ---- */
-          .strip { margin-top: 2rem; }
-          .strip h3 {
-            font-family: ui-monospace, monospace; font-size: .72rem; letter-spacing: .16em;
-            text-transform: uppercase; color: var(--faint); margin: 0 0 .9rem;
-            padding-bottom: .5rem; border-bottom: 1px solid var(--line);
-          }
-          .glyphs {
-            display: grid; gap: .5rem;
-            grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
-          }
-          .glyph {
-            margin: 0; display: flex; flex-direction: column; align-items: center; gap: .5rem;
-            background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-            padding: .85rem .4rem .5rem;
-            transition: border-color .14s ease, background .14s ease;
-          }
-          .glyph:hover { border-color: var(--accent); }
-          .glyph .render { height: 34px; }
-          .glyph .render svg { max-height: 34px; }
-          .glyph code { font-size: .64rem; color: var(--faint); white-space: nowrap; }
-
-          /* ---- Feature cards ---- */
-          .cards {
-            display: grid; gap: 1rem;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-          }
-          .feature {
-            background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-            padding: 1.5rem 1.4rem; box-shadow: var(--shadow);
-          }
-          .feature h3 { margin: 0 0 .6rem; font-size: 1.02rem; letter-spacing: -.01em; }
-          .feature p { margin: 0; color: var(--muted); font-size: .93rem; }
-          .feature code {
-            font-size: .86em; color: var(--ink);
-            background: var(--chip); border: 1px solid var(--chip-line);
-            border-radius: 5px; padding: .04em .3em;
-          }
-          .soon {
-            font-family: ui-monospace, monospace; font-size: .58rem; letter-spacing: .12em;
-            text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent);
-            border-radius: 999px; padding: .1em .55em; margin-left: .35em; vertical-align: middle;
-          }
-
-          /* ---- Footer ---- */
-          .foot {
-            margin-top: 5rem; padding-top: 2.5rem; border-top: 1px solid var(--line);
-            text-align: center;
-          }
-          .foot-mark { font-weight: 800; font-size: 1.35rem; letter-spacing: -.03em; margin: 0 0 1rem; }
-          .foot-mark .x {
-            background: linear-gradient(160deg, var(--accent-2), var(--accent));
-            -webkit-background-clip: text; background-clip: text; color: transparent;
-          }
-          .foot nav { display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: center; }
-          .foot nav a { font-size: .92rem; }
-          .foot-fine {
-            margin: 1.6rem 0 0; color: var(--faint); font-size: .74rem;
-            font-family: ui-monospace, monospace; letter-spacing: .04em;
-          }
-
-          /* ---- Motion: a single subtle hero reveal ---- */
-          @media (prefers-reduced-motion: no-preference) {
-            .hero > * { animation: rise .7s cubic-bezier(.2,.7,.2,1) both; }
-            .hero .wordmark  { animation-delay: .04s; }
-            .hero .tagline   { animation-delay: .10s; }
-            .hero .hero-eq   { animation-delay: .16s; }
-            @keyframes rise {
-              from { opacity: 0; transform: translateY(14px); }
-              to   { opacity: 1; transform: translateY(0); }
-            }
-          }
-        </style>""";
-
-    // -------------------------------------------------------------------------
-    // Small helpers (mirrors S8SpecimenGalleryTest).
-    // -------------------------------------------------------------------------
-
-    private static String indent(String block, String pad) {
-        return block.lines().map(l -> pad + l)
-            .reduce((a, b) -> a + "\n" + b).orElse(block);
-    }
-
-    private static String indentBlock(String block, String pad) {
-        return block.lines().map(l -> l.isEmpty() ? l : pad + l)
-            .reduce((a, b) -> a + "\n" + b).orElse(block);
-    }
-
-    private static String escapeHtml(String s) {
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-    }
-
-    private static int countOccurrences(String haystack, String needle) {
-        int count = 0;
-        for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + 1)) {
-            count++;
-        }
-        return count;
+        Files.writeString(out, page);
+        assertTrue(Files.size(out) > 5_000);
     }
 }

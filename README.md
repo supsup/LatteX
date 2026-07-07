@@ -10,6 +10,13 @@ String svg = com.lattex.api.LatteX.render("\\frac{a+b}{c}");
 
 > **Acknowledgments.** LatteX is a *clean-room* implementation — its layout is derived from Knuth's *TeXbook* (Appendix G) and the OpenType-MATH / SVG specifications, not from any existing renderer's source. That said, a grateful hat-tip to **[KaTeX](https://katex.org)**: we used its superb *supported-functions* coverage as a **feature reference** — *what* LaTeX commands are worth supporting — to shape our roadmap. Thanks also to the **STIX Two Math** font (SIL OFL) that LatteX bundles, and to the wider TeX/LaTeX ecosystem it stands on.
 
+## See it
+
+**[examples/showcase.html](examples/showcase.html)** — a curated tour of what
+LatteX renders (every formula on it is regression-locked by the wild-corpus
+ratchet: 428/484 real-world formulas, 88%, and only allowed to go up). For the
+fx layer in motion, **[the fx gallery](examples/GALLERY.md)**.
+
 ## Why
 
 The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX and MathJax are JavaScript. JLaTeXMath is excellent but old (AWT/image-first) **and GPL**. SnuggleTeX is permissive but limited to MathML. LatteX fills that gap: **Apache-2.0, pure Java, SVG-native.**
