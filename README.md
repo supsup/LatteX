@@ -62,3 +62,7 @@ Requires a Java 25 toolchain (Gradle provisions it via the toolchain spec).
 ## Contributing
 
 LatteX is a **clean-room** implementation. Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md) — in particular the rule that we implement from the *primary sources* (Knuth's TeXbook + the OpenType/SVG specs), **never** from other renderers' code.
+
+## Disclaimer
+
+This project is provided under the Apache License 2.0 on an "AS IS" basis, without warranties or conditions of any kind. See the LICENSE file for details.
