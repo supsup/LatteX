@@ -64,6 +64,37 @@ class LayoutS4Test {
         assertAlphabet(LatteX.render(nested));
     }
 
+    @Test
+    void binomUsesWiderStackGapThanFraction() {
+        // \binom (rule-less stack) must use the OpenType stack* spacing, whose
+        // gap is ~3x the fraction gap — so its numerator/denominator are pushed
+        // farther apart than a same-content \frac. \frac geometry is unchanged
+        // (guarded by fractionRuleSitsBetweenNumeratorAndDenominator above).
+        int nGid = FONT.glyphId('n');
+        int kGid = FONT.glyphId('k');
+
+        double fracSep = numDenSeparation(layout("\\frac{n}{k}"), nGid, kGid);
+        double binomSep = numDenSeparation(layout("\\binom{n}{k}"), nGid, kGid);
+
+        assertTrue(binomSep > fracSep,
+            "binom stack gap (" + binomSep + ") wider than fraction gap (" + fracSep + ")");
+    }
+
+    /** Vertical distance between the numerator ('n') and denominator ('k') baselines. */
+    private static double numDenSeparation(Layout l, int numGid, int denGid) {
+        Double num = null;
+        Double den = null;
+        for (PositionedGlyph g : l.glyphs()) {
+            if (g.glyphId() == numGid) {
+                num = g.baselineY();
+            } else if (g.glyphId() == denGid) {
+                den = g.baselineY();
+            }
+        }
+        assertTrue(num != null && den != null, "found numerator and denominator glyphs");
+        return den - num;
+    }
+
     // ---- Scripts ---------------------------------------------------------
 
     @Test

@@ -558,23 +558,46 @@ public final class LayoutEngine {
         Box denBox = layoutBox(frac.denominator(), ctx.denominator());
 
         double axis = c.axisHeight() * scale;
-        // A rule-less fraction (\binom) has zero bar thickness, so the numerator and
-        // denominator close up around the (undrawn) bar into a tight binomial stack.
+        // A rule-less fraction (\binom / \atop) has zero bar thickness.
         double thickness = frac.hasRule() ? c.fractionRuleThickness() * scale : 0.0;
-        double numShiftUp = (display
-            ? c.fractionNumeratorDisplayStyleShiftUp() : c.fractionNumeratorShiftUp()) * scale;
-        double denShiftDown = (display
-            ? c.fractionDenominatorDisplayStyleShiftDown() : c.fractionDenominatorShiftDown()) * scale;
-        double numGapMin = (display
-            ? c.fractionNumDisplayStyleGapMin() : c.fractionNumeratorGapMin()) * scale;
-        double denGapMin = (display
-            ? c.fractionDenomDisplayStyleGapMin() : c.fractionDenominatorGapMin()) * scale;
-
-        // Keep the numerator's bottom clear of the rule's top by at least numGapMin;
-        // symmetrically for the denominator below the rule.
         double ruleHalf = thickness / 2.0;
-        numShiftUp = Math.max(numShiftUp, axis + ruleHalf + numGapMin + numBox.depth());
-        denShiftDown = Math.max(denShiftDown, denBox.height() - axis + ruleHalf + denGapMin);
+
+        double numShiftUp;
+        double denShiftDown;
+        if (frac.hasRule()) {
+            numShiftUp = (display
+                ? c.fractionNumeratorDisplayStyleShiftUp() : c.fractionNumeratorShiftUp()) * scale;
+            denShiftDown = (display
+                ? c.fractionDenominatorDisplayStyleShiftDown() : c.fractionDenominatorShiftDown()) * scale;
+            double numGapMin = (display
+                ? c.fractionNumDisplayStyleGapMin() : c.fractionNumeratorGapMin()) * scale;
+            double denGapMin = (display
+                ? c.fractionDenomDisplayStyleGapMin() : c.fractionDenominatorGapMin()) * scale;
+
+            // Keep the numerator's bottom clear of the rule's top by at least numGapMin;
+            // symmetrically for the denominator below the rule.
+            numShiftUp = Math.max(numShiftUp, axis + ruleHalf + numGapMin + numBox.depth());
+            denShiftDown = Math.max(denShiftDown, denBox.height() - axis + ruleHalf + denGapMin);
+        } else {
+            // A rule-less stack (\binom / \atop) uses the OpenType stack* family,
+            // not the tighter fraction* spacing — stackGapMin is ~3× the fraction
+            // gap, matching TeX's \atop geometry (TeXbook Appendix-G Rule 15).
+            numShiftUp = (display
+                ? c.stackTopDisplayStyleShiftUp() : c.stackTopShiftUp()) * scale;
+            denShiftDown = (display
+                ? c.stackBottomDisplayStyleShiftDown() : c.stackBottomShiftDown()) * scale;
+            double gapMin = (display
+                ? c.stackDisplayStyleGapMin() : c.stackGapMin()) * scale;
+
+            // Enforce the minimum gap between the numerator's bottom and the
+            // denominator's top, splitting any shortfall evenly around the axis.
+            double gap = (numShiftUp - numBox.depth()) - (denBox.height() - denShiftDown);
+            if (gap < gapMin) {
+                double need = (gapMin - gap) / 2.0;
+                numShiftUp += need;
+                denShiftDown += need;
+            }
+        }
 
         double width = Math.max(numBox.width(), denBox.width());
         double numX = (width - numBox.width()) / 2.0;
