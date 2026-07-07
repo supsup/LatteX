@@ -85,6 +85,8 @@ class MathParserTest {
                 String kind = cp == Accent.RULE ? (under ? "under" : "over") : sym(cp);
                 yield "Acc(" + cmd + "[" + kind + (stretchy ? ",wide" : "") + "]," + pp(base) + ")";
             }
+            case MathNode.Colored(var body, var color) ->
+                "Col[" + color.svgValue() + "](" + pp(body) + ")";
             case MathNode.OperatorName(var name, var takesLimits) ->
                 "Op(" + name + (takesLimits ? ",lim" : "") + ")";
             case MathNode.TextRun(var text, var style) ->
@@ -329,6 +331,21 @@ class MathParserTest {
         assertTrue(t.hasRule(), "\\tfrac keeps the fraction rule");
         assertEquals(MathNode.FractionStyle.TEXT, t.fractionStyle());
         assertEquals("Frac[TEXT](A(1,ORD),A(2,ORD))", pp(t));
+    }
+
+    @Test
+    void textcolorPaintsItsBodyValidatingTheColor() {
+        MathNode.Colored red = assertInstanceOf(MathNode.Colored.class,
+            MathParser.parse("\\textcolor{red}{x}"));
+        assertEquals("#ff0000", red.color().svgValue());
+        assertEquals("Col[#ff0000](A(x,ORD))", pp(red));
+        // named + hex both route through Color — the single validated fill boundary
+        assertEquals("#0000ff", assertInstanceOf(MathNode.Colored.class,
+            MathParser.parse("\\textcolor{blue}{y}")).color().svgValue());
+        assertEquals("#ff8800", assertInstanceOf(MathNode.Colored.class,
+            MathParser.parse("\\textcolor{#ff8800}{z}")).color().svgValue());
+        // an unknown/malformed color is a clean parse error, never an emitted raw string
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\textcolor{bogus}{x}"));
     }
 
     @Test

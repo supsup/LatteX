@@ -2,8 +2,10 @@ package com.lattex.layout;
 
 import com.lattex.font.GlyphOutline;
 import com.lattex.font.SfntFont;
+import com.lattex.api.Color;
 import com.lattex.parse.MathNode;
 import com.lattex.parse.MathNode.Accent;
+import com.lattex.parse.MathNode.Colored;
 import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
 import com.lattex.parse.MathNode.Fenced;
@@ -110,6 +112,7 @@ public final class LayoutEngine {
             case Fraction frac -> fractionBox(frac, ctx);
             case Radical(var radicand, var index) -> radicalBox(radicand, index, ctx);
             case Spacing(var muWidth) -> Box.glue(muWidth * ctx.mu());
+            case Colored(var body, var color) -> coloredBox(body, color, ctx);
             case Phantom(var content, var keepW, var keepV) ->
                 phantomBox(content, keepW, keepV, ctx);
             case BigOperator(var op, var lower, var upper, var limitsMode) ->
@@ -408,6 +411,20 @@ public final class LayoutEngine {
     }
 
     /** The spacing class a node contributes in a row (composites have implied classes). */
+    /**
+     * Lays out {@code body} exactly as usual, then stamps {@code color} onto every
+     * glyph and rule it produced — so the color is a pure presentation overlay with
+     * no effect on geometry. {@code paintedWith} only sets the color where none is
+     * present, so an inner {@code \color} wrapped by an outer one keeps the inner.
+     */
+    private static Box coloredBox(MathNode body, Color color, LayoutContext ctx) {
+        Box b = layoutBox(body, ctx);
+        return new Box(
+            b.glyphs().stream().map(g -> g.paintedWith(color)).toList(),
+            b.rules().stream().map(r -> r.paintedWith(color)).toList(),
+            b.width(), b.height(), b.depth());
+    }
+
     private static MathClass classOf(MathNode node) {
         return switch (node) {
             case Atom atom -> atom.mathClass();
@@ -418,6 +435,7 @@ public final class LayoutEngine {
             case BigOperator _ -> MathClass.OP;
             case MathList _ -> MathClass.ORD; // a {group} behaves as an Ord atom
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
+            case Colored c -> classOf(c.body()); // color is transparent: take the body's class
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
             case OperatorName _ -> MathClass.OP; // a named operator is class Op
             case TextRun _ -> MathClass.ORD;   // a text run behaves as an Ord atom

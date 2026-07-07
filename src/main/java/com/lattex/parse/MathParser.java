@@ -608,6 +608,14 @@ public final class MathParser {
                 MathNode den = parseArgument("\\tfrac denominator");
                 return new Fraction(num, den, true, MathNode.FractionStyle.TEXT);
             }
+            case "textcolor" -> {
+                // \textcolor{color}{body}: paint body a fixed color. The name/hex is
+                // validated through Color (the only path from a raw string to an SVG
+                // fill); an inner \textcolor wins over an outer one at layout time.
+                Color color = parseColorArg("\\textcolor");
+                MathNode body = parseArgument("\\textcolor body");
+                return new MathNode.Colored(body, color);
+            }
             case "binom" -> {
                 return binom(MathNode.FractionStyle.INHERIT);
             }
@@ -921,6 +929,36 @@ public final class MathParser {
      * literal characters — an {@code \operatorname} whose argument reaches for a
      * command/group/script fails cleanly rather than silently dropping it.
      */
+    /**
+     * Reads a {@code {color}} group as a validated {@link Color}. The group holds
+     * a color name ({@code red}) or a hex literal ({@code #ff0000}); it is routed
+     * through {@link Color#parse} — the single typed boundary — so an unrecognized
+     * or malformed color fails as a clean parse error, never an emitted raw string.
+     */
+    private Color parseColorArg(String command) {
+        if (peek().kind() != Kind.LBRACE) {
+            throw new MathSyntaxException(
+                command + " needs a '{color}' argument but found " + describe(peek()));
+        }
+        next(); // consume '{'
+        StringBuilder sb = new StringBuilder();
+        while (peek().kind() != Kind.RBRACE) {
+            Token t = peek();
+            if (t.kind() != Kind.CHAR) {
+                throw new MathSyntaxException(
+                    command + " color must be a name or hex literal, but found " + describe(t));
+            }
+            sb.appendCodePoint(t.codePoint());
+            next();
+        }
+        next(); // consume '}'
+        try {
+            return Color.parse(sb.toString());
+        } catch (IllegalArgumentException e) {
+            throw new MathSyntaxException(e.getMessage());
+        }
+    }
+
     private String readOperatorNameArg() {
         if (peek().kind() != Kind.LBRACE) {
             throw new MathSyntaxException(

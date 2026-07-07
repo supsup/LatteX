@@ -250,6 +250,7 @@ public final class MathVariant {
                 a.accentCodePoint(), a.stretchy(), a.under());
             case Phantom p -> new Phantom(
                 apply(style, p.content()), p.keepWidth(), p.keepVertical());
+            case MathNode.Colored c -> new MathNode.Colored(apply(style, c.body()), c.color());
             // Glue, roman operator words, and text-mode runs carry no math letter to restyle.
             case Spacing s -> s;
             case OperatorName o -> o;

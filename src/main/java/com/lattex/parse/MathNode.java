@@ -1,5 +1,6 @@
 package com.lattex.parse;
 
+import com.lattex.api.Color;
 import com.lattex.api.RenderOptions;
 import java.util.List;
 import java.util.Objects;
@@ -292,6 +293,30 @@ public sealed interface MathNode {
      * @param muWidth the space width in math units (may be negative, e.g. {@code \!})
      */
     record Spacing(double muWidth) implements MathNode {
+    }
+
+    /**
+     * A sub-formula painted a fixed {@link Color} — the node behind
+     * {@code \textcolor{c}{…}} and {@code \color{c}…}. Layout-transparent: it lays
+     * out exactly like its {@link #body} and takes the body's implied spacing
+     * class, so color never affects geometry. The {@link Color} is stamped onto the
+     * body's glyphs at layout time and emitted as a per-{@code <path>} {@code fill}
+     * override — an inner color wins over an outer one, and the surrounding group
+     * fill is left untouched. {@link Color} is the only way in from a raw string, so
+     * no unvalidated fill value can ever reach the SVG.
+     *
+     * @param body  the sub-formula to paint (non-null)
+     * @param color the validated fill color (non-null)
+     */
+    record Colored(MathNode body, Color color) implements MathNode {
+        public Colored {
+            if (body == null) {
+                throw new IllegalArgumentException("Colored body must not be null");
+            }
+            if (color == null) {
+                throw new IllegalArgumentException("Colored color must not be null");
+            }
+        }
     }
 
     /**
