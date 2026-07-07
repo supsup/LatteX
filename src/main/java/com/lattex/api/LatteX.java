@@ -194,7 +194,7 @@ public final class LatteX {
      *
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @return {@code ""} or a leading-space-prefixed {@code data-lx-fx-*} attribute run
-     * @throws MathSyntaxException if {@code latex} does not parse
+     * @throws com.lattex.parse.MathSyntaxException if {@code latex} does not parse
      */
     public static String fxContainerAttrs(String latex) {
         MathNode node = MathParser.parse(latex);

@@ -27,6 +27,20 @@ class LxMacroTest {
     // ---- style options reduce to a typed RenderOptions ----
 
     @Test
+    void bodyQuotesAreOrdinaryContentNotDelimiters() {
+        // Lattice (lattex/42): \lx{"} falsely reported unterminated because the
+        // brace scanner toggled quote-state on body quotes. Quotes are syntax
+        // ONLY inside [options].
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+            () -> com.lattex.api.LatteX.renderStyledHtml("\\lx{\"}"));
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+            () -> com.lattex.api.LatteX.renderStyledHtml("\\lx{\\text{\"}}"));
+        // options keep their quote semantics: a bracket inside a quoted value
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+            () -> com.lattex.api.LatteX.renderStyledHtml("\\lx[a11y.label=\"[x]\"]{x}"));
+    }
+
+    @Test
     void parsesStyleColorAndScale() {
         StyledMath sm = lx("\\lx[style.color=#c0392b, style.scale=1.4]{ \\frac{a+b}{c} }");
         assertEquals(1.4, sm.style().scale());

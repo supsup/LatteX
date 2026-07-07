@@ -515,6 +515,10 @@ body { font-family: system-ui; max-width: 40rem; margin: 3rem auto; }
     var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
     var tint = (authored && authored.toLowerCase() !== 'currentcolor')
       ? authored : '#5fe8ff';
+    // Capture pristine styles BEFORE any mutation (Lattice: capturing after
+    // the tint meant teardown "restored" the hologram look, not the original).
+    var col0 = el.style.color, fil0 = el.style.filter,
+        tf0 = el.style.transform, trans0 = el.style.transition, op0 = el.style.opacity;
     el.style.color = tint;
     function aberr(px) {
       return 'drop-shadow(' + px + 'px 0 0 rgba(255,44,120,.5))'
@@ -530,8 +534,6 @@ body { font-family: system-ui; max-width: 40rem; margin: 3rem auto; }
       + ' transparent 1px, transparent 3px);';
     document.body.appendChild(scan);
     el._lxHolo = scan;
-    var col0 = el.style.color, fil0 = el.style.filter,
-        tf0 = el.style.transform, trans0 = el.style.transition, op0 = el.style.opacity;
     function place() {
       var r = el.getBoundingClientRect();
       scan.style.left = r.left + 'px'; scan.style.top = r.top + 'px';
@@ -1103,11 +1105,13 @@ body { font-family: system-ui; max-width: 40rem; margin: 3rem auto; }
   // up out of the settled ink. Body-level drop/splat/spatter overlays, removed on cleanup.
   function inkdrop(el) {
     if (el.__lxInk) { return; }
+    // Reduced motion: show plainly and DON'T trip the re-entry guard
+    // (Lattice: setting it first made reduced-motion inkdrop one-shot forever).
+    if (reduced) { el.style.opacity = '1'; return; }
     el.__lxInk = true;
     var ink = resolveColor(el);
     var trans0 = el.style.transition, to0 = el.style.transformOrigin,
         pos0 = el.style.position, z0 = el.style.zIndex, tf0 = el.style.transform;
-    if (reduced) { el.style.opacity = '1'; return; }
     var r = el.getBoundingClientRect();
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     var timers = [];
