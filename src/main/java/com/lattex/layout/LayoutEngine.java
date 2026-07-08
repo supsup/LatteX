@@ -150,6 +150,7 @@ public final class LayoutEngine {
                 bigOperatorBox(op, lower, upper, limitsMode, ctx);
             case Fenced(var leftDelim, var body, var rightDelim) ->
                 fencedBox(leftDelim, body, rightDelim, ctx);
+            case MathNode.SizedDelim sd -> sizedDelimBox(sd, ctx);
             case Accent accent -> accentBox(accent, ctx);
             case OperatorName opName -> operatorNameBox(opName, ctx);
             case TextRun textRun -> textRunBox(textRun, ctx);
@@ -487,6 +488,7 @@ public final class LayoutEngine {
             case Fraction _ -> MathClass.ORD;
             case Radical _ -> MathClass.ORD;
             case Fenced _ -> MathClass.INNER;
+            case MathNode.SizedDelim sd -> sd.mathClass(); // the declared \bigl/\bigr/\bigm class
             case BigOperator _ -> MathClass.OP;
             case MathList _ -> MathClass.ORD; // a {group} behaves as an Ord atom
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
@@ -1112,6 +1114,28 @@ public final class LayoutEngine {
             depth = Math.max(depth, hd[2]);
         }
         return new Box(glyphs, rules, penX, height, depth);
+    }
+
+    /** Fixed spans (as multiples of the em) for {@code \big}…{@code \Bigg}, indexed 1..4. */
+    private static final double[] BIG_DELIM_SPAN = {0.0, 1.2, 1.8, 2.4, 3.0};
+
+    /**
+     * A manually-sized delimiter ({@code \big}/{@code \Big}/{@code \bigg}/{@code
+     * \Bigg}): the same stretch machinery as {@code \left..\right}, but the target span
+     * is a FIXED multiple of the em rather than the content height, centred on the math
+     * axis. The declared class (OPEN/CLOSE/REL/ORD) rides on the node for spacing.
+     */
+    private static Box sizedDelimBox(MathNode.SizedDelim sd, LayoutContext ctx) {
+        if (sd.delimCp() == MathNode.Fenced.NULL_DELIMITER) {
+            return Box.glue(0.0); // \bigl. — an invisible (null) delimiter
+        }
+        SfntFont font = ctx.font();
+        double scale = ctx.scale();
+        double axis = ctx.constants().axisHeight() * scale;
+        double span = BIG_DELIM_SPAN[sd.sizeLevel()] * ctx.fontSize();
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        double[] hd = placeDelimiter(font, sd.delimCp(), span, axis, scale, 0.0, glyphs);
+        return new Box(glyphs, List.of(), hd[0], Math.max(0.0, hd[1]), Math.max(0.0, hd[2]));
     }
 
     /**

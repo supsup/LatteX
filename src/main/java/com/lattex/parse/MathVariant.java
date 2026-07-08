@@ -245,6 +245,7 @@ public final class MathVariant {
                 b.limitsMode());
             case Fenced f -> new Fenced(
                 f.leftDelim(), apply(style, f.body()), f.rightDelim());
+            case MathNode.SizedDelim sd -> sd; // a delimiter glyph is not font-variant styled
             case Accent a -> new Accent(
                 a.command(), apply(style, a.base()),
                 a.accentCodePoint(), a.stretchy(), a.under());

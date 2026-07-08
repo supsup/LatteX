@@ -351,6 +351,8 @@ public final class LatteX {
                 String close = rightDelim == Fenced.NULL_DELIMITER ? "" : " " + delimiterName(rightDelim);
                 yield (open + inner + close).strip();
             }
+            case MathNode.SizedDelim sd ->
+                sd.delimCp() == Fenced.NULL_DELIMITER ? "" : delimiterName(sd.delimCp());
             case Accent(var command, var base, _, _, _) ->
                 accentName(command) + " " + describe(base);
             case OperatorName(var name, _) -> name;
