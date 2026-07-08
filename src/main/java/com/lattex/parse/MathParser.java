@@ -983,12 +983,21 @@ public final class MathParser {
         StringBuilder sb = new StringBuilder();
         while (peek().kind() != Kind.RBRACE) {
             Token t = peek();
-            if (t.kind() != Kind.CHAR) {
+            if (t.kind() == Kind.CHAR) {
+                sb.appendCodePoint(t.codePoint());
+                next();
+            } else if (t.kind() == Kind.COMMAND && SPACES.containsKey(t.name())) {
+                // Spacing commands are allowed inside an operator name (arg\,max,
+                // lim\;sup): a positive space renders as one literal space; a negative
+                // space (\!) collapses. The name stays plain text — no math nucleus.
+                if (SPACES.get(t.name()) > 0) {
+                    sb.append(' ');
+                }
+                next();
+            } else {
                 throw new MathSyntaxException(
                     "\\operatorname argument must be plain text, but found " + describe(t));
             }
-            sb.appendCodePoint(t.codePoint());
-            next();
         }
         next(); // consume '}'
         if (sb.length() == 0) {

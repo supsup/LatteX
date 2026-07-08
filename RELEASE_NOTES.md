@@ -4,6 +4,18 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## 0.5.0 · 2026-07-08 — embedded fragments, equation numbering & real semantic threading
+
+**Wild render coverage 96.5% → 98.6%** (477/484), plus the semantic moat goes from demo to real.
+
+- **`LatteX.renderFragment(latex, fontSizePx)`** — a new public API returning the inner `<g>/<path>/<rect>` markup + box metrics (`widthPx`/`heightPx`/`depthPx`), for a consumer that composes math inline on a shared baseline (a diagram renderer drawing math-in-labels). No `<svg>` wrapper; same minimal alphabet. Powers Sirentide's math-in-labels.
+- **`\tag{…}` equation numbering** — a display equation's label renders flush-right, auto-wrapped in parens (`\tag{1}` → `(1)`). `\tag` is equation-global, hoisted to the top level wherever it appears; the label is math-mode (`\tag{5.29}`, `\tag{$*$}`). Closed the entire `\tag` gap cluster (+7 wild rows).
+- **Semantic `thread` is real now.** The `thread` effect (hover a token → every occurrence lights up) shipped its runtime + contract in 0.2.1 but had **no producer** — glyphmaps were hand-stamped fixtures. `SvgEmitter.glyphmap` now serializes the `data-lx-glyphmap` token-identity sidecar from the layout (code point → emitted-path indices, in emit order), and `renderStyledHtml` auto-stamps it for a `thread` effect. The "automatic stamping" promised in 0.2.1 finally ships.
+- **`\operatorname*{…}` spacing + `\oiint`/`\oiiint`** — operator names now accept spacing commands (`\operatorname*{arg\,max}`, `lim\;sup`); added the surface/volume integral big-operators. (+3 wild rows.)
+- **Hardening & honesty** — a matrix cell-count cap (`MAX_MATRIX_CELLS`) closes a breadth-DoS the depth guard missed (a wide+tall grid could force ~4·10⁸ cells from a ~100 KB source); and the CLI version is now single-sourced from the build (`lattex --version` no longer drifts), with the docs reconciled to the actual API.
+
+---
+
 ## 0.4.0 · 2026-07-07 — extensible arrows, style-pinned fractions, per-subterm color & a PNG export
 
 The fidelity push continues — **wild render coverage 92.8% → 96.5%**:
@@ -160,4 +172,3 @@ Render at a custom scale, color, or math style.
 
 - **Live in docs, made interactive** — `$…$` math renders in a Markdown → HTML pipeline (the flexmark seam), with `\lx` effects, graph popups, and click-to-copy reaching the page.
 - **A MathML output option** — for screen readers and assistive tech.
-- **Equation numbering** — for numbered display equations.

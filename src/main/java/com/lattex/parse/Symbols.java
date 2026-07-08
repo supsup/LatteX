@@ -45,6 +45,8 @@ final class Symbols {
         // provides them at these code points; verified present).
         Map.entry("iint", new Sym(0x222C, MathClass.OP)),     // ∬
         Map.entry("iiint", new Sym(0x222D, MathClass.OP)),    // ∭
+        Map.entry("oiint", new Sym(0x222F, MathClass.OP)),    // ∯ surface integral
+        Map.entry("oiiint", new Sym(0x2230, MathClass.OP)),   // ∰ volume integral
         Map.entry("idotsint", new Sym(0x2A0C, MathClass.OP)), // ⨌
         Map.entry("bigcup", new Sym(0x22C3, MathClass.OP)),   // ⋃
         Map.entry("bigcap", new Sym(0x22C2, MathClass.OP)),   // ⋂

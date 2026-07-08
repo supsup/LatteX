@@ -44,7 +44,7 @@ OK	calculus-physics	D	f''(x) \begin{cases} > 0 & \text{concave up} \\ < 0 & \tex
 OK	calculus-physics	D	\nabla f = \frac{\partial f}{\partial x}\,\hat{\imath} + \frac{\partial f}{\partial y}\,\hat{\jmath} + \frac{\partial f}{\partial z}\,\hat{k}
 OK	calculus-physics	D	\nabla^2 \phi = 0
 OK	calculus-physics	D	\oint_{\partial S} \mathbf{F}\cdot d\mathbf{r} = \iint_S (\nabla\times\mathbf{F})\cdot d\mathbf{S}
-GAP	calculus-physics	D	\iiint_V (\nabla\cdot\mathbf{F})\,dV = \oiint_{\partial V} \mathbf{F}\cdot d\mathbf{S}
+OK	calculus-physics	D	\iiint_V (\nabla\cdot\mathbf{F})\,dV = \oiint_{\partial V} \mathbf{F}\cdot d\mathbf{S}
 OK	calculus-physics	D	\nabla\times\mathbf{F} = \begin{vmatrix} \hat{\mathbf{i}} & \hat{\mathbf{j}} & \hat{\mathbf{k}} \\ \frac{\partial}{\partial x} & \frac{\partial}{\partial y} & \frac{\partial}{\partial z} \\ F_x & F_y & F_z \end{vmatrix}
 OK	calculus-physics	D	\mathbf{a}\times(\mathbf{b}\times\mathbf{c}) = \mathbf{b}(\mathbf{a}\cdot\mathbf{c}) - \mathbf{c}(\mathbf{a}\cdot\mathbf{b})
 OK	calculus-physics	I	(\mathbf{a}\times\mathbf{b})_i = \epsilon_{ijk}\,a_j b_k
@@ -166,9 +166,9 @@ OK	stats-ml	D	D_{\mathrm{KL}}(P \,\|\, Q) = \sum_{x} P(x) \log \frac{P(x)}{Q(x)}
 OK	stats-ml	D	I(X; Y) = H(X) - H(X \mid Y)
 OK	stats-ml	D	\mathcal{L} = -\frac{1}{N} \sum_{i=1}^{N} \sum_{c=1}^{C} y_{i,c} \log \hat{y}_{i,c}
 OK	stats-ml	D	\mathrm{MSE} = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2
-GAP	stats-ml	D	\hat{\theta}_{\mathrm{MLE}} = \operatorname*{arg\,max}_{\theta} \sum_{i=1}^{n} \log p(x_i \mid \theta)
+OK	stats-ml	D	\hat{\theta}_{\mathrm{MLE}} = \operatorname*{arg\,max}_{\theta} \sum_{i=1}^{n} \log p(x_i \mid \theta)
 OK	stats-ml	D	\hat{\theta}_{\text{MAP}} = \arg\max_{\theta} \; p(\mathcal{D} \mid \theta)\, p(\theta)
-GAP	stats-ml	D	\hat{\boldsymbol\beta}^{\text{ridge}} = \operatorname*{arg\,min}_{\boldsymbol\beta} \left\{ \|\mathbf{y} - \mathbf{X}\boldsymbol\beta\|_2^2 + \lambda \|\boldsymbol\beta\|_2^2 \right\}
+OK	stats-ml	D	\hat{\boldsymbol\beta}^{\text{ridge}} = \operatorname*{arg\,min}_{\boldsymbol\beta} \left\{ \|\mathbf{y} - \mathbf{X}\boldsymbol\beta\|_2^2 + \lambda \|\boldsymbol\beta\|_2^2 \right\}
 OK	stats-ml	D	\hat{\beta} = (X^\top X)^{-1} X^\top y
 OK	stats-ml	D	\min_{\beta} \; \frac{1}{2n} \|y - X\beta\|_2^2 + \lambda \|\beta\|_1
 OK	stats-ml	D	\sigma(z) = \frac{1}{1 + e^{-z}}

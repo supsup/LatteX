@@ -365,6 +365,25 @@ class MathParserTest {
     }
 
     @Test
+    void operatorNameAllowsSpacingCommandsInItsArgument() {
+        // arg\,max / lim\;sup: a spacing command in an operator name renders as one
+        // literal space, not a parse error; \! (negative) collapses.
+        assertEquals("Op(arg max,lim)", pp(MathParser.parse("\\operatorname*{arg\\,max}")));
+        assertEquals("Op(lim sup)", pp(MathParser.parse("\\operatorname{lim\\;sup}")));
+        assertEquals("Op(argmax)", pp(MathParser.parse("\\operatorname{arg\\!max}")));
+        // a non-spacing command in the name is still a loud error (name is plain text)
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\operatorname{a\\alpha b}"));
+    }
+
+    @Test
+    void oiintSurfaceIntegralParsesAsABigOperator() {
+        // \oiint / \oiiint are big operators (surface/volume integrals), not Unknown command
+        assertInstanceOf(MathNode.BigOperator.class, MathParser.parse("\\oiint_S"));
+        assertInstanceOf(MathNode.BigOperator.class, MathParser.parse("\\oiiint_V"));
+    }
+
+    @Test
     void greekAndRelations() {
         assertEquals(
             "L(A(U+03B1,ORD) A(+,BIN) A(U+03B2,ORD) A(U+2264,REL) A(U+03B3,ORD))",
