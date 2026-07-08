@@ -84,4 +84,35 @@ class GlyphmapTest {
         assertFalse(com.lattex.api.LatteX.renderStyledHtml("x + x").contains("data-lx-glyphmap"),
             "plain math must not stamp a glyphmap");
     }
+
+    @Test
+    void indicesIdentifyTheSameGlyphOnASkippableCorpus() {
+        // The strong coupling check: corpora where the glyphmap index != glyph position,
+        // so a mis-counted skip would land on the WRONG path. x\phantom{y}x -> 78:0,1
+        // (phantom inkless, skipped); \sum x + x -> 78:1,3 (\sum is inked but NO_SOURCE at
+        // index 0); \frac{x}{x}+x -> 78:0,1,3 (the fraction bar is a <rect>, not a path).
+        // Every index in a run must point to BYTE-IDENTICAL path data (the same glyph).
+        for (String latex : java.util.List.of("x \\phantom{y} x", "\\sum x + x", "\\frac{x}{x} + x")) {
+            String map = glyphmapOf(latex);
+            java.util.List<String> paths = pathData(com.lattex.api.LatteX.render(latex));
+            for (String run : map.split(";")) {
+                String[] idxs = run.split(":")[1].split(",");
+                String glyph0 = paths.get(Integer.parseInt(idxs[0]));
+                for (String idx : idxs) {
+                    assertEquals(glyph0, paths.get(Integer.parseInt(idx)),
+                        "run " + run + " in [" + latex + "] points to differing glyph outlines "
+                            + "— a skip miscount would land on the wrong path");
+                }
+            }
+        }
+    }
+
+    private static java.util.List<String> pathData(String svg) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        Matcher m = Pattern.compile("<path d=\"([^\"]*)\"").matcher(svg);
+        while (m.find()) {
+            out.add(m.group(1));
+        }
+        return out;
+    }
 }
