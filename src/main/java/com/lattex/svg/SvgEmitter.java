@@ -109,12 +109,12 @@ public final class SvgEmitter {
     static void emitInner(StringBuilder out, Layout layout, SfntFont font, String fill,
                           double dx, double dy) {
         out.append("  <g fill=\"").append(fill).append("\">\n");
-        for (PositionedGlyph g : layout.glyphs()) {
-            String d = GlyphPath.toPathData(font.outline(g.glyphId()));
-            if (d.isEmpty()) {
-                continue; // whitespace / inkless glyph
-            }
-            out.append("    <path d=\"").append(d).append("\"");
+        // ONE producer decides which glyphs emit a <path> and in what order
+        // (emittedGlyphs); glyphmap() keys off the SAME sequence, so a path index in
+        // the SVG and a path index in the data-lx-glyphmap sidecar can never diverge.
+        for (EmittedGlyph eg : emittedGlyphs(layout, font)) {
+            PositionedGlyph g = eg.glyph();
+            out.append("    <path d=\"").append(eg.pathData()).append("\"");
             if (g.color() != null) {
                 // \color/\textcolor override; svgValue() is an allow-listed fill literal.
                 out.append(" fill=\"").append(g.color().svgValue()).append("\"");
@@ -137,6 +137,28 @@ public final class SvgEmitter {
         out.append("  </g>\n");
     }
 
+    /** A glyph that produces a {@code <path>}, paired with its path data. */
+    private record EmittedGlyph(PositionedGlyph glyph, String pathData) {}
+
+    /**
+     * THE single decision of which glyphs emit a {@code <path>} and in what order: it
+     * applies the one inkless skip ({@code d.isEmpty()}) to {@link Layout#glyphs()} and
+     * returns the survivors in emit order. Both {@link #emitInner} (which writes the
+     * paths) and {@link #glyphmap} (which keys token identity to path index) consume
+     * this, so their path indices are the SAME by construction — no mirrored predicate
+     * to drift out of sync.
+     */
+    private static java.util.List<EmittedGlyph> emittedGlyphs(Layout layout, SfntFont font) {
+        java.util.List<EmittedGlyph> out = new java.util.ArrayList<>();
+        for (PositionedGlyph g : layout.glyphs()) {
+            String d = GlyphPath.toPathData(font.outline(g.glyphId()));
+            if (!d.isEmpty()) {
+                out.add(new EmittedGlyph(g, d));
+            }
+        }
+        return out;
+    }
+
     /**
      * Serializes the token-identity {@code data-lx-glyphmap} sidecar for a laid-out
      * formula: {@code <hexcp>:<idx>,<idx>;<hexcp>:...}, where each index addresses an
@@ -144,22 +166,23 @@ public final class SvgEmitter {
      * source code point. The {@code thread} fx effect reads it to light up every
      * occurrence of a hovered token.
      *
-     * <p>Iterates {@link Layout#glyphs()} in the SAME order as {@link #emitInner} and
-     * skips inkless glyphs identically ({@code d.isEmpty()}), so the indices line up
-     * with the actual {@code <path>}s. Only code points with two or more occurrences
-     * form a run — a unique glyph has nothing to thread and stays inert. Returns the
-     * empty string when nothing is threadable (the runtime treats that as no map).
+     * <p>Keys off the SAME {@link #emittedGlyphs} sequence that {@link #emitInner}
+     * writes, so an index here is a {@code <path>}'s position by construction — not a
+     * mirrored skip predicate that could drift. Only code points with two or more
+     * occurrences form a run — a unique glyph has nothing to thread and stays inert.
+     * Note the map is math-atom-scoped: only author {@code Atom}s carry a source code
+     * point, so construction glyphs (delimiters, radical surds, big-op symbols) and
+     * text-mode / operator-name letters ({@code \text}, {@code \sin}) are
+     * {@link PositionedGlyph#NO_SOURCE} and never thread. Returns the empty string when
+     * nothing is threadable (the runtime treats that as no map).
      */
     public static String glyphmap(Layout layout, SfntFont font) {
         java.util.Map<Integer, java.util.List<Integer>> byCodePoint = new java.util.LinkedHashMap<>();
-        int pathIndex = 0;
-        for (PositionedGlyph g : layout.glyphs()) {
-            String d = GlyphPath.toPathData(font.outline(g.glyphId()));
-            if (d.isEmpty()) {
-                continue; // inkless glyph: emitInner emits no <path>, so it takes no index
-            }
-            int idx = pathIndex++;
-            int cp = g.sourceCodePoint();
+        // Key off the SAME emitted-glyph sequence emitInner writes — the index here is
+        // the <path>'s position in the SVG, by construction, not by a mirrored predicate.
+        java.util.List<EmittedGlyph> emitted = emittedGlyphs(layout, font);
+        for (int idx = 0; idx < emitted.size(); idx++) {
+            int cp = emitted.get(idx).glyph().sourceCodePoint();
             if (cp != PositionedGlyph.NO_SOURCE) {
                 byCodePoint.computeIfAbsent(cp, k -> new java.util.ArrayList<>()).add(idx);
             }
