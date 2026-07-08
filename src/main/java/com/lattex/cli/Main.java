@@ -80,6 +80,11 @@ public final class Main {
                                   for math that sits on a line of prose. The default
                                   is DISPLAY style (full size, its own block). Works
                                   standalone and in --batch.
+            --scale <N>           Output size multiplier (default 1.0), folded into
+                                  the vector geometry (crisp, not a CSS zoom). Bounded
+                                  to [0.1, 20.0].
+            --color <C>           Ink color: 'currentColor' (default — inherits text
+                                  color) or a #rgb / #rrggbb hex literal.
             -h, --help            Show this help and exit.
             -V, --version         Print the version and exit.
             --                    Treat all following arguments as the
@@ -141,6 +146,8 @@ public final class Main {
         boolean batch = false;
         boolean nullDelim = false;
         boolean inline = false;
+        Double scale = null;
+        com.lattex.api.Color color = null;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -164,6 +171,30 @@ public final class Main {
                     case "--batch" -> batch = true;
                     case "-0", "--null" -> nullDelim = true;
                     case "--inline" -> inline = true;
+                    case "--scale" -> {
+                        if (i + 1 >= args.length) {
+                            err.println("lattex: error: --scale requires a NUMBER argument");
+                            return 2;
+                        }
+                        try {
+                            scale = com.lattex.api.RenderOptions.parseScale(args[++i]);
+                        } catch (IllegalArgumentException e) {
+                            err.println("lattex: error: " + e.getMessage());
+                            return 2;
+                        }
+                    }
+                    case "--color" -> {
+                        if (i + 1 >= args.length) {
+                            err.println("lattex: error: --color requires a COLOR argument");
+                            return 2;
+                        }
+                        try {
+                            color = com.lattex.api.RenderOptions.parseColor(args[++i]);
+                        } catch (IllegalArgumentException e) {
+                            err.println("lattex: error: " + e.getMessage());
+                            return 2;
+                        }
+                    }
                     case "--" -> optionsEnded = true;
                     default -> {
                         err.println("lattex: error: unknown option '" + arg + "'");
@@ -181,8 +212,22 @@ public final class Main {
             }
         }
 
+        // Fold the render flags into a single validated options object; --inline is
+        // TEXT math style, and --scale/--color ride the same api-only parsers. A
+        // top-level \lx in the source still overrides these (existing render() rule).
+        com.lattex.api.RenderOptions opts = com.lattex.api.RenderOptions.defaults();
+        if (inline) {
+            opts = opts.inline();
+        }
+        if (scale != null) {
+            opts = opts.withScale(scale);
+        }
+        if (color != null) {
+            opts = opts.withColor(color);
+        }
+
         if (batch) {
-            return runBatch(in, out, err, outputFile, sawExpr, nullDelim, inline);
+            return runBatch(in, out, err, outputFile, sawExpr, nullDelim, opts);
         }
 
         String latex;
@@ -205,7 +250,7 @@ public final class Main {
 
         String svg;
         try {
-            svg = inline ? LatteX.renderInline(latex) : LatteX.render(latex);
+            svg = LatteX.render(latex, opts);
         } catch (MathSyntaxException e) {
             err.println("lattex: error: invalid LaTeX: " + e.getMessage());
             return 1;
@@ -238,7 +283,7 @@ public final class Main {
      */
     private static int runBatch(InputStream in, PrintStream out, PrintStream err,
                                 Path outputFile, boolean sawExpr, boolean nullDelim,
-                                boolean inline) {
+                                com.lattex.api.RenderOptions opts) {
         if (outputFile != null) {
             err.println("lattex: error: -o/--output cannot be combined with --batch"
                 + " (batch writes NUL-delimited records to stdout)");
@@ -268,7 +313,7 @@ public final class Main {
             }
             String record;
             try {
-                record = inline ? LatteX.renderInline(latex) : LatteX.render(latex);
+                record = LatteX.render(latex, opts);
             } catch (MathSyntaxException e) {
                 record = "lattex: error: invalid LaTeX: " + e.getMessage();
                 anyFailed = true;
