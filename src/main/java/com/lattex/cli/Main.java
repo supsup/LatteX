@@ -252,7 +252,12 @@ public final class Main {
         try {
             svg = LatteX.render(latex, opts);
         } catch (MathSyntaxException e) {
-            err.println("lattex: error: invalid LaTeX: " + e.getMessage());
+            // caretString() points a '^' at the offending column when the position is
+            // known; it falls back to just the message otherwise.
+            err.println("lattex: error: invalid LaTeX:");
+            for (String line : e.caretString().split("\n", -1)) {
+                err.println("  " + line);
+            }
             return 1;
         } catch (RuntimeException e) {
             err.println("lattex: error: could not render expression: " + e.getMessage());

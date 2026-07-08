@@ -97,21 +97,21 @@ public final class MathParser {
      * spaces preserved (text mode is space-significant); for other kinds {@code
      * text} is {@code null}.
      */
-    record Token(Kind kind, int codePoint, String name, String text) {
-        static Token special(Kind k) {
-            return new Token(k, 0, null, null);
+    record Token(Kind kind, int codePoint, String name, String text, int offset) {
+        static Token special(Kind k, int offset) {
+            return new Token(k, 0, null, null, offset);
         }
 
-        static Token ch(int cp) {
-            return new Token(Kind.CHAR, cp, null, null);
+        static Token ch(int cp, int offset) {
+            return new Token(Kind.CHAR, cp, null, null, offset);
         }
 
-        static Token cmd(String name) {
-            return new Token(Kind.COMMAND, 0, name, null);
+        static Token cmd(String name, int offset) {
+            return new Token(Kind.COMMAND, 0, name, null, offset);
         }
 
-        static Token text(String command, String raw) {
-            return new Token(Kind.TEXT, 0, command, raw);
+        static Token text(String command, String raw, int offset) {
+            return new Token(Kind.TEXT, 0, command, raw, offset);
         }
     }
 
@@ -132,12 +132,13 @@ public final class MathParser {
                 i++; // whitespace is insignificant in math mode
                 continue;
             }
+            int start = i; // source offset of the token about to be lexed (for error carets)
             switch (c) {
                 case '\\' -> {
                     i++;
                     if (i >= n) {
                         throw new MathSyntaxException(
-                            "Dangling '\\' at end of input (expected a command name)");
+                            "Dangling '\\' at end of input (expected a command name)", start);
                     }
                     char d = s.charAt(i);
                     if (isAsciiLetter(d)) {
@@ -151,40 +152,40 @@ public final class MathParser {
                             // Capture the {…} argument raw so text-mode spaces
                             // survive (math mode strips whitespace); grouping
                             // braces are invisible, as in LaTeX.
-                            i = lexTextArgument(s, name, i, out);
+                            i = lexTextArgument(s, name, i, out, start);
                         } else {
-                            out.add(Token.cmd(name));
+                            out.add(Token.cmd(name, start));
                         }
                     } else {
                         // Single-character control sequence: \, \{ \} \| \! etc.
-                        out.add(Token.cmd(String.valueOf(d)));
+                        out.add(Token.cmd(String.valueOf(d), start));
                         i++;
                     }
                 }
                 case '{' -> {
-                    out.add(Token.special(Kind.LBRACE));
+                    out.add(Token.special(Kind.LBRACE, start));
                     i++;
                 }
                 case '}' -> {
-                    out.add(Token.special(Kind.RBRACE));
+                    out.add(Token.special(Kind.RBRACE, start));
                     i++;
                 }
                 case '^' -> {
-                    out.add(Token.special(Kind.SUP));
+                    out.add(Token.special(Kind.SUP, start));
                     i++;
                 }
                 case '_' -> {
-                    out.add(Token.special(Kind.SUB));
+                    out.add(Token.special(Kind.SUB, start));
                     i++;
                 }
                 default -> {
                     int cp = s.codePointAt(i);
-                    out.add(Token.ch(cp));
+                    out.add(Token.ch(cp, start));
                     i += Character.charCount(cp);
                 }
             }
         }
-        out.add(Token.special(Kind.EOF));
+        out.add(Token.special(Kind.EOF, n));
         return out;
     }
 
@@ -200,14 +201,14 @@ public final class MathParser {
      * (invisible, as in LaTeX). Nested-math ({@code $…$}) inside the argument is a
      * documented follow-up — the content is taken literally here.
      */
-    private static int lexTextArgument(String s, String command, int i, List<Token> out) {
+    private static int lexTextArgument(String s, String command, int i, List<Token> out, int start) {
         int n = s.length();
         while (i < n && isWhitespace(s.charAt(i))) {
             i++; // skip space between the control word and its argument
         }
         if (i >= n || s.charAt(i) != '{') {
             throw new MathSyntaxException(
-                "\\" + command + " expects a '{...}' text argument");
+                "\\" + command + " expects a '{...}' text argument", start);
         }
         i++; // consume '{'
         StringBuilder sb = new StringBuilder();
@@ -221,7 +222,7 @@ public final class MathParser {
                 depth--;
                 i++;
                 if (depth == 0) {
-                    out.add(Token.text(command, sb.toString()));
+                    out.add(Token.text(command, sb.toString(), start));
                     return i;
                 }
             } else {
@@ -230,7 +231,7 @@ public final class MathParser {
                 i += Character.charCount(cp);
             }
         }
-        throw new MathSyntaxException("Unbalanced brace in \\" + command + " argument");
+        throw new MathSyntaxException("Unbalanced brace in \\" + command + " argument", start);
     }
 
     private static boolean isWhitespace(char c) {
@@ -268,13 +269,20 @@ public final class MathParser {
 
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */
     static MathNode parseMath(String latex) {
-        MathParser parser = new MathParser(latex);
-        MathNode node = parser.parseTopLevel();
-        if (parser.peek().kind() != Kind.EOF) {
-            throw new MathSyntaxException(
-                "Unexpected trailing input near token " + parser.p + " in: " + latex);
+        try {
+            MathParser parser = new MathParser(latex);
+            MathNode node = parser.parseTopLevel();
+            if (parser.peek().kind() != Kind.EOF) {
+                throw new MathSyntaxException(
+                    "Unexpected trailing input", parser.peek().offset());
+            }
+            return node;
+        } catch (MathSyntaxException e) {
+            // Attach the source as the error propagates out, so caretString() can point
+            // at the column. Idempotent: an inner frame's source (if any) is kept.
+            e.attachSource(latex);
+            throw e;
         }
-        return node;
     }
 
     // ------------------------------------------------------------------
@@ -286,6 +294,11 @@ public final class MathParser {
 
     Token next() {
         return tokens.get(p++);
+    }
+
+    /** Source offset of the current token, for a positioned {@link MathSyntaxException}. */
+    int currentOffset() {
+        return peek().offset();
     }
 
     boolean isCommand(Token t, String name) {
@@ -323,13 +336,13 @@ public final class MathParser {
     private MathNode parseGroup() {
         if (peek().kind() != Kind.LBRACE) {
             throw new MathSyntaxException(
-                "Expected '{' but found " + describe(peek()));
+                "Expected '{' but found " + describe(peek()), currentOffset());
         }
         next(); // consume '{'
         List<MathNode> items = new ArrayList<>();
         while (peek().kind() != Kind.RBRACE) {
             if (peek().kind() == Kind.EOF) {
-                throw new MathSyntaxException("Unbalanced brace: missing '}'");
+                throw new MathSyntaxException("Unbalanced brace: missing '}'", currentOffset());
             }
             items.add(parseComponent());
         }
@@ -552,7 +565,7 @@ public final class MathParser {
         if (++depth > MAX_DEPTH) {
             depth--;
             throw new MathSyntaxException(
-                "nesting too deep: exceeds the " + MAX_DEPTH + "-level limit");
+                "nesting too deep: exceeds the " + MAX_DEPTH + "-level limit", currentOffset());
         }
         try {
             return parseNucleusInner();
@@ -590,7 +603,9 @@ public final class MathParser {
 
     /** Dispatches a control sequence. Assumes the current token is a COMMAND. */
     private MathNode parseCommand() {
-        String name = next().name(); // consume the command
+        Token command = next(); // consume the command
+        String name = command.name();
+        int commandOffset = command.offset();
 
         switch (name) {
             case "frac" -> {
@@ -814,7 +829,7 @@ public final class MathParser {
                 if (sized != null) {
                     return sized;
                 }
-                throw new MathSyntaxException("Unknown command: \\" + name);
+                throw new MathSyntaxException("Unknown command: \\" + name, commandOffset);
             }
         }
     }
