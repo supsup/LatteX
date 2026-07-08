@@ -1,7 +1,11 @@
 package com.lattex.api;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.lattex.parse.MathSyntaxException;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -69,5 +73,34 @@ class MathMLTest {
             }
         }
         assertTrue(checked > 400, "expected to sweep the whole OK corpus, only did " + checked);
+    }
+
+    @Test
+    void malformedInputFailsLoudNotSilentlyEmpty() {
+        // toMathML shares parse() — malformed input must throw, not emit junk MathML.
+        assertThrows(MathSyntaxException.class, () -> LatteX.toMathML("x^"));
+        assertThrows(MathSyntaxException.class, () -> LatteX.toMathML("\\frac{a}"));
+    }
+
+    @Test
+    void delimitedMatricesWrapTheTableInFences() {
+        // pmatrix carries ( ) delimiters -> stretchy mo fences, so a screen reader hears
+        // the brackets instead of a bare table.
+        String pm = LatteX.toMathML("\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}");
+        assertTrue(pm.contains("<mtable>") && pm.contains("fence=\"true\""),
+            "pmatrix should wrap its table in mo fences: " + pm);
+        assertWellFormed(pm);
+        // a plain matrix (no delimiters) stays a bare mtable — no phantom fences.
+        String plain = LatteX.toMathML("\\begin{matrix} a & b \\end{matrix}");
+        assertFalse(plain.contains("fence=\"true\""), "plain matrix has no fences: " + plain);
+    }
+
+    @Test
+    void nolimitsPutsScriptsBesideNotAboveBelow() {
+        // \sum_{i}^{n} keeps limits above/below (munderover); an explicit \nolimits sets
+        // them to the side (msubsup), matching the SVG.
+        assertTrue(LatteX.toMathML("\\sum_{i=1}^n i").contains("<munderover>"));
+        String nolim = LatteX.toMathML("\\int\\nolimits_a^b f");
+        assertTrue(nolim.contains("<msubsup>"), "\\nolimits should emit msubsup: " + nolim);
     }
 }
