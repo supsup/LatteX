@@ -210,4 +210,26 @@ final class MainTest {
         assertEquals(2, r.code());
         assertTrue(r.err().contains("no expressions"));
     }
+
+    @Test
+    void scaleAndColorFlagsReachTheRender() {
+        // --color stamps the ink fill.
+        assertTrue(invoke("--color", "#ff0000", "x").out().contains("fill=\"#ff0000\""),
+            "--color should set the ink fill");
+        // --scale grows the vector geometry (crisp, not a CSS zoom).
+        double plain = svgWidth(invoke("x^2").out());
+        double scaled = svgWidth(invoke("--scale", "2", "x^2").out());
+        assertTrue(scaled > plain * 1.5,
+            "--scale 2 width " + scaled + " should clearly exceed plain " + plain);
+        // Bad or missing values fail loud (exit 2), never a stack trace.
+        assertEquals(2, invoke("--scale", "abc", "x").code());
+        assertEquals(2, invoke("--color", "notacolor", "x").code());
+        assertEquals(2, invoke("--scale").code());
+    }
+
+    private static double svgWidth(String svg) {
+        java.util.regex.Matcher m =
+            java.util.regex.Pattern.compile("width=\"([0-9.]+)").matcher(svg);
+        return m.find() ? Double.parseDouble(m.group(1)) : -1.0;
+    }
 }

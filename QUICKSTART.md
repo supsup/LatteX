@@ -217,8 +217,10 @@ over the JVM `LatteX.render` — same core, byte-identical SVG.
 
 The binary is fully self-contained: the STIX Two Math font is baked into the image via
 the GraalVM reachability metadata the library already ships (no reflection, no external
-files). Styling flags (`--scale`/`--color`/`--display`) land once the `RenderOptions`
-API merges to the mainline — the CLI's arg parser has the seam ready.
+files). Styling flags are wired to the typed `RenderOptions`: `--scale <N>` (vector
+size multiplier, `[0.1, 20.0]`), `--color <C>` (`currentColor` or a `#rgb`/`#rrggbb`
+hex), and `--inline` (text style). All three work standalone and in `--batch`; a bad
+value fails loud with exit code 2. A top-level `\lx[...]` in the source still wins.
 
 **No GraalVM?** The same CLI runs on any JVM, no native build required:
 
