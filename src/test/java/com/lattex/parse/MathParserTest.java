@@ -134,6 +134,7 @@ class MathParserTest {
                 yield sb.append(')').toString();
             }
             case MathNode.StyledMath sm -> "Lx(" + pp(sm.body()) + ")";
+            case MathNode.StyleSwitch sw -> "Style(" + sw.level() + " " + pp(sw.body()) + ")";
         };
     }
 
@@ -396,6 +397,25 @@ class MathParserTest {
         assertInstanceOf(MathNode.BigOperator.class, MathParser.parse("\\bigcup_i"));
         // An unknown \big-ish suffix stays an Unknown command (not silently a delimiter).
         assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\bigx"));
+    }
+
+    @Test
+    void styleSwitchWrapsTheRestOfItsGroup() {
+        // {\displaystyle x y}: a single StyleSwitch(DISPLAY, ...) capturing BOTH x and y.
+        MathNode.StyleSwitch sw = assertInstanceOf(MathNode.StyleSwitch.class,
+            MathParser.parse("{\\displaystyle x y}"));
+        assertEquals(MathNode.StyleLevel.DISPLAY, sw.level());
+        assertInstanceOf(MathNode.MathList.class, sw.body()); // both x and y are captured
+
+        // Bare, top-level switches carry their level.
+        assertEquals(MathNode.StyleLevel.TEXT, assertInstanceOf(MathNode.StyleSwitch.class,
+            MathParser.parse("\\textstyle x")).level());
+        assertEquals(MathNode.StyleLevel.SCRIPT_SCRIPT, assertInstanceOf(MathNode.StyleSwitch.class,
+            MathParser.parse("\\scriptscriptstyle z")).level());
+
+        // Boundary containment: the switch stops at the brace — it does NOT swallow the
+        // `a` before or the `c` after, so the whole thing is a plain list, not one switch.
+        assertInstanceOf(MathNode.MathList.class, MathParser.parse("a {\\displaystyle b} c"));
     }
 
     @Test

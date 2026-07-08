@@ -287,6 +287,7 @@ public final class MathVariant {
             // so this arm is unreachable in practice; restyle the body for totality.
             case StyledMath sm -> new StyledMath(
                 apply(style, sm.body()), sm.style(), sm.fx(), sm.sem());
+            case MathNode.StyleSwitch sw -> new MathNode.StyleSwitch(sw.level(), apply(style, sw.body()));
         };
     }
 }

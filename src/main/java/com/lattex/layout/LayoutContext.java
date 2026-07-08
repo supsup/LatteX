@@ -86,6 +86,11 @@ public record LayoutContext(SfntFont font, MathConstants constants, double fontS
         return with(MathStyle.TEXT, cramped);
     }
 
+    /** Context forcing an explicit style ({@code \displaystyle}/{@code \scriptstyle}/…), cramping inherited. */
+    public LayoutContext atStyle(MathStyle newStyle) {
+        return with(newStyle, cramped);
+    }
+
     /** Context for a radicand: same style, cramped. */
     public LayoutContext cramp() {
         return with(style, true);

@@ -377,6 +377,7 @@ public final class LatteX {
                         + " over " + describe(xa.below());
             }
             case StyledMath sm -> describe(sm.body()); // the wrapper is transparent to a11y
+            case MathNode.StyleSwitch sw -> describe(sw.body()); // style is invisible to a11y prose
         };
     }
 

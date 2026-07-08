@@ -164,6 +164,13 @@ public final class LayoutEngine {
             // top-level-only for the MVP, so this arm is effectively the render-entry
             // unwrap; it also keeps the sealed switch exhaustive without a default.)
             case StyledMath sm -> layoutBox(sm.body(), ctx);
+            case MathNode.StyleSwitch(var level, var body) ->
+                layoutBox(body, ctx.atStyle(switch (level) {
+                    case DISPLAY -> MathStyle.DISPLAY;
+                    case TEXT -> MathStyle.TEXT;
+                    case SCRIPT -> MathStyle.SCRIPT;
+                    case SCRIPT_SCRIPT -> MathStyle.SCRIPT_SCRIPT;
+                }));
         };
     }
 
@@ -513,6 +520,7 @@ public final class LayoutEngine {
             case MathNode.XArrow _ -> MathClass.REL;
             case Spacing _ -> null;           // classless glue (handled by caller)
             case StyledMath sm -> classOf(sm.body()); // wrapper is transparent to spacing
+            case MathNode.StyleSwitch sw -> classOf(sw.body()); // ditto — style is invisible to spacing
         };
     }
 
