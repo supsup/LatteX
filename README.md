@@ -17,7 +17,9 @@ LatteX renders (every formula on it is regression-locked by the wild-corpus
 ratchet: 481/484 real-world formulas, 99.4%, and only allowed to go up). For the
 fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
 26 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
-captured previews (every effect as its own looping GIF).
+captured previews (every effect as its own looping GIF). For the parallel MathML
+output, **[examples/mathml.html](examples/mathml.html)** shows each formula's SVG
+render beside its `toMathML()` serialization — same parse, two products.
 
 ![A scroll through the LatteX showcase — the definition of the derivative, Euler's identity, the Basel problem, a Gaussian integral, the curl determinant, a piecewise cases block, an aligned derivation, and the 0.3.0 stack mechanism (underbrace + substack), every formula rendered to self-contained SVG](examples/showcase.gif)
 

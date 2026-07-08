@@ -60,7 +60,19 @@ class ShowcasePageTest {
         new Item("A labelled definition — \\stackrel, new in 0.3.0",
             "f(x) \\stackrel{\\text{def}}{=} \\limsup_{n \\to \\infty} f_n(x)"),
         new Item("A commutative diagram — \\xrightarrow over an array, new in 0.3.1",
-            "\\begin{array}{ccc} X & \\stackrel{f}{\\longrightarrow} & Y \\\\ \\downarrow & & \\downarrow \\\\ X/{\\sim} & \\xrightarrow{\\bar{f}} & Y/{\\sim} \\end{array}"));
+            "\\begin{array}{ccc} X & \\stackrel{f}{\\longrightarrow} & Y \\\\ \\downarrow & & \\downarrow \\\\ X/{\\sim} & \\xrightarrow{\\bar{f}} & Y/{\\sim} \\end{array}"),
+        new Item("Style-pinned fractions — \\dfrac vs \\tfrac, new in 0.4.0",
+            "\\dfrac{a}{b} \\quad \\text{vs} \\quad \\tfrac{a}{b}"),
+        new Item("Per-subterm color — \\textcolor, new in 0.4.0",
+            "\\textcolor{red}{x^2} + \\textcolor{blue}{2x} + 1"),
+        new Item("Equation numbering — \\tag, new in 0.5.0",
+            "e^{i\\pi} + 1 = 0 \\tag{1}"),
+        new Item("Fixed-size delimiters — the \\Big evaluation bar, new in 0.5.0",
+            "\\int_1^e \\frac{dx}{x} = \\ln x \\Big|_1^e = 1"),
+        new Item("Named operators + a surface integral — \\operatorname*, \\oiint, new in 0.5.0",
+            "\\operatorname*{arg\\,max}_{\\theta} \\; \\oiint_S \\mathbf{F} \\cdot d\\mathbf{A}"),
+        new Item("Bare style switch — \\displaystyle in a group, new in 0.6.0",
+            "{\\displaystyle \\sum_{n=1}^{\\infty} \\frac{1}{n^s}} = \\zeta(s)"));
 
     @Test
     void writesShowcasePage() throws IOException {
