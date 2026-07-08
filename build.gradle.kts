@@ -43,6 +43,17 @@ tasks.test {
     useJUnitPlatform()
 }
 
+// Single-source the version: stamp `project.version` into lattex-version.properties
+// at build time, so the CLI (Main) and its test read the build version from one
+// place — no hand-synced constant that drifts from build.gradle (it did: the CLI
+// hardcode read 0.2.1 against a 0.5.0 artifact). Present in both the jar and the
+// test classpath (unlike the jar manifest, which is null under `gradle test`).
+tasks.processResources {
+    filesMatching("lattex-version.properties") {
+        expand(mapOf("version" to project.version.toString()))
+    }
+}
+
 // ---- CLI (S7): JVM-mode entry point + native-image binary --------------------
 
 application {

@@ -67,8 +67,27 @@ final class MainTest {
     void versionExitsZero() {
         Result r = invoke("--version");
         assertEquals(0, r.code());
-        assertTrue(r.out().trim().equals("lattex 0.2.1"),
-            "CLI version must match the artifact version (Lattice, lattex/42): " + r.out());
+        // Single-sourced: --version must equal the build version (from
+        // lattex-version.properties, stamped by Gradle from project.version). No
+        // hardcoded version string here or in Main — so the CLI cannot drift.
+        String expected = "lattex " + buildVersion();
+        assertTrue(r.out().trim().equals(expected),
+            "CLI --version must match the build artifact version: expected '"
+                + expected + "' but got " + r.out());
+    }
+
+    private static String buildVersion() {
+        try (java.io.InputStream in =
+                 MainTest.class.getResourceAsStream("/lattex-version.properties")) {
+            java.util.Properties props = new java.util.Properties();
+            props.load(in);
+            String v = props.getProperty("version");
+            assertTrue(v != null && !v.isBlank() && !v.contains("${"),
+                "lattex-version.properties must be Gradle-expanded to a real version, got: " + v);
+            return v.strip();
+        } catch (java.io.IOException e) {
+            throw new AssertionError("lattex-version.properties must be on the test classpath", e);
+        }
     }
 
     @Test

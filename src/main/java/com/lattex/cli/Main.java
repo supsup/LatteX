@@ -30,8 +30,29 @@ import java.nio.file.Path;
  */
 public final class Main {
 
-    /** Kept in step with the library artifact version. */
-    private static final String VERSION = "0.2.1"; // MUST track build.gradle.kts version (MainTest pins it)
+    /**
+     * The artifact version, read from {@code lattex-version.properties} — which the
+     * build stamps from {@code project.version}. Single-sourced, so the CLI can never
+     * drift from the build (it used to: a hand-synced constant read 0.2.1 against a
+     * 0.5.0 artifact). Falls back to {@code "dev"} only if the resource is absent.
+     */
+    private static final String VERSION = readVersion();
+
+    private static String readVersion() {
+        try (java.io.InputStream in = Main.class.getResourceAsStream("/lattex-version.properties")) {
+            if (in != null) {
+                java.util.Properties props = new java.util.Properties();
+                props.load(in);
+                String v = props.getProperty("version");
+                if (v != null && !v.isBlank()) {
+                    return v.strip();
+                }
+            }
+        } catch (java.io.IOException ignored) {
+            // fall through to the dev fallback
+        }
+        return "dev";
+    }
 
     private static final String USAGE = """
         lattex — render LaTeX math to a self-contained SVG (LatteX %s)

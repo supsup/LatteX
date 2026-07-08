@@ -2,12 +2,13 @@
 
 Render LaTeX math to SVG, then drop it straight into your HTML.
 
-> **Status note.** LatteX is early. The render core, `\lx` syntax, inline/em
-> sizing, `fx` effects, and the action menu described below are **built** (living
-> on review branches, merging soon). The native CLI (S7) is **built**; the HTTP
-> service, WASM build, and editor/markdown plugins are **planned** — each is flagged inline and summarised in
-> the [status legend](#7-status-legend). Accuracy over hype: if it isn't built, this
-> doc says so.
+> **Status note.** LatteX is early but real — most of what's described here is
+> **built and on `main`**: the render core, `\lx` syntax, inline/em sizing, `fx`
+> effects, `renderFragment` (embedded math), and the native CLI (S7). **Planned,
+> not yet in the API:** the click action menu (Copy LaTeX / Graph), Graph plotting,
+> the HTTP service, the WASM build, and editor/markdown plugins — each flagged
+> inline and in the [status legend](#7-status-legend). Accuracy over hype: if it
+> isn't built, this doc says so.
 
 ---
 
@@ -22,8 +23,8 @@ filled `<path>`s (never `<text>`, `<use>`, `<defs>`, `<script>`, or external
 a standard sanitizer allow-list. The math font (**STIX Two Math**, OFL) is bundled,
 so there are no web fonts to load either. Apache-2.0.
 
-**What it can render:** measured, not claimed — 428 of 484 real-world formulas
-(88%) from the wild corpus render clean, regression-locked by a coverage
+**What it can render:** measured, not claimed — 467 of 484 real-world formulas
+(96.5%) from the wild corpus render clean, regression-locked by a coverage
 ratchet that only moves up. Browse the tour: **[examples/showcase.html]
 (examples/showcase.html)** (highlights incl. matrices, cases, align, bra-ket,
 and the mod/logic/dots families); the full command inventory is the generated
@@ -145,20 +146,19 @@ wrapper the API emits around it. Three helpers produce that wrapper:
   `data-fx-hover` / `data-fx-click` (+ `data-fx-duration`). A page-side runtime
   (CSS `@keyframes` + a little JS) reads those and plays the animation. Sources
   without effects return the bare SVG. See `examples/fx-demo.html`.
-- **`LatteX.renderMenuHtml(latex)`** / **`renderMenuInline(latex)`** — wraps the SVG
-  in a container carrying `data-lx-latex` (the HTML-escaped LaTeX source, for a
-  "Copy LaTeX" action) and, when the math is marked graphable (via `intent`/`concept`
-  of `function`/`graph`, or a `data.graph`/`data.graphable` marker),
-  `data-lx-graphable="true"`. A page-side runtime builds a click-to-open action menu
-  (Copy LaTeX, and a contextual Graph icon). See `examples/menu-demo.html`.
+- **`LatteX.renderFragment(latex, fontSizePx)`** — the inner `<g>/<path>/<rect>`
+  markup plus box metrics (`widthPx`/`heightPx`/`depthPx`), for a consumer that
+  composes the math inline on a shared baseline (e.g. a diagram renderer drawing
+  math-in-labels). Unlike `render*`, it returns no `<svg>` wrapper. See the API
+  javadoc on `MathFragment`.
 
 In every case the data attributes live on the container the page emits — **never**
 inside the sanitized SVG — so the emitter's minimal alphabet is unchanged.
 
-> The `fx` animations, the action menu, and Graph *plotting* are wired via the
-> example page runtimes today; the SVG-side container-stamping (`renderStyledHtml` /
-> `renderMenu*`) is a prototype of the future S8 step, and real Graph plotting is
-> planned.
+> The `fx` animations are wired via the example page runtimes today; the SVG-side
+> container-stamping (`renderStyledHtml`) is the shipped path. A click-to-open
+> action menu (Copy LaTeX, contextual Graph) and real Graph *plotting* are planned,
+> not yet in the API.
 
 ## 5. Integration by stack
 
@@ -166,14 +166,14 @@ Everything wraps the one core: `render(latex, options) → SVG string`.
 
 ### JVM — Java / Kotlin / Scala — *available*
 
-Depend on the versioned artifact `com.lattex:lattex:0.4.0` (module `com.lattex`,
+Depend on the versioned artifact `com.lattex:lattex:0.5.0` (module `com.lattex`,
 exporting `com.lattex.api`) and call the API directly:
 
 ```kotlin
 // build.gradle.kts — resolve from ~/.m2 after `./gradlew publishToMavenLocal`
 // in the LatteX repo (a published repo can be added later).
 repositories { mavenLocal(); mavenCentral() }
-dependencies { implementation("com.lattex:lattex:0.4.0") }
+dependencies { implementation("com.lattex:lattex:0.5.0") }
 ```
 
 ```java
@@ -224,7 +224,7 @@ API merges to the mainline — the CLI's arg parser has the seam ready.
 
 ```bash
 ./gradlew run --args="\frac{a}{b}"                 # via Gradle
-java -jar build/libs/lattex-0.4.0.jar "x^2"            # via the runnable jar
+java -jar build/libs/lattex-0.5.0.jar "x^2"            # via the runnable jar
 ```
 
 ### Performance — native binary vs. `java -jar` vs. `./gradlew run`
@@ -298,7 +298,7 @@ inline math is em-sized and baseline-seated while display math renders full size
 | `\lx[...]{...}` author syntax (validated, fail-loud) | Built* |
 | Inline math — em-sizing + baseline alignment (`renderInline`) | Built* |
 | `fx.*` effects on the container (`renderStyledHtml`) | Built* |
-| Click action menu — Copy LaTeX / contextual Graph (`renderMenu*`) | Built* |
+| Click action menu — Copy LaTeX / contextual Graph | Planned |
 | Native CLI (`lattex`, GraalVM) — argv/stdin → SVG, `-o`/`--help`/`--version` | Built (S7) |
 | HTTP service wrapper | Planned / optional |
 | Browser / JS (WASM) build | Future |
