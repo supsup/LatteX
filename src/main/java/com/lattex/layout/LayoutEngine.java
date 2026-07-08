@@ -140,7 +140,9 @@ public final class LayoutEngine {
         double scale = ctx.scale();
         int gid = font.glyphId(atom.codePoint());
         GlyphOutline o = font.outline(gid);
-        PositionedGlyph glyph = new PositionedGlyph(gid, 0.0, 0.0, scale);
+        // Carry the source code point so the glyphmap can key token identity to this
+        // glyph's emitted <path> (the data-lx-glyphmap sidecar the `thread` effect reads).
+        PositionedGlyph glyph = new PositionedGlyph(gid, 0.0, 0.0, scale, null, atom.codePoint());
         double width = font.advanceWidth(gid) * scale;
         double height = o.isEmpty() ? 0.0 : Math.max(0.0, o.yMax() * scale);
         double depth = o.isEmpty() ? 0.0 : Math.max(0.0, -o.yMin() * scale);

@@ -137,6 +137,52 @@ public final class SvgEmitter {
         out.append("  </g>\n");
     }
 
+    /**
+     * Serializes the token-identity {@code data-lx-glyphmap} sidecar for a laid-out
+     * formula: {@code <hexcp>:<idx>,<idx>;<hexcp>:...}, where each index addresses an
+     * emitted {@code <path>} in EMIT ORDER and the run groups the paths that share a
+     * source code point. The {@code thread} fx effect reads it to light up every
+     * occurrence of a hovered token.
+     *
+     * <p>Iterates {@link Layout#glyphs()} in the SAME order as {@link #emitInner} and
+     * skips inkless glyphs identically ({@code d.isEmpty()}), so the indices line up
+     * with the actual {@code <path>}s. Only code points with two or more occurrences
+     * form a run — a unique glyph has nothing to thread and stays inert. Returns the
+     * empty string when nothing is threadable (the runtime treats that as no map).
+     */
+    public static String glyphmap(Layout layout, SfntFont font) {
+        java.util.Map<Integer, java.util.List<Integer>> byCodePoint = new java.util.LinkedHashMap<>();
+        int pathIndex = 0;
+        for (PositionedGlyph g : layout.glyphs()) {
+            String d = GlyphPath.toPathData(font.outline(g.glyphId()));
+            if (d.isEmpty()) {
+                continue; // inkless glyph: emitInner emits no <path>, so it takes no index
+            }
+            int idx = pathIndex++;
+            int cp = g.sourceCodePoint();
+            if (cp != PositionedGlyph.NO_SOURCE) {
+                byCodePoint.computeIfAbsent(cp, k -> new java.util.ArrayList<>()).add(idx);
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<Integer, java.util.List<Integer>> e : byCodePoint.entrySet()) {
+            if (e.getValue().size() < 2) {
+                continue; // a single occurrence isn't a thread group
+            }
+            if (sb.length() > 0) {
+                sb.append(';');
+            }
+            sb.append(Integer.toHexString(e.getKey())).append(':');
+            for (int i = 0; i < e.getValue().size(); i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(e.getValue().get(i));
+            }
+        }
+        return sb.toString();
+    }
+
     /** Locale-independent compact number: integers plain, else up to 4 dp. */
     private static String num(double v) {
         if (v == Math.rint(v) && !Double.isInfinite(v)) {

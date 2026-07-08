@@ -19,6 +19,7 @@ import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.StyledMath;
 import com.lattex.parse.MathNode.SupSub;
 import com.lattex.parse.MathNode.TextRun;
+import com.lattex.parse.Effect;
 import com.lattex.parse.EffectSpec;
 import com.lattex.parse.MathParser;
 import com.lattex.parse.Semantics;
@@ -196,9 +197,23 @@ public final class LatteX {
         MathNode node = MathParser.parse(latex);
         EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
         Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
-        // render() re-parses and applies a top-level \lx style to the inner SVG.
-        String svg = render(latex);
-        return openTag(fx, sem) + svg + "</span>";
+
+        // Lay out once, and reuse the layout for BOTH the SVG and the glyphmap — the
+        // sidecar's path indices must line up with this exact emission.
+        RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
+        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
+        SfntFont font = FontHolder.FONT;
+        LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+            DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+        Layout layout = LayoutEngine.layout(body, ctx);
+        String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+
+        // The `thread` effect reads data-lx-glyphmap to light up every occurrence of a
+        // hovered token. Stamp the sidecar only when a thread effect is present — it is
+        // inert (and wasted bytes) otherwise. Value is [0-9a-f:,;] only, so container-safe.
+        String glyphmap = fx.effects().containsValue(Effect.THREAD)
+            ? SvgEmitter.glyphmap(layout, font) : "";
+        return openTag(fx, sem, glyphmap) + svg + "</span>";
     }
 
     /**
@@ -208,13 +223,17 @@ public final class LatteX {
      * duration matches {@code \d{1,5}ms}, the a11y label is HTML-escaped), so no raw
      * author string reaches the attribute unescaped.
      */
-    private static String openTag(EffectSpec fx, Semantics sem) {
+    private static String openTag(EffectSpec fx, Semantics sem, String glyphmap) {
         StringBuilder sb = new StringBuilder("<span class=\"lx-math\"");
         sem.intentValue().ifPresent(v -> sb.append(" data-lx-intent=\"").append(v).append('"'));
         sem.conceptValue().ifPresent(v -> sb.append(" data-lx-concept=\"").append(v).append('"'));
         // The fx half rides the SAME stamping source as fxContainerAttrs — one
         // producer, so the two public shapes cannot drift.
         sb.append(fxAttrs(fx));
+        // Token-identity sidecar for the `thread` effect (renderer-derived, [0-9a-f:,;]).
+        if (!glyphmap.isEmpty()) {
+            sb.append(" data-lx-glyphmap=\"").append(glyphmap).append('"');
+        }
         // data.* attributes (keys already identifier-validated) — iterated in sorted
         // key order so the generated HTML is deterministic regardless of the source
         // map's iteration order (a HashMap/Map.of view is randomized per JVM run).
