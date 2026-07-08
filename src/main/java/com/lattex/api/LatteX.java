@@ -381,6 +381,188 @@ public final class LatteX {
         };
     }
 
+    // ------------------------------------------------------------------
+    // MathML — a Presentation-MathML serialization of the SAME parse tree that
+    // describe() walks for the aria label and the renderer walks for SVG. Assistive
+    // tech gets navigable structure (not a flat string), plus an interop surface —
+    // still zero-dependency, pure Java, from one shared traversal.
+    // ------------------------------------------------------------------
+
+    /**
+     * Renders {@code latex} to a self-contained Presentation-MathML {@code <math>}
+     * element, built from the same parse tree as {@link #render(String)} so the
+     * structure matches the SVG. The result is well-formed XML (text content escaped).
+     *
+     * @param latex a LaTeX math expression
+     * @return {@code <math xmlns="http://www.w3.org/1998/Math/MathML">…</math>}
+     * @throws com.lattex.parse.MathSyntaxException if {@code latex} does not parse
+     */
+    public static String toMathML(String latex) {
+        return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
+            + toMathML(MathParser.parse(latex)) + "</math>";
+    }
+
+    /** Serializes one node to Presentation-MathML markup (no {@code <math>} wrapper). */
+    private static String toMathML(MathNode node) {
+        return switch (node) {
+            case Atom atom -> atomMathML(atom);
+            case MathList(var items) -> {
+                StringBuilder sb = new StringBuilder("<mrow>");
+                for (MathNode item : items) {
+                    sb.append(toMathML(item));
+                }
+                yield sb.append("</mrow>").toString();
+            }
+            case SupSub(var base, var sup, var sub) -> {
+                String b = toMathML(base);
+                if (sub != null && sup != null) {
+                    yield "<msubsup>" + b + toMathML(sub) + toMathML(sup) + "</msubsup>";
+                }
+                if (sub != null) {
+                    yield "<msub>" + b + toMathML(sub) + "</msub>";
+                }
+                yield "<msup>" + b + toMathML(sup) + "</msup>";
+            }
+            case Fraction f -> (f.hasRule()
+                    ? "<mfrac>"
+                    : "<mfrac linethickness=\"0\">")
+                + toMathML(f.numerator()) + toMathML(f.denominator()) + "</mfrac>";
+            case Radical(var radicand, var index) -> index == null
+                ? "<msqrt>" + toMathML(radicand) + "</msqrt>"
+                : "<mroot>" + toMathML(radicand) + toMathML(index) + "</mroot>";
+            case Spacing sp -> "<mspace width=\"" + spaceEm(sp) + "em\"/>";
+            case MathNode.Colored c ->
+                "<mstyle mathcolor=\"" + xmlEscape(c.color().svgValue()) + "\">"
+                    + toMathML(c.body()) + "</mstyle>";
+            case MathNode.Tagged t ->
+                "<mrow>" + toMathML(t.body()) + "<mspace width=\"1em\"/><mo>(</mo>"
+                    + toMathML(t.label()) + "<mo>)</mo></mrow>";
+            case Phantom p -> "<mphantom>" + toMathML(p.content()) + "</mphantom>";
+            case BigOperator(var op, var lower, var upper, _) -> {
+                String o = mo(op.codePoint());
+                if (lower != null && upper != null) {
+                    yield "<munderover>" + o + toMathML(lower) + toMathML(upper) + "</munderover>";
+                }
+                if (lower != null) {
+                    yield "<munder>" + o + toMathML(lower) + "</munder>";
+                }
+                if (upper != null) {
+                    yield "<mover>" + o + toMathML(upper) + "</mover>";
+                }
+                yield o;
+            }
+            case Fenced(var leftDelim, var body, var rightDelim) -> {
+                StringBuilder sb = new StringBuilder("<mrow>");
+                if (leftDelim != Fenced.NULL_DELIMITER) {
+                    sb.append(fenceMo(leftDelim));
+                }
+                sb.append(toMathML(body));
+                if (rightDelim != Fenced.NULL_DELIMITER) {
+                    sb.append(fenceMo(rightDelim));
+                }
+                yield sb.append("</mrow>").toString();
+            }
+            case MathNode.SizedDelim sd -> sd.delimCp() == Fenced.NULL_DELIMITER
+                ? "<mrow/>"
+                : "<mo stretchy=\"false\">" + xmlEscape(Character.toString(sd.delimCp())) + "</mo>";
+            case Accent a -> {
+                String acc = mo(a.accentCodePoint());
+                yield a.under()
+                    ? "<munder accentunder=\"true\">" + toMathML(a.base()) + acc + "</munder>"
+                    : "<mover accent=\"true\">" + toMathML(a.base()) + acc + "</mover>";
+            }
+            case OperatorName(var name, _) -> "<mo>" + xmlEscape(name) + "</mo>";
+            case TextRun(var text, _) -> "<mtext>" + xmlEscape(text) + "</mtext>";
+            case Matrix m -> matrixMathML(m);
+            case MathNode.Stack st -> stackMathML(st);
+            case MathNode.XArrow xa -> {
+                String arrow = xa.left() ? "<mo>&#8592;</mo>" : "<mo>&#8594;</mo>";
+                yield xa.below() == null
+                    ? "<mover>" + arrow + toMathML(xa.above()) + "</mover>"
+                    : "<munderover>" + arrow + toMathML(xa.below()) + toMathML(xa.above()) + "</munderover>";
+            }
+            case StyledMath sm -> toMathML(sm.body()); // the \lx wrapper is transparent to MathML
+            case MathNode.StyleSwitch sw -> toMathML(sw.body()); // \displaystyle etc.: presentation, not structure
+        };
+    }
+
+    /** An {@code <mo>} for a code point (operator/relation/punctuation). */
+    private static String mo(int codePoint) {
+        return "<mo>" + xmlEscape(Character.toString(codePoint)) + "</mo>";
+    }
+
+    /** A stretchy fence {@code <mo>} for a delimiter code point. */
+    private static String fenceMo(int codePoint) {
+        return "<mo fence=\"true\" stretchy=\"true\">"
+            + xmlEscape(Character.toString(codePoint)) + "</mo>";
+    }
+
+    /** An atom's element: {@code <mn>} for digits, {@code <mi>} for letters, else {@code <mo>}. */
+    private static String atomMathML(Atom atom) {
+        int cp = atom.codePoint();
+        String ch = xmlEscape(Character.toString(cp));
+        return switch (atom.mathClass()) {
+            case ORD -> {
+                if (cp >= '0' && cp <= '9') {
+                    yield "<mn>" + ch + "</mn>";
+                }
+                yield Character.isLetter(cp) ? "<mi>" + ch + "</mi>" : "<mo>" + ch + "</mo>";
+            }
+            case OPEN, CLOSE -> "<mo fence=\"true\">" + ch + "</mo>";
+            case OP, BIN, REL, PUNCT, INNER -> "<mo>" + ch + "</mo>";
+        };
+    }
+
+    /** MathML {@code <mtable>} for a grid; cells walk the same tree. */
+    private static String matrixMathML(Matrix m) {
+        int cols = m.columnCount();
+        StringBuilder sb = new StringBuilder("<mtable>");
+        for (var row : m.rows()) {
+            sb.append("<mtr>");
+            for (int c = 0; c < cols; c++) {
+                sb.append("<mtd>")
+                  .append(c < row.size() ? toMathML(row.get(c)) : "")
+                  .append("</mtd>");
+            }
+            sb.append("</mtr>");
+        }
+        return sb.append("</mtable>").toString();
+    }
+
+    /** MathML for a stacked annotation (under/over-brace, overset/underset). */
+    private static String stackMathML(MathNode.Stack st) {
+        String base = toMathML(st.base());
+        return switch (st.kind()) {
+            case UNDERBRACE -> "<munder>" + base
+                + (st.below() == null ? "<mo>&#9183;</mo>" : toMathML(st.below())) + "</munder>";
+            case OVERBRACE -> "<mover>" + base
+                + (st.above() == null ? "<mo>&#9182;</mo>" : toMathML(st.above())) + "</mover>";
+            case STACKREL, OVERSET -> "<mover>" + base + toMathML(st.above()) + "</mover>";
+            case UNDERSET -> "<munder>" + base + toMathML(st.below()) + "</munder>";
+        };
+    }
+
+    /** Explicit-spacing width in em (18mu = 1em). */
+    private static double spaceEm(Spacing sp) {
+        return Math.round(sp.muWidth() / 18.0 * 1000.0) / 1000.0;
+    }
+
+    /** XML-escapes text content / attribute values for MathML output. */
+    private static String xmlEscape(String s) {
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            switch (ch) {
+                case '&' -> sb.append("&amp;");
+                case '<' -> sb.append("&lt;");
+                case '>' -> sb.append("&gt;");
+                case '"' -> sb.append("&quot;");
+                default -> sb.append(ch);
+            }
+        }
+        return sb.toString();
+    }
+
     /** A plain-language label for a grid: kind, size, then each row's cells. */
     private static String describeMatrix(Matrix m) {
         int rows = m.rows().size();
