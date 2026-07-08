@@ -563,6 +563,33 @@ public sealed interface MathNode {
         }
     }
 
+    /** The four TeX math styles a {@code \displaystyle}-family switch can select. */
+    enum StyleLevel {
+        /** {@code \displaystyle} — full size, big-operator limits above/below. */
+        DISPLAY,
+        /** {@code \textstyle} — inline size, limits to the side. */
+        TEXT,
+        /** {@code \scriptstyle} — script (superscript/subscript) size. */
+        SCRIPT,
+        /** {@code \scriptscriptstyle} — nested-script size. */
+        SCRIPT_SCRIPT
+    }
+
+    /**
+     * A bare style switch — {@code \displaystyle}/{@code \textstyle}/{@code
+     * \scriptstyle}/{@code \scriptscriptstyle}. Unlike {@code \dfrac} (which pins one
+     * fraction), a switch restyles EVERYTHING after it to the end of the enclosing
+     * group; the parser captures that remainder as {@code body}. This is the wrapper
+     * MathJax/Wikipedia put around essentially every exported display formula
+     * ({@code {\displaystyle …}}), so ingesting real content needs it.
+     */
+    record StyleSwitch(StyleLevel level, MathNode body) implements MathNode {
+        public StyleSwitch {
+            Objects.requireNonNull(level, "level");
+            Objects.requireNonNull(body, "body");
+        }
+    }
+
     /**
      * Per-column horizontal alignment inside a {@link Matrix} grid cell (the
      * {@code l}/{@code c}/{@code r} of an {@code array} column spec; matrices are

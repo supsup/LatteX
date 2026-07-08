@@ -347,8 +347,8 @@ OK	wiki-textbook	D	\frac{d}{dx}\int_a^x f(t)\,dt = f(x)
 OK	wiki-textbook	D	\frac{dy}{dx} = \frac{dy}{du} \cdot \frac{du}{dx}
 OK	wiki-textbook	D	\left(\frac{u}{v}\right)' = \frac{u'v - uv'}{v^2}
 OK	wiki-textbook	I	\frac{d^2y}{dx^2}
-GAP	wiki-textbook	D	{\displaystyle \int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}}
-GAP	wiki-textbook	D	{\displaystyle \zeta(s) = \sum_{n=1}^{\infty} \frac{1}{n^s}}
+OK	wiki-textbook	D	{\displaystyle \int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}}
+OK	wiki-textbook	D	{\displaystyle \zeta(s) = \sum_{n=1}^{\infty} \frac{1}{n^s}}
 OK	wiki-textbook	D	\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
 OK	wiki-textbook	D	\Gamma(z) = \int_0^{\infty} t^{z-1} e^{-t}\,dt
 OK	wiki-textbook	D	\operatorname{erf}(x) = \frac{2}{\sqrt{\pi}} \int_0^x e^{-t^2}\,dt

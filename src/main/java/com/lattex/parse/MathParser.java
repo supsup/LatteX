@@ -337,6 +337,37 @@ public final class MathParser {
         return wrap(items);
     }
 
+    /**
+     * A bare {@code \displaystyle}-family switch: it restyles everything after it to the
+     * end of the enclosing group, so greedily consume components up to the group boundary
+     * ({@code }}, EOF, or a matrix cell/row separator) and wrap them. Nesting handles
+     * override — a later {@code \textstyle} in the same group parses as an inner switch.
+     */
+    private MathNode parseStyleSwitch(String name) {
+        MathNode.StyleLevel level = switch (name) {
+            case "displaystyle" -> MathNode.StyleLevel.DISPLAY;
+            case "textstyle" -> MathNode.StyleLevel.TEXT;
+            case "scriptstyle" -> MathNode.StyleLevel.SCRIPT;
+            case "scriptscriptstyle" -> MathNode.StyleLevel.SCRIPT_SCRIPT;
+            default -> throw new IllegalStateException("not a style switch: " + name);
+        };
+        List<MathNode> rest = new ArrayList<>();
+        while (!isStyleSwitchBoundary(peek())) {
+            rest.add(parseComponent());
+        }
+        return new MathNode.StyleSwitch(level, wrap(rest));
+    }
+
+    /** Where a {@code \displaystyle}-family switch stops consuming: group end or a cell/row sep. */
+    private boolean isStyleSwitchBoundary(Token t) {
+        return switch (t.kind()) {
+            case RBRACE, EOF -> true;
+            case CHAR -> t.codePoint() == '&';                              // matrix column separator
+            case COMMAND -> t.name().equals("\\") || t.name().equals("cr"); // matrix row separator
+            default -> false;
+        };
+    }
+
     /** One component: a nucleus, plus any scripts (or big-operator limits). */
     MathNode parseComponent() {
         MathNode nucleus = parseNucleus();
@@ -622,6 +653,9 @@ public final class MathParser {
                 MathNode num = parseArgument("\\tfrac numerator");
                 MathNode den = parseArgument("\\tfrac denominator");
                 return new Fraction(num, den, true, MathNode.FractionStyle.TEXT);
+            }
+            case "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle" -> {
+                return parseStyleSwitch(name);
             }
             case "textcolor" -> {
                 // \textcolor{color}{body}: paint body a fixed color. The name/hex is

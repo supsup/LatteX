@@ -14,7 +14,7 @@ String svg = com.lattex.api.LatteX.render("\\frac{a+b}{c}");
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
-ratchet: 477/484 real-world formulas, 98.6%, and only allowed to go up). For the
+ratchet: 479/484 real-world formulas, 99.0%, and only allowed to go up). For the
 fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
 26 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
 captured previews (every effect as its own looping GIF).
@@ -37,7 +37,7 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 ## Status
 
-Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), and equation numbering (`\tag`) to SVG today — **98.6% of the wild corpus** as of **0.5.0**. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **26-effect** `fx` layer are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), and equation numbering (`\tag`) to SVG today — **99.0% of the wild corpus** as of **0.5.0**. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **26-effect** `fx` layer are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
 ## The fx layer is OPTIONAL
 
