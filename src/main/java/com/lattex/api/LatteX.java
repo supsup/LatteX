@@ -146,6 +146,13 @@ public final class LatteX {
      * {@link MathFragment#heightPx()} the above-baseline extent, and
      * {@link MathFragment#depthPx()} the below-baseline extent.
      *
+     * <p>The fragment also carries the token-identity sidecar
+     * {@link MathFragment#glyphmap()} — derived from the SAME layout + font as
+     * {@code innerSvg} (one emit-order producer), so a glyphmap index addresses the
+     * Nth {@code <path>} of {@code innerSvg}. The indices are emit-order-based and thus
+     * RE-BASE-INVARIANT: the {@code -minX} x re-base shifts the paths' positions but not
+     * their order, so no index adjustment is applied. See {@link MathFragment#glyphmap()}.
+     *
      * @param latex      the LaTeX math source (without surrounding {@code $} delimiters)
      * @param fontSizePx the base font size in user units (px at 1:1)
      * @return the laid-out {@link MathFragment}
@@ -163,6 +170,11 @@ public final class LatteX {
         Layout layout = LayoutEngine.layout(body, ctx);
 
         String inner = SvgEmitter.emitFragment(layout, font);
+        // Token-identity sidecar from the SAME layout + font that produced `inner`, so a
+        // glyphmap index is the Nth <path> of `inner` by construction. emitFragment
+        // re-bases x by -minX, but the indices are emit-ORDER-based (index N = Nth path),
+        // so the re-base shifts positions, not order — no index adjustment needed.
+        String glyphmap = SvgEmitter.glyphmap(layout, font);
         // The baseline is y=0 in layout space; above-baseline ink has negative y
         // (SVG y-down), below-baseline positive. So heightPx (above) is the magnitude
         // of minY and depthPx (below) is maxY — clamped so an all-below/all-above box
@@ -170,7 +182,7 @@ public final class LatteX {
         double width = layout.width();
         double height = Math.max(0.0, -layout.minY());
         double depth = Math.max(0.0, layout.maxY());
-        return new MathFragment(inner, width, height, depth);
+        return new MathFragment(inner, width, height, depth, glyphmap);
     }
 
     /**
