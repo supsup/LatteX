@@ -24,6 +24,27 @@ package com.lattex.api;
  *                  fragment (math-in-labels) this is exactly the box width to reserve
  * @param heightPx  the ink extent ABOVE the baseline (a non-negative magnitude)
  * @param depthPx   the ink extent BELOW the baseline (a non-negative magnitude)
+ * @param glyphmap  the token-identity sidecar for the fragment's inner {@code <path>}s
+ *                  — the {@code <hexcp>:<idx>,<idx>;<hexcp>:...} grammar (charset
+ *                  {@code [0-9a-f:,;]}) produced by the renderer, letting a diagram
+ *                  consumer ADDRESS the embedded math (hover a variable &rarr; thread its
+ *                  occurrences). Each index addresses an emitted {@code <path>} of
+ *                  {@link #innerSvg()} in EMIT ORDER, and a run groups the paths that
+ *                  share a source code point (only two-or-more occurrences form a run).
+ *                  The map is math-atom-scoped: only author {@code Atom}s carry a source
+ *                  code point, so construction glyphs (delimiters, radical surds,
+ *                  big-operator symbols) and {@code \text}/{@code \sin} letters have no
+ *                  source — they CONSUME an emit index but are never keyed. Empty string
+ *                  when nothing is threadable.
+ *
+ *                  <p><strong>Re-base invariance (the load-bearing contract).</strong>
+ *                  The indices are EMIT-ORDER-based, so they are RE-BASE-INVARIANT.
+ *                  {@link LatteX#renderFragment(String, double)} re-bases {@code innerSvg}
+ *                  x by {@code -minX} (shifting every element's {@code transform}), but an
+ *                  index still addresses the Nth {@code <path>} of {@code innerSvg}
+ *                  regardless of that translate — index N = the Nth path, position-
+ *                  independent. No index adjustment is applied or needed.
  */
-public record MathFragment(String innerSvg, double widthPx, double heightPx, double depthPx) {
+public record MathFragment(String innerSvg, double widthPx, double heightPx, double depthPx,
+                           String glyphmap) {
 }
