@@ -26,6 +26,14 @@ import com.lattex.parse.Symbols.EnvSpec;
  */
 final class EnvironmentParser {
 
+    /**
+     * Total-cell cap for a single matrix/array/align grid (rows × columns). The
+     * breadth analogue of {@link MathParser#MAX_DEPTH}: it bounds the rows×cols
+     * blow-up that row-padding creates. Generous for real math (a 100×100 grid);
+     * far below the ~4×10⁸ cells a 100 KB adversarial source could otherwise force.
+     */
+    static final int MAX_MATRIX_CELLS = 10_000;
+
     private EnvironmentParser() {
     }
 
@@ -153,6 +161,18 @@ final class EnvironmentParser {
                 v.add(0);
             }
             vlines = v;
+        }
+
+        // DoS guard (breadth, not depth): cols is the widest row and EVERY row pads
+        // out to it, so a pathological wide+tall grid materialises rows*cols cells
+        // from O(rows+cols) source — MAX_DEPTH bounds nesting, nothing bounded breadth.
+        // Adversary-reachable via the \lx author macro. Cap the total cell count so a
+        // ~100 KB source can't force a multi-hundred-million-cell grid (OOM / long hang).
+        long totalCells = (long) rawRows.size() * cols;
+        if (totalCells > MAX_MATRIX_CELLS) {
+            throw new MathSyntaxException("matrix too large: " + rawRows.size() + " rows x "
+                + cols + " cols = " + totalCells + " cells exceeds the "
+                + MAX_MATRIX_CELLS + "-cell limit");
         }
 
         // Pad short rows to the column count with empty cells (TeX pads with nulls).

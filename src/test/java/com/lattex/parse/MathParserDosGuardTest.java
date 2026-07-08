@@ -47,6 +47,31 @@ class MathParserDosGuardTest {
         assertDoesNotThrow(() -> MathParser.parse(legal));
     }
 
+    @Test
+    void wideMatrixThrowsSyntaxExceptionNotOom() {
+        // Breadth DoS: cols = the widest row and every row pads out to it, so
+        // rows*cols cells materialise from O(rows+cols) source. The cell cap must
+        // reject the grid as a clean MathSyntaxException, never run the allocation.
+        StringBuilder sb = new StringBuilder("\\begin{matrix} 1");
+        sb.append(" & 1".repeat(199));      // 200 columns
+        sb.append(" \\\\ x".repeat(60));    // 61 rows -> 200*61 = 12200 > 10000
+        sb.append(" \\end{matrix}");
+        MathSyntaxException ex = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse(sb.toString()));
+        assertTrue(ex.getMessage().contains("too large"),
+            "should name the cell-count limit: " + ex.getMessage());
+    }
+
+    @Test
+    void legalMatrixUnderTheCellCapStillParses() {
+        // A generous-but-legal 10x10 grid (100 cells, well under MAX_MATRIX_CELLS).
+        StringBuilder sb = new StringBuilder("\\begin{matrix} 1");
+        sb.append(" & 1".repeat(9));        // 10 columns
+        sb.append(" \\\\ x".repeat(9));     // 10 rows -> 100 cells
+        sb.append(" \\end{matrix}");
+        assertDoesNotThrow(() -> MathParser.parse(sb.toString()));
+    }
+
     /** An over-length input is rejected at the entry as a MathSyntaxException. */
     @Test
     void overLengthInputThrowsSyntaxException() {
