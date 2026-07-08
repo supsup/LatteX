@@ -438,16 +438,22 @@ public final class LatteX {
                 "<mrow>" + toMathML(t.body()) + "<mspace width=\"1em\"/><mo>(</mo>"
                     + toMathML(t.label()) + "<mo>)</mo></mrow>";
             case Phantom p -> "<mphantom>" + toMathML(p.content()) + "</mphantom>";
-            case BigOperator(var op, var lower, var upper, _) -> {
+            case BigOperator(var op, var lower, var upper, var limits) -> {
                 String o = mo(op.codePoint());
+                // \nolimits (e.g. an inline integral) sets scripts to the SIDE —
+                // msub/msup/msubsup — matching the SVG; otherwise above/below.
+                boolean beside = limits == MathNode.LimitsMode.NOLIMITS;
                 if (lower != null && upper != null) {
-                    yield "<munderover>" + o + toMathML(lower) + toMathML(upper) + "</munderover>";
+                    yield (beside ? "<msubsup>" : "<munderover>") + o
+                        + toMathML(lower) + toMathML(upper) + (beside ? "</msubsup>" : "</munderover>");
                 }
                 if (lower != null) {
-                    yield "<munder>" + o + toMathML(lower) + "</munder>";
+                    yield (beside ? "<msub>" : "<munder>") + o + toMathML(lower)
+                        + (beside ? "</msub>" : "</munder>");
                 }
                 if (upper != null) {
-                    yield "<mover>" + o + toMathML(upper) + "</mover>";
+                    yield (beside ? "<msup>" : "<mover>") + o + toMathML(upper)
+                        + (beside ? "</msup>" : "</mover>");
                 }
                 yield o;
             }
@@ -513,10 +519,24 @@ public final class LatteX {
         };
     }
 
-    /** MathML {@code <mtable>} for a grid; cells walk the same tree. */
+    /**
+     * MathML {@code <mtable>} for a grid; cells walk the same tree. When the matrix
+     * carries enclosing delimiters ({@code pmatrix}/{@code bmatrix}/{@code vmatrix}/…),
+     * the table is wrapped in stretchy {@code <mo>} fences so a screen reader hears the
+     * brackets — otherwise every kind would sound like a bare table.
+     */
     private static String matrixMathML(Matrix m) {
         int cols = m.columnCount();
-        StringBuilder sb = new StringBuilder("<mtable>");
+        StringBuilder sb = new StringBuilder();
+        boolean fenced = m.leftDelim() != Fenced.NULL_DELIMITER
+            || m.rightDelim() != Fenced.NULL_DELIMITER;
+        if (fenced) {
+            sb.append("<mrow>");
+            if (m.leftDelim() != Fenced.NULL_DELIMITER) {
+                sb.append(fenceMo(m.leftDelim()));
+            }
+        }
+        sb.append("<mtable>");
         for (var row : m.rows()) {
             sb.append("<mtr>");
             for (int c = 0; c < cols; c++) {
@@ -526,7 +546,14 @@ public final class LatteX {
             }
             sb.append("</mtr>");
         }
-        return sb.append("</mtable>").toString();
+        sb.append("</mtable>");
+        if (fenced) {
+            if (m.rightDelim() != Fenced.NULL_DELIMITER) {
+                sb.append(fenceMo(m.rightDelim()));
+            }
+            sb.append("</mrow>");
+        }
+        return sb.toString();
     }
 
     /** MathML for a stacked annotation (under/over-brace, overset/underset). */
