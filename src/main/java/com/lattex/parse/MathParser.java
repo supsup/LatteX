@@ -298,10 +298,25 @@ public final class MathParser {
 
     private MathNode parseTopLevel() {
         List<MathNode> items = new ArrayList<>();
+        MathNode tag = null;
         while (peek().kind() != Kind.EOF) {
+            // \tag{label} is equation-global: hoist it out of the component stream and
+            // attach it to the whole equation, wherever it appears in the source.
+            if (isCommand(peek(), "tag")) {
+                next(); // consume \tag
+                if (tag != null) {
+                    throw new MathSyntaxException("Multiple \\tag on one equation");
+                }
+                if (peek().kind() != Kind.LBRACE) {
+                    throw new MathSyntaxException("\\tag expects a {label} group");
+                }
+                tag = parseGroup();
+                continue;
+            }
             items.add(parseComponent());
         }
-        return wrap(items);
+        MathNode body = wrap(items);
+        return tag == null ? body : new MathNode.Tagged(body, tag);
     }
 
     /** A brace group {@code '{' list '}'}. Assumes the current token is LBRACE. */

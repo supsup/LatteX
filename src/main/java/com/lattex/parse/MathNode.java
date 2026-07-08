@@ -320,6 +320,27 @@ public sealed interface MathNode {
     }
 
     /**
+     * A display equation carrying a {@code \tag{label}} — the {@code body} equation
+     * plus a {@code label} rendered flush-right, auto-wrapped in parentheses (LaTeX
+     * renders {@code \tag{1}} as {@code (1)}). {@code \tag} is equation-global, so it
+     * is hoisted to the top level during the parse regardless of where it appears.
+     *
+     * @param body  the tagged equation (non-null)
+     * @param label the tag label content, rendered as {@code (label)} at the right
+     *              (non-null; math-mode, so {@code \tag{$*$}}-style labels layout too)
+     */
+    record Tagged(MathNode body, MathNode label) implements MathNode {
+        public Tagged {
+            if (body == null) {
+                throw new IllegalArgumentException("Tagged body must not be null");
+            }
+            if (label == null) {
+                throw new IllegalArgumentException("Tagged label must not be null");
+            }
+        }
+    }
+
+    /**
      * A base decorated with an accent above (or a line below), covering the two
      * families of TeX accent commands:
      *
