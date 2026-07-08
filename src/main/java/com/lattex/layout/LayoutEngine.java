@@ -4,6 +4,7 @@ import com.lattex.font.GlyphOutline;
 import com.lattex.font.SfntFont;
 import com.lattex.api.Color;
 import com.lattex.parse.MathNode;
+import com.lattex.parse.MathSyntaxException;
 import com.lattex.parse.MathNode.Accent;
 import com.lattex.parse.MathNode.Colored;
 import com.lattex.parse.MathNode.Atom;
@@ -104,7 +105,37 @@ public final class LayoutEngine {
     // Box construction — one arm per renderable node kind.
     // ------------------------------------------------------------------
 
+    /**
+     * Independent layout-recursion depth bound. Layout recurses as deep as the node
+     * tree ({@link #layoutBox} calls itself for every child), and a {@code
+     * StackOverflowError} here is an {@code Error} — it escapes the caller's {@code
+     * catch (RuntimeException)} guards and kills the render thread. The parser's {@code
+     * MAX_DEPTH} bounds the tree today, but that is a DIFFERENT module for a DIFFERENT
+     * reason (parse-stack safety); layout frames are heavier (Box allocations), so a
+     * future {@code MAX_DEPTH} bump — or a programmatic {@link MathNode} tree built
+     * without the parser — would silently re-open thread death. This is layout's own
+     * guarantee, surfaced as a caught {@link MathSyntaxException}.
+     */
+    static final int MAX_LAYOUT_DEPTH = 512;
+
+    /** Per-thread layout recursion depth (the engine is static/stateless). */
+    private static final ThreadLocal<int[]> LAYOUT_DEPTH = ThreadLocal.withInitial(() -> new int[1]);
+
     private static Box layoutBox(MathNode node, LayoutContext ctx) {
+        int[] depth = LAYOUT_DEPTH.get();
+        if (++depth[0] > MAX_LAYOUT_DEPTH) {
+            depth[0]--; // balance the counter before unwinding
+            throw new MathSyntaxException(
+                "layout nesting too deep: exceeds the " + MAX_LAYOUT_DEPTH + "-level limit");
+        }
+        try {
+            return layoutBoxDispatch(node, ctx);
+        } finally {
+            depth[0]--;
+        }
+    }
+
+    private static Box layoutBoxDispatch(MathNode node, LayoutContext ctx) {
         return switch (node) {
             case Atom atom -> atomBox(atom, ctx);
             case MathList(var items) -> rowBox(items, ctx);
