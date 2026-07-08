@@ -33,7 +33,7 @@ OK	calculus-physics	D	\sin x = x - \frac{x^3}{3!} + \frac{x^5}{5!} - \cdots
 OK	calculus-physics	D	\lim_{x\to a}\frac{f(x)}{g(x)} = \lim_{x\to a}\frac{f'(x)}{g'(x)}
 OK	calculus-physics	D	\frac{dz}{dt} = \frac{\partial z}{\partial x}\frac{dx}{dt} + \frac{\partial z}{\partial y}\frac{dy}{dt}
 OK	calculus-physics	D	s = \int_a^b \sqrt{1 + \left(\frac{dy}{dx}\right)^2}\,dx
-GAP	calculus-physics	D	\int_1^e \frac{dx}{x} = \ln x \Big|_1^e = 1
+OK	calculus-physics	D	\int_1^e \frac{dx}{x} = \ln x \Big|_1^e = 1
 OK	calculus-physics	I	\left.\frac{df}{dx}\right|_{x=0}
 OK	calculus-physics	I	\left(\frac{\partial S}{\partial V}\right)_T
 OK	calculus-physics	D	\forall \varepsilon > 0\ \exists \delta > 0 : 0 < |x-a| < \delta \implies |f(x)-L| < \varepsilon
@@ -271,7 +271,7 @@ OK	algebra-discrete	D	\left| \bigcup_{i=1}^{n} A_i \right| = \sum_{\emptyset \ne
 OK	algebra-discrete	I	E = \{ n \in \mathbb{Z} \mid n = 2k \text{ for some } k \in \mathbb{Z} \}
 OK	algebra-discrete	I	\mathbb{Q} = \left\{ \tfrac{p}{q} : p, q \in \mathbb{Z},\ q \ne 0 \right\}
 OK	algebra-discrete	D	\neg (p \land q) \equiv \neg p \lor \neg q
-GAP	algebra-discrete	D	\forall x\, \forall y\, \bigl( x < y \implies \exists z\, (x < z \land z < y) \bigr)
+OK	algebra-discrete	D	\forall x\, \forall y\, \bigl( x < y \implies \exists z\, (x < z \land z < y) \bigr)
 OK	algebra-discrete	D	x \oplus y = (x \lor y) \land \neg (x \land y)
 OK	algebra-discrete	D	\begin{array}{c|c|c} p & q & p \land q \\ \hline T & T & T \\ T & F & F \\ F & T & F \\ F & F & F \end{array}
 OK	algebra-discrete	I	f \colon \{0,1\}^n \to \{0,1\}

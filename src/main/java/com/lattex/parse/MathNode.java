@@ -287,6 +287,29 @@ public sealed interface MathNode {
     }
 
     /**
+     * A manually-sized delimiter — {@code \big}/{@code \Big}/{@code \bigg}/{@code
+     * \Bigg} and their {@code l}/{@code r}/{@code m} class variants. A single delimiter
+     * glyph stretched to a FIXED height (a multiple of the em), independent of any
+     * surrounding content — unlike {@link Fenced}, whose delimiters size to their body.
+     *
+     * @param delimCp   the delimiter code point (e.g. {@code (}, {@code |})
+     * @param sizeLevel 1 ({@code \big}) … 4 ({@code \Bigg}) — the fixed size bucket
+     * @param mathClass the spacing class: {@code OPEN} ({@code \bigl}), {@code CLOSE}
+     *                  ({@code \bigr}), {@code REL} ({@code \bigm}), or {@code ORD} (plain)
+     */
+    record SizedDelim(int delimCp, int sizeLevel, MathClass mathClass) implements MathNode {
+        public SizedDelim {
+            if (sizeLevel < 1 || sizeLevel > 4) {
+                throw new IllegalArgumentException(
+                    "SizedDelim sizeLevel must be 1..4, got " + sizeLevel);
+            }
+            if (mathClass == null) {
+                throw new IllegalArgumentException("SizedDelim mathClass must not be null");
+            }
+        }
+    }
+
+    /**
      * Explicit horizontal spacing (glue), e.g. the thin space {@code \,}. The
      * width is in math units (mu); 18mu = 1em.
      *

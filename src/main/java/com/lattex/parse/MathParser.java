@@ -808,6 +808,12 @@ public final class MathParser {
                 if (sym != null) {
                     return new Atom(sym.codePoint(), sym.mathClass());
                 }
+                // \big/\Big/\bigg/\Bigg (+ l/r/m class variants): fixed-size delimiters.
+                // Runs AFTER BIG_OPERATORS/SYMBOLS, so \bigcup, \bigstar, … are gone.
+                MathNode sized = tryParseSizedDelim(name);
+                if (sized != null) {
+                    return sized;
+                }
                 throw new MathSyntaxException("Unknown command: \\" + name);
             }
         }
@@ -1007,6 +1013,46 @@ public final class MathParser {
     }
 
     /** Reads a delimiter code point after {@code \left}/{@code \right}. */
+    /**
+     * If {@code name} is a {@code \big}-family delimiter command ({@code \big}/{@code
+     * \Big}/{@code \bigg}/{@code \Bigg} with an optional {@code l}/{@code r}/{@code m}
+     * class suffix), reads the following delimiter and returns the fixed-size node;
+     * otherwise returns {@code null} so the caller reports an unknown command. Runs
+     * after the symbol/big-operator lookups, so {@code \bigcup}/{@code \bigstar} never
+     * reach here.
+     */
+    private MathNode tryParseSizedDelim(String name) {
+        int level;
+        String suffix;
+        if (name.startsWith("bigg")) {
+            level = 3;
+            suffix = name.substring(4);
+        } else if (name.startsWith("Bigg")) {
+            level = 4;
+            suffix = name.substring(4);
+        } else if (name.startsWith("big")) {
+            level = 1;
+            suffix = name.substring(3);
+        } else if (name.startsWith("Big")) {
+            level = 2;
+            suffix = name.substring(3);
+        } else {
+            return null;
+        }
+        MathClass mathClass = switch (suffix) {
+            case "" -> MathClass.ORD;    // plain \big
+            case "l" -> MathClass.OPEN;  // \bigl
+            case "r" -> MathClass.CLOSE; // \bigr
+            case "m" -> MathClass.REL;   // \bigm
+            default -> null;             // an unknown suffix — not a \big command
+        };
+        if (mathClass == null) {
+            return null;
+        }
+        int delim = readDelimiter("\\" + name);
+        return new MathNode.SizedDelim(delim, level, mathClass);
+    }
+
     private int readDelimiter(String context) {
         Token t = next();
         if (t.kind() == Kind.CHAR) {

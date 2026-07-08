@@ -76,6 +76,8 @@ class MathParserTest {
             }
             case Fenced(int left, var body, int right) ->
                 "Fen(" + delim(left) + " " + pp(body) + " " + delim(right) + ")";
+            case MathNode.SizedDelim sd ->
+                "Big" + sd.sizeLevel() + "[" + sd.mathClass() + "](" + delim(sd.delimCp()) + ")";
             case Spacing(double mu) -> "Sp(" + mu + ")";
             case Phantom(var content, var keepW, var keepV) -> {
                 String kind = keepW && keepV ? "phantom" : keepW ? "hphantom" : "vphantom";
@@ -381,6 +383,19 @@ class MathParserTest {
         // \oiint / \oiiint are big operators (surface/volume integrals), not Unknown command
         assertInstanceOf(MathNode.BigOperator.class, MathParser.parse("\\oiint_S"));
         assertInstanceOf(MathNode.BigOperator.class, MathParser.parse("\\oiiint_V"));
+    }
+
+    @Test
+    void bigFamilyProducesFixedSizeDelimiters() {
+        // \big/\Big/\bigg/\Bigg = size levels 1..4; l/r/m set the spacing class.
+        assertEquals("Big1[ORD](|)", pp(MathParser.parse("\\big|")));
+        assertEquals("Big2[OPEN](()", pp(MathParser.parse("\\Bigl(")));
+        assertEquals("Big3[CLOSE]())", pp(MathParser.parse("\\biggr)")));
+        assertEquals("Big4[REL](|)", pp(MathParser.parse("\\Biggm|")));
+        // Name-collision guard: \bigcup is still a big OPERATOR, not a sized delimiter.
+        assertInstanceOf(MathNode.BigOperator.class, MathParser.parse("\\bigcup_i"));
+        // An unknown \big-ish suffix stays an Unknown command (not silently a delimiter).
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\bigx"));
     }
 
     @Test
