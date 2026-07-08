@@ -71,7 +71,7 @@ OK	calculus-physics	D	F = \frac{1}{4\pi\epsilon_0}\frac{q_1 q_2}{r^2}
 OK	calculus-physics	D	\mathbf{F} = q(\mathbf{E} + \mathbf{v}\times\mathbf{B})
 OK	calculus-physics	D	\mathbf{B}(\mathbf{r}) = \frac{\mu_0}{4\pi} \int \frac{I\,d\mathbf{l}' \times \hat{\mathbf{r}}}{r^2}
 OK	calculus-physics	D	\mathbf{S} = \frac{1}{\mu_0}\,\mathbf{E}\times\mathbf{B}
-GAP	calculus-physics	D	\frac{\partial\rho}{\partial t} + \nabla\cdot\mathbf{J} = 0 \tag{5.29}
+OK	calculus-physics	D	\frac{\partial\rho}{\partial t} + \nabla\cdot\mathbf{J} = 0 \tag{5.29}
 OK	calculus-physics	D	P = \frac{q^2 a^2}{6\pi\epsilon_0 c^3}
 OK	calculus-physics	D	i\hbar\frac{\partial}{\partial t}\Psi(\mathbf{r},t) = \hat{H}\Psi(\mathbf{r},t)
 OK	calculus-physics	D	-\frac{\hbar^2}{2m}\frac{d^2\psi}{dx^2} + V(x)\psi = E\psi
@@ -188,7 +188,7 @@ OK	stats-ml	D	\begin{aligned} v_{t+1} &= \mu v_t - \eta \nabla f(\theta_t) \\ \t
 OK	stats-ml	D	\begin{aligned} m_t &= \beta_1 m_{t-1} + (1 - \beta_1) g_t \\ v_t &= \beta_2 v_{t-1} + (1 - \beta_2) g_t^2 \\ \theta_t &= \theta_{t-1} - \alpha \, \hat{m}_t / \left( \sqrt{\hat{v}_t} + \epsilon \right) \end{aligned}
 OK	stats-ml	D	\mathcal{L}_{\text{reg}} = \mathcal{L} + \frac{\lambda}{2} \|\theta\|_2^2
 OK	stats-ml	D	\min_G \max_D V(D, G) = \mathbb{E}_{x \sim p_{\text{data}}(x)}[\log D(x)] + \mathbb{E}_{z \sim p_z(z)}[\log(1 - D(G(z)))]
-GAP	stats-ml	D	\log p_\theta(x) \geq \mathbb{E}_{q_\phi(z \mid x)}\left[ \log p_\theta(x \mid z) \right] - D_{\mathrm{KL}}\left( q_\phi(z \mid x) \,\|\, p(z) \right) \tag{1}
+OK	stats-ml	D	\log p_\theta(x) \geq \mathbb{E}_{q_\phi(z \mid x)}\left[ \log p_\theta(x \mid z) \right] - D_{\mathrm{KL}}\left( q_\phi(z \mid x) \,\|\, p(z) \right) \tag{1}
 OK	stats-ml	D	z = \mu + \sigma \odot \epsilon, \quad \epsilon \sim \mathcal{N}(0, \mathbf{I})
 OK	stats-ml	D	q(x_t \mid x_{t-1}) = \mathcal{N}\left( x_t; \sqrt{1 - \beta_t}\, x_{t-1},\; \beta_t \mathbf{I} \right)
 OK	stats-ml	D	\mathcal{L} = \underbrace{\mathbb{E}_{q(z \mid x)}[\log p(x \mid z)]}_{\text{reconstruction}} - \underbrace{D_{\mathrm{KL}}(q(z \mid x) \,\|\, p(z))}_{\text{regularization}}
@@ -261,7 +261,7 @@ OK	algebra-discrete	D	x \equiv a_1 \pmod{m_1}, \quad x \equiv a_2 \pmod{m_2}, \q
 OK	algebra-discrete	D	\left(\frac{a}{p}\right) = \begin{cases} 1 & \text{if } a \text{ is a quadratic residue mod } p \text{ and } p \nmid a \\ -1 & \text{if } a \text{ is a quadratic non-residue mod } p \\ 0 & \text{if } p \mid a \end{cases}
 OK	algebra-discrete	D	\left(\frac{p}{q}\right)\left(\frac{q}{p}\right) = (-1)^{\frac{p-1}{2} \cdot \frac{q-1}{2}}
 OK	algebra-discrete	D	\sqrt{2} = 1 + \cfrac{1}{2 + \cfrac{1}{2 + \cfrac{1}{2 + \cdots}}}
-GAP	algebra-discrete	D	x^n + y^n = z^n \tag{1}
+OK	algebra-discrete	D	x^n + y^n = z^n \tag{1}
 OK	algebra-discrete	D	F_n = F_{n-1} + F_{n-2}, \qquad F_1 = F_2 = 1
 OK	algebra-discrete	D	F_n = \frac{1}{\sqrt{5}} \left[ \left( \frac{1+\sqrt{5}}{2} \right)^{\!n} - \left( \frac{1-\sqrt{5}}{2} \right)^{\!n} \right]
 OK	algebra-discrete	D	\begin{pmatrix} 1 & 1 \\ 1 & 0 \end{pmatrix}^{\!n} = \begin{pmatrix} F_{n+1} & F_n \\ F_n & F_{n-1} \end{pmatrix}
@@ -311,7 +311,7 @@ OK	wiki-textbook	I	\pi \approx 3.14159
 OK	wiki-textbook	I	i = \sqrt{-1}
 OK	wiki-textbook	I	f\colon \mathbb{R} \to \mathbb{R}
 OK	wiki-textbook	D	x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
-GAP	wiki-textbook	D	ax^2 + bx + c = 0 \tag{1}
+OK	wiki-textbook	D	ax^2 + bx + c = 0 \tag{1}
 OK	wiki-textbook	D	e^{ix} = \cos x + i\sin x
 OK	wiki-textbook	D	A = P\left(1 + \frac{r}{n}\right)^{nt}
 OK	wiki-textbook	I	A = Pe^{rt}
@@ -426,9 +426,9 @@ OK	structured-envs	D	\theta_{t+1} = \theta_t - \eta\,\nabla_{\!\theta}\,\mathcal
 OK	structured-envs	D	|\psi\rangle = \alpha|0\rangle + \beta|1\rangle, \qquad |\alpha|^2 + |\beta|^2 = 1
 OK	structured-envs	D	x = a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{a_3 + \cdots}}}
 OK	structured-envs	D	f(x) = \frac{1}{\sigma\sqrt{2\pi}}\, e^{-\frac{1}{2}\left(\frac{x-\mu}{\sigma}\right)^{2}}
-GAP	structured-envs	D	E = mc^2 \tag{1}
-GAP	structured-envs	D	u_t + u\,u_x = \nu\,u_{xx} \tag{3.2}
-GAP	structured-envs	D	\int_\Omega \nabla u \cdot \nabla v \,dx = \int_\Omega f v \,dx \tag{$*$}
+OK	structured-envs	D	E = mc^2 \tag{1}
+OK	structured-envs	D	u_t + u\,u_x = \nu\,u_{xx} \tag{3.2}
+OK	structured-envs	D	\int_\Omega \nabla u \cdot \nabla v \,dx = \int_\Omega f v \,dx \tag{$*$}
 OK	structured-envs	D	\underbrace{x + x + \cdots + x}_{n\ \text{times}} = nx
 OK	structured-envs	D	\mathcal{L}(\theta,\phi;x) = \underbrace{\mathbb{E}_{q_\phi(z|x)}\left[\log p_\theta(x \mid z)\right]}_{\text{reconstruction}} - \underbrace{D_{\mathrm{KL}}\left(q_\phi(z \mid x)\,\|\,p(z)\right)}_{\text{regularization}}
 OK	structured-envs	D	\overbrace{1 + 2 + \cdots + n}^{=\,n(n+1)/2}

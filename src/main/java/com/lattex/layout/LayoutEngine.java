@@ -125,6 +125,7 @@ public final class LayoutEngine {
             case Matrix matrix -> matrixBox(matrix, ctx);
             case MathNode.Stack stack -> stackBox(stack, ctx);
             case MathNode.XArrow xArrow -> xArrowBox(xArrow, ctx);
+            case MathNode.Tagged(var body, var label) -> taggedBox(body, label, ctx);
             // A top-level \lx wrapper: its RenderOptions (scale / mathStyle / color)
             // are applied at the render entry by seeding the LayoutContext + the
             // emitter fill, so here we simply lay out the wrapped body. (\lx is
@@ -425,6 +426,27 @@ public final class LayoutEngine {
             b.width(), b.height(), b.depth());
     }
 
+    /**
+     * A {@code \tag'd} equation: the body, then the label auto-wrapped in ordinary
+     * parentheses ({@code \tag{1}} renders as {@code (1)}) and placed flush-right
+     * after a {@code \qquad}-sized gap. {@code \tag} is equation-global, so this only
+     * appears at the top level.
+     */
+    private static Box taggedBox(MathNode body, MathNode label, LayoutContext ctx) {
+        Box bodyBox = layoutBox(body, ctx);
+        Box labelBox = layoutBox(new MathList(List.of(
+            new Atom('(', MathClass.OPEN), label, new Atom(')', MathClass.CLOSE))), ctx);
+        double gap = 2.0 * ctx.fontSize(); // ~\qquad between the equation and its tag
+        double labelX = bodyBox.width() + gap;
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        bodyBox.drawInto(glyphs, rules, 0.0, 0.0);
+        labelBox.drawInto(glyphs, rules, labelX, 0.0);
+        return new Box(glyphs, rules, labelX + labelBox.width(),
+            Math.max(bodyBox.height(), labelBox.height()),
+            Math.max(bodyBox.depth(), labelBox.depth()));
+    }
+
     private static MathClass classOf(MathNode node) {
         return switch (node) {
             case Atom atom -> atom.mathClass();
@@ -436,6 +458,7 @@ public final class LayoutEngine {
             case MathList _ -> MathClass.ORD; // a {group} behaves as an Ord atom
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
             case Colored c -> classOf(c.body()); // color is transparent: take the body's class
+            case MathNode.Tagged t -> classOf(t.body()); // the tag rides outside; class = body's
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
             case OperatorName _ -> MathClass.OP; // a named operator is class Op
             case TextRun _ -> MathClass.ORD;   // a text run behaves as an Ord atom

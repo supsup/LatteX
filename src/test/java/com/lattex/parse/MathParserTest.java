@@ -87,6 +87,8 @@ class MathParserTest {
             }
             case MathNode.Colored(var body, var color) ->
                 "Col[" + color.svgValue() + "](" + pp(body) + ")";
+            case MathNode.Tagged(var body, var label) ->
+                "Tag(" + pp(body) + "|" + pp(label) + ")";
             case MathNode.OperatorName(var name, var takesLimits) ->
                 "Op(" + name + (takesLimits ? ",lim" : "") + ")";
             case MathNode.TextRun(var text, var style) ->
@@ -346,6 +348,20 @@ class MathParserTest {
             MathParser.parse("\\textcolor{#ff8800}{z}")).color().svgValue());
         // an unknown/malformed color is a clean parse error, never an emitted raw string
         assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\textcolor{bogus}{x}"));
+    }
+
+    @Test
+    void tagHoistsAnEquationNumberToTheTopLevel() {
+        MathNode.Tagged t = assertInstanceOf(MathNode.Tagged.class,
+            MathParser.parse("x \\tag{1}"));
+        assertEquals("A(x,ORD)", pp(t.body()));
+        assertEquals("A(1,ORD)", pp(t.label()));
+        assertEquals("Tag(A(x,ORD)|A(1,ORD))", pp(t));
+        // \tag is equation-global — it hoists out wherever it appears in the stream
+        assertInstanceOf(MathNode.Tagged.class, MathParser.parse("\\tag{1} x + y"));
+        // two \tag on one equation, or a \tag with no { label } group, fail loudly
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("x \\tag{1} \\tag{2}"));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("x \\tag 1"));
     }
 
     @Test
