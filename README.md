@@ -63,25 +63,104 @@ Either way the consumer gets them **from the jar it already renders with** — n
 
 ## PNG export — `bin/lattex-shot`
 
-SVG is the native output, but sometimes you need a raster (Slack, a GitHub issue
-body, slides, an LMS upload). `bin/lattex-shot` is the raster backend this README's
-Design section gestures at — as glue, not a new dependency: LatteX renders the math
-to SVG with exact metrics, and [BrewShot](https://github.com/supsup/BrewShot)
-screenshots it, tightly cropped.
+LatteX's native output is **SVG** — a *vector* format that stays razor-sharp at any
+size. But some destinations don't accept SVG: Slack messages, a GitHub issue body, a
+slide deck, an LMS upload. For those you need a **raster** image — a **PNG**, a fixed
+grid of pixels. `bin/lattex-shot` produces that PNG.
+
+It is deliberately **glue, not a new dependency**: it doesn't contain a rasterizer of
+its own. It shells out to two tools you already have — the LatteX jar (to render the
+math) and [BrewShot](https://github.com/supsup/BrewShot), a zero-dependency headless-
+Chrome screenshot harness (to turn the rendered page into pixels).
+
+### Quick start
 
 ```bash
-./gradlew jar                                     # build the lattex jar first
-bin/lattex-shot '\int_0^\infty e^{-x}dx = 1' -o eq.png
-echo '\frac{a}{b}' | bin/lattex-shot - -o frac.png     # or pipe via stdin
-bin/lattex-shot 'E = mc^2' --scale 4 --bg transparent -o hero.png
+./gradlew jar                                          # 1. build the lattex jar
+
+bin/lattex-shot '\int_0^\infty e^{-x}dx = 1' -o eq.png # 2a. LaTeX as an argument
+echo '\frac{a}{b}' | bin/lattex-shot - -o frac.png     # 2b. or piped via stdin (the '-')
+bin/lattex-shot 'E = mc^2' --scale 4 --bg transparent -o hero.png   # 2c. bigger + transparent
 ```
 
-Flags: `-o FILE`, `--scale N` (it's SVG, so a bigger scale is *more pixels*, not
-upscaling), `--bg COLOR`, `--color COLOR` (the ink), `--pad PX`. It finds the jar in
-`build/libs/` and `brewshot` on your `PATH`; override with `LATTEX_JAR` / `BREWSHOT`.
-The scale is a CSS transform (not an SVG width rewrite, which mis-composes some
-placement-transformed glyphs), and the crop clips to the rendered box — so no
-whitespace-trim guesswork.
+The first positional argument is the LaTeX math. Passing `-` instead reads the LaTeX
+from **stdin**, so you can pipe it from another command or a file (`cat eq.tex | bin/lattex-shot - -o eq.png`).
+
+Here is the actual result — this very PNG was produced by running
+
+```bash
+bin/lattex-shot '\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}' --scale 4 -o examples/lattex-shot-example.png
+```
+
+and committed straight from the pipeline, nothing hand-touched (the docs eat their own
+dog food):
+
+![Gaussian integral rendered by lattex-shot — tightly cropped, @4x](examples/lattex-shot-example.png)
+
+Note what you get for free: the glyphs are razor-sharp (it's vector, rendered at 4×),
+the crop hugs the equation exactly, and it's centered with even padding — ready to drop
+straight into a doc.
+
+### How it works (the pipeline)
+
+1. **Render.** LatteX turns your LaTeX into a self-contained SVG whose width/height are
+   the *exact* typeset metrics of the math (no guessed bounding box).
+2. **Wrap.** The SVG is dropped into a minimal one-off HTML page. A wrapper `<div>`
+   carries the background color, the ink color, the padding, and the scale.
+3. **Scale.** The wrapper is enlarged with a **CSS `transform: scale(N)`** (see the note
+   below on *why* a CSS transform rather than resizing the SVG).
+4. **Shoot + crop.** BrewShot opens the page in headless Chrome and screenshots the
+   wrapper's exact on-screen rectangle (via `getBoundingClientRect()`, which already
+   includes the scale and padding). The result is **tightly cropped** to the math — no
+   whitespace-trim heuristics, no stray margins.
+
+### Flags
+
+| Flag | Meaning | Default |
+|---|---|---|
+| `-o FILE` | Output PNG path. | `lattex.png` |
+| `--scale N` | **Vector scale factor.** Because the source is SVG (vector), a larger scale means *more pixels* — a genuinely sharper image, **not** a blurry upscale of a small one. `3` is roughly "@3x" / retina-crisp; use `4`+ for hero/print. | `3` |
+| `--bg COLOR` | Background — any CSS color. Use **`transparent`** for no background (e.g. to drop the equation onto a colored slide). | `#ffffff` (white) |
+| `--color COLOR` | The **ink**: the color of the math glyphs themselves. | `#111111` (near-black) |
+| `--pad PX` | Padding (breathing room) around the math, measured **at scale 1** — it is scaled along with everything else. | `16` |
+
+### Setup it needs
+
+- **The LatteX jar** — build it once with `./gradlew jar`. The script auto-finds the
+  newest `build/libs/lattex-*.jar`; override the path with the `LATTEX_JAR` env var.
+- **BrewShot** — a `brewshot` executable on your `PATH`, or point `BREWSHOT` at the
+  binary or `.jar`. (If it's a jar, the script runs it as `java -jar`.)
+
+If either is missing, or the LaTeX renders to nothing, the script exits non-zero with a
+one-line reason on stderr (jar/brewshot not found → exit 3; nothing rendered → exit 4).
+
+### What you'd get without it
+
+To see why the scale-and-crop step matters, here is the **same equation** done the
+naïve way — just drop LatteX's SVG onto a page and screenshot the window, with no
+scaling and no crop:
+
+![The same integral, screenshotted naively — tiny, top-left, marooned in whitespace](examples/lattex-shot-naive.png)
+
+The math is correct, but it's tiny (native 1× size), stranded in the top-left, and
+swimming in whitespace — so you'd be left hand-cropping and upscaling a raster (which
+*does* go blurry). `lattex-shot` gives you the sharp, tight top image instead, in one
+command. (Naïvely rewriting the SVG's `width`/`height` to scale it up doesn't save you
+either: it mis-sizes the box and **clips the edges** — the `√π` and fraction fall off
+the right — and can mis-compose glyphs that LatteX places with their own SVG transforms.)
+
+### Why a CSS transform, and why the exact crop
+
+Two implementation choices are what make the top image clean:
+
+- **Scaling is a CSS transform, not an SVG width/height rewrite.** A CSS
+  `transform: scale()` enlarges the already-composed picture uniformly, so every glyph
+  stays exactly where the layout put it — avoiding the clipping / mis-composition the
+  naïve `width`/`height` rewrite above runs into.
+- **The crop clips to the rendered box.** Because BrewShot clips to the wrapper's
+  measured rectangle (`getBoundingClientRect()`, which already includes the scale and
+  padding), the PNG is exactly the math plus your `--pad` — no dependence on fragile
+  "trim the surrounding whitespace" image post-processing.
 
 ## Build
 
