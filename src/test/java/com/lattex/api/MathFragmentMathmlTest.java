@@ -36,17 +36,33 @@ class MathFragmentMathmlTest {
         assertFalse(f.innerSvg().isBlank(), "the visual surface is untouched");
     }
 
-    /// THE same-tree pin (consumer requirement: no re-parse). renderFragment unwraps a
-    /// top-level \lx wrapper BEFORE layout — so its mathml must equal toMathML of the BODY,
-    /// which only happens if the mathml is serialized from the same already-unwrapped node
-    /// instance. A re-parse of the raw source would re-include the wrapper and diverge.
+    /// Wrapper-transparency consistency: a \lx-wrapped fragment's mathml equals the bare
+    /// body's. (Honesty note: this does NOT discriminate re-parse from same-tree — the
+    /// serializer is itself wrapper-transparent, so a re-parse produces identical output;
+    /// a divergent-emit mutant survived this test. The no-re-parse property is pinned by
+    /// {@link #renderFragmentSerializesTheSameBodyItLaidOut_sourcePin} instead.)
     @Test
-    void mathmlIsSerializedFromTheSameUnwrappedBodyNotAReparse() {
+    void wrappedFragmentMathmlEqualsBareBodyMathml() {
         MathFragment wrapped = LatteX.renderFragment("\\lx[style.scale=1.2]{ x^2 }", 16.0);
         MathFragment bare = LatteX.renderFragment("x^2", 16.0);
-        assertEquals(bare.mathml(), wrapped.mathml(),
-            "wrapped fragment's mathml == the body's mathml — proves the serializer saw the "
-                + "unwrapped node renderFragment laid out, not a re-parse of the raw source");
+        assertEquals(bare.mathml(), wrapped.mathml());
+    }
+
+    /// THE no-re-parse pin (consumer requirement #1: same tree, no drift). The property is
+    /// not black-box observable (a re-parse of the same source yields an equal tree), so —
+    /// same pattern as a release-gate script pin — assert the SOURCE calls mathmlOrEmpty on
+    /// the already-parsed `body`, not on a fresh MathParser.parse. If this fails, someone
+    /// reintroduced a second parse: restore the single-parse call or renegotiate the
+    /// contract with the Sirentide consumer first.
+    @Test
+    void renderFragmentSerializesTheSameBodyItLaidOut_sourcePin() throws Exception {
+        java.nio.file.Path src = java.nio.file.Path.of(
+            "src", "main", "java", "com", "lattex", "api", "LatteX.java");
+        String code = java.nio.file.Files.readString(src);
+        assertTrue(code.contains("mathmlOrEmpty(body)"),
+            "renderFragment must serialize the SAME parsed body it laid out");
+        assertFalse(code.contains("mathmlOrEmpty(MathParser.parse"),
+            "no second parse feeding the MathML surface");
     }
 
     /// Per-fragment fail-soft (consumer requirement #2): across a spread of fragment shapes,
