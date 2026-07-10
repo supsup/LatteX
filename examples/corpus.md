@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **141 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **135**, `NEEDS-S4-LAYOUT` **2**, `NEEDS-PARSER-NODE` **3**, `NEEDS-FONT-STYLE` **1**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **141 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **136**, `NEEDS-S4-LAYOUT` **2**, `NEEDS-PARSER-NODE` **3**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -142,7 +142,7 @@ following once the node exists.
 | `\sqrt{x}+\mathstrut y` | mathstrut — a zero-width strut sizing the row | `PARSES-NOW` |
 | `\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2` | text runs — needs \\text node (upright text mode) | `PARSES-NOW` |
 | `f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}` | piecewise cases — cases environment (left brace over two left-aligned columns) | `PARSES-NOW` |
-| `k={\color{red}x}-2` | colored subterm — needs \\color node + emitter color | `NEEDS-FONT-STYLE` |
+| `k={\color{red}x}-2` | colored subterm — \\color group-scoped switch + emitter fill | `PARSES-NOW` |
 
 ## Matrices / arrays
 
@@ -256,9 +256,3 @@ Every row that does **not** yet parse into a tree — i.e. everything outside `P
 | `P\left(A=2\middle\|\frac{A^2}{B}>4\right)` | mid delimiter — needs \\middle node |
 | `\aa` | the letter a-with-ring (å) — needs symbol |
 | `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs \\bordermatrix node |
-
-### `NEEDS-FONT-STYLE` — the missing feature is fundamentally a font-variant glyph set or emitter color (1)
-
-| LaTeX | Description |
-| --- | --- |
-| `k={\color{red}x}-2` | colored subterm — needs \\color node + emitter color |

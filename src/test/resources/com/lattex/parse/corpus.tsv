@@ -101,7 +101,7 @@ PARSES-NOW	spacing	\phantom{M}x\hphantom{yy}z\vphantom{(}w	phantom / hphantom / 
 PARSES-NOW	spacing	\sqrt{x}+\mathstrut y	mathstrut — a zero-width strut sizing the row
 PARSES-NOW	text	\text{50 apples}\times\text{100 apples}=\text{lots of apples}^2	text runs — needs \text node (upright text mode)
 PARSES-NOW	cases	f(n)=\begin{cases}n/2&\text{if }n\text{ even}\\-(n+1)/2&\text{if }n\text{ odd}\end{cases}	piecewise cases — cases environment (left brace over two left-aligned columns)
-NEEDS-FONT-STYLE	color	k={\color{red}x}-2	colored subterm — needs \color node + emitter color
+PARSES-NOW	color	k={\color{red}x}-2	colored subterm — \color group-scoped switch + emitter fill
 # ==== matrices / arrays ============================================
 PARSES-NOW	matrix	\begin{matrix}a&b\\c&d\end{matrix}	plain matrix — environment with &/\\ grid node
 PARSES-NOW	matrix	\begin{pmatrix}a&b\\c&d\end{pmatrix}	parenthesized matrix
