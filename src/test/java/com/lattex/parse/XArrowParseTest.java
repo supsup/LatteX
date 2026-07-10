@@ -79,4 +79,43 @@ class XArrowParseTest {
         MathNode.XArrow xa = (MathNode.XArrow) MathParser.parse("\\xrightarrow{\\ f\\ }");
         assertTrue(xa.above() instanceof MathNode.MathList, "spaces + letter");
     }
+
+    @Test
+    void theExtendedArrowFamilyEachMapsToItsOwnKind() {
+        // Plan lattex-xarrow-family (L4): every \\x... command routes to the right shaft
+        // kind — the one source of truth the parser, layout, and MathML all read.
+        record Case(String cmd, MathNode.XArrowKind kind) {}
+        for (Case c : new Case[] {
+                new Case("xrightarrow", MathNode.XArrowKind.RIGHT),
+                new Case("xleftarrow", MathNode.XArrowKind.LEFT),
+                new Case("xleftrightarrow", MathNode.XArrowKind.LEFTRIGHT),
+                new Case("xRightarrow", MathNode.XArrowKind.RIGHT_DBL),
+                new Case("xLeftarrow", MathNode.XArrowKind.LEFT_DBL),
+                new Case("xLeftrightarrow", MathNode.XArrowKind.LEFTRIGHT_DBL),
+                new Case("xmapsto", MathNode.XArrowKind.MAPSTO),
+                new Case("xhookrightarrow", MathNode.XArrowKind.HOOK_RIGHT),
+                new Case("xhookleftarrow", MathNode.XArrowKind.HOOK_LEFT),
+                new Case("xrightleftharpoons", MathNode.XArrowKind.RIGHTLEFTHARPOONS)}) {
+            MathNode.XArrow xa = (MathNode.XArrow) MathParser.parse("\\" + c.cmd() + "{f}");
+            assertEquals(c.kind(), xa.kind(), c.cmd());
+            // The new arrows share the exact optional-[below]-then-{above} grammar.
+            MathNode.XArrow withBelow =
+                (MathNode.XArrow) MathParser.parse("\\" + c.cmd() + "[g]{f}");
+            assertEquals(c.kind(), withBelow.kind());
+            assertTrue(withBelow.belowLabel().isPresent(), c.cmd() + " below label");
+        }
+    }
+
+    @Test
+    void distinctKindsHaveDistinctShaftGlyphsAndMathml() {
+        // No two kinds collide on the shaft codepoint or the MathML entity — a copy-paste
+        // slip in the enum table would be caught here.
+        java.util.Set<Integer> cps = new java.util.HashSet<>();
+        java.util.Set<String> mml = new java.util.HashSet<>();
+        for (MathNode.XArrowKind k : MathNode.XArrowKind.values()) {
+            assertTrue(cps.add(k.codePoint()), "duplicate shaft codepoint: " + k);
+            assertTrue(mml.add(k.mathmlEntity()), "duplicate mathml entity: " + k);
+            assertTrue(k.a11yName() != null && !k.a11yName().isBlank(), "a11y name: " + k);
+        }
+    }
 }

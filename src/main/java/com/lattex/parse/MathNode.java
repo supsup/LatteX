@@ -869,18 +869,75 @@ public sealed interface MathNode {
      *
      * @param above the required label set at script size over the arrow
      * @param below the optional {@code [...]} label under the arrow, or {@code null}
-     * @param left  whether the arrow points left ({@code xleftarrow})
+     * @param kind  which extensible arrow (the shaft glyph + its direction/semantics)
      */
-    record XArrow(MathNode above, MathNode below, boolean left) implements MathNode {
+    record XArrow(MathNode above, MathNode below, XArrowKind kind) implements MathNode {
         public XArrow {
             if (above == null) {
                 throw new IllegalArgumentException("XArrow above label must not be null");
+            }
+            if (kind == null) {
+                throw new IllegalArgumentException("XArrow kind must not be null");
             }
         }
 
         /** The label under the arrow, if present. */
         public Optional<MathNode> belowLabel() {
             return Optional.ofNullable(below);
+        }
+    }
+
+    /**
+     * The extensible-arrow family (amsmath's {@code \x...} labelled arrows). Each kind
+     * centralizes the three things every consumer needs: the shaft {@code codePoint}
+     * (the base glyph the layout stretches under the labels), the Presentation-MathML
+     * {@code <mo>} entity, and a short {@code ppTag} for structural test dumps. Adding an
+     * arrow is one row here — the parser dispatch, layout, and MathML all read the kind,
+     * so they can never disagree about which glyph a command draws (plan
+     * lattex-xarrow-family / L4).
+     */
+    enum XArrowKind {
+        RIGHT(0x2192, "&#x2192;", "R", "rightwards"),                       // \xrightarrow
+        LEFT(0x2190, "&#x2190;", "L", "leftwards"),                         // \xleftarrow
+        LEFTRIGHT(0x2194, "&#x2194;", "LR", "left-right"),                  // \xleftrightarrow
+        RIGHT_DBL(0x21D2, "&#x21D2;", "R=", "rightwards double"),           // \xRightarrow
+        LEFT_DBL(0x21D0, "&#x21D0;", "L=", "leftwards double"),             // \xLeftarrow
+        LEFTRIGHT_DBL(0x21D4, "&#x21D4;", "LR=", "left-right double"),      // \xLeftrightarrow
+        MAPSTO(0x21A6, "&#x21A6;", "|->", "maps-to"),                       // \xmapsto
+        HOOK_RIGHT(0x21AA, "&#x21AA;", "R(", "rightwards hook"),            // \xhookrightarrow
+        HOOK_LEFT(0x21A9, "&#x21A9;", "L)", "leftwards hook"),              // \xhookleftarrow
+        RIGHTLEFTHARPOONS(0x21CC, "&#x21CC;", "RLh", "right-left harpoons");// \xrightleftharpoons
+
+        private final int codePoint;
+        private final String mathmlEntity;
+        private final String ppTag;
+        private final String a11yName;
+
+        XArrowKind(int codePoint, String mathmlEntity, String ppTag, String a11yName) {
+            this.codePoint = codePoint;
+            this.mathmlEntity = mathmlEntity;
+            this.ppTag = ppTag;
+            this.a11yName = a11yName;
+        }
+
+        /** The base shaft glyph the layout stretches under the labels. */
+        public int codePoint() {
+            return codePoint;
+        }
+
+        /** The Presentation-MathML {@code <mo>} content for {@code LatteX.toMathML}. */
+        public String mathmlEntity() {
+            return mathmlEntity;
+        }
+
+        /** A short structural tag for pretty-printed test dumps. */
+        public String ppTag() {
+            return ppTag;
+        }
+
+        /** Human-readable arrow name for a11y prose ({@code LatteX} describe()). */
+        public String a11yName() {
+            return a11yName;
         }
     }
 }
