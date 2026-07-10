@@ -66,9 +66,9 @@ PARSES-NOW	delim-fixed	/j\backslash	slash and \backslash symbol
 # ==== delimiters — scaled (\left \right) ===========================
 PARSES-NOW	delim-scaled	\left(\frac{x^2}{y^3}\right)	scaled parens — S4 fencedBox stretches the delimiters to the fraction body
 PARSES-NOW	delim-scaled	\left\{\frac{x^2}{y^3}\right\}	scaled braces — delimiters stretch symmetrically about the axis to the content
-NEEDS-S4-LAYOUT	delim-scaled	\left.\frac{x^3}{3}\right|_0^1	eval bar (braced) — parses; needs null-left + scaled bar layout
-NEEDS-S4-LAYOUT	delim-scaled	\left.\frac{x^3}3\right|_0^1	eval bar, terse \frac denominator — parses (single-token \frac arg); needs null-left + scaled bar layout
-NEEDS-PARSER-NODE	delim-scaled	P\left(A=2\middle|\frac{A^2}{B}>4\right)	mid delimiter — needs \middle node
+PARSES-NOW	delim-scaled	\left.\frac{x^3}{3}\right|_0^1	eval bar (braced) — null-left + stretched bar verified (LayoutS4Test.evalBarStretchesOverTheBody)
+PARSES-NOW	delim-scaled	\left.\frac{x^3}3\right|_0^1	eval bar, terse \frac denominator — null-left + stretched bar verified (same layout path)
+PARSES-NOW	delim-scaled	P\left(A=2\middle|\frac{A^2}{B}>4\right)	mid delimiter — \middle node + same-span stretch (MiddleDelim; LayoutS4Test.middleDelimiterStretchesLikeTheOuterPair)
 PARSES-NOW	delim-scaled	\binom{n}{r}	binomial coefficient — \binom node (rule-less paren-fenced stack)
 PARSES-NOW	delim-scaled	\frac{n!}{r!(n-r)!}=\binom{n}{r}	binomial identity — \binom node (rule-less paren-fenced stack)
 # ==== accents / decorations ========================================

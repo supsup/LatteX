@@ -323,6 +323,49 @@ class LayoutS4Test {
     }
 
     @Test
+    void middleDelimiterStretchesLikeTheOuterPair() {
+        // L2 (plan lattex-middle-evalbar): \middle| between a tall fraction and a
+        // plain atom must be a STRETCHED variant sized by the tallest segment —
+        // never the text-size '|' glyph an ordinary atom would produce.
+        // The bar stretches as a vertical ASSEMBLY of repeated base-glyph pieces
+        // (same mechanism as tall braces): a text-size atom is exactly ONE piece,
+        // a \middle-stretched bar is several.
+        Layout plain = layout("\\left(\\frac{x^2}{y^3}|z\\right)");
+        long plainBarPieces = plain.glyphs().stream()
+            .filter(g -> g.glyphId() == FONT.glyphId('|')).count();
+        assertEquals(1, plainBarPieces, "an ORDINARY bar atom is a single text-size glyph");
+
+        Layout mid = layout("\\left(\\frac{x^2}{y^3}\\middle|z\\right)");
+        long midBarPieces = mid.glyphs().stream()
+            .filter(g -> g.glyphId() == FONT.glyphId('|')).count();
+        assertTrue(midBarPieces >= 2,
+            "\\middle| is a stretched multi-piece assembly (got " + midBarPieces + " pieces)");
+        // Same symmetric-span rule as the outer pair: ink straddles the baseline.
+        assertTrue(-mid.minY() > 30.0, "middle-fenced ink rises above the baseline");
+        assertTrue(mid.maxY() > 25.0, "middle-fenced ink descends below the baseline");
+        // NOTE: alphabet-checked on an '='/'>-free input — assertAlphabet's naive
+        // attr regex reads "A = 2" INSIDE the quoted aria-label value as an
+        // attribute (pre-existing helper limitation, not an emitter defect).
+        assertAlphabet(LatteX.render("\\left(x\\middle|\\frac{a}{b}\\right)"));
+    }
+
+    @Test
+    void evalBarStretchesOverTheBody() {
+        // Corpus 'eval bar' receipt (tier NEEDS-S4-LAYOUT -> PARSES-NOW): the
+        // null-left + scaled-bar layout the tier note asked for already holds —
+        // \left. renders nothing and \right| is a stretched variant spanning the
+        // fraction, with the _0^1 scripts attached to the fenced group.
+        Layout l = layout("\\left.\\frac{x^3}{3}\\right|_0^1");
+        long barPieces = l.glyphs().stream()
+            .filter(g -> g.glyphId() == FONT.glyphId('|')).count();
+        assertTrue(barPieces >= 2,
+            "the eval bar is a stretched multi-piece assembly (got " + barPieces + " pieces)");
+        assertTrue(-l.minY() > 30.0, "bar ink rises above the baseline");
+        assertTrue(l.maxY() > 25.0, "bar ink descends below the baseline");
+        assertAlphabet(LatteX.render("\\left.\\frac{x^3}{3}\\right|_0^1"));
+    }
+
+    @Test
     void braceDelimitersRender() {
         // A fraction body stretches the braces to a taller MATH vertical variant,
         // so the delimiter glyph ids are brace *variants*, not the base '{' / '}'.

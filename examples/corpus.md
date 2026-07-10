@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **141 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **136**, `NEEDS-S4-LAYOUT` **2**, `NEEDS-PARSER-NODE` **3**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **141 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **139**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -99,9 +99,9 @@ following once the node exists.
 | --- | --- | --- |
 | `\left(\frac{x^2}{y^3}\right)` | scaled parens — S4 fencedBox stretches the delimiters to the fraction body | `PARSES-NOW` |
 | `\left\{\frac{x^2}{y^3}\right\}` | scaled braces — delimiters stretch symmetrically about the axis to the content | `PARSES-NOW` |
-| `\left.\frac{x^3}{3}\right\|_0^1` | eval bar (braced) — parses; needs null-left + scaled bar layout | `NEEDS-S4-LAYOUT` |
-| `\left.\frac{x^3}3\right\|_0^1` | eval bar, terse \\frac denominator — parses (single-token \\frac arg); needs null-left + scaled bar layout | `NEEDS-S4-LAYOUT` |
-| `P\left(A=2\middle\|\frac{A^2}{B}>4\right)` | mid delimiter — needs \\middle node | `NEEDS-PARSER-NODE` |
+| `\left.\frac{x^3}{3}\right\|_0^1` | eval bar (braced) — null-left + stretched bar verified (LayoutS4Test.evalBarStretchesOverTheBody) | `PARSES-NOW` |
+| `\left.\frac{x^3}3\right\|_0^1` | eval bar, terse \\frac denominator — null-left + stretched bar verified (same layout path) | `PARSES-NOW` |
+| `P\left(A=2\middle\|\frac{A^2}{B}>4\right)` | mid delimiter — \\middle node + same-span stretch (MiddleDelim; LayoutS4Test.middleDelimiterStretchesLikeTheOuterPair) | `PARSES-NOW` |
 | `\binom{n}{r}` | binomial coefficient — \\binom node (rule-less paren-fenced stack) | `PARSES-NOW` |
 | `\frac{n!}{r!(n-r)!}=\binom{n}{r}` | binomial identity — \\binom node (rule-less paren-fenced stack) | `PARSES-NOW` |
 
@@ -242,17 +242,9 @@ following once the node exists.
 
 Every row that does **not** yet parse into a tree — i.e. everything outside `PARSES-NOW` — grouped by tier, generated straight from `corpus.tsv` so it can never list an already-shipped feature as still-needed.
 
-### `NEEDS-S4-LAYOUT` — parses today; faithful rendering needs *new* 2D layout (delimiter sizing to content, eval bars) (2)
+### `NEEDS-PARSER-NODE` — needs a new `MathNode` / parser feature (named in the row) (2)
 
 | LaTeX | Description |
 | --- | --- |
-| `\left.\frac{x^3}{3}\right\|_0^1` | eval bar (braced) — parses; needs null-left + scaled bar layout |
-| `\left.\frac{x^3}3\right\|_0^1` | eval bar, terse \\frac denominator — parses (single-token \\frac arg); needs null-left + scaled bar layout |
-
-### `NEEDS-PARSER-NODE` — needs a new `MathNode` / parser feature (named in the row) (3)
-
-| LaTeX | Description |
-| --- | --- |
-| `P\left(A=2\middle\|\frac{A^2}{B}>4\right)` | mid delimiter — needs \\middle node |
 | `\aa` | the letter a-with-ring (å) — needs symbol |
 | `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs \\bordermatrix node |

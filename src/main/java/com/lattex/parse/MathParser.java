@@ -968,6 +968,15 @@ public final class MathParser {
                 next(); // consume \right; the delimiter is read by the caller
                 break;
             }
+            if (isCommand(t, "middle")) {
+                // \middle <delim> — a mid delimiter stretched like the enclosing
+                // \left..\right pair (L2, plan lattex-middle-evalbar). Legal ONLY
+                // here: outside a fenced body the command falls through to the
+                // unknown-command failure, matching TeX's "extra \middle" error.
+                next();
+                items.add(new MathNode.MiddleDelim(readDelimiter("\\middle")));
+                continue;
+            }
             if (t.kind() == Kind.EOF) {
                 throw new MathSyntaxException("Unbalanced \\left: missing \\right");
             }

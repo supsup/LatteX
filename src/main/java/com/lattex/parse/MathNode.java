@@ -287,6 +287,19 @@ public sealed interface MathNode {
     }
 
     /**
+     * A {@code \middle} delimiter inside a {@code \left..\right} group (L2, plan
+     * lattex-middle-evalbar): stretched to the SAME symmetric span as the enclosing
+     * pair, exactly like the outer delimiters. Only the fenced-body parser produces
+     * it, so it only ever appears as a direct child of a {@link Fenced} body; the
+     * {@code Fenced} layout consumes it in place as a segment boundary. The
+     * standalone layout fallback (never reached via the parser) draws the plain
+     * unstretched glyph.
+     *
+     * @param delimCp the delimiter code point (e.g. {@code |}, {@code /})
+     */
+    record MiddleDelim(int delimCp) implements MathNode {}
+
+    /**
      * A manually-sized delimiter — {@code \big}/{@code \Big}/{@code \bigg}/{@code
      * \Bigg} and their {@code l}/{@code r}/{@code m} class variants. A single delimiter
      * glyph stretched to a FIXED height (a multiple of the em), independent of any

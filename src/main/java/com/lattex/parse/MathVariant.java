@@ -221,6 +221,8 @@ public final class MathVariant {
     public static MathNode apply(Style style, MathNode node) {
         return switch (node) {
             case Atom a -> new Atom(map(style, a.codePoint()), a.mathClass());
+            // A delimiter is never letter/digit-mapped by a style variant.
+            case MathNode.MiddleDelim md -> md;
             case MathList list -> {
                 List<MathNode> items = new ArrayList<>(list.items().size());
                 for (MathNode child : list.items()) {
