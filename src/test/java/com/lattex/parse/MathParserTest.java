@@ -127,7 +127,7 @@ class MathParserTest {
             }
             case MathNode.XArrow xa -> {
                 StringBuilder sb = new StringBuilder("XArr[")
-                    .append(xa.left() ? "L" : "R").append("](^").append(pp(xa.above()));
+                    .append(xa.kind().ppTag()).append("](^").append(pp(xa.above()));
                 if (xa.below() != null) {
                     sb.append(",_").append(pp(xa.below()));
                 }

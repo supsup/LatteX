@@ -1052,7 +1052,7 @@ public final class LayoutEngine {
         // Stretch target: the widest label plus side padding, but at least the
         // arrow's natural advance (the label-width term is what makes the arrow
         // grow under a long label — dropping it collapses the stretch).
-        int arrowCp = xa.left() ? 0x2190 : 0x2192;
+        int arrowCp = xa.kind().codePoint();
         double natural = font.advanceWidth(font.glyphId(arrowCp)) * scale;
         double pad = XARROW_SIDE_PAD_MU * ctx.mu();
         double target = Math.max(natural, labelWidth) + 2.0 * pad;

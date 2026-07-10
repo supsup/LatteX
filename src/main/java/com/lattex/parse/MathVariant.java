@@ -282,7 +282,7 @@ public final class MathVariant {
             case MathNode.XArrow xa -> new MathNode.XArrow(
                 apply(style, xa.above()),
                 xa.below() == null ? null : apply(style, xa.below()),
-                xa.left());
+                xa.kind());
             // A \lx wrapper is top-level-only (nested \lx is rejected by the parser),
             // so this arm is unreachable in practice; restyle the body for totality.
             case StyledMath sm -> new StyledMath(

@@ -160,4 +160,26 @@ class XArrowLayoutTest {
         assertTrue(row > parts + 9.0 * mu,
             "REL spacing on both sides (~10mu expected): row=" + row + " parts=" + parts);
     }
+
+    @Test
+    void everyExtendedArrowRendersToSvgAndMathml() {
+        // Each \\x... arrow reaches BOTH the SVG pipeline and toMathML — not just parse.
+        // A tofu/.notdef would still emit a <path>, so also assert the MathML carries the
+        // kind's own <mo> entity (proving the correct shaft, not a shared fallback).
+        for (MathNode.XArrowKind k : MathNode.XArrowKind.values()) {
+            String cmd = switch (k) {
+                case RIGHT -> "xrightarrow"; case LEFT -> "xleftarrow";
+                case LEFTRIGHT -> "xleftrightarrow"; case RIGHT_DBL -> "xRightarrow";
+                case LEFT_DBL -> "xLeftarrow"; case LEFTRIGHT_DBL -> "xLeftrightarrow";
+                case MAPSTO -> "xmapsto"; case HOOK_RIGHT -> "xhookrightarrow";
+                case HOOK_LEFT -> "xhookleftarrow"; case RIGHTLEFTHARPOONS -> "xrightleftharpoons";
+            };
+            String latex = "\\" + cmd + "{f}";
+            String svg = com.lattex.api.LatteX.render(latex);
+            assertTrue(svg.contains("<path"), cmd + " renders drawn geometry");
+            String mml = com.lattex.api.LatteX.toMathML(latex);
+            assertTrue(mml.contains(k.mathmlEntity()),
+                cmd + " MathML carries its own arrow entity " + k.mathmlEntity());
+        }
+    }
 }

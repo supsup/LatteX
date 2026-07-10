@@ -350,6 +350,23 @@ public final class MathParser {
         return wrap(items);
     }
 
+    /** Maps an {@code \x...} extensible-arrow command name (no backslash) to its shaft kind. */
+    private static MathNode.XArrowKind xArrowKind(String name) {
+        return switch (name) {
+            case "xrightarrow" -> MathNode.XArrowKind.RIGHT;
+            case "xleftarrow" -> MathNode.XArrowKind.LEFT;
+            case "xleftrightarrow" -> MathNode.XArrowKind.LEFTRIGHT;
+            case "xRightarrow" -> MathNode.XArrowKind.RIGHT_DBL;
+            case "xLeftarrow" -> MathNode.XArrowKind.LEFT_DBL;
+            case "xLeftrightarrow" -> MathNode.XArrowKind.LEFTRIGHT_DBL;
+            case "xmapsto" -> MathNode.XArrowKind.MAPSTO;
+            case "xhookrightarrow" -> MathNode.XArrowKind.HOOK_RIGHT;
+            case "xhookleftarrow" -> MathNode.XArrowKind.HOOK_LEFT;
+            case "xrightleftharpoons" -> MathNode.XArrowKind.RIGHTLEFTHARPOONS;
+            default -> throw new IllegalStateException("not an extensible arrow: " + name);
+        };
+    }
+
     /**
      * A bare {@code \displaystyle}-family switch: it restyles everything after it to the
      * end of the enclosing group, so greedily consume components up to the group boundary
@@ -727,11 +744,14 @@ public final class MathParser {
                 MathNode base = parseArgument("\\overbrace argument");
                 return new MathNode.Stack(base, null, null, MathNode.StackKind.OVERBRACE);
             }
-            case "xrightarrow", "xleftarrow" -> {
-                // amsmath's extensible labelled arrow: an optional [below] label
-                // FIRST, then the required {above} label. The '[' is only taken as
-                // the optional argument when a matching ']' closes it (lookahead);
-                // an unclosed '[' belongs to the following content.
+            case "xrightarrow", "xleftarrow", "xleftrightarrow",
+                 "xRightarrow", "xLeftarrow", "xLeftrightarrow",
+                 "xmapsto", "xhookrightarrow", "xhookleftarrow", "xrightleftharpoons" -> {
+                // amsmath's extensible labelled arrows (the whole \x... family): an
+                // optional [below] label FIRST, then the required {above} label. The '['
+                // is only taken as the optional argument when a matching ']' closes it
+                // (lookahead); an unclosed '[' belongs to the following content. The
+                // command name picks the shaft glyph via XArrowKind (one source of truth).
                 MathNode below = null;
                 if (peek().kind() == Kind.CHAR && peek().codePoint() == '['
                         && hasMatchingRBracket()) {
@@ -739,7 +759,7 @@ public final class MathParser {
                     below = normalizeOptionalLabel(parseUntilRBracket());
                 }
                 MathNode above = parseArgument("\\" + name + " label");
-                return new MathNode.XArrow(above, below, name.equals("xleftarrow"));
+                return new MathNode.XArrow(above, below, xArrowKind(name));
             }
             case "substack" -> {
                 return parseSubstack();

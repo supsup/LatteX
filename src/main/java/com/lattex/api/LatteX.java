@@ -403,7 +403,7 @@ public final class LatteX {
                 };
             }
             case MathNode.XArrow xa -> {
-                String dir = xa.left() ? "left" : "right";
+                String dir = xa.kind().a11yName();
                 yield xa.below() == null
                     ? dir + " arrow labelled " + describe(xa.above())
                     : dir + " arrow labelled " + describe(xa.above())
@@ -515,7 +515,7 @@ public final class LatteX {
             case Matrix m -> matrixMathML(m);
             case MathNode.Stack st -> stackMathML(st);
             case MathNode.XArrow xa -> {
-                String arrow = xa.left() ? "<mo>&#8592;</mo>" : "<mo>&#8594;</mo>";
+                String arrow = "<mo>" + xa.kind().mathmlEntity() + "</mo>";
                 yield xa.below() == null
                     ? "<mover>" + arrow + toMathML(xa.above()) + "</mover>"
                     : "<munderover>" + arrow + toMathML(xa.below()) + toMathML(xa.above()) + "</munderover>";
