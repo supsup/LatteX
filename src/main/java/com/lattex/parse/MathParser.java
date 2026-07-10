@@ -371,6 +371,26 @@ public final class MathParser {
         return new MathNode.StyleSwitch(level, wrap(rest));
     }
 
+    /**
+     * A bare {@code \color{c}} SWITCH (the switch form of {@code \textcolor{c}{body}}): it
+     * recolours everything after it to the end of the enclosing group, so — exactly like
+     * {@link #parseStyleSwitch} — greedily consume components up to the group boundary
+     * ({@code }}, EOF, or a matrix cell/row separator) and wrap them in a {@link
+     * MathNode.Colored}. Nesting handles override: a later {@code \color} in the same group
+     * parses as an inner {@code Colored} for what follows it, and inner wins at layout (same
+     * fill precedence as nested {@code \textcolor}). The colour name/hex is validated through
+     * {@link Color} — the single raw-string-to-fill boundary — so a bogus colour fails loud,
+     * never an emitted raw string.
+     */
+    private MathNode parseColorSwitch() {
+        Color color = parseColorArg("\\color");
+        List<MathNode> rest = new ArrayList<>();
+        while (!isStyleSwitchBoundary(peek())) {
+            rest.add(parseComponent());
+        }
+        return new MathNode.Colored(wrap(rest), color);
+    }
+
     /** Where a {@code \displaystyle}-family switch stops consuming: group end or a cell/row sep. */
     private boolean isStyleSwitchBoundary(Token t) {
         return switch (t.kind()) {
@@ -679,6 +699,9 @@ public final class MathParser {
                 Color color = parseColorArg("\\textcolor");
                 MathNode body = parseArgument("\\textcolor body");
                 return new MathNode.Colored(body, color);
+            }
+            case "color" -> {
+                return parseColorSwitch();
             }
             case "binom" -> {
                 return binom(MathNode.FractionStyle.INHERIT);

@@ -354,6 +354,37 @@ class MathParserTest {
     }
 
     @Test
+    void colorSwitchRecoloursTheRestOfItsGroup() {
+        // \\color{red} is a SWITCH (like \\displaystyle): it paints everything AFTER it to the
+        // end of the enclosing group — unlike \\textcolor{red}{x} which paints only its argument.
+        // The corpus case k={\\color{red}x}-2: inside the group, \\color{red} scopes exactly x.
+        MathNode grouped = MathParser.parse("{\\color{red}x}");
+        MathNode.Colored red = assertInstanceOf(MathNode.Colored.class, grouped);
+        assertEquals("#ff0000", red.color().svgValue());
+        assertEquals("Col[#ff0000](A(x,ORD))", pp(red));
+
+        // At top level with no braces, it colours to the end of the stream.
+        MathNode top = MathParser.parse("\\color{blue}x+y");
+        MathNode.Colored blue = assertInstanceOf(MathNode.Colored.class, top);
+        assertEquals("#0000ff", blue.color().svgValue());
+        assertEquals("Col[#0000ff](L(A(x,ORD) A(+,BIN) A(y,ORD)))", pp(blue));
+
+        // The switch STOPS at the group boundary: {\\color{red}a}b -> only a is red, b is bare.
+        MathNode.MathList outer = assertInstanceOf(MathNode.MathList.class,
+            MathParser.parse("{\\color{red}a}b"));
+        assertEquals("L(Col[#ff0000](A(a,ORD)) A(b,ORD))", pp(outer));
+
+        // A later \\color in the same group overrides for what follows it (nesting).
+        assertEquals("Col[#ff0000](L(A(x,ORD) Col[#0000ff](A(y,ORD))))",
+            pp(MathParser.parse("\\color{red}x\\color{blue}y")));
+
+        // hex + named both validate through Color; a bogus colour fails loud (never a raw string).
+        assertEquals("#ff8800", assertInstanceOf(MathNode.Colored.class,
+            MathParser.parse("\\color{#ff8800}z")).color().svgValue());
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\color{bogus}x"));
+    }
+
+    @Test
     void tagHoistsAnEquationNumberToTheTopLevel() {
         MathNode.Tagged t = assertInstanceOf(MathNode.Tagged.class,
             MathParser.parse("x \\tag{1}"));
