@@ -34,6 +34,7 @@ class MathParserTest {
     static String pp(MathNode node) {
         return switch (node) {
             case Atom(int cp, MathClass cls) -> "A(" + sym(cp) + "," + cls + ")";
+            case MathNode.MiddleDelim(int cp) -> "MID(" + sym(cp) + ")";
             case MathList(var items) -> {
                 StringBuilder sb = new StringBuilder("L(");
                 for (int i = 0; i < items.size(); i++) {
@@ -719,5 +720,34 @@ class MathParserTest {
     void overbraceRejectsDoubleLabel() {
         assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("\\overbrace{x}^{a}^{b}"));
+    }
+
+    // ---- L2: \middle (plan lattex-middle-evalbar) ----
+
+    @Test
+    void middleParsesInsideFencedGroupAsMiddleDelimNode() {
+        MathNode n = MathParser.parse("P\\left(A=2\\middle|\\frac{A^2}{B}>4\\right)");
+        // The Fenced body carries the MiddleDelim in place.
+        boolean found = new Object() {
+            boolean scan(MathNode node) {
+                if (node instanceof MathNode.MiddleDelim) return true;
+                if (node instanceof MathNode.MathList(var items)) {
+                    for (MathNode i : items) if (scan(i)) return true;
+                }
+                if (node instanceof MathNode.Fenced(var l, var body, var r)) return scan(body);
+                if (node instanceof MathNode.SupSub(var b, var sup, var sub)) {
+                    return (b != null && scan(b)) || (sup != null && scan(sup)) || (sub != null && scan(sub));
+                }
+                return false;
+            }
+        }.scan(n);
+        org.junit.jupiter.api.Assertions.assertTrue(found, "MiddleDelim node present in the fenced body");
+    }
+
+    @Test
+    void middleOutsideFencedGroupStillFails() {
+        // TeX's "extra \middle" error: outside \left..\right the command is illegal.
+        org.junit.jupiter.api.Assertions.assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("x\\middle|y"));
     }
 }

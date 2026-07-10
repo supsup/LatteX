@@ -150,6 +150,10 @@ public final class LayoutEngine {
                 bigOperatorBox(op, lower, upper, limitsMode, ctx);
             case Fenced(var leftDelim, var body, var rightDelim) ->
                 fencedBox(leftDelim, body, rightDelim, ctx);
+            // Standalone fallback only — the parser emits MiddleDelim solely inside a
+            // Fenced body, where fencedBox consumes it in place (segment boundary).
+            case MathNode.MiddleDelim(var delimCp) ->
+                atomBox(new Atom(delimCp, MathClass.REL), ctx);
             case MathNode.SizedDelim sd -> sizedDelimBox(sd, ctx);
             case Accent accent -> accentBox(accent, ctx);
             case OperatorName opName -> operatorNameBox(opName, ctx);
@@ -492,6 +496,9 @@ public final class LayoutEngine {
         return switch (node) {
             case Atom atom -> atom.mathClass();
             case SupSub(var base, _, _) -> classOf(base);
+            // Standalone spacing class only — inside a Fenced body the delimiter is
+            // consumed positionally by fencedWithMiddles, not spaced as an atom.
+            case MathNode.MiddleDelim _ -> MathClass.REL;
             case Fraction _ -> MathClass.ORD;
             case Radical _ -> MathClass.ORD;
             case Fenced _ -> MathClass.INNER;
@@ -1093,6 +1100,16 @@ public final class LayoutEngine {
         double scale = ctx.scale();
         double axis = c.axisHeight() * scale;
 
+        // \middle support (L2, plan lattex-middle-evalbar): a body carrying
+        // MiddleDelim children is laid out as segments with each middle delimiter
+        // stretched to the SAME symmetric span as the outer pair. Bodies without
+        // \middle take the pre-existing path below UNCHANGED (golden-stable).
+        List<MathNode> flatBody = body instanceof MathNode.MathList(var items)
+            ? items : List.of(body);
+        if (flatBody.stream().anyMatch(n -> n instanceof MathNode.MiddleDelim)) {
+            return fencedWithMiddles(leftDelim, flatBody, rightDelim, ctx, font, axis, scale);
+        }
+
         Box bodyBox = layoutBox(body, ctx);
 
         // Symmetric target about the axis: cover the taller of (body above axis)
@@ -1115,6 +1132,71 @@ public final class LayoutEngine {
         }
         bodyBox.drawInto(glyphs, rules, penX, 0.0);
         penX += bodyBox.width();
+        if (rightDelim != MathNode.Fenced.NULL_DELIMITER) {
+            double[] hd = placeDelimiter(font, rightDelim, requiredSpan, axis, scale, penX, glyphs);
+            penX = hd[0];
+            height = Math.max(height, hd[1]);
+            depth = Math.max(depth, hd[2]);
+        }
+        return new Box(glyphs, rules, penX, height, depth);
+    }
+
+    /**
+     * Segmented {@code \left..\middle..\right} layout (L2): every segment between
+     * delimiters is laid out independently; the symmetric span requirement is taken
+     * over ALL segments so the outer pair and every {@code \middle} delimiter get
+     * the SAME size (TeX's rule — a \middle is sized exactly like \left/\right).
+     */
+    private static Box fencedWithMiddles(int leftDelim, List<MathNode> flatBody, int rightDelim,
+                                         LayoutContext ctx, SfntFont font, double axis, double scale) {
+        List<List<MathNode>> segments = new ArrayList<>();
+        List<Integer> middles = new ArrayList<>();
+        List<MathNode> current = new ArrayList<>();
+        for (MathNode n : flatBody) {
+            if (n instanceof MathNode.MiddleDelim(var delimCp)) {
+                segments.add(current);
+                middles.add(delimCp);
+                current = new ArrayList<>();
+            } else {
+                current.add(n);
+            }
+        }
+        segments.add(current);
+
+        List<Box> segmentBoxes = new ArrayList<>();
+        double requiredSpan = 0.0;
+        double height = 0.0;
+        double depth = 0.0;
+        for (List<MathNode> segment : segments) {
+            Box b = layoutBox(new MathNode.MathList(List.copyOf(segment)), ctx);
+            segmentBoxes.add(b);
+            double aboveAxis = b.height() - axis;
+            double belowAxis = b.depth() + axis;
+            requiredSpan = Math.max(requiredSpan, 2.0 * Math.max(aboveAxis, belowAxis) * DELIMITER_FACTOR);
+            height = Math.max(height, b.height());
+            depth = Math.max(depth, b.depth());
+        }
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        double penX = 0.0;
+        if (leftDelim != MathNode.Fenced.NULL_DELIMITER) {
+            double[] hd = placeDelimiter(font, leftDelim, requiredSpan, axis, scale, penX, glyphs);
+            penX = hd[0];
+            height = Math.max(height, hd[1]);
+            depth = Math.max(depth, hd[2]);
+        }
+        for (int i = 0; i < segmentBoxes.size(); i++) {
+            Box seg = segmentBoxes.get(i);
+            seg.drawInto(glyphs, rules, penX, 0.0);
+            penX += seg.width();
+            if (i < middles.size()) {
+                double[] hd = placeDelimiter(font, middles.get(i), requiredSpan, axis, scale, penX, glyphs);
+                penX = hd[0];
+                height = Math.max(height, hd[1]);
+                depth = Math.max(depth, hd[2]);
+            }
+        }
         if (rightDelim != MathNode.Fenced.NULL_DELIMITER) {
             double[] hd = placeDelimiter(font, rightDelim, requiredSpan, axis, scale, penX, glyphs);
             penX = hd[0];

@@ -332,6 +332,7 @@ public final class LatteX {
     static String describe(MathNode node) {
         return switch (node) {
             case Atom atom -> Character.toString(atom.codePoint());
+            case MathNode.MiddleDelim(var delimCp) -> Character.toString(delimCp);
             case MathList(var items) -> {
                 StringBuilder sb = new StringBuilder();
                 for (MathNode item : items) {
@@ -439,6 +440,9 @@ public final class LatteX {
     private static String toMathML(MathNode node) {
         return switch (node) {
             case Atom atom -> atomMathML(atom);
+            // \middle delimiter: a stretchy operator, exactly how MathML models it.
+            case MathNode.MiddleDelim(var delimCp) ->
+                "<mo stretchy=\"true\">" + xmlEscape(Character.toString(delimCp)) + "</mo>";
             case MathList(var items) -> {
                 StringBuilder sb = new StringBuilder("<mrow>");
                 for (MathNode item : items) {
