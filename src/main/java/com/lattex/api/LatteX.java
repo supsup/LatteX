@@ -182,7 +182,28 @@ public final class LatteX {
         double width = layout.width();
         double height = Math.max(0.0, -layout.minY());
         double depth = Math.max(0.0, layout.maxY());
-        return new MathFragment(inner, width, height, depth, glyphmap);
+        // Presentation-MathML of the SAME parsed body the SVG was laid out from — one
+        // parse, two serializations, so the visual and assistive surfaces can never
+        // drift (plan lattex-mathfragment-mathml; the Sirentide consumer contract).
+        // Serializing `body` (post-\lx-unwrap) rather than re-parsing `latex` is
+        // deliberate and load-bearing: a re-parse would re-include the wrapper AND
+        // reopen the one-source-no-drift property.
+        return new MathFragment(inner, width, height, depth, glyphmap, mathmlOrEmpty(body));
+    }
+
+    /**
+     * Per-fragment fail-soft MathML: serializes the already-parsed node, or returns
+     * {@code ""} on ANY failure — a MathML problem must never blank or throw through a
+     * label whose SVG rendered fine (the math-bridge's Optional.empty degrade contract,
+     * consumer requirement #2 of plan lattex-mathfragment-mathml).
+     */
+    private static String mathmlOrEmpty(MathNode body) {
+        try {
+            return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
+                + toMathML(body) + "</math>";
+        } catch (RuntimeException | StackOverflowError e) {
+            return "";
+        }
     }
 
     /**
