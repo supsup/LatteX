@@ -44,7 +44,27 @@ package com.lattex.api;
  *                  index still addresses the Nth {@code <path>} of {@code innerSvg}
  *                  regardless of that translate — index N = the Nth path, position-
  *                  independent. No index adjustment is applied or needed.
+ * @param mathml    a Presentation-MathML {@code <math>} serialization of the SAME parsed
+ *                  body that produced {@code innerSvg} (one parse, two serializations —
+ *                  no re-parse, so the two can never drift), for consumers that want an
+ *                  assistive-tech surface next to the visual paths (a diagram label's
+ *                  aria payload). PER-FRAGMENT FAIL-SOFT: empty string when MathML
+ *                  serialization fails or the fragment was constructed via the
+ *                  pre-mathml arity — never null, and a MathML failure never affects
+ *                  {@code innerSvg} (a label that renders visually keeps rendering).
  */
 public record MathFragment(String innerSvg, double widthPx, double heightPx, double depthPx,
-                           String glyphmap) {
+                           String glyphmap, String mathml) {
+
+    /**
+     * Pre-mathml arity (plan lattex-mathfragment-mathml): delegates with an empty
+     * {@code mathml} so every existing call-site — including consumers that construct
+     * fragments field-by-field (the Sirentide math-bridge pattern) — compiles and
+     * behaves exactly as before the component existed. Prefer the canonical
+     * constructor when the MathML is available.
+     */
+    public MathFragment(String innerSvg, double widthPx, double heightPx, double depthPx,
+                        String glyphmap) {
+        this(innerSvg, widthPx, heightPx, depthPx, glyphmap, "");
+    }
 }
