@@ -559,9 +559,12 @@ public final class LayoutEngine {
             italic = font.italicCorrection(font.glyphId(baseAtom.codePoint())) * baseScale;
         }
 
+        // The per-glyph kern staircases only exist for a single-glyph nucleus.
+        com.lattex.font.MathKernInfo baseKern = base instanceof Atom baseAtom
+            ? font.mathKernInfo(font.glyphId(baseAtom.codePoint())) : null;
         Box supBox = sup == null ? null : layoutBox(sup, ctx.superscript());
         Box subBox = sub == null ? null : layoutBox(sub, ctx.subscript());
-        return attachScripts(baseBox, simpleChar, italic, supBox, subBox, ctx);
+        return attachScripts(baseBox, simpleChar, italic, supBox, subBox, baseKern, ctx);
     }
 
     /**
@@ -574,7 +577,8 @@ public final class LayoutEngine {
      * italic correction (already scaled), added to the superscript's x-offset.
      */
     private static Box attachScripts(Box baseBox, boolean simpleChar, double italic,
-                                     Box supBox, Box subBox, LayoutContext ctx) {
+                                     Box supBox, Box subBox,
+                                     com.lattex.font.MathKernInfo baseKern, LayoutContext ctx) {
         var c = ctx.constants();
         double baseScale = ctx.scale();
         // Base-derived tentative shifts (rule 18a): zero for a bare character,
@@ -625,17 +629,39 @@ public final class LayoutEngine {
             }
         }
 
+        // OpenType math-kern cut-ins (L9, plan lattex-mathkern-scripts): the MATH
+        // table's per-corner staircases say how far a script may tuck INTO (negative)
+        // or must clear (positive) the base glyph at the script's landing height —
+        // superscripts read the base's TopRight corner at the height of the script's
+        // BOTTOM ink edge, subscripts the BottomRight corner at their TOP ink edge
+        // (heights in font design units, so divide the pixel height by the scale the
+        // metrics were multiplied by). Base-glyph side only: the script side of the
+        // spec pairing needs a single-glyph script, which a composed script box
+        // rarely is — a documented follow-on, not an accident.
+        double supKern = 0.0;
+        double subKern = 0.0;
+        if (baseKern != null) {
+            if (supBox != null && baseKern.topRight() != null) {
+                int h = (int) Math.round((supShift - supBox.depth()) / baseScale);
+                supKern = baseKern.topRight().kernAtHeight(h) * baseScale;
+            }
+            if (subBox != null && baseKern.bottomRight() != null) {
+                int h = (int) Math.round((subBox.height() - subShift) / baseScale);
+                subKern = baseKern.bottomRight().kernAtHeight(h) * baseScale;
+            }
+        }
+
         if (supBox != null) {
-            supBox.drawInto(glyphs, rules, baseBox.width() + italic, -supShift);
+            supBox.drawInto(glyphs, rules, baseBox.width() + italic + supKern, -supShift);
             height = Math.max(height, supShift + supBox.height());
             depth = Math.max(depth, supBox.depth() - supShift); // usually negative → ignored
-            scriptsRight = Math.max(scriptsRight, baseBox.width() + italic + supBox.width());
+            scriptsRight = Math.max(scriptsRight, baseBox.width() + italic + supKern + supBox.width());
         }
         if (subBox != null) {
-            subBox.drawInto(glyphs, rules, baseBox.width(), subShift);
+            subBox.drawInto(glyphs, rules, baseBox.width() + subKern, subShift);
             depth = Math.max(depth, subShift + subBox.depth());
             height = Math.max(height, subBox.height() - subShift); // usually negative → ignored
-            scriptsRight = Math.max(scriptsRight, baseBox.width() + subBox.width());
+            scriptsRight = Math.max(scriptsRight, baseBox.width() + subKern + subBox.width());
         }
 
         double width = scriptsRight + c.spaceAfterScript() * baseScale;
@@ -842,7 +868,8 @@ public final class LayoutEngine {
 
         if (sideLimits) {
             double italic = font.italicCorrection(opGid) * scale;
-            return attachScripts(opBox, false, italic, upperBox, lowerBox, ctx);
+            return attachScripts(opBox, false, italic, upperBox, lowerBox,
+                font.mathKernInfo(opGid), ctx);
         }
         return stackLimits(opBox, upperBox, lowerBox, ctx);
     }
