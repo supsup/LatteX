@@ -12,9 +12,10 @@ String svg = com.lattex.api.LatteX.render("\\frac{a+b}{c}");
 
 ## See it
 
-Every public render entry throws exactly one typed exception — `MathSyntaxException`,
-caret-pointing for syntax errors, containment-wrapped (cause preserved) for internal
-layout/emit failures — so an `Error` can never escape onto a live page.
+Every failure the render pipeline signals arrives as one typed exception —
+`MathSyntaxException`, caret-pointing for syntax errors, containment-wrapped (cause
+preserved) for internal layout/emit failures — so an `Error` from the laid-out
+pipeline can never escape onto a live page.
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus

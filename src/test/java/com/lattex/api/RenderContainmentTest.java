@@ -61,6 +61,18 @@ class RenderContainmentTest {
     }
 
     @Test
+    void deepNestingArrivesTypedNeverAsAnEscapedError() {
+        // Conf's review add (lattex/129): the never-throw promise rests on TWO halves
+        // composing — MathParser's MAX_DEPTH guard (typed throw) + this boundary. Each
+        // half is pinned separately above; THIS pins the real composition end-to-end,
+        // so removing the parser guard can't silently regress the live-page promise.
+        String deep = "{".repeat(600) + "x" + "}".repeat(600);
+        MathSyntaxException ex = assertThrows(MathSyntaxException.class,
+            () -> LatteX.render(deep));
+        assertNotNull(ex.getMessage());
+    }
+
+    @Test
     void parseErrorsKeepTheirPositionalDiagnostics() {
         // End-to-end: a genuine syntax error through render() still carries its
         // offset/caret — containment must not degrade the author-facing diagnostics.
