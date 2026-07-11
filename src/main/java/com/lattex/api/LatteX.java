@@ -85,6 +85,69 @@ public final class LatteX {
         }
     }
 
+    /**
+     * Diagnostic render (L6.2, plan lattex-containment-diagnostics): the same SVG
+     * {@link #render(String)} produces, plus a structured {@link Diagnostics} — and it
+     * NEVER throws. A syntax error returns {@code PARSE_ERROR} with the offset/caret;
+     * an internal layout/emit failure returns {@code RENDER_BUG} with the throwable
+     * crumb in {@code detail}. The Sirentide-parity twin (lattex/126): one consumer
+     * code path handles a failed diagram and a failed formula identically.
+     */
+    public static RenderResult renderWithDiagnostics(String latex) {
+        String stage = "parse";
+        try {
+            MathNode node = MathParser.parse(latex);
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
+            stage = "layout";
+            SfntFont font = FontHolder.FONT;
+            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+            Layout layout = LayoutEngine.layout(body, ctx);
+            stage = "emit";
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+            return new RenderResult(svg, new Diagnostics(Outcome.OK, "emit",
+                "Rendered successfully.", -1, "", -1, ""));
+        } catch (MathSyntaxException e) {
+            // Typed channel: a parse-stage throw is an author-facing syntax error with
+            // position; a later-stage typed throw (depth guard, contained internal
+            // failure) is classified RENDER_BUG — the pipeline, not the author.
+            Outcome outcome = "parse".equals(stage) ? Outcome.PARSE_ERROR : Outcome.RENDER_BUG;
+            String caret;
+            try { caret = e.caretString(); } catch (RuntimeException ignored) { caret = ""; }
+            return new RenderResult("", new Diagnostics(outcome, stage,
+                e.getMessage() == null ? "render failed" : e.getMessage(),
+                lineOf(latex, e.offset()), causeCrumb(e), e.offset(),
+                caret == null ? "" : caret));
+        } catch (StackOverflowError | RuntimeException e) {
+            // Belt-and-suspenders: parse-stage non-typed failures (the fd6bd568 lane)
+            // and anything the L6.1 boundary did not see. Never escapes.
+            return new RenderResult("", new Diagnostics(Outcome.RENDER_BUG, stage,
+                "internal render failure", -1,
+                e.getClass().getSimpleName()
+                    + (e.getMessage() == null ? "" : ": " + e.getMessage()),
+                -1, ""));
+        }
+    }
+
+    /** 1-based line of {@code offset} in {@code source}, or -1 when unknown. */
+    private static int lineOf(String source, int offset) {
+        if (source == null || offset < 0 || offset > source.length()) { return -1; }
+        int line = 1;
+        for (int i = 0; i < offset; i++) {
+            if (source.charAt(i) == '\n') { line++; }
+        }
+        return line;
+    }
+
+    /** The throwable-crumb for Diagnostics.detail: cause type+message, or "". */
+    private static String causeCrumb(Throwable t) {
+        Throwable cause = t.getCause();
+        if (cause == null) { return ""; }
+        return cause.getClass().getSimpleName()
+            + (cause.getMessage() == null ? "" : ": " + cause.getMessage());
+    }
+
     public static String render(String latex) {
         return render(latex, RenderOptions.defaults());
     }
