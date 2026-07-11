@@ -192,7 +192,10 @@ unexpected internal failure in layout/emit is *contained* into the same channel 
 prefixed `internal render failure`, original failure preserved as the cause) — so a
 `StackOverflowError` or renderer bug can never escape and kill the calling thread. Catch
 `MathSyntaxException`, show the caret, move on. (`OutOfMemoryError` is deliberately not
-caught.)
+caught.) For batch pipelines that must degrade per-formula instead of per-page, use
+`renderWithDiagnostics` — it NEVER throws and returns `RenderResult{svg, Diagnostics}`
+with a Sirentide-parity outcome (`OK`/`PARSE_ERROR`/`RENDER_BUG`…), stage, message, and
+the caret as data — one consumer code path for a failed diagram and a failed formula.
 
 ```java
 try {
