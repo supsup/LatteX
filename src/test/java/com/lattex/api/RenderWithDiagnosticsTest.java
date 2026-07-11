@@ -45,14 +45,6 @@ class RenderWithDiagnosticsTest {
         assertEquals("", r.svg());
     }
 
-    @Test
-    void enumNamesMirrorSirentideExactly() {
-        // Local pin of the lattex/126 parity vocabulary (Conf's source-mirror
-        // drift-guard upgrades this to a cross-repo check). Names AND order.
-        assertEquals("OK,PARSE_ERROR,OUTPUT_CAP_EXCEEDED,UNSUPPORTED_CONSTRUCT,RENDER_BUG",
-            String.join(",", java.util.Arrays.stream(Outcome.values())
-                .map(Enum::name).toArray(String[]::new)));
-    }
 
     @Test
     void lineOfDerivesOneBasedLines() {
