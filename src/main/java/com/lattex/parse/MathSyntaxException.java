@@ -33,6 +33,17 @@ public final class MathSyntaxException extends IllegalArgumentException {
         this.offset = offset;
     }
 
+    /**
+     * Internal-failure containment form (L6.1, plan lattex-containment-diagnostics):
+     * used by the render boundary to surface a layout/emit-stage failure through the
+     * SAME typed channel consumers already catch, with the original failure preserved
+     * as the cause. No source offset — the problem is not positional.
+     */
+    public MathSyntaxException(String message, Throwable cause) {
+        super(message, cause);
+        this.offset = NO_OFFSET;
+    }
+
     /** The source character offset of the problem, or {@link #NO_OFFSET} if unknown. */
     public int offset() {
         return offset;

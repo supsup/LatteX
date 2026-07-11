@@ -22,6 +22,7 @@ import com.lattex.parse.MathNode.TextRun;
 import com.lattex.parse.Effect;
 import com.lattex.parse.EffectSpec;
 import com.lattex.parse.MathParser;
+import com.lattex.parse.MathSyntaxException;
 import com.lattex.parse.Semantics;
 import com.lattex.parse.Trigger;
 import com.lattex.svg.SvgEmitter;
@@ -61,6 +62,29 @@ public final class LatteX {
      * @param latex the LaTeX math source (without surrounding {@code $} delimiters)
      * @return the SVG document
      */
+
+    /**
+     * L6.1 — the never-throw floor (plan lattex-containment-diagnostics): every public
+     * render entry runs its post-parse pipeline (layout + emit) inside this boundary.
+     * Contract: {@link MathSyntaxException} (including the layout depth guard's) passes
+     * through UNTOUCHED — the typed channel consumers already catch; any OTHER
+     * {@code RuntimeException} or {@code StackOverflowError} is contained into a
+     * {@code MathSyntaxException} carrying the original failure as its cause, so an
+     * {@code Error} can never escape onto a live page. {@code OutOfMemoryError} is
+     * deliberately NOT caught (catching it lies about JVM state).
+     */
+    static <T> T containRender(java.util.function.Supplier<T> stage) {
+        try {
+            return stage.get();
+        } catch (MathSyntaxException e) {
+            throw e;
+        } catch (StackOverflowError | RuntimeException e) {
+            throw new MathSyntaxException("internal render failure ("
+                + e.getClass().getSimpleName()
+                + (e.getMessage() == null ? "" : ": " + e.getMessage()) + ")", e);
+        }
+    }
+
     public static String render(String latex) {
         return render(latex, RenderOptions.defaults());
     }
@@ -101,11 +125,15 @@ public final class LatteX {
             body = sm.body();
         }
 
-        SfntFont font = FontHolder.FONT;
-        LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-            DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
-        Layout layout = LayoutEngine.layout(body, ctx);
-        return SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+        final RenderOptions fStyle = style;
+        final MathNode fBody = body;
+        return containRender(() -> {
+            SfntFont font = FontHolder.FONT;
+            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+                DISPLAY_FONT_SIZE * fStyle.scale(), fStyle.mathStyle(), false);
+            Layout layout = LayoutEngine.layout(fBody, ctx);
+            return SvgEmitter.emit(layout, font, describe(fBody), fStyle.color().svgValue());
+        });
     }
 
     /**
@@ -165,9 +193,11 @@ public final class LatteX {
         // container metadata rides the consumer's own wrapper, not the fragment.
         MathNode body = node instanceof StyledMath sm ? sm.body() : node;
 
+        final MathNode fBody = body;
+        return containRender(() -> {
         SfntFont font = FontHolder.FONT;
         LayoutContext ctx = new LayoutContext(font, font.mathConstants(), fontSizePx);
-        Layout layout = LayoutEngine.layout(body, ctx);
+        Layout layout = LayoutEngine.layout(fBody, ctx);
 
         String inner = SvgEmitter.emitFragment(layout, font);
         // Token-identity sidecar from the SAME layout + font that produced `inner`, so a
@@ -188,7 +218,8 @@ public final class LatteX {
         // Serializing `body` (post-\lx-unwrap) rather than re-parsing `latex` is
         // deliberate and load-bearing: a re-parse would re-include the wrapper AND
         // reopen the one-source-no-drift property.
-        return new MathFragment(inner, width, height, depth, glyphmap, mathmlOrEmpty(body));
+        return new MathFragment(inner, width, height, depth, glyphmap, mathmlOrEmpty(fBody));
+        });
     }
 
     /**
@@ -235,18 +266,20 @@ public final class LatteX {
         // sidecar's path indices must line up with this exact emission.
         RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
         MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-        SfntFont font = FontHolder.FONT;
-        LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-            DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
-        Layout layout = LayoutEngine.layout(body, ctx);
-        String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+        return containRender(() -> {
+            SfntFont font = FontHolder.FONT;
+            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+            Layout layout = LayoutEngine.layout(body, ctx);
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
 
-        // The `thread` effect reads data-lx-glyphmap to light up every occurrence of a
-        // hovered token. Stamp the sidecar only when a thread effect is present — it is
-        // inert (and wasted bytes) otherwise. Value is [0-9a-f:,;] only, so container-safe.
-        String glyphmap = fx.effects().containsValue(Effect.THREAD)
-            ? SvgEmitter.glyphmap(layout, font) : "";
-        return openTag(fx, sem, glyphmap) + svg + "</span>";
+            // The `thread` effect reads data-lx-glyphmap to light up every occurrence of a
+            // hovered token. Stamp the sidecar only when a thread effect is present — it is
+            // inert (and wasted bytes) otherwise. Value is [0-9a-f:,;] only, so container-safe.
+            String glyphmap = fx.effects().containsValue(Effect.THREAD)
+                ? SvgEmitter.glyphmap(layout, font) : "";
+            return openTag(fx, sem, glyphmap) + svg + "</span>";
+        });
     }
 
     /**

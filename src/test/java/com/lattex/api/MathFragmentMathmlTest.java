@@ -59,7 +59,10 @@ class MathFragmentMathmlTest {
         java.nio.file.Path src = java.nio.file.Path.of(
             "src", "main", "java", "com", "lattex", "api", "LatteX.java");
         String code = java.nio.file.Files.readString(src);
-        assertTrue(code.contains("mathmlOrEmpty(body)"),
+        // L6.1 note: the containment boundary captures the body as `fBody` inside the
+        // render lambda — the pinned invariant (serialize the LAID-OUT body, never a
+        // re-parse) is unchanged; only the local name moved.
+        assertTrue(code.contains("mathmlOrEmpty(fBody)"),
             "renderFragment must serialize the SAME parsed body it laid out");
         assertFalse(code.contains("mathmlOrEmpty(MathParser.parse"),
             "no second parse feeding the MathML surface");
