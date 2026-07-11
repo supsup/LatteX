@@ -15,7 +15,8 @@ String svg = com.lattex.api.LatteX.render("\\frac{a+b}{c}");
 Every failure the render pipeline signals arrives as one typed exception —
 `MathSyntaxException`, caret-pointing for syntax errors, containment-wrapped (cause
 preserved) for internal layout/emit failures — so an `Error` from the laid-out
-pipeline can never escape onto a live page.
+pipeline can never escape onto a live page. Inline embedding carries baseline
+metrics (`renderInlineResult` → depth/height in em) so prose math sits on the line.
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus

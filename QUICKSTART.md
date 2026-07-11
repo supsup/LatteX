@@ -202,6 +202,16 @@ try {
 }
 ```
 
+**Inline math on the text baseline.** `renderInline` gives you the SVG; for prose
+embedding use `renderInlineResult` — the same SVG plus baseline metrics, so the
+formula sits ON the line instead of floating above it. Apply the depth as
+`vertical-align` on *your* wrapper (the SVG itself stays style-attribute-free):
+
+```java
+var r = com.lattex.api.LatteX.renderInlineResult("y_i^2");
+String html = "<span style=\"vertical-align:-" + r.depthEm() + "em\">" + r.svg() + "</span>";
+```
+
 ### Any other stack — Node, Python, Ruby, Go, static-site generators — *available (S7)*
 
 A self-contained **native CLI**, `lattex`, built with GraalVM native-image — **no JVM
