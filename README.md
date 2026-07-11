@@ -16,8 +16,11 @@ Every failure the render pipeline signals arrives as one typed exception —
 `MathSyntaxException`, caret-pointing for syntax errors, containment-wrapped (cause
 preserved) for internal layout/emit failures — so an `Error` from the laid-out
 pipeline can never escape onto a live page. Inline embedding carries baseline
-metrics (`renderInlineResult` → depth/height in em) so prose math sits on the line. `renderWithDiagnostics` returns a never-throwing
-`RenderResult` with a Sirentide-parity `Diagnostics` (outcome/stage/message + caret).
+metrics (`renderInlineResult` → depth/height in em) so prose math sits on the line.
+`renderWithDiagnostics` returns a never-throwing `RenderResult` with a Sirentide-parity
+`Diagnostics` (outcome/stage/message + caret). Script placement consumes the font's
+OpenType math-kern staircases, so subscripts tuck into a slanted glyph (V₁, Pₙ) and
+superscripts clear an overhang (f²) exactly as the font intends.
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
