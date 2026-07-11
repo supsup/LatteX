@@ -148,7 +148,35 @@ public final class LatteX {
      * @return a self-contained inline-styled SVG document
      */
     public static String renderInline(String latex) {
-        return render(latex, RenderOptions.defaults().inline());
+        return renderInlineResult(latex).svg();
+    }
+
+    /**
+     * Inline render WITH baseline metrics (L7, plan lattex-inline-baseline): the
+     * same SVG {@link #renderInline(String)} returns — one pipeline, byte-identical
+     * by construction — plus the depth/height of the ink relative to the baseline,
+     * in em of the formula's own font size. The embedding layer applies
+     * {@code vertical-align: -depthEm em} on ITS wrapper so inline math sits ON the
+     * prose baseline instead of floating above it (no style attribute is baked into
+     * the SVG — sanitizer-safe, and composes with fx enter-transforms).
+     */
+    public static InlineSvgResult renderInlineResult(String latex) {
+        RenderOptions opts = RenderOptions.defaults().inline();
+        MathNode node = MathParser.parse(latex);
+        RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
+        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
+        final RenderOptions fStyle = style;
+        return containRender(() -> {
+            SfntFont font = FontHolder.FONT;
+            double fontSize = DISPLAY_FONT_SIZE * fStyle.scale();
+            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+                fontSize, fStyle.mathStyle(), false);
+            Layout layout = LayoutEngine.layout(body, ctx);
+            String svg = SvgEmitter.emit(layout, font, describe(body), fStyle.color().svgValue());
+            double depthEm = Math.max(0.0, layout.maxY()) / fontSize;
+            double heightEm = Math.max(0.0, -layout.minY()) / fontSize;
+            return new InlineSvgResult(svg, depthEm, heightEm);
+        });
     }
 
     /**
