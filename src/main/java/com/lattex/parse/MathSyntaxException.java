@@ -29,6 +29,12 @@ public final class MathSyntaxException extends IllegalArgumentException {
     // unbalanced." Defaults false; set only via the unsupported(...) factory.
     private boolean unsupportedConstruct = false;
 
+    // L10 (plan lattex-hostile-input-hardening): marks a RESOURCE-CAP trip (output
+    // bytes / layout boxes) so renderWithDiagnostics classifies OUTPUT_CAP_EXCEEDED
+    // instead of RENDER_BUG. A typed flag, not a message-prefix — the class is final,
+    // so the marker lives here rather than in a subtype.
+    private boolean capExceeded;
+
     public MathSyntaxException(String message) {
         this(message, NO_OFFSET);
     }
@@ -59,6 +65,18 @@ public final class MathSyntaxException extends IllegalArgumentException {
     public MathSyntaxException(String message, Throwable cause) {
         super(message, cause);
         this.offset = NO_OFFSET;
+    }
+
+    /** L10 factory: a resource-cap trip (classified {@code OUTPUT_CAP_EXCEEDED}). */
+    public static MathSyntaxException capExceeded(String message) {
+        MathSyntaxException e = new MathSyntaxException(message);
+        e.capExceeded = true;
+        return e;
+    }
+
+    /** Whether this failure is a resource-cap trip (output bytes / layout boxes). */
+    public boolean isCapExceeded() {
+        return capExceeded;
     }
 
     /** The source character offset of the problem, or {@link #NO_OFFSET} if unknown. */
