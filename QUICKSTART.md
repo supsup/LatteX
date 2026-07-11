@@ -184,6 +184,24 @@ Zero runtime dependencies, so it drops into any JVM app with no transitive bagga
 The version is a real immutable release — pin it, and it can never silently change
 under you (a LatteX update is an explicit version bump).
 
+**Error handling — one typed channel, never an `Error`.** Every public render entry
+(`render`, `renderInline`, `renderFragment`, `renderStyledHtml`) throws exactly one
+exception type: `com.lattex.parse.MathSyntaxException`. A genuine syntax error carries
+the source offset and a caret-pointing `caretString()` for author-facing messages; an
+unexpected internal failure in layout/emit is *contained* into the same channel (message
+prefixed `internal render failure`, original failure preserved as the cause) — so a
+`StackOverflowError` or renderer bug can never escape and kill the calling thread. Catch
+`MathSyntaxException`, show the caret, move on. (`OutOfMemoryError` is deliberately not
+caught.)
+
+```java
+try {
+    String svg = com.lattex.api.LatteX.render(userInput);
+} catch (com.lattex.parse.MathSyntaxException e) {
+    log.warn("math failed:\n{}", e.caretString()); // fall back to verbatim source
+}
+```
+
 ### Any other stack — Node, Python, Ruby, Go, static-site generators — *available (S7)*
 
 A self-contained **native CLI**, `lattex`, built with GraalVM native-image — **no JVM
