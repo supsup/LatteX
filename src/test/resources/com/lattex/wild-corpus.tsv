@@ -240,7 +240,7 @@ OK	algebra-discrete	D	\binom{n}{k} = \binom{n-1}{k-1} + \binom{n-1}{k}
 OK	algebra-discrete	D	\sum_{k=0}^{n} \binom{n}{k} = 2^n
 OK	algebra-discrete	D	(x+y)^n = \sum_{k=0}^{n} \binom{n}{k} x^{n-k} y^{k}
 OK	algebra-discrete	D	\left(\!\!\binom{n}{k}\!\!\right) = \binom{n+k-1}{k}
-GAP	algebra-discrete	D	{n \brace k} = k {n-1 \brace k} + {n-1 \brace k-1}
+OK	algebra-discrete	D	{n \brace k} = k {n-1 \brace k} + {n-1 \brace k-1}
 OK	algebra-discrete	D	n! \sim \sqrt{2\pi n}\,\left(\frac{n}{e}\right)^{n}
 OK	algebra-discrete	D	H_n = \sum_{k=1}^{n} \frac{1}{k} = \ln n + \gamma + O(1/n)
 OK	algebra-discrete	D	\lfloor x \rfloor \le x < \lfloor x \rfloor + 1

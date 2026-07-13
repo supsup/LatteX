@@ -28,6 +28,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import static com.lattex.parse.Symbols.ACCENTS;
 import static com.lattex.parse.Symbols.BIG_OPERATORS;
 import static com.lattex.parse.Symbols.FONT_VARIANTS;
@@ -326,6 +327,16 @@ public final class MathParser {
                 tag = parseGroup();
                 continue;
             }
+            // A TeX INFIX fraction operator (\over/\atop/...) splits its enclosing
+            // group: everything BEFORE it is the numerator, everything after (to the
+            // group boundary — here EOF) is the denominator. It becomes the group's
+            // sole result, so once seen we finish the fraction and stop accumulating.
+            if (isInfixFraction(peek())) {
+                MathNode frac = splitInfixDenominator(next().name(), items, true);
+                items = new ArrayList<>();
+                items.add(frac);
+                break;
+            }
             items.add(parseComponent());
         }
         MathNode body = wrap(items);
@@ -344,10 +355,92 @@ public final class MathParser {
             if (peek().kind() == Kind.EOF) {
                 throw new MathSyntaxException("Unbalanced brace: missing '}'", currentOffset());
             }
+            // A TeX INFIX fraction operator (\over/\atop/...) splits THIS group into
+            // numerator (items so far) over denominator (the rest, to the '}'), and
+            // becomes the group's sole result. splitInfixDenominator stops at the
+            // '}', which we consume here.
+            if (isInfixFraction(peek())) {
+                MathNode frac = splitInfixDenominator(next().name(), items, false);
+                next(); // consume '}'
+                return frac;
+            }
             items.add(parseComponent());
         }
         next(); // consume '}'
         return wrap(items);
+    }
+
+    /** The five TeX INFIX fraction operators (command names, no backslash). */
+    private static final Set<String> INFIX_FRACTIONS =
+        Set.of("over", "atop", "choose", "brace", "brack");
+
+    /** Whether {@code t} is one of the five INFIX fraction operators. */
+    private boolean isInfixFraction(Token t) {
+        return t.kind() == Kind.COMMAND && INFIX_FRACTIONS.contains(t.name());
+    }
+
+    /**
+     * Completes a TeX INFIX fraction ({@code \over}, {@code \atop}, {@code \choose},
+     * {@code \brace}, {@code \brack}). Unlike {@code \frac}/{@code \binom}, these sit
+     * BETWEEN a numerator and a denominator and split their enclosing group: the
+     * operator ({@code op}, a command name with no backslash) has just been consumed,
+     * {@code numItems} are the components accumulated before it (the numerator), and
+     * the denominator is the REST of this group parsed with the ordinary component
+     * parser up to the group boundary — {@code '}'} for a {@code {...}} group,
+     * {@code EOF} at top level. Because the denominator uses {@link #parseComponent},
+     * scripts bind normally inside it ({@code a \over b^2} → denominator {@code b^2}).
+     *
+     * <p>TeX allows at most ONE infix operator per group; a second one here is
+     * ambiguous and throws (never a silent mis-nest). The terminator ({@code '}'}/EOF)
+     * is left in place for the caller to consume.
+     */
+    private MathNode splitInfixDenominator(String op, List<MathNode> numItems, boolean topLevel) {
+        MathNode numerator = wrap(numItems);
+        List<MathNode> denItems = new ArrayList<>();
+        while (true) {
+            Kind k = peek().kind();
+            if (k == Kind.EOF) {
+                if (topLevel) {
+                    break;
+                }
+                throw new MathSyntaxException("Unbalanced brace: missing '}'", currentOffset());
+            }
+            if (!topLevel && k == Kind.RBRACE) {
+                break;
+            }
+            if (isInfixFraction(peek())) {
+                throw new MathSyntaxException(
+                    "ambiguous: multiple infix fraction operators "
+                    + "(\\over/\\atop/\\choose/\\brace/\\brack) in one group",
+                    currentOffset());
+            }
+            denItems.add(parseComponent());
+        }
+        return makeInfixFraction(op, numerator, wrap(denItems));
+    }
+
+    /**
+     * Maps an INFIX fraction operator to its node, reusing the {@link Fraction} /
+     * {@link Fenced} construction of {@code \frac} and {@code \binom}:
+     * {@code \over} is a ruled fraction; {@code \atop} a rule-less one; and
+     * {@code \choose}/{@code \brace}/{@code \brack} are rule-less fractions fenced by
+     * {@code ()}/{@code
+     * {}}/{@code []} respectively (the {@code \binom} construction with a different
+     * delimiter pair).
+     */
+    private static MathNode makeInfixFraction(String op, MathNode num, MathNode den) {
+        return switch (op) {
+            case "over"   -> new Fraction(num, den, true, MathNode.FractionStyle.INHERIT);
+            case "atop"   -> new Fraction(num, den, false, MathNode.FractionStyle.INHERIT);
+            case "choose" -> new Fenced('(',
+                new Fraction(num, den, false, MathNode.FractionStyle.INHERIT), ')');
+            case "brace"  -> new Fenced('{',
+                new Fraction(num, den, false, MathNode.FractionStyle.INHERIT), '}');
+            case "brack"  -> new Fenced('[',
+                new Fraction(num, den, false, MathNode.FractionStyle.INHERIT), ']');
+            default -> throw new IllegalStateException(
+                "not an infix fraction operator: \\" + op);
+        };
     }
 
     /** Maps an {@code \x...} extensible-arrow command name (no backslash) to its shaft kind. */
