@@ -906,7 +906,8 @@ public final class MathParser {
                 if (sized != null) {
                     return sized;
                 }
-                throw new MathSyntaxException("Unknown command: \\" + name, commandOffset);
+                throw MathSyntaxException.unsupported(
+                    "Unknown command: \\" + name + commandSuggestion(name), commandOffset);
             }
         }
     }
@@ -1300,6 +1301,43 @@ public final class MathParser {
             .comparingInt((SupportedCommand c) -> c.category().ordinal())
             .thenComparing(SupportedCommand::command));
         return List.copyOf(out);
+    }
+
+    /**
+     * The keyword-dispatched structural commands handled by the big {@code switch} in
+     * {@link #parseCommandBody} (fractions, roots, binomials, phantoms, style/color, …).
+     * Unlike the symbol/operator/accent tables, these are NOT reachable via
+     * {@link #supportedCommands()}, so a "did you mean?" over commands alone would never
+     * propose {@code \frac}. This hand-maintained set fills that gap; keep it in sync with
+     * the switch when a structural command is added or renamed. (Purely a suggestion
+     * source — it changes no parse behavior.)
+     */
+    private static final List<String> STRUCTURAL_COMMANDS = List.of(
+        "frac", "cfrac", "dfrac", "tfrac", "binom", "dbinom", "tbinom", "sqrt",
+        "overset", "underset", "stackrel", "underbrace", "overbrace", "substack",
+        "phantom", "hphantom", "vphantom", "mathstrut", "operatorname",
+        "textcolor", "color", "left", "right", "not", "bmod", "pmod",
+        "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle",
+        "limits", "nolimits", "begin", "end",
+        "xrightarrow", "xleftarrow", "xleftrightarrow", "xRightarrow", "xLeftarrow",
+        "xLeftrightarrow", "xmapsto", "xhookrightarrow", "xhookleftarrow",
+        "xrightleftharpoons");
+
+    /**
+     * A {@code " — did you mean \frac?"} suffix for an unknown command {@code name}
+     * (given WITHOUT its leading backslash), or {@code ""} when no supported command is
+     * within the {@link FuzzyMatch} threshold. The candidate set is every
+     * {@link #supportedCommands()} name (backslash stripped — these track the tables
+     * automatically) plus the {@link #STRUCTURAL_COMMANDS} the switch handles directly.
+     */
+    private static String commandSuggestion(String name) {
+        List<String> names = new ArrayList<>(STRUCTURAL_COMMANDS);
+        for (SupportedCommand c : supportedCommands()) {
+            names.add(c.command().substring(1)); // drop the leading '\'
+        }
+        return FuzzyMatch.nearest(name, names)
+            .map(hit -> " — did you mean \\" + hit + "?")
+            .orElse("");
     }
 
     /** Categorises a symbol-table entry by its code-point range and math class. */

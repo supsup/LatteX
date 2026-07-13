@@ -47,7 +47,12 @@ final class EnvironmentParser {
         String env = readBraceName(parser, "\\begin");
         EnvSpec spec = ENVIRONMENTS.get(env);
         if (spec == null) {
-            throw new MathSyntaxException("Unknown environment: \\begin{" + env + "}");
+            String suggestion = FuzzyMatch.nearest(env, ENVIRONMENTS.keySet())
+                .map(hit -> " — did you mean \\begin{" + hit + "}?")
+                .orElse("");
+            throw MathSyntaxException.unsupported(
+                "Unknown environment: \\begin{" + env + "}" + suggestion,
+                MathSyntaxException.NO_OFFSET);
         }
 
         // array carries a user column spec {ccc|c}; other envs are uniform.
