@@ -620,6 +620,16 @@ final class Symbols {
         Map.entry("smallmatrix", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.SMALL, ColumnAlign.CENTER)),
         Map.entry("array", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ARRAY, ColumnAlign.CENTER)),
         Map.entry("cases", new EnvSpec('{', NO_DELIM, MatrixKind.CASES, ColumnAlign.LEFT)),
+        // eqnarray: a fixed 3-column right/center/left grid (LHS, relation, RHS). It
+        // reuses ARRAY's machinery but takes NO user column spec — EnvironmentParser
+        // synthesises the fixed [RIGHT, CENTER, LEFT] aligns, keyed on the env name.
+        // The starred form differs only in numbering, which LatteX does not render.
+        Map.entry("eqnarray", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ARRAY, ColumnAlign.CENTER)),
+        Map.entry("eqnarray*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ARRAY, ColumnAlign.CENTER)),
+        // alignat: like align (alternating right/left column pairs) but with a MANDATORY
+        // {n} column-pair count that EnvironmentParser reads-and-discards before the body.
+        Map.entry("alignat", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
+        Map.entry("alignat*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
         // Aligned-equation environments. align/aligned use alternating right/left
         // column pairs (the per-column alignment is derived in EnvironmentParser by
         // kind, so the uniform field is unused here); gather is a single centred
