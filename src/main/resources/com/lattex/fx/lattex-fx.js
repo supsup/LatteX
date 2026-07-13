@@ -2062,4 +2062,22 @@
   } else {
     init();
   }
+
+  // TEST SEAM (fx-runtime JS harness, plan e09b28be): hand the internals to a
+  // PRE-INSTALLED hook so the JVM-side GraalJS tests can pin behavior (placement
+  // compose, glyphmap grammar, lifecycle teardown). Strictly a no-op in browsers —
+  // nothing ever defines window.__lxTestHook there, and the runtime neither reads
+  // nor stores anything back from the hook.
+  if (typeof window !== 'undefined' && typeof window.__lxTestHook === 'function') {
+    window.__lxTestHook({
+      placement: placement,
+      setPathDelta: setPathDelta,
+      clearPathDelta: clearPathDelta,
+      userCentre: userCentre,
+      pivotScaleDelta: pivotScaleDelta,
+      parseGlyphmap: parseGlyphmap,
+      play: play,
+      init: init
+    });
+  }
 })();
