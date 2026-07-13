@@ -111,8 +111,15 @@ public final class LatteX {
         } catch (MathSyntaxException e) {
             // Typed channel: a parse-stage throw is an author-facing syntax error with
             // position; a later-stage typed throw (depth guard, contained internal
-            // failure) is classified RENDER_BUG — the pipeline, not the author.
-            Outcome outcome = "parse".equals(stage) ? Outcome.PARSE_ERROR : Outcome.RENDER_BUG;
+            // failure) is classified RENDER_BUG — the pipeline, not the author. A parse-stage
+            // throw flagged as an unknown command/environment is UNSUPPORTED_CONSTRUCT, so a
+            // typo ("did you mean \frac?") is distinguishable from malformed syntax.
+            Outcome outcome;
+            if ("parse".equals(stage)) {
+                outcome = e.isUnsupportedConstruct() ? Outcome.UNSUPPORTED_CONSTRUCT : Outcome.PARSE_ERROR;
+            } else {
+                outcome = Outcome.RENDER_BUG;
+            }
             String caret;
             try { caret = e.caretString(); } catch (RuntimeException ignored) { caret = ""; }
             return new RenderResult("", new Diagnostics(outcome, stage,

@@ -23,6 +23,11 @@ public final class MathSyntaxException extends IllegalArgumentException {
 
     private final int offset;
     private String source; // the full input, attached by MathParser.parse; null if standalone
+    // An unknown command / environment (a construct LatteX does not support), as opposed
+    // to malformed syntax. Lets the Outcome mapping classify a typo as UNSUPPORTED_CONSTRUCT
+    // instead of PARSE_ERROR so consumers can tell "you meant \frac" from "your braces are
+    // unbalanced." Defaults false; set only via the unsupported(...) factory.
+    private boolean unsupportedConstruct = false;
 
     public MathSyntaxException(String message) {
         this(message, NO_OFFSET);
@@ -31,6 +36,18 @@ public final class MathSyntaxException extends IllegalArgumentException {
     public MathSyntaxException(String message, int offset) {
         super(message);
         this.offset = offset;
+    }
+
+    /**
+     * Builds an exception flagged as an UNSUPPORTED construct (an unknown command or
+     * environment name) rather than malformed syntax. Same message/offset channel as the
+     * plain constructor; only {@link #isUnsupportedConstruct()} differs, which the
+     * diagnostics layer reads to classify the {@link com.lattex.api.Outcome}.
+     */
+    static MathSyntaxException unsupported(String message, int offset) {
+        MathSyntaxException e = new MathSyntaxException(message, offset);
+        e.unsupportedConstruct = true;
+        return e;
     }
 
     /**
@@ -52,6 +69,15 @@ public final class MathSyntaxException extends IllegalArgumentException {
     /** The full source input, or {@code null} if it was not attached. */
     public String source() {
         return source;
+    }
+
+    /**
+     * {@code true} when this reports an unsupported construct (an unknown command or
+     * environment), as opposed to malformed syntax. Read by the diagnostics layer to
+     * classify the {@link com.lattex.api.Outcome} as {@code UNSUPPORTED_CONSTRUCT}.
+     */
+    public boolean isUnsupportedConstruct() {
+        return unsupportedConstruct;
     }
 
     /**
