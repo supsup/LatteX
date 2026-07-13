@@ -2076,6 +2076,7 @@
       userCentre: userCentre,
       pivotScaleDelta: pivotScaleDelta,
       parseGlyphmap: parseGlyphmap,
+      scrollKillable: scrollKillable,
       play: play,
       init: init
     });
