@@ -37,6 +37,11 @@ dependencies {
     testImplementation(files("libs/brewshot-0.2.0.jar"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // GraalJS polyglot: executes lattex-fx.js INSIDE the JVM test task so runtime
+    // behavior is pinned hermetically (no Node/jsdom toolchain; plan e09b28be).
+    // Test scope only; the zero-runtime-dependencies promise is untouched.
+    testImplementation("org.graalvm.polyglot:polyglot:24.2.2")
+    testImplementation("org.graalvm.polyglot:js-community:24.2.2")
 }
 
 tasks.test {

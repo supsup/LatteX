@@ -51,3 +51,13 @@ This subset is a contract with downstream HTML sanitizers (LatteX SVG must pass 
 ```
 
 Java 25 toolchain, provisioned by Gradle. Keep the build dependency-light and the tests deterministic (env-scrubbed — no ambient state).
+
+### The fx-runtime JS harness
+
+`lattex-fx.js` (the optional effects runtime) is pinned **behaviorally**, not by string-grep: `FxRuntimeJsHarnessTest` executes the real script inside a GraalJS context (test-scope dependency; no Node/jsdom toolchain) against a minimal stub DOM (`src/test/resources/com/lattex/fx/harness-dom-stub.js`). Internals reach the tests through the guarded `window.__lxTestHook` seam at the tail of the script — a no-op in browsers.
+
+Rules of the road:
+
+- **Touching the runtime's placement/compose or glyphmap code?** The harness pins compose order, the `transform-origin: 0 0` pin, and the glyphmap contract grammar — mutations there must fail a harness test, and the pins move *with* a deliberate behavior change, never around it.
+- **Changing `SvgEmitter`'s path `transform` format?** `placementRegexParsesTheRealEmitterTransformString` renders real math and feeds the emitted string to the runtime's parser — the cross-language coupling is pinned end-to-end; update both sides together.
+- **Adding runtime internals worth pinning?** Extend the `__lxTestHook` object at the script tail and stub only what the new code touches at load — the stub is deliberately minimal, not a jsdom (BrewShot owns real-browser eyeballing).
