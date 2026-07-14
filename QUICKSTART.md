@@ -23,8 +23,8 @@ filled `<path>`s (never `<text>`, `<use>`, `<defs>`, `<script>`, or external
 a standard sanitizer allow-list. The math font (**STIX Two Math**, OFL) is bundled,
 so there are no web fonts to load either. Apache-2.0.
 
-**What it can render:** measured, not claimed — 467 of 484 real-world formulas
-(96.5%) from the wild corpus render clean, regression-locked by a coverage
+**What it can render:** measured, not claimed — 484 of 484 real-world formulas
+(100%) from the wild corpus render clean, regression-locked by a coverage
 ratchet that only moves up. Browse the tour: **[examples/showcase.html]
 (examples/showcase.html)** (highlights incl. matrices, cases, align, bra-ket,
 and the mod/logic/dots families); the full command inventory is the generated

@@ -24,7 +24,7 @@ superscripts clear an overhang (f²) exactly as the font intends.
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
-ratchet: 481/484 real-world formulas, 99.4%, and only allowed to go up). For the
+ratchet: 484/484 real-world formulas, 100%, and only allowed to go up). For the
 fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
 26 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
 captured previews (every effect as its own looping GIF). For the parallel MathML
@@ -49,7 +49,7 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 ## Status
 
-Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **99.4% of the wild corpus** as of **0.5.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **26-effect** `fx` layer are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (484/484) as of **0.6.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **26-effect** `fx` layer are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
 ## The fx layer is OPTIONAL
 
