@@ -56,7 +56,7 @@ class WildCorpusCoverageTest {
                 }
             }
         }
-        assertTrue(okRows >= 481, "pass-set shrank in the TSV itself: " + okRows
+        assertTrue(okRows >= 482, "pass-set shrank in the TSV itself: " + okRows
             + " OK rows (started at 417) — statuses may only flip GAP->OK");
         assertTrue(broken.isEmpty(), broken.size()
             + " previously-rendering formulas REGRESSED:\n  "

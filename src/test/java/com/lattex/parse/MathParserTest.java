@@ -314,6 +314,55 @@ class MathParserTest {
     }
 
     @Test
+    void infixFractionOperatorsSplitTheirGroup() {
+        // The TeX INFIX operators sit BETWEEN numerator and denominator and split
+        // their enclosing group: `n` before, `k` after. \over is a ruled fraction
+        // (== \frac), \atop is rule-less (no fence), and \choose/\brace/\brack are
+        // rule-less fractions fenced by ( ) / { } / [ ] (== \binom with a delimiter).
+        assertEquals("Frac(A(a,ORD),A(b,ORD))", pp(MathParser.parse("a \\over b")));
+        assertEquals("Binom(A(n,ORD),A(k,ORD))", pp(MathParser.parse("{n \\atop k}")));
+
+        // \choose -> ( ) fence around the rule-less stack, structurally verified.
+        MathNode ch = MathParser.parse("{n \\choose k}");
+        Fenced chf = assertInstanceOf(Fenced.class, ch);
+        assertEquals('(', chf.leftDelim());
+        assertEquals(')', chf.rightDelim());
+        Fraction chStack = assertInstanceOf(Fraction.class, chf.body());
+        assertTrue(!chStack.hasRule(), "\\choose has no fraction rule");
+        assertEquals("Fen(( Binom(A(n,ORD),A(k,ORD)) ))", pp(ch));
+        // \brace -> { }, \brack -> [ ].
+        assertEquals("Fen({ Binom(A(n,ORD),A(k,ORD)) })", pp(MathParser.parse("{n \\brace k}")));
+        assertEquals("Fen([ Binom(A(n,ORD),A(k,ORD)) ])", pp(MathParser.parse("{n \\brack k}")));
+
+        // \over is IDENTICAL to \frac (ruled, inherited style).
+        Fraction over = assertInstanceOf(Fraction.class, MathParser.parse("a \\over b"));
+        assertTrue(over.hasRule(), "\\over keeps the fraction rule");
+        assertEquals(MathNode.FractionStyle.INHERIT, over.fractionStyle());
+    }
+
+    @Test
+    void infixDenominatorParsesScriptsAndNestsPerGroup() {
+        // Script binding: the denominator is parsed with the ordinary component
+        // parser, so `^2` binds to `b` INSIDE the denominator (b^2, not just b).
+        assertEquals("Frac(A(a,ORD),SS(A(b,ORD),^A(2,ORD)))",
+            pp(MathParser.parse("a \\over b^2")));
+        // Nesting is by group: the inner {a \over b} splits only a/b; the outer
+        // `+ c` is unaffected and stays at top level.
+        assertEquals("L(Frac(A(a,ORD),A(b,ORD)) A(+,BIN) A(c,ORD))",
+            pp(MathParser.parse("{a \\over b} + c")));
+    }
+
+    @Test
+    void twoInfixOperatorsInOneGroupAreAmbiguous() {
+        // TeX allows at most ONE infix fraction operator per group; a second one is
+        // ambiguous and must fail loudly rather than silently mis-nest.
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("x \\over y \\over z"));
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("{n \\brace k \\atop m}"));
+    }
+
+    @Test
     void cfracForcesDisplayStyle() {
         Fraction f = assertInstanceOf(Fraction.class, MathParser.parse("\\cfrac{1}{x}"));
         assertTrue(f.hasRule(), "\\cfrac keeps the fraction rule");
