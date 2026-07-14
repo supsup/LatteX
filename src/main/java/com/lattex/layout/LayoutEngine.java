@@ -185,8 +185,11 @@ public final class LayoutEngine {
         int gid = font.glyphId(atom.codePoint());
         GlyphOutline o = font.outline(gid);
         // Carry the source code point so the glyphmap can key token identity to this
-        // glyph's emitted <path> (the data-lx-glyphmap sidecar the `thread` effect reads).
-        PositionedGlyph glyph = new PositionedGlyph(gid, 0.0, 0.0, scale, null, atom.codePoint());
+        // glyph's emitted <path> (the data-lx-glyphmap sidecar the `thread` effect reads),
+        // and the current fence depth so the precedence-cascade groupmap can key this
+        // glyph to its paren-nesting level (the data-lx-groupmap sidecar).
+        PositionedGlyph glyph = new PositionedGlyph(gid, 0.0, 0.0, scale, null,
+            atom.codePoint(), ctx.fenceDepth());
         double width = font.advanceWidth(gid) * scale;
         double height = o.isEmpty() ? 0.0 : Math.max(0.0, o.yMax() * scale);
         double depth = o.isEmpty() ? 0.0 : Math.max(0.0, -o.yMin() * scale);
@@ -240,7 +243,7 @@ public final class LayoutEngine {
             }
             int gid = font.glyphId(cp);
             GlyphOutline o = font.outline(gid);
-            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale));
+            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale, ctx.fenceDepth())); // carry fence depth so function/text words light with their group (F2)
             penX += font.advanceWidth(gid) * scale;
             if (!o.isEmpty()) {
                 height = Math.max(height, o.yMax() * scale);
@@ -286,7 +289,7 @@ public final class LayoutEngine {
                 gid = font.glyphId(cp); // font lacks the shaped variant: plain glyph
             }
             GlyphOutline o = font.outline(gid);
-            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale));
+            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale, ctx.fenceDepth())); // carry fence depth so function/text words light with their group (F2)
             penX += font.advanceWidth(gid) * scale;
             if (!o.isEmpty()) {
                 height = Math.max(height, o.yMax() * scale);
@@ -1133,11 +1136,16 @@ public final class LayoutEngine {
         // \middle take the pre-existing path below UNCHANGED (golden-stable).
         List<MathNode> flatBody = body instanceof MathNode.MathList(var items)
             ? items : List.of(body);
+        // The body's atoms are one paren-level deeper (precedence-cascade fence depth);
+        // the delimiters themselves are construction glyphs (no rank) so bodyCtx's deeper
+        // depth is inert on them, and insideFence preserves style so scale/axis are
+        // identical — the deepening reaches only the body's source atoms.
+        LayoutContext bodyCtx = ctx.insideFence();
         if (flatBody.stream().anyMatch(n -> n instanceof MathNode.MiddleDelim)) {
-            return fencedWithMiddles(leftDelim, flatBody, rightDelim, ctx, font, axis, scale);
+            return fencedWithMiddles(leftDelim, flatBody, rightDelim, bodyCtx, font, axis, scale);
         }
 
-        Box bodyBox = layoutBox(body, ctx);
+        Box bodyBox = layoutBox(body, bodyCtx);
 
         // Symmetric target about the axis: cover the taller of (body above axis)
         // and (body below axis) on both sides, so the pair is balanced on the axis.
@@ -1300,8 +1308,13 @@ public final class LayoutEngine {
             case ALIGN, GATHER, MULTLINE -> MathStyle.DISPLAY;
             default -> MathStyle.TEXT;
         };
+        // Preserve the ENCLOSING fence depth into the cell (Fixpoint F1, lattex/176): a matrix
+        // is not a precedence boundary, so a cell atom inside a \left..\right fence must keep
+        // that depth — the 5-arg form would reset it to 0 and emit a confidently-wrong groupmap
+        // (the matrix-cell atom ranked WITH atoms outside the fence). A fence INSIDE a cell then
+        // correctly deepens from the cell's inherited level.
         LayoutContext cellCtx =
-            new LayoutContext(font, c, ctx.fontSize(), cellStyle, false);
+            new LayoutContext(font, c, ctx.fontSize(), cellStyle, false, ctx.fenceDepth());
 
         int rows = mx.rows().size();
         int cols = mx.columnCount();
