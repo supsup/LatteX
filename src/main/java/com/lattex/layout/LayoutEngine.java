@@ -243,7 +243,7 @@ public final class LayoutEngine {
             }
             int gid = font.glyphId(cp);
             GlyphOutline o = font.outline(gid);
-            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale));
+            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale, ctx.fenceDepth())); // carry fence depth so function/text words light with their group (F2)
             penX += font.advanceWidth(gid) * scale;
             if (!o.isEmpty()) {
                 height = Math.max(height, o.yMax() * scale);
@@ -289,7 +289,7 @@ public final class LayoutEngine {
                 gid = font.glyphId(cp); // font lacks the shaped variant: plain glyph
             }
             GlyphOutline o = font.outline(gid);
-            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale));
+            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale, ctx.fenceDepth())); // carry fence depth so function/text words light with their group (F2)
             penX += font.advanceWidth(gid) * scale;
             if (!o.isEmpty()) {
                 height = Math.max(height, o.yMax() * scale);
@@ -1308,8 +1308,13 @@ public final class LayoutEngine {
             case ALIGN, GATHER, MULTLINE -> MathStyle.DISPLAY;
             default -> MathStyle.TEXT;
         };
+        // Preserve the ENCLOSING fence depth into the cell (Fixpoint F1, lattex/176): a matrix
+        // is not a precedence boundary, so a cell atom inside a \left..\right fence must keep
+        // that depth — the 5-arg form would reset it to 0 and emit a confidently-wrong groupmap
+        // (the matrix-cell atom ranked WITH atoms outside the fence). A fence INSIDE a cell then
+        // correctly deepens from the cell's inherited level.
         LayoutContext cellCtx =
-            new LayoutContext(font, c, ctx.fontSize(), cellStyle, false);
+            new LayoutContext(font, c, ctx.fontSize(), cellStyle, false, ctx.fenceDepth());
 
         int rows = mx.rows().size();
         int cols = mx.columnCount();

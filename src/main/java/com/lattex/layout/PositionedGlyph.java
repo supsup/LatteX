@@ -46,6 +46,17 @@ public record PositionedGlyph(int glyphId, double originX, double baselineY, dou
         this(glyphId, originX, baselineY, scale, null, NO_SOURCE, NO_RANK);
     }
 
+    /**
+     * A no-source glyph carrying a fence depth — a function-word or {@code \text} letter that
+     * has no threadable source token (so {@link #NO_SOURCE}) but IS visually inside a fenced
+     * group, so it must carry that group's depth to light with it in the precedence cascade
+     * rather than dimming as unresolved (Fixpoint F2, lattex/176). Distinguished from the
+     * {@code (…, Color)} 5-arg by the {@code int} depth.
+     */
+    public PositionedGlyph(int glyphId, double originX, double baselineY, double scale, int fenceDepth) {
+        this(glyphId, originX, baselineY, scale, null, NO_SOURCE, fenceDepth);
+    }
+
     /** A glyph with a color override but no source token. */
     public PositionedGlyph(int glyphId, double originX, double baselineY, double scale, Color color) {
         this(glyphId, originX, baselineY, scale, color, NO_SOURCE, NO_RANK);

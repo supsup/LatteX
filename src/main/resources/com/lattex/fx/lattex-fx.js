@@ -2002,8 +2002,16 @@
     if (!raw || !GROUPMAP_RE.test(raw)) { return null; }
     var runs = raw.split(';');
     var ranks = []; // ascending rank order: ranks[k] = [path indices at that rank]
+    var prevRank = -1;
     for (var r = 0; r < runs.length; r++) {
       var pair = runs[r].split(':');
+      // The rank (pair[0]) MUST be strictly ascending — the cascade steps runs in array
+      // order, so a rank-disordered map (5:1;2:3) would animate the WRONG order. Refuse it
+      // wholesale, matching the out-of-bounds posture (Fixpoint N1, lattex/176) rather than
+      // silently trusting the producer's serialization.
+      var rank = Number(pair[0]);
+      if (!(rank > prevRank)) { return null; }
+      prevRank = rank;
       var idx = pair[1].split(',').map(Number);
       for (var i = 0; i < idx.length; i++) {
         if (idx[i] >= pathCount) { return null; } // out-of-bounds: refuse whole

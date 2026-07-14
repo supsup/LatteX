@@ -68,6 +68,17 @@ class PrecedenceStampTest {
     }
 
     @Test
+    void precedenceWithAFunctionWordInsideAFenceStampsAndIncludesTheWord() {
+        // F2 battery (Fixpoint lattex/176): the mixed confident case — a fenced group holding a
+        // function word. The groupmap IS stamped (real nesting), and the \sin word's glyphs are
+        // IN rank 0 (they carry the fence depth now) rather than dimming forever.
+        String gm = groupmapAttr("\\lx[fx.hover=precedence]{\\left(\\sin x + y\\right) + d}");
+        assertTrue(gm != null && gm.startsWith("0:"), "stamped, fenced group is rank 0: " + gm);
+        assertTrue(gm.substring(2, gm.indexOf(';')).split(",").length >= 5,
+            "the \\sin word's glyphs are in rank 0, not dropped: " + gm);
+    }
+
+    @Test
     void precedenceOnALoneFenceGroupEmitsNoGroupmap() {
         // A single paren group with nothing outside it has only one rank → nothing to
         // sequence → no groupmap (no "evaluate then combine" step to show).

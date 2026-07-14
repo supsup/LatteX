@@ -103,6 +103,36 @@ class GroupmapTest {
         assertEquals("", groupmapOf("a^2 + \\frac{b}{c}"));
     }
 
+    // -- F1/F2 regressions (Fixpoint lattex/176): sub-formulas inside a fence keep its depth --
+
+    @Test
+    void aMatrixCellInsideAFenceKeepsTheEnclosingDepth() {
+        // F1: matrixBox built its cell context via the 5-arg ctor, which reset fenceDepth to 0
+        // — so a cell atom VISUALLY inside a \left fence was ranked WITH atoms outside it (a
+        // confidently-wrong cascade). The cell atom `a` must land in the SAME rank run as `x`
+        // (both inside the fence, rank 0), and `d` (outside) in rank 1.
+        String gm = groupmapOf("\\left(x + \\begin{smallmatrix}a\\end{smallmatrix}\\right) + d");
+        assertTrue(gm.matches("^[0-9]+:[0-9]+(,[0-9]+)*(;[0-9]+:[0-9]+(,[0-9]+)*)*$"), gm);
+        assertTrue(gm.startsWith("0:"), "the fenced group (x and the matrix cell a) is rank 0: " + gm);
+        // exactly two ranks — the fence body (incl. the matrix cell) then the outer +d.
+        assertEquals(2, gm.split(";").length, "matrix cell ranks WITH the fence body, not with d: " + gm);
+    }
+
+    @Test
+    void aFunctionWordInsideAFenceLightsWithItsGroup() {
+        // F2: \sin's letters went through the no-source glyph ctor → NO_RANK → absent from every
+        // rank run → dimmed forever by the cascade. They must now carry the enclosing fence
+        // depth so the whole \sin word is in rank 0 with the rest of the fenced sub-expression.
+        String gm = groupmapOf("\\left(\\sin x + y\\right) + d");
+        assertTrue(gm.matches("^[0-9]+:[0-9]+(,[0-9]+)*(;[0-9]+:[0-9]+(,[0-9]+)*)*$"), gm);
+        assertTrue(gm.startsWith("0:"), gm);
+        assertEquals(2, gm.split(";").length, "the whole fenced group is rank 0, +d is rank 1: " + gm);
+        // rank-0 run must hold the 3 \sin glyphs (s,i,n) + x + y + the inner + = >= 5 indices;
+        // if \sin were rank-less the run would be missing them.
+        int rank0Count = gm.substring(2, gm.indexOf(';')).split(",").length;
+        assertTrue(rank0Count >= 5, "the \\sin word's glyphs are in rank 0, not dropped: " + gm);
+    }
+
     @Test
     void indicesAddressEmittedPathsInEmitOrderMatchingGlyphmap() {
         // The groupmap and glyphmap key off the SAME emitted-glyph sequence, so an index
