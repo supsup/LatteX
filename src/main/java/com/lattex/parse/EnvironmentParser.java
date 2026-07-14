@@ -58,10 +58,22 @@ final class EnvironmentParser {
         // array carries a user column spec {ccc|c}; other envs are uniform.
         List<ColumnAlign> specAligns = null;
         List<Integer> specVlines = null;
-        if (spec.kind() == MatrixKind.ARRAY) {
+        if (isEqnarray(env)) {
+            // eqnarray is a FIXED 3-column right/center/left grid (LHS, relation, RHS)
+            // with NO user column spec to read. Reuse ARRAY's machinery by synthesising
+            // its spec here, keyed on the env name (checked before the ARRAY branch since
+            // eqnarray registers as MatrixKind.ARRAY).
+            specAligns = List.of(ColumnAlign.RIGHT, ColumnAlign.CENTER, ColumnAlign.LEFT);
+            specVlines = List.of(0, 0, 0, 0);
+        } else if (spec.kind() == MatrixKind.ARRAY) {
             ColumnSpec cs = readColumnSpec(parser);
             specAligns = cs.aligns();
             specVlines = cs.vlines();
+        } else if (isAlignat(env)) {
+            // alignat has a MANDATORY {n} column-pair count. Read and DISCARD it (mirrors
+            // the ARRAY column-spec read above); LatteX's ALIGN path then derives the
+            // alternating right/left columns from the & structure exactly like align.
+            discardBraceArg(parser, "\\begin{" + env + "}");
         }
 
         // Read the body: cells (& separated) into rows (\\ separated), tracking
@@ -91,6 +103,12 @@ final class EnvironmentParser {
                 parser.next();
                 hlines.merge(rawRows.size(), rule,
                     (a, b) -> a == RowRule.SOLID ? a : b); // a solid line wins
+                continue;
+            }
+            if (parser.isCommand(t, "nonumber") || parser.isCommand(t, "notag")) {
+                // Equation-numbering suppressors: LatteX renders no equation numbers, so
+                // these are inert no-ops (skipped here so an env body containing them parses).
+                parser.next();
                 continue;
             }
             if (parser.isCommand(t, "\\") || parser.isCommand(t, "cr")) {
@@ -198,6 +216,37 @@ final class EnvironmentParser {
 
         return new Matrix(grid, aligns, vlines, rowRules,
             spec.leftDelim(), spec.rightDelim(), spec.kind());
+    }
+
+    /** True for {@code eqnarray}/{@code eqnarray*} — the fixed right/center/left 3-column grid. */
+    private static boolean isEqnarray(String env) {
+        return env.equals("eqnarray") || env.equals("eqnarray*");
+    }
+
+    /** True for {@code alignat}/{@code alignat*} — align with a mandatory {@code {n}} argument. */
+    private static boolean isAlignat(String env) {
+        return env.equals("alignat") || env.equals("alignat*");
+    }
+
+    /**
+     * Reads and DISCARDS a mandatory {@code {n}} brace argument (alignat's column-pair
+     * count, which LatteX ignores since it derives columns from the {@code &} structure).
+     * Fails loud on a missing or unterminated argument.
+     */
+    private static void discardBraceArg(MathParser parser, String context) {
+        if (parser.peek().kind() != Kind.LBRACE) {
+            throw new MathSyntaxException(
+                context + " requires a {n} column-pair count but found "
+                    + MathParser.describe(parser.peek()));
+        }
+        parser.next(); // consume '{'
+        while (parser.peek().kind() != Kind.RBRACE) {
+            if (parser.peek().kind() == Kind.EOF) {
+                throw new MathSyntaxException(context + " has an unterminated {n} argument");
+            }
+            parser.next();
+        }
+        parser.next(); // consume '}'
     }
 
     /** Silently consumes an optional {@code \\*} and/or {@code \\[len]} row-break modifier. */

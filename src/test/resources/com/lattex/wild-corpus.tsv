@@ -473,11 +473,11 @@ OK	structured-envs	D	\begin{align*} \lim_{h \to 0} \frac{(x+h)^2 - x^2}{h} &= \l
 OK	structured-envs	D	\begin{align*} \|x + y\|^2 &= \|x\|^2 + 2\langle x, y \rangle + \|y\|^2 \\ &\le \|x\|^2 + 2\|x\|\|y\| + \|y\|^2 \\ &= (\|x\| + \|y\|)^2 \end{align*}
 OK	structured-envs	D	\begin{aligned} \hat{f}(\xi) &= \int_{-\infty}^{\infty} f(x)\, e^{-2\pi i x \xi}\,dx \\ f(x) &= \int_{-\infty}^{\infty} \hat{f}(\xi)\, e^{2\pi i x \xi}\,d\xi \end{aligned}
 OK	structured-envs	D	\begin{align*} S_n &= a\,\frac{1 - r^{n+1}}{1 - r} \\ \lim_{n \to \infty} S_n &= \frac{a}{1 - r} \quad \text{for } |r| < 1 \end{align*}
-GAP	structured-envs	D	\begin{eqnarray} y &=& (x+1)^2 \nonumber \\ &=& x^2 + 2x + 1 \end{eqnarray}
+OK	structured-envs	D	\begin{eqnarray} y &=& (x+1)^2 \nonumber \\ &=& x^2 + 2x + 1 \end{eqnarray}
 OK	structured-envs	D	\begin{gather*} \nabla \cdot \mathbf{u} = 0 \\ \rho \left( \frac{\partial \mathbf{u}}{\partial t} + \mathbf{u} \cdot \nabla \mathbf{u} \right) = -\nabla p + \mu \nabla^2 \mathbf{u} \end{gather*}
 OK	structured-envs	D	\begin{multline} \sum_{k=1}^{100} k = 1 + 2 + 3 + \cdots + 98 \\ + 99 + 100 = 5050 \end{multline}
 OK	structured-envs	D	\begin{split} f(x) &= \sum_{n=0}^{\infty} \frac{f^{(n)}(0)}{n!} x^n \\ &= f(0) + f'(0)x + \frac{f''(0)}{2}x^2 + \cdots \end{split}
-GAP	structured-envs	D	\begin{alignat}{2} 2x + 3y &= 7, &\qquad x - y &= 1 \\ 4x - y &= 3, &\qquad 2x + y &= 5 \end{alignat}
+OK	structured-envs	D	\begin{alignat}{2} 2x + 3y &= 7, &\qquad x - y &= 1 \\ 4x - y &= 3, &\qquad 2x + y &= 5 \end{alignat}
 OK	structured-envs	D	\begin{array}{ccc} X & \stackrel{f}{\longrightarrow} & Y \\ \downarrow & & \downarrow \\ X/{\sim} & \xrightarrow{\bar{f}} & Y/{\sim} \end{array}
 OK	structured-envs	D	\begin{array}{c|cc} & B & B^c \\ \hline A & 0.2 & 0.3 \\ A^c & 0.1 & 0.4 \end{array}
 OK	structured-envs	D	\begin{align*} \log(xy) &= \log x + \log y \\ \log(x/y) &= \log x - \log y \\ \log x^n &= n \log x \end{align*}
