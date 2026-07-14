@@ -21,15 +21,31 @@ import com.lattex.font.SfntFont;
  * @param fontSize  the base display font size, in user units (px at 1:1)
  * @param style     the current math style
  * @param cramped   whether the current style is cramped
+ * @param fenceDepth the {@code \left..\right} / delimiter nesting depth (0 = outermost).
+ *                  Threaded so an atom glyph can carry it (precedence-cascade sidecar,
+ *                  {@code data-lx-groupmap}); ONLY {@link #insideFence()} deepens it —
+ *                  the style transitions (scripts/fractions/radicals) preserve it, since
+ *                  order-of-operations grouping follows explicit parens, not sub-formula
+ *                  structure.
  */
 public record LayoutContext(SfntFont font, MathConstants constants, double fontSize,
-                            MathStyle style, boolean cramped) {
+                            MathStyle style, boolean cramped, int fenceDepth) {
 
     /**
-     * Entry-point context: display style, un-cramped, at the given size.
+     * Entry-point context: display style, un-cramped, at the given size, fence depth 0.
      */
     public LayoutContext(SfntFont font, MathConstants constants, double fontSize) {
-        this(font, constants, fontSize, MathStyle.DISPLAY, false);
+        this(font, constants, fontSize, MathStyle.DISPLAY, false, 0);
+    }
+
+    /**
+     * Entry-point context at an explicit style/cramping — fence depth 0 (a top-level
+     * render always starts outside every fence). Keeps the pre-fenceDepth 5-arg call
+     * shape working at the render entry points.
+     */
+    public LayoutContext(SfntFont font, MathConstants constants, double fontSize,
+                         MathStyle style, boolean cramped) {
+        this(font, constants, fontSize, style, cramped, 0);
     }
 
     /** User units per font design unit at display/text size (the un-shrunk base). */
@@ -53,7 +69,16 @@ public record LayoutContext(SfntFont font, MathConstants constants, double fontS
     }
 
     private LayoutContext with(MathStyle newStyle, boolean newCramped) {
-        return new LayoutContext(font, constants, fontSize, newStyle, newCramped);
+        // Preserves fenceDepth: a style transition (script/fraction/radical) is NOT a
+        // precedence-grouping boundary — only an explicit \left..\right fence is.
+        return new LayoutContext(font, constants, fontSize, newStyle, newCramped, fenceDepth);
+    }
+
+    /** Context INSIDE one more {@code \left..\right} fence level — the ONLY place fence
+     *  depth increases. Style/cramping carry unchanged; every atom laid out under this
+     *  context (transitively) is one paren-level deeper for the precedence cascade. */
+    public LayoutContext insideFence() {
+        return new LayoutContext(font, constants, fontSize, style, cramped, fenceDepth + 1);
     }
 
     /** Context for a superscript: one style smaller, cramping inherited. */

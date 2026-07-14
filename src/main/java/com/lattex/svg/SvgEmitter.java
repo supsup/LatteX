@@ -206,6 +206,66 @@ public final class SvgEmitter {
         return sb.toString();
     }
 
+    /**
+     * Serializes the precedence-group {@code data-lx-groupmap} sidecar for a laid-out
+     * formula: {@code <rank>:<idx>,<idx>;<rank>:...}, where each index addresses an
+     * emitted {@code <path>} in EMIT ORDER (the SAME {@link #emittedGlyphs} sequence
+     * {@link #glyphmap} and {@link #emitInner} key off) and {@code rank} is the
+     * evaluation order — {@code 0} = evaluated first. The {@code precedence} fx effect
+     * reads it to light sub-expressions in binding order (deepest parens inward).
+     *
+     * <p>FENCED-ONLY v1 (seam sign-off lattex/169): rank is derived purely from
+     * {@code \left..\right} nesting — a source atom's {@code fenceDepth} inverted so the
+     * DEEPEST fence is rank 0 ({@code rank = maxDepth − fenceDepth}). Construction glyphs
+     * ({@link PositionedGlyph#NO_RANK}) carry no rank. This handles the unambiguous case
+     * (paren grouping) without operator-precedence reconstruction, so it never guesses.
+     *
+     * <p>WHOLE-EXPRESSION FAIL-HONEST: emitted ONLY when there is genuine nesting
+     * variation (≥2 distinct ranks). A paren-free expression — or one where every atom
+     * sits at the same depth — has no cascade to show and returns the empty string (the
+     * runtime treats that as no map, degrading to a single static highlight). A partial
+     * or single-group cascade is never emitted.
+     */
+    public static String groupmap(Layout layout, SfntFont font) {
+        java.util.List<EmittedGlyph> emitted = emittedGlyphs(layout, font);
+        int maxDepth = -1;
+        for (EmittedGlyph eg : emitted) {
+            int d = eg.glyph().fenceDepth();
+            if (d != PositionedGlyph.NO_RANK) {
+                maxDepth = Math.max(maxDepth, d);
+            }
+        }
+        if (maxDepth < 1) {
+            return ""; // no fence nesting variation → nothing to cascade → static degrade
+        }
+        // rank = maxDepth − depth, so the deepest fenced group is rank 0 (evaluated first).
+        // TreeMap keeps ranks ascending in the serialized runs.
+        java.util.Map<Integer, java.util.List<Integer>> byRank = new java.util.TreeMap<>();
+        for (int idx = 0; idx < emitted.size(); idx++) {
+            int d = emitted.get(idx).glyph().fenceDepth();
+            if (d != PositionedGlyph.NO_RANK) {
+                byRank.computeIfAbsent(maxDepth - d, k -> new java.util.ArrayList<>()).add(idx);
+            }
+        }
+        if (byRank.size() < 2) {
+            return ""; // only one rank present → no ordering to animate
+        }
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<Integer, java.util.List<Integer>> e : byRank.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append(';');
+            }
+            sb.append(e.getKey()).append(':');
+            for (int i = 0; i < e.getValue().size(); i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(e.getValue().get(i));
+            }
+        }
+        return sb.toString();
+    }
+
     /** Locale-independent compact number: integers plain, else up to 4 dp. */
     private static String num(double v) {
         if (v == Math.rint(v) && !Double.isInfinite(v)) {

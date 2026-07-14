@@ -48,7 +48,7 @@ record Box(List<PositionedGlyph> glyphs, List<Rule> rules,
     void drawInto(List<PositionedGlyph> outGlyphs, List<Rule> outRules, double dx, double dy) {
         for (PositionedGlyph g : glyphs) {
             outGlyphs.add(new PositionedGlyph(g.glyphId(), g.originX() + dx, g.baselineY() + dy,
-                g.scale(), g.color(), g.sourceCodePoint()));
+                g.scale(), g.color(), g.sourceCodePoint(), g.fenceDepth()));
         }
         for (Rule r : rules) {
             outRules.add(new Rule(r.x() + dx, r.y() + dy, r.width(), r.height(), r.color()));

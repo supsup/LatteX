@@ -20,21 +20,35 @@ import com.lattex.api.Color;
  *                  from (an atom), or {@link #NO_SOURCE} for a construction glyph
  *                  (delimiter piece, radical surd, big-op) with no author token — used
  *                  to build the {@code data-lx-glyphmap} token-identity sidecar
+ * @param fenceDepth the {@code \left..\right} / delimiter nesting depth this glyph was
+ *                  laid out at (0 = outermost), or {@link #NO_RANK} for a construction
+ *                  glyph — the raw depth the {@code data-lx-groupmap} precedence sidecar
+ *                  inverts into an evaluation rank (deepest fenced group = rank 0). Only
+ *                  FENCE nesting deepens it; scripts/fractions/radicals do not.
  */
 public record PositionedGlyph(int glyphId, double originX, double baselineY, double scale,
-                              Color color, int sourceCodePoint) {
+                              Color color, int sourceCodePoint, int fenceDepth) {
 
     /** A glyph with no source token — a construction glyph (not an author atom). */
     public static final int NO_SOURCE = -1;
 
+    /** A glyph with no precedence depth — a construction glyph (not an author atom). */
+    public static final int NO_RANK = -1;
+
+    /** A source atom glyph carrying its fence depth — the precedence-sidecar path. */
+    public PositionedGlyph(int glyphId, double originX, double baselineY, double scale,
+                           Color color, int sourceCodePoint) {
+        this(glyphId, originX, baselineY, scale, color, sourceCodePoint, NO_RANK);
+    }
+
     /** A glyph with no color override and no source token. */
     public PositionedGlyph(int glyphId, double originX, double baselineY, double scale) {
-        this(glyphId, originX, baselineY, scale, null, NO_SOURCE);
+        this(glyphId, originX, baselineY, scale, null, NO_SOURCE, NO_RANK);
     }
 
     /** A glyph with a color override but no source token. */
     public PositionedGlyph(int glyphId, double originX, double baselineY, double scale, Color color) {
-        this(glyphId, originX, baselineY, scale, color, NO_SOURCE);
+        this(glyphId, originX, baselineY, scale, color, NO_SOURCE, NO_RANK);
     }
 
     /**
@@ -43,6 +57,7 @@ public record PositionedGlyph(int glyphId, double originX, double baselineY, dou
      */
     public PositionedGlyph paintedWith(Color c) {
         return color == null
-            ? new PositionedGlyph(glyphId, originX, baselineY, scale, c, sourceCodePoint) : this;
+            ? new PositionedGlyph(glyphId, originX, baselineY, scale, c, sourceCodePoint, fenceDepth)
+            : this;
     }
 }
