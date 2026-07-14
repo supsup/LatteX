@@ -429,10 +429,88 @@ public final class LatteX {
      * @return {@code ""} or a leading-space-prefixed {@code data-lx-fx-*} attribute run
      * @throws com.lattex.parse.MathSyntaxException if {@code latex} does not parse
      */
+    /**
+     * @deprecated Parse-only: it structurally cannot carry the layout-derived
+     * {@code data-lx-glyphmap} sidecar, which is why the {@code thread} effect stayed inert on
+     * any consumer using the split render+attrs seam. Use {@link #tryRenderMath(String)} — the
+     * render-coupled record computes SVG and container attributes from the SAME parse+layout,
+     * so glyphmap indices can never desync from the emitted paths. Kept one minor version
+     * (seam sign-off, lattex room seq 165); removal after 0.7.0.
+     */
+    @Deprecated
     public static String fxContainerAttrs(String latex) {
         MathNode node = MathParser.parse(latex);
         EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
         return fxAttrs(fx);
+    }
+
+    /**
+     * The render-coupled seam record: the self-contained SVG document plus the container
+     * attributes derived from the SAME parse+layout, as a key→value map. The consumer (the
+     * Stafficy {@code /docs} markdown converter) stamps each entry onto ITS OWN wrapper
+     * element; the key set is pinned by the container-output contract (the five
+     * {@code data-lx-fx-*} plus {@code data-lx-glyphmap}), so nothing re-encodes and the
+     * reflective bridge stays name-agnostic. Values are parse-validated (effects: closed
+     * vocabulary; duration: {@code \d{1,5}ms}; glow: {@code currentColor|#rrggbb}; glyphmap:
+     * {@code [0-9a-f:,;]} only).
+     *
+     * @param svg            the SVG document, byte-identical to {@link #render(String)}
+     * @param containerAttrs immutable attribute map (empty for a plain, effect-free expression)
+     */
+    public record RenderedMath(String svg, Map<String, String> containerAttrs) {}
+
+    /**
+     * Render a LaTeX math expression AND its container attributes from one parse+layout —
+     * the sanctioned producer path for a consumer that builds its own wrapper element
+     * (seam sign-off: lattex room seq 163→165). The {@code data-lx-glyphmap} token-identity
+     * sidecar (present only when a {@code thread} effect is authored) indexes the returned
+     * SVG's {@code <path>}s in emit order; because both halves come from the same
+     * {@link Layout}, the indices cannot desync — the drift a separate attrs call would risk.
+     *
+     * <p>Failure semantics mirror the consumer-side {@code tryRender}: ANY failure (parse
+     * error, layout overflow, emit fault) yields {@link Optional#empty()} so the caller falls
+     * back to the plain source text — fail-inert, never a half-rendered pair.
+     *
+     * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
+     * @return the render-coupled pair, or empty on any failure
+     */
+    public static java.util.Optional<RenderedMath> tryRenderMath(String latex) {
+        try {
+            MathNode node = MathParser.parse(latex);
+            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
+            SfntFont font = FontHolder.FONT;
+            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+            Layout layout = LayoutEngine.layout(body, ctx);
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+            String glyphmap = fx.effects().containsValue(Effect.THREAD)
+                ? SvgEmitter.glyphmap(layout, font) : "";
+            return java.util.Optional.of(new RenderedMath(svg, containerAttrMap(fx, glyphmap)));
+        } catch (RuntimeException e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    /**
+     * THE single container-attribute producer: {@link #fxAttrs} (the string form
+     * {@link #openTag} and the deprecated seam join) derives from this map, so the record
+     * form and the string form cannot drift. Insertion order is the historical stamp order
+     * (enter/hover/click, duration, glow, glyphmap) so the joined string stays byte-identical.
+     */
+    private static Map<String, String> containerAttrMap(EffectSpec fx, String glyphmap) {
+        Map<String, String> attrs = new java.util.LinkedHashMap<>();
+        for (Trigger t : Trigger.values()) {
+            fx.effect(t).ifPresent(e ->
+                attrs.put("data-lx-fx-" + t.name().toLowerCase(Locale.ROOT), e.token()));
+        }
+        fx.durationValue().ifPresent(v -> attrs.put("data-lx-fx-duration", v));
+        fx.glowColorValue().ifPresent(c -> attrs.put("data-lx-fx-glow-color", c.svgValue()));
+        if (glyphmap != null && !glyphmap.isEmpty()) {
+            attrs.put("data-lx-glyphmap", glyphmap);
+        }
+        return java.util.Collections.unmodifiableMap(attrs);
     }
 
     /**
@@ -442,20 +520,13 @@ public final class LatteX {
      * attributes, each value validated at parse time.
      */
     private static String fxAttrs(EffectSpec fx) {
+        // Derived from containerAttrMap — the ONE producer (record seam + string form share
+        // it, so they cannot drift). Values are parse-validated; the glow colour's svgValue()
+        // is currentColor or a canonical #rrggbb literal — a safe attribute VALUE.
         StringBuilder sb = new StringBuilder();
-        // fx triggers, in a stable enter/hover/click order.
-        for (Trigger t : Trigger.values()) {
-            fx.effect(t).ifPresent(e ->
-                sb.append(" data-lx-fx-").append(t.name().toLowerCase(Locale.ROOT))
-                    .append("=\"").append(e.token()).append('"'));
+        for (Map.Entry<String, String> e : containerAttrMap(fx, "").entrySet()) {
+            sb.append(' ').append(e.getKey()).append("=\"").append(e.getValue()).append('"');
         }
-        fx.durationValue().ifPresent(v ->
-            sb.append(" data-lx-fx-duration=\"").append(v).append('"'));
-        // glow colour: a validated Color, so svgValue() is currentColor or a canonical
-        // #rrggbb literal — a safe attribute VALUE (never a new element/attribute), and
-        // it rides the container exactly like the other fx.* metadata.
-        fx.glowColorValue().ifPresent(c ->
-            sb.append(" data-lx-fx-glow-color=\"").append(c.svgValue()).append('"'));
         return sb.toString();
     }
 
