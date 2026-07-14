@@ -200,6 +200,19 @@ public enum Effect {
      * element to the inner {@code <svg>}. Without a glyphmap it is inert.
      */
     THREAD,
+    /**
+     * PRECEDENCE: the order-of-operations cascade — hover and the equation EVALUATES in
+     * binding order, sub-expressions lighting inward (the deepest {@code \left..\right}
+     * group first, then the next level out). The pedagogical sequel to {@code thread}:
+     * thread answers "same token," precedence answers "what happens first." Page-side JS
+     * routine reading the {@code data-lx-groupmap} container sidecar (seam lattex/168→172):
+     * paths are addressed by emit order and grouped by evaluation rank, and only
+     * {@code opacity}/{@code transform} on the existing {@code <path>}s change; it adds no
+     * element to the inner {@code <svg>}. FENCED-ONLY v1: rank derives purely from paren
+     * nesting, and the sidecar is whole-expression fail-honest — absent (⇒ inert, a single
+     * static highlight) whenever precedence is ambiguous or there is no nesting to cascade.
+     */
+    PRECEDENCE,
     /** Explicitly no effect. */
     NONE;
 
@@ -242,13 +255,15 @@ public enum Effect {
             case "typeset" -> TYPESET;
             case "constellation" -> CONSTELLATION;
             case "thread" -> THREAD;
+            case "precedence" -> PRECEDENCE;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
                     + "\" (expected boom|pulse|fade|glow|lightning|storm|handscribe"
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
                     + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
-                    + "|shatter|glitch|sparkler|quantum|typeset|constellation|thread|none)");
+                    + "|shatter|glitch|sparkler|quantum|typeset|constellation|thread"
+                    + "|precedence|none)");
         };
     }
 

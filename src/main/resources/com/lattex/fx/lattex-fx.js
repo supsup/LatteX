@@ -1985,6 +1985,87 @@
     svg.addEventListener('mouseleave', restore);
   }
 
+  // PRECEDENCE: the order-of-operations cascade — hover and the equation EVALUATES in
+  // binding order, sub-expressions lighting inward. Identity arrives via the
+  // data-lx-groupmap container sidecar (seam lattex/168→172): runs of
+  // <rank>:<path-index-list>, indices addressing the inner SVG's <path>s in emit order,
+  // rank = evaluation order (0 = first). Renderer-derived + sanitizer-value-constrained;
+  // we still validate the contract grammar here (defense in depth + the drift-guard test
+  // keys on this literal) and REFUSE the whole map on any out-of-bounds index (Lattice's
+  // boundary note: the runtime rejects an invalid semantic member, never a partial). No
+  // map → inert (the whole-expression fail-honest static degrade). Only opacity/transform
+  // on EXISTING paths change; adds no element to the inner <svg>.
+  var GROUPMAP_RE = /^[0-9]+:[0-9]+(,[0-9]+)*(;[0-9]+:[0-9]+(,[0-9]+)*)*$/;
+
+  function parseGroupmap(el, pathCount) {
+    var raw = el.getAttribute('data-lx-groupmap');
+    if (!raw || !GROUPMAP_RE.test(raw)) { return null; }
+    var runs = raw.split(';');
+    var ranks = []; // ascending rank order: ranks[k] = [path indices at that rank]
+    for (var r = 0; r < runs.length; r++) {
+      var pair = runs[r].split(':');
+      var idx = pair[1].split(',').map(Number);
+      for (var i = 0; i < idx.length; i++) {
+        if (idx[i] >= pathCount) { return null; } // out-of-bounds: refuse whole
+      }
+      ranks.push(idx);
+    }
+    if (ranks.length < 2) { return null; } // nothing to sequence: inert
+    return ranks;
+  }
+
+  function precedence(el) {
+    if (el.__lxPrecedence) { return; }
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    var ranks = parseGroupmap(el, paths.length);
+    if (!ranks) { return; } // no/invalid/single-rank groupmap: stays inert (static)
+    el.__lxPrecedence = true;
+
+    // Bold-stroke emphasis in the path's LOCAL (font design) units — never style.transform,
+    // which would clobber the per-glyph placement transform attribute (the thread lesson).
+    function clear() {
+      for (var i = 0; i < paths.length; i++) {
+        paths[i].style.opacity = '';
+        paths[i].style.stroke = '';
+        paths[i].style.strokeWidth = '';
+        paths[i].style.transition = '';
+      }
+    }
+    // Light every path in ranks[0..upto] as "resolved" (bold), the rest receded.
+    function lightUpTo(upto) {
+      var lit = {};
+      for (var k = 0; k <= upto && k < ranks.length; k++) {
+        for (var j = 0; j < ranks[k].length; j++) { lit[ranks[k][j]] = 1; }
+      }
+      for (var i = 0; i < paths.length; i++) {
+        var on = lit[i] === 1;
+        paths[i].style.transition = 'opacity 160ms ease, stroke-width 160ms ease';
+        paths[i].style.opacity = on ? '1' : '0.25';
+        paths[i].style.stroke = on ? 'currentColor' : '';
+        paths[i].style.strokeWidth = on ? '28' : '';
+      }
+    }
+    var timers = [];
+    function cascade() {
+      for (var t = 0; t < timers.length; t++) { clearTimeout(timers[t]); }
+      timers = [];
+      if (reduced) { lightUpTo(0); return; } // reduced-motion: just show the innermost group
+      for (var k = 0; k < ranks.length; k++) {
+        (function (step) {
+          timers.push(setTimeout(function () { lightUpTo(step); }, step * 520));
+        })(k);
+      }
+    }
+    svg.addEventListener('mouseenter', cascade);
+    svg.addEventListener('mouseleave', function () {
+      for (var t = 0; t < timers.length; t++) { clearTimeout(timers[t]); }
+      timers = [];
+      clear();
+    });
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -2011,6 +2092,7 @@
     if (name === 'typeset') { typeset(el); return; }
     if (name === 'constellation') { constellation(el); return; }
     if (name === 'thread') { thread(el); return; } // arming effect: binds per-glyph hover
+    if (name === 'precedence') { precedence(el); return; } // arming: binds the hover cascade
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';

@@ -185,8 +185,11 @@ public final class LayoutEngine {
         int gid = font.glyphId(atom.codePoint());
         GlyphOutline o = font.outline(gid);
         // Carry the source code point so the glyphmap can key token identity to this
-        // glyph's emitted <path> (the data-lx-glyphmap sidecar the `thread` effect reads).
-        PositionedGlyph glyph = new PositionedGlyph(gid, 0.0, 0.0, scale, null, atom.codePoint());
+        // glyph's emitted <path> (the data-lx-glyphmap sidecar the `thread` effect reads),
+        // and the current fence depth so the precedence-cascade groupmap can key this
+        // glyph to its paren-nesting level (the data-lx-groupmap sidecar).
+        PositionedGlyph glyph = new PositionedGlyph(gid, 0.0, 0.0, scale, null,
+            atom.codePoint(), ctx.fenceDepth());
         double width = font.advanceWidth(gid) * scale;
         double height = o.isEmpty() ? 0.0 : Math.max(0.0, o.yMax() * scale);
         double depth = o.isEmpty() ? 0.0 : Math.max(0.0, -o.yMin() * scale);
@@ -1133,11 +1136,16 @@ public final class LayoutEngine {
         // \middle take the pre-existing path below UNCHANGED (golden-stable).
         List<MathNode> flatBody = body instanceof MathNode.MathList(var items)
             ? items : List.of(body);
+        // The body's atoms are one paren-level deeper (precedence-cascade fence depth);
+        // the delimiters themselves are construction glyphs (no rank) so bodyCtx's deeper
+        // depth is inert on them, and insideFence preserves style so scale/axis are
+        // identical — the deepening reaches only the body's source atoms.
+        LayoutContext bodyCtx = ctx.insideFence();
         if (flatBody.stream().anyMatch(n -> n instanceof MathNode.MiddleDelim)) {
-            return fencedWithMiddles(leftDelim, flatBody, rightDelim, ctx, font, axis, scale);
+            return fencedWithMiddles(leftDelim, flatBody, rightDelim, bodyCtx, font, axis, scale);
         }
 
-        Box bodyBox = layoutBox(body, ctx);
+        Box bodyBox = layoutBox(body, bodyCtx);
 
         // Symmetric target about the axis: cover the taller of (body above axis)
         // and (body below axis) on both sides, so the pair is balanced on the axis.

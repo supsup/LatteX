@@ -376,8 +376,20 @@ public final class LatteX {
             // inert (and wasted bytes) otherwise. Value is [0-9a-f:,;] only, so container-safe.
             String glyphmap = fx.effects().containsValue(Effect.THREAD)
                 ? SvgEmitter.glyphmap(layout, font) : "";
-            return openTag(fx, sem, glyphmap) + svg + "</span>";
+            String groupmap = precedenceGroupmap(fx, layout, font);
+            return openTag(fx, sem, glyphmap, groupmap) + svg + "</span>";
         });
+    }
+
+    /**
+     * The {@code data-lx-groupmap} precedence sidecar for {@code fx}, or {@code ""}. Stamped
+     * only when a {@code precedence} effect is present; the emitter is itself
+     * whole-expression fail-honest (empty unless there is genuine fence-nesting variation),
+     * so an ambiguous/flat expression yields {@code ""} and the effect degrades to static.
+     */
+    private static String precedenceGroupmap(EffectSpec fx, Layout layout, SfntFont font) {
+        return fx.effects().containsValue(Effect.PRECEDENCE)
+            ? SvgEmitter.groupmap(layout, font) : "";
     }
 
     /**
@@ -387,7 +399,7 @@ public final class LatteX {
      * duration matches {@code \d{1,5}ms}, the a11y label is HTML-escaped), so no raw
      * author string reaches the attribute unescaped.
      */
-    private static String openTag(EffectSpec fx, Semantics sem, String glyphmap) {
+    private static String openTag(EffectSpec fx, Semantics sem, String glyphmap, String groupmap) {
         StringBuilder sb = new StringBuilder("<span class=\"lx-math\"");
         sem.intentValue().ifPresent(v -> sb.append(" data-lx-intent=\"").append(v).append('"'));
         sem.conceptValue().ifPresent(v -> sb.append(" data-lx-concept=\"").append(v).append('"'));
@@ -397,6 +409,10 @@ public final class LatteX {
         // Token-identity sidecar for the `thread` effect (renderer-derived, [0-9a-f:,;]).
         if (!glyphmap.isEmpty()) {
             sb.append(" data-lx-glyphmap=\"").append(glyphmap).append('"');
+        }
+        // Precedence-group sidecar for the `precedence` effect (renderer-derived, [0-9:,;]).
+        if (!groupmap.isEmpty()) {
+            sb.append(" data-lx-groupmap=\"").append(groupmap).append('"');
         }
         // data.* attributes (keys already identifier-validated) — iterated in sorted
         // key order so the generated HTML is deterministic regardless of the source
@@ -487,7 +503,8 @@ public final class LatteX {
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
             String glyphmap = fx.effects().containsValue(Effect.THREAD)
                 ? SvgEmitter.glyphmap(layout, font) : "";
-            return java.util.Optional.of(new RenderedMath(svg, containerAttrMap(fx, glyphmap)));
+            String groupmap = precedenceGroupmap(fx, layout, font);
+            return java.util.Optional.of(new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap)));
         } catch (RuntimeException e) {
             return java.util.Optional.empty();
         }
@@ -499,7 +516,7 @@ public final class LatteX {
      * form and the string form cannot drift. Insertion order is the historical stamp order
      * (enter/hover/click, duration, glow, glyphmap) so the joined string stays byte-identical.
      */
-    private static Map<String, String> containerAttrMap(EffectSpec fx, String glyphmap) {
+    private static Map<String, String> containerAttrMap(EffectSpec fx, String glyphmap, String groupmap) {
         Map<String, String> attrs = new java.util.LinkedHashMap<>();
         for (Trigger t : Trigger.values()) {
             fx.effect(t).ifPresent(e ->
@@ -509,6 +526,9 @@ public final class LatteX {
         fx.glowColorValue().ifPresent(c -> attrs.put("data-lx-fx-glow-color", c.svgValue()));
         if (glyphmap != null && !glyphmap.isEmpty()) {
             attrs.put("data-lx-glyphmap", glyphmap);
+        }
+        if (groupmap != null && !groupmap.isEmpty()) {
+            attrs.put("data-lx-groupmap", groupmap);
         }
         return java.util.Collections.unmodifiableMap(attrs);
     }
@@ -523,8 +543,11 @@ public final class LatteX {
         // Derived from containerAttrMap — the ONE producer (record seam + string form share
         // it, so they cannot drift). Values are parse-validated; the glow colour's svgValue()
         // is currentColor or a canonical #rrggbb literal — a safe attribute VALUE.
+        // Empty sidecars: fxAttrs stamps only the fx-* / duration / glow attrs; openTag
+        // stamps the glyphmap/groupmap sidecars separately (and the deprecated seam never
+        // carried them).
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, String> e : containerAttrMap(fx, "").entrySet()) {
+        for (Map.Entry<String, String> e : containerAttrMap(fx, "", "").entrySet()) {
             sb.append(' ').append(e.getKey()).append("=\"").append(e.getValue()).append('"');
         }
         return sb.toString();
