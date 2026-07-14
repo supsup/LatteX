@@ -906,6 +906,23 @@ public final class MathParser {
                 if (sized != null) {
                     return sized;
                 }
+                // Equation-numbering control commands are INERT in LatteX (no automatic
+                // equation numbering / cross-referencing). Rather than throw "Unknown
+                // command" — which today breaks otherwise-valid align/gather/multline
+                // blocks that carry them — accept them as no-glyph no-ops. An empty
+                // MathList contributes nothing to layout/SVG/MathML.
+                if (name.equals("nonumber") || name.equals("notag")) {
+                    return new MathList(List.of());
+                }
+                // \label{key}: consume and DISCARD its mandatory brace group (mirrors
+                // the strictness of the \tag reader), then emit nothing.
+                if (name.equals("label")) {
+                    if (peek().kind() != Kind.LBRACE) {
+                        throw new MathSyntaxException("\\label expects a {key} group");
+                    }
+                    parseGroup(); // read and discard the label
+                    return new MathList(List.of());
+                }
                 throw MathSyntaxException.unsupported(
                     "Unknown command: \\" + name + commandSuggestion(name), commandOffset);
             }
