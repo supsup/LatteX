@@ -4,20 +4,27 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## 0.6.0 · 2026-07-14 — the corpus closes: 100% wild coverage
+## 0.7.0 · 2026-07-14 — the corpus closes: 100% wild coverage
 
-**Wild render coverage 98.6% → 100% (484/484).** Every formula in the real-world corpus now renders, regression-locked by the ratchet. The release also carries the L-series fidelity work and the first hermetic JS test rig.
+**Wild render coverage 99.4% → 100% (484/484).** Every formula in the real-world corpus now renders, regression-locked by the ratchet. (Unvendored until consumers bump: Stafficy `/docs` still pins 0.6.0.)
 
 - **`eqnarray` / `alignat` environments** — the classic pre-`amsmath` three-column alignment and the explicit-column `alignat{n}`, both routed through the shared alignment grid. Closed 2 wild rows.
 - **TeX infix fractions — `\over` / `\atop` / `\choose` / `\brace` / `\brack`** — the primitive infix forms (`{n! \over k!}`, `{n \choose k}`) that predate `\frac`, parsed by group-splitting at the infix operator. Closed the LAST wild-corpus gap row.
-- **Numbering no-ops honored — `\nonumber` / `\notag` / `\allowdisplaybreaks`** — display-flow commands that have no meaning in a single-equation SVG render are now validated and consumed instead of erroring, so pasted textbook alignments render as written.
+- **Numbering no-ops honored — `\nonumber` / `\notag` / `\allowdisplaybreaks`** — display-flow commands with no meaning in a single-equation SVG render are validated and consumed instead of erroring, so pasted textbook alignments render as written.
+- **Did-you-mean suggestions** — an unknown command/environment error now carries a Levenshtein-nearest suggestion (`\fraç` → "did you mean \frac?").
+- **Hermetic fx runtime harness** — `lattex-fx.js` lifecycle behavior (interval/listener/overlay teardown, re-entry non-growth, reduced-motion) pinned by 15 GraalJS-driven tests with an instrumented DOM stub — no Node toolchain, test-scope only, zero runtime dependencies held.
+
+---
+
+## 0.6.0 · 2026-07-08 — L-series fidelity (the vendored `/docs` build)
+
+**Wild render coverage 98.6% → 99.4% (481/484).** The build Stafficy `/docs` pins.
+
 - **`\middle`** — mid-expression delimiters that size with the enclosure (`\left\{ x \middle| x > 0 \right\}`), plus evaluation-bar receipts.
 - **Never-throw floor** — `containRender` boundary: any internal failure degrades to a contained error render, never a propagated exception; an additive `cause` constructor keeps diagnostics whole.
 - **Inline baseline metrics** — `InlineSvgResult` carries width/height/depth so an embedding consumer (Stafficy `/docs` inline math) aligns the SVG on the surrounding text baseline exactly.
 - **OpenType math-kern script placement** — super/subscripts follow the font's kern staircases instead of fixed offsets; noticeably better italic attachment.
 - **Sirentide-parity diagnostics + source-mirror drift guard** — the fragment seam consumed by the diagram renderer is pinned by tests on both sides.
-- **Did-you-mean suggestions** — an unknown command/environment error now carries a Levenshtein-nearest suggestion (`\fraç` → "did you mean \frac?").
-- **Hermetic fx runtime harness** — `lattex-fx.js` lifecycle behavior (interval/listener/overlay teardown, re-entry non-growth, reduced-motion) is now pinned by 15 GraalJS-driven tests with an instrumented DOM stub — no Node toolchain, test-scope only, zero runtime dependencies held.
 
 ---
 

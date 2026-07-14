@@ -73,11 +73,11 @@ class ShowcasePageTest {
             "\\operatorname*{arg\\,max}_{\\theta} \\; \\oiint_S \\mathbf{F} \\cdot d\\mathbf{A}"),
         new Item("Bare style switch — \\displaystyle in a group, new in 0.6.0",
             "{\\displaystyle \\sum_{n=1}^{\\infty} \\frac{1}{n^s}} = \\zeta(s)"),
-        new Item("Classic multi-line environments — eqnarray/alignat, new in 0.6.0",
+        new Item("Classic multi-line environments — eqnarray/alignat, new in 0.7.0",
             "\\begin{alignat}{2} 2x + y &= 5, &\\qquad x - y &= 1 \\\\ x &= 2, & y &= 1 \\end{alignat}"),
-        new Item("Numbering no-ops honored — \\nonumber/\\notag, new in 0.6.0",
+        new Item("Numbering no-ops honored — \\nonumber/\\notag, new in 0.7.0",
             "\\begin{align} a &= b + c \\nonumber \\\\ &= d \\notag \\end{align}"),
-        new Item("TeX infix fractions — \\over, \\choose, new in 0.6.0 (the last wild-corpus gap)",
+        new Item("TeX infix fractions — \\over, \\choose, new in 0.7.0 (the last wild-corpus gap)",
             "{n \\choose k} = {n! \\over k!\\,(n-k)!}"));
 
     @Test

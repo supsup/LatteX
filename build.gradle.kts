@@ -14,7 +14,7 @@ group = "com.lattex"
 // Phase-B branch can vendor + verify end-to-end ahead of the official 0.2.0 train
 // (coord 5737: + the DoS parse-guard). The final cut re-stamps this to "0.2.0";
 // downstream keeps 0.1.0 untouched (immutable) beside the rc.
-version = "0.6.0"
+version = "0.7.0"
 
 java {
     toolchain {
