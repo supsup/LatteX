@@ -4,6 +4,26 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased (mainline) — precedence cascade fx
+
+On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
+release bump ships when consumers are ready to re-pin).
+
+- **`precedence` fx effect — the order-of-operations cascade.** Hover a fenced
+  expression and it lights up in *evaluation order*: the innermost group first,
+  then outward, so the animation traces how the equation actually binds. Identity
+  rides a renderer-emitted `data-lx-groupmap` container sidecar (runs of
+  `<rank>:<path-index-list>`, rank 0 = evaluated first), so the runtime never
+  guesses precedence from presentation markup. Only opacity/transform on existing
+  `<path>`s change — no element is added to the inner `<svg>`.
+- **Fenced-only v1, fail-honest.** It reconstructs grouping from delimiters
+  (`\left`…`\right` / paren nesting), not operator precedence, so it never
+  teaches wrong binding. When grouping can't be determined the whole-expression
+  map is withheld and the effect degrades to inert — no partial cascade. Honors
+  `prefers-reduced-motion`.
+
+---
+
 ## 0.7.0 · 2026-07-14 — the corpus closes: 100% wild coverage
 
 **Wild render coverage 99.4% → 100% (484/484).** Every formula in the real-world corpus now renders, regression-locked by the ratchet. (Unvendored until consumers bump: Stafficy `/docs` still pins 0.6.0.)
