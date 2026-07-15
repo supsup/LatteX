@@ -2273,6 +2273,11 @@ html.lx-fx .lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
       }
     }
     svg.addEventListener('mouseenter', cascade);
+    // Handle for autoplay (fx.enter=precedence) and the public LatteXFx.play()
+    // trigger (plan 51051447): the cascade is otherwise reachable ONLY by a real
+    // pointer crossing into the svg, which locks out docs pages, capture tooling,
+    // and touch devices entirely.
+    el.__lxPrecedencePlay = cascade;
     svg.addEventListener('mouseleave', function () {
       for (var t = 0; t < timers.length; t++) { clearTimeout(timers[t]); }
       timers = [];
@@ -2330,6 +2335,9 @@ html.lx-fx .lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
       // enter: play once on load.
       if (enter) {
         play(el, enter, dur);
+        // Arming effects animate nothing at arm time; enter means "play on load",
+        // so fire the cascade once now (reduced-motion is honored inside it).
+        if (enter === 'precedence' && el.__lxPrecedencePlay) { el.__lxPrecedencePlay(); }
         // enter=fade holds opacity:1 only via the animation's `both` fill; a
         // LATER transform effect (hover/click) reassigns el.style.animation and
         // drops that hold, so the element would revert to its base opacity:0 and
@@ -2357,6 +2365,25 @@ html.lx-fx .lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
+  }
+
+  // PUBLIC PAGE API (plan 51051447): one supported programmatic trigger, so pages,
+  // galleries, capture tooling, and touch UIs can play an element's configured
+  // effect without dispatching synthetic pointer events into runtime internals.
+  // Exposes ONLY a function taking a DOM element; reads nothing back; adds no
+  // new capability beyond what a physical hover already triggers.
+  if (typeof window !== 'undefined') {
+    window.LatteXFx = window.LatteXFx || {};
+    window.LatteXFx.play = function (el) {
+      if (!el || !el.getAttribute) { return false; }
+      var name = el.getAttribute('data-lx-fx-hover')
+              || el.getAttribute('data-lx-fx-enter')
+              || el.getAttribute('data-lx-fx-click');
+      if (!name) { return false; }
+      play(el, name, el.getAttribute('data-lx-fx-duration') || '400ms');
+      if (el.__lxPrecedencePlay) { el.__lxPrecedencePlay(); }
+      return true;
+    };
   }
 
   // TEST SEAM (fx-runtime JS harness, plan e09b28be): hand the internals to a
@@ -2568,6 +2595,74 @@ html.lx-fx .lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
             <span class="cap">fx.hover=storm — the screen darkens, bolts light it up</span>
             <code class="src">\lx[fx.hover=storm]{ E = mc^2 }</code>
             <span class="hint">hover — night lightning; the equation heats white-hot</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-hover="precedence" data-lx-groupmap="0:10,11,12,13,14;1:7,8,9,15,16,17;2:4,5,6,18,19,20;3:0,1,2,3,21,22"><svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.52 -59.132 547.4813 88.932" width="547.4813" height="88.932" role="img" aria-label="φ = 1 + open paren 1 + open paren 1 + open paren 1 + ⋯ close paren to the power of - 1 close paren to the power of - 1 close paren to the power of - 1">
+              <g fill="currentColor">
+                <path d="M257 76 L258 167 Q259 256 278 324 Q297 392 333 430 Q370 469 423 469 Q490 469 529 411 Q568 353 568 252 Q568 171 535 117 Q502 63 445 33 Q388 3 317 -7 L332 -192 L258 -217 L235 -214 L251 -9 Q152 4 94 61 Q37 119 37 232 Q37 291 58 346 Q80 402 129 440 Q178 479 258 487 L260 471 L252 403 Q176 391 127 347 Q79 304 79 234 Q79 189 96 158 Q113 128 139 110 Q166 93 197 85 Q229 77 257 76 Z M315 178 L315 78 Q346 80 381 88 Q417 97 448 116 Q480 135 500 168 Q520 202 520 254 Q520 322 493 352 Q466 383 425 383 Q382 383 358 352 Q334 322 324 275 Q315 228 315 178 Z" transform="translate(0 0) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(35.2311 0) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(75.1422 0) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(103.8311 0) scale(0.04 -0.04)"/>
+                <path d="M64 270 Q64 431 89 575 Q114 720 158 843 Q203 966 263 1062 Q324 1159 395 1223 L418 1199 Q330 1095 272 951 Q215 807 187 634 Q159 462 159 270 Q159 79 187 -94 Q215 -267 272 -410 Q330 -554 418 -659 L395 -683 Q324 -618 263 -522 Q203 -426 158 -303 Q114 -180 89 -35 Q64 109 64 270 Z" transform="translate(141.52 0.48) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(159.52 0) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(188.2089 0) scale(0.04 -0.04)"/>
+                <path d="M54 270 Q54 434 92 571 Q131 709 198 814 Q266 919 354 983 L373 958 Q252 842 197 666 Q143 491 143 270 Q143 49 197 -126 Q252 -302 373 -418 L354 -443 Q266 -379 198 -274 Q131 -169 92 -31 Q54 107 54 270 Z" transform="translate(225.8978 0.48) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(242.0578 0) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(270.7467 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(308.4356 0.48) scale(0.04 -0.04)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(322.7156 0) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(351.4044 0) scale(0.04 -0.04)"/>
+                <path d="M219 258 Q219 233 204 216 Q189 199 158 199 Q128 199 114 216 Q100 233 100 258 Q100 284 115 301 Q130 318 159 318 Q189 318 204 300 Q219 282 219 258 Z M536 258 Q536 233 521 216 Q506 199 475 199 Q445 199 431 216 Q417 233 417 258 Q417 284 432 301 Q447 318 476 318 Q506 318 521 300 Q536 282 536 258 Z M853 258 Q853 233 838 216 Q823 199 792 199 Q762 199 748 216 Q734 233 734 258 Q734 284 749 301 Q764 318 793 318 Q823 318 838 300 Q853 282 853 258 Z" transform="translate(389.0933 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(427.2133 0.48) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(441.4933 -19.76) scale(0.028 -0.028)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(450.3133 -19.76) scale(0.028 -0.028)"/>
+                <path d="M350 270 Q350 107 311 -31 Q273 -169 205 -274 Q138 -379 50 -443 L31 -418 Q152 -302 206 -126 Q261 49 261 270 Q261 491 206 666 Q152 842 31 958 L50 983 Q138 919 205 814 Q273 709 311 571 Q350 434 350 270 Z" transform="translate(465.7733 0.48) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(481.9333 -29.64) scale(0.028 -0.028)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(490.7533 -29.64) scale(0.028 -0.028)"/>
+                <path d="M386 270 Q386 109 361 -35 Q336 -180 291 -303 Q247 -426 186 -522 Q126 -618 55 -683 L32 -659 Q120 -554 177 -410 Q235 -267 263 -94 Q291 79 291 270 Q291 462 263 634 Q235 807 177 951 Q120 1095 32 1199 L55 1223 Q126 1159 186 1062 Q247 966 291 843 Q336 720 361 575 Q386 431 386 270 Z" transform="translate(506.2133 0.48) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(524.2133 -39.24) scale(0.028 -0.028)"/>
+                <path d="M426 0 L80 0 L80 28 Q151 28 180 43 Q209 58 209 95 L209 518 Q209 544 202 555 Q195 567 176 567 Q161 567 129 563 Q97 559 74 551 L74 584 L268 639 L297 639 L297 95 Q297 58 327 43 Q357 28 426 28 L426 0 Z" transform="translate(533.0333 -39.24) scale(0.028 -0.028)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.hover=precedence — the golden ratio's continued fraction resolves inside-out; each bracket pair bolds as the value it closes completes</span>
+            <code class="src">\lx[fx.hover=precedence]{ \varphi = 1 + \left( 1 + \left( 1 + \left( 1 + \cdots \right)^{-1} \right)^{-1} \right)^{-1} }</code>
+            <span class="hint">hover — watch evaluation order become visible</span>
+          </figcaption>
+        </figure>
+        <figure class="card">
+          <div class="render">
+            <span class="lx-math" data-lx-fx-enter="precedence" data-lx-groupmap="0:1,2,3,4,5,8,9,10,11,12;1:0,6,7,13,14;2:15,16,17,18"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -40.84 416.1956 61.04" width="416.1956" height="61.04" role="img" aria-label="open paren open paren x + y close paren squared - open paren x - y close paren squared close paren = 4 x y">
+              <g fill="currentColor">
+                <path d="M54 270 Q54 434 92 571 Q131 709 198 814 Q266 919 354 983 L373 958 Q252 842 197 666 Q143 491 143 270 Q143 49 197 -126 Q252 -302 373 -418 L354 -443 Q266 -379 198 -274 Q131 -169 92 -31 Q54 107 54 270 Z" transform="translate(0 0.48) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(16.16 0.48) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(30.44 0) scale(0.04 -0.04)"/>
+                <path d="M658 225 L396 225 L396 -40 L324 -40 L324 225 L62 225 L62 293 L324 293 L324 558 L396 558 L396 293 L658 293 L658 225 Z" transform="translate(58.4889 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(96.1778 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(115.4978 0.48) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(129.7778 -19.76) scale(0.028 -0.028)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(154.1267 0) scale(0.04 -0.04)"/>
+                <path d="M45 270 Q45 437 117 555 Q190 673 311 736 L327 710 Q218 636 172 529 Q127 423 127 270 Q127 117 172 10 Q218 -96 327 -170 L311 -196 Q190 -133 117 -15 Q45 103 45 270 Z" transform="translate(175.6156 0.48) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(189.8956 0) scale(0.04 -0.04)"/>
+                <path d="M270 218 L45 218 L45 283 L270 283 L270 218 Z" transform="translate(217.9444 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(239.4333 0) scale(0.04 -0.04)"/>
+                <path d="M312 270 Q312 103 239 -15 Q167 -133 46 -196 L30 -170 Q140 -96 185 10 Q230 117 230 270 Q230 423 185 529 Q140 636 30 710 L46 736 Q167 673 239 555 Q312 437 312 270 Z" transform="translate(258.7533 0.48) scale(0.04 -0.04)"/>
+                <path d="M464 160 L432 0 L38 0 L38 34 L190 186 Q240 237 273 278 Q306 320 322 362 Q339 404 339 456 Q339 512 305 545 Q272 579 214 579 Q165 579 130 558 Q96 537 68 481 L44 491 Q67 564 117 604 Q167 644 240 644 Q297 644 340 622 Q383 601 407 562 Q432 524 432 471 Q432 427 413 386 Q395 346 358 303 Q322 260 269 206 L137 81 L137 76 L207 79 L346 79 Q386 79 402 97 Q418 115 435 160 L464 160 Z" transform="translate(273.0333 -19.76) scale(0.028 -0.028)"/>
+                <path d="M350 270 Q350 107 311 -31 Q273 -169 205 -274 Q138 -379 50 -443 L31 -418 Q152 -302 206 -126 Q261 49 261 270 Q261 491 206 666 Q152 842 31 958 L50 983 Q138 919 205 814 Q273 709 311 571 Q350 434 350 270 Z" transform="translate(288.4933 0.48) scale(0.04 -0.04)"/>
+                <path d="M658 327 L62 327 L62 395 L658 395 L658 327 Z M658 123 L62 123 L62 190 L658 190 L658 123 Z" transform="translate(315.7644 0) scale(0.04 -0.04)"/>
+                <path d="M481 158 L379 158 L379 0 L290 0 L290 158 L13 158 L13 221 L318 645 L379 645 L379 227 L481 227 L481 158 Z M290 227 L290 536 L286 536 L68 231 L68 227 L290 227 Z" transform="translate(355.6756 0) scale(0.04 -0.04)"/>
+                <path d="M482 0 L273 0 L273 29 Q299 29 309 33 Q320 38 320 51 Q320 61 313 72 L250 169 L230 204 L226 204 L144 86 Q137 74 128 62 Q120 50 120 44 Q120 36 130 32 Q140 29 165 29 L165 0 L-2 0 L-2 29 Q24 29 41 39 Q58 50 83 79 L203 235 L99 384 Q82 409 70 422 Q58 435 45 439 Q32 444 11 444 L11 473 L226 473 L226 445 Q178 445 178 422 Q178 410 191 390 Q205 371 230 329 L254 285 L258 285 L305 353 Q325 381 333 395 Q341 409 341 421 Q341 432 332 438 Q324 445 300 445 L300 473 L465 473 L465 444 Q440 444 421 431 Q402 419 385 397 L279 261 L402 87 Q423 57 438 43 Q454 29 482 29 L482 0 Z" transform="translate(375.4756 0) scale(0.04 -0.04)"/>
+                <path d="M493 473 L493 444 Q463 444 449 430 Q435 417 424 388 L268 -22 Q239 -98 211 -145 Q184 -192 152 -213 Q120 -235 77 -235 Q46 -235 26 -223 Q6 -211 6 -183 Q6 -160 19 -150 Q33 -140 52 -140 Q78 -140 98 -151 Q119 -162 129 -162 Q143 -162 159 -140 Q175 -119 190 -89 Q206 -59 215 -32 Q225 -6 225 5 Q225 15 214 41 Q204 67 195 87 L48 408 Q41 425 28 434 Q15 444 -12 444 L-12 473 L202 473 L202 443 Q168 443 156 436 Q145 430 145 417 Q145 407 150 395 Q155 384 159 373 L257 153 L270 104 L277 104 L374 394 Q376 399 377 406 Q379 414 379 419 Q379 434 363 439 Q348 444 323 444 L323 473 L493 473 Z" transform="translate(394.6356 0) scale(0.04 -0.04)"/>
+              </g>
+            </svg></span>
+          </div>
+          <figcaption>
+            <span class="cap">fx.enter=precedence — autoplay on load: the two same-depth groups light TOGETHER, then the shell, then the identity</span>
+            <code class="src">\lx[fx.enter=precedence]{ \left( \left( x+y \right)^2 - \left( x-y \right)^2 \right) = 4xy }</code>
+            <span class="hint">load — parallel groups, one heartbeat</span>
           </figcaption>
         </figure>
         <figure class="card">
