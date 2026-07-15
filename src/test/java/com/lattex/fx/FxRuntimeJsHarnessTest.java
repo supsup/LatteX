@@ -74,6 +74,27 @@ class FxRuntimeJsHarnessTest {
         return context.eval(Source.create("js", script));
     }
 
+    // ---- pin 0: the public page API (plan 51051447) -----------------------------
+
+    @Test
+    void publicLatteXFxPlayIsExportedAndFailsClosedOnNonElements() {
+        // The ONE supported programmatic trigger: pages/galleries/capture tooling and
+        // touch UIs play an element's configured effect without synthetic pointer
+        // events into runtime internals. Exported only when window exists; refuses
+        // anything that is not an fx-configured element.
+        Value play = context.eval(Source.create("js",
+            "window.LatteXFx && window.LatteXFx.play"));
+        assertNotNull(play, "window.LatteXFx.play must be exported");
+        assertTrue(play.canExecute(), "play is a function");
+        assertFalse(context.eval(Source.create("js",
+            "window.LatteXFx.play(null)")).asBoolean(), "null refuses");
+        assertFalse(context.eval(Source.create("js",
+            "window.LatteXFx.play({})")).asBoolean(), "non-element refuses");
+        assertFalse(context.eval(Source.create("js",
+            "window.LatteXFx.play({getAttribute: function () { return null; }})")).asBoolean(),
+            "element with no fx attributes refuses");
+    }
+
     // ---- pin 1: placement compose + transform-origin ---------------------------
 
     @Test

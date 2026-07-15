@@ -34,8 +34,9 @@ class GroupmapTest {
     @Test
     void oneFenceLevelRanksTheInnerGroupBeforeTheOuter() {
         // \left(a + b\right) + c : a,+,b sit inside the fence (depth 1 → rank 0); the
-        // outer + and c sit outside (depth 0 → rank 1). The delimiters are construction
-        // glyphs (NO_RANK) and never appear. Grammar-valid, two distinct ranks.
+        // outer + and c sit outside (depth 0 → rank 1). Since the delimiter-lighting
+        // change (plan 51051447) the fence pair CARRIES the body depth and appears in
+        // rank 0's run — pinned exactly by fenceDelimitersLightWithTheGroupTheyClose.
         String gm = groupmapOf("\\left(a + b\\right) + c");
         assertTrue(gm.matches("^[0-9]+:[0-9]+(,[0-9]+)*(;[0-9]+:[0-9]+(,[0-9]+)*)*$"),
             "matches the pinned contract grammar: " + gm);
@@ -131,6 +132,25 @@ class GroupmapTest {
         // if \sin were rank-less the run would be missing them.
         int rank0Count = gm.substring(2, gm.indexOf(';')).split(",").length;
         assertTrue(rank0Count >= 5, "the \\sin word's glyphs are in rank 0, not dropped: " + gm);
+    }
+
+    @Test
+    void fenceDelimitersLightWithTheGroupTheyClose() {
+        // Charles's cascade design (2026-07-14, plan 51051447): a \left..\right pair is
+        // the boundary of the value being completed, so the brackets carry the BODY's
+        // depth and bold exactly when their group resolves. Emit order for
+        // \left(a + b\right) + c is: ( a + b ) + c → the delimiters are indices 0 and 4,
+        // both in rank 0 with the body; the outer + c are rank 1.
+        assertEquals("0:0,1,2,3,4;1:5,6", groupmapOf("\\left(a + b\\right) + c"));
+    }
+
+    @Test
+    void aLargeOperatorInsideAFenceLightsWithItsGroup() {
+        // The lattex/180-filmed residual (follow-up taken at 182): the big-op glyph used
+        // the rankless ctor, so \sum dimmed as unresolved forever while its own operand
+        // lit. Emit order for \left(\sum x + y\right) + d: ( Σ x + y ) + d — the op
+        // glyph (index 1) and both delimiters ride rank 0; + d are rank 1.
+        assertEquals("0:0,1,2,3,4,5;1:6,7", groupmapOf("\\left(\\sum x + y\\right) + d"));
     }
 
     @Test

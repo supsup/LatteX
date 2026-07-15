@@ -33,7 +33,9 @@ class BrewShotFxGifTest {
     private static final List<String[]> SHOWPIECES = List.of(
         new String[] {"glitch", "hover"},
         new String[] {"shatter", "click"},
-        new String[] {"wobble", "enter"}   // rides setPathDelta: the compose path on film
+        new String[] {"wobble", "enter"},   // rides setPathDelta: the compose path on film
+        new String[] {"precedence", "play"}, // fired via the PUBLIC LatteXFx.play trigger (plan 51051447)
+        new String[] {"precedence", "enter"} // AUTOPLAY pin: reload liveness reds if the enter-autoplay line is deleted
     );
 
     private static Path examples() {
@@ -64,6 +66,9 @@ class BrewShotFxGifTest {
     private void recordOne(BrewShot chrome, String pageUrl, String effect, String trigger)
             throws Exception {
         // Locate the card, scroll it into view, return its page-coordinate rect.
+        // 'play' showpieces are authored as hover effects but FIRED via the public
+        // programmatic trigger — locate by the hover attribute.
+        String locateTrig = trigger.equals("play") ? "hover" : trigger;
         Object rect = chrome.eval("""
             (function () {
               var el = document.querySelector('[data-lx-fx-%TRIG%="%FX%"]');
@@ -78,7 +83,7 @@ class BrewShotFxGifTest {
                        y: r.top + window.pageYOffset - m,
                        w: r.width + 2 * m, h: r.height + 2 * m };
             })()
-            """.replace("%TRIG%", trigger).replace("%FX%", effect));
+            """.replace("%TRIG%", locateTrig).replace("%FX%", effect));
         assertTrue(rect instanceof Map, "no card found for fx." + trigger + "=" + effect);
         double x = (Double) MiniJson.get(rect, "x"), y = (Double) MiniJson.get(rect, "y");
         double w = (Double) MiniJson.get(rect, "w"), h = (Double) MiniJson.get(rect, "h");
@@ -93,16 +98,18 @@ class BrewShotFxGifTest {
             chrome.open(pageUrl);
             chrome.settle(60); // catch the animation young
         } else {
-            String fire = trigger.equals("hover")
-                ? "el.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true}))"
-                : "el.click()";
+            String fire = switch (trigger) {
+                case "hover" -> "el.dispatchEvent(new MouseEvent('mouseenter', {bubbles: true}))";
+                case "play" -> "window.LatteXFx.play(el)"; // the public trigger, end-to-end
+                default -> "el.click()";
+            };
             chrome.eval("""
                 (function () {
                   var el = document.querySelector('[data-lx-fx-%TRIG%="%FX%"]');
                   %FIRE%;
                   return true;
                 })()
-                """.replace("%TRIG%", trigger).replace("%FX%", effect)
+                """.replace("%TRIG%", locateTrig).replace("%FX%", effect)
                    .replace("%FIRE%", fire));
         }
 
@@ -119,6 +126,25 @@ class BrewShotFxGifTest {
         }
         assertTrue(anyChange, "fx." + trigger + "=" + effect
             + " produced identical frames — trigger dead or animation inert");
+
+        // Any-pixel-change liveness is FALSE-GREEN for enter=precedence (page-load
+        // rendering noise changes pixels even with autoplay deleted — survived-mutant
+        // lesson, executed 2026-07-14). Pin the cascade's own signature instead: the
+        // resolved paths carry inline stroke-width, which ONLY lightUpTo() writes.
+        if (effect.equals("precedence")) {
+            Object lit = chrome.eval("""
+                (function () {
+                  var svg = document.querySelector('[data-lx-fx-%TRIG%="precedence"] svg');
+                  if (!svg) { return 'NO-SVG'; }
+                  var ps = svg.querySelectorAll('path');
+                  for (var i = 0; i < ps.length; i++) {
+                    if (ps[i].style.strokeWidth) { return true; }
+                  }
+                  return false;
+                })()""".replace("%TRIG%", locateTrig));
+            assertTrue(Boolean.TRUE.equals(lit), "fx." + trigger + "=precedence: no path "
+                + "carries the cascade stroke-width signature — the cascade never ran");
+        }
 
         Path out = examples().resolve("fx-" + trigger + "-" + effect + ".gif");
         BrewShot.gif(frames, FRAME_DELAY_MS, out);

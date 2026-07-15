@@ -856,7 +856,10 @@ public final class LayoutEngine {
         double halfInk = (o.yMax() - o.yMin()) / 2.0 * scale;
         double opBaseline = (o.yMax() + o.yMin()) / 2.0 * scale - axis; // shift centre onto axis
         Box opBox = new Box(
-            List.of(new PositionedGlyph(opGid, 0.0, opBaseline, scale)),
+            // Carry the enclosing fence depth: a \sum/\int/\prod inside a fence is an
+            // author atom and must light with its group, not dim as unresolved forever
+            // (the lattex/180-filmed residual of the F2 class; follow-up taken at 182).
+            List.of(new PositionedGlyph(opGid, 0.0, opBaseline, scale, ctx.fenceDepth())),
             List.of(), opWidth, halfInk + axis, halfInk - axis);
 
         // Limit placement: above/below in display style (except integrals, which
@@ -1137,9 +1140,10 @@ public final class LayoutEngine {
         List<MathNode> flatBody = body instanceof MathNode.MathList(var items)
             ? items : List.of(body);
         // The body's atoms are one paren-level deeper (precedence-cascade fence depth);
-        // the delimiters themselves are construction glyphs (no rank) so bodyCtx's deeper
-        // depth is inert on them, and insideFence preserves style so scale/axis are
-        // identical — the deepening reaches only the body's source atoms.
+        // the fence delimiters CARRY that same body depth so the pair lights exactly when
+        // the group it closes completes (Charles's cascade design, 2026-07-14 — brackets
+        // bolding read as "this value is finished"). insideFence preserves style so
+        // scale/axis are identical — the deepening carries no metric change.
         LayoutContext bodyCtx = ctx.insideFence();
         if (flatBody.stream().anyMatch(n -> n instanceof MathNode.MiddleDelim)) {
             return fencedWithMiddles(leftDelim, flatBody, rightDelim, bodyCtx, font, axis, scale);
@@ -1160,7 +1164,8 @@ public final class LayoutEngine {
         double depth = bodyBox.depth();
 
         if (leftDelim != MathNode.Fenced.NULL_DELIMITER) {
-            double[] hd = placeDelimiter(font, leftDelim, requiredSpan, axis, scale, penX, glyphs);
+            double[] hd = placeDelimiter(font, leftDelim, requiredSpan, axis, scale, penX, glyphs,
+                bodyCtx.fenceDepth());
             penX = hd[0];
             height = Math.max(height, hd[1]);
             depth = Math.max(depth, hd[2]);
@@ -1168,7 +1173,8 @@ public final class LayoutEngine {
         bodyBox.drawInto(glyphs, rules, penX, 0.0);
         penX += bodyBox.width();
         if (rightDelim != MathNode.Fenced.NULL_DELIMITER) {
-            double[] hd = placeDelimiter(font, rightDelim, requiredSpan, axis, scale, penX, glyphs);
+            double[] hd = placeDelimiter(font, rightDelim, requiredSpan, axis, scale, penX, glyphs,
+                bodyCtx.fenceDepth());
             penX = hd[0];
             height = Math.max(height, hd[1]);
             depth = Math.max(depth, hd[2]);
@@ -1216,7 +1222,8 @@ public final class LayoutEngine {
         List<Rule> rules = new ArrayList<>();
         double penX = 0.0;
         if (leftDelim != MathNode.Fenced.NULL_DELIMITER) {
-            double[] hd = placeDelimiter(font, leftDelim, requiredSpan, axis, scale, penX, glyphs);
+            double[] hd = placeDelimiter(font, leftDelim, requiredSpan, axis, scale, penX, glyphs,
+                ctx.fenceDepth());
             penX = hd[0];
             height = Math.max(height, hd[1]);
             depth = Math.max(depth, hd[2]);
@@ -1226,14 +1233,16 @@ public final class LayoutEngine {
             seg.drawInto(glyphs, rules, penX, 0.0);
             penX += seg.width();
             if (i < middles.size()) {
-                double[] hd = placeDelimiter(font, middles.get(i), requiredSpan, axis, scale, penX, glyphs);
+                double[] hd = placeDelimiter(font, middles.get(i), requiredSpan, axis, scale, penX,
+                    glyphs, ctx.fenceDepth());
                 penX = hd[0];
                 height = Math.max(height, hd[1]);
                 depth = Math.max(depth, hd[2]);
             }
         }
         if (rightDelim != MathNode.Fenced.NULL_DELIMITER) {
-            double[] hd = placeDelimiter(font, rightDelim, requiredSpan, axis, scale, penX, glyphs);
+            double[] hd = placeDelimiter(font, rightDelim, requiredSpan, axis, scale, penX, glyphs,
+                ctx.fenceDepth());
             penX = hd[0];
             height = Math.max(height, hd[1]);
             depth = Math.max(depth, hd[2]);
@@ -1271,9 +1280,18 @@ public final class LayoutEngine {
     private static double[] placeDelimiter(SfntFont font, int delimCp, double requiredSpan,
                                            double axis, double scale, double x,
                                            List<PositionedGlyph> glyphs) {
+        return placeDelimiter(font, delimCp, requiredSpan, axis, scale, x, glyphs,
+            PositionedGlyph.NO_RANK);
+    }
+
+    /// Depth-carrying overload — see StretchyGlyph.placeInto: only \left..\right pairs
+    /// (and their \middle segments) pass a real depth; every other caller stays NO_RANK.
+    private static double[] placeDelimiter(SfntFont font, int delimCp, double requiredSpan,
+                                           double axis, double scale, double x,
+                                           List<PositionedGlyph> glyphs, int fenceDepth) {
         StretchyGlyph d = stretchVertical(font, font.glyphId(delimCp), requiredSpan, scale);
         double inkTop = -axis - d.span() / 2.0; // centre the ink on the axis
-        d.placeInto(glyphs, x, inkTop);
+        d.placeInto(glyphs, x, inkTop, fenceDepth);
         return new double[] {x + d.width(), axis + d.span() / 2.0, d.span() / 2.0 - axis};
     }
 
@@ -1719,10 +1737,19 @@ public final class LayoutEngine {
      */
     private record StretchyGlyph(List<StretchyPiece> pieces, double width, double span) {
         void placeInto(List<PositionedGlyph> out, double x, double inkTopY) {
+            placeInto(out, x, inkTopY, PositionedGlyph.NO_RANK);
+        }
+
+        /// Depth-carrying overload: \left..\right fence delimiters pass their BODY's
+        /// fence depth so the pair lights with the group it closes in the precedence
+        /// cascade (Charles, 2026-07-14: the brackets bolding marks "this value is now
+        /// complete"). Construction uses (radical surds, matrix brackets, \big sizers)
+        /// keep NO_RANK via the 3-arg form — they delimit typography, not precedence.
+        void placeInto(List<PositionedGlyph> out, double x, double inkTopY, int fenceDepth) {
             for (StretchyPiece p : pieces) {
                 // inkTop = baselineY - scale*yMax  ⇒  baselineY = inkTop + scale*yMax.
                 double baselineY = inkTopY + p.topOffset() + p.scale() * p.yMax();
-                out.add(new PositionedGlyph(p.gid(), x, baselineY, p.scale()));
+                out.add(new PositionedGlyph(p.gid(), x, baselineY, p.scale(), fenceDepth));
             }
         }
     }

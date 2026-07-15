@@ -2067,6 +2067,11 @@
       }
     }
     svg.addEventListener('mouseenter', cascade);
+    // Handle for autoplay (fx.enter=precedence) and the public LatteXFx.play()
+    // trigger (plan 51051447): the cascade is otherwise reachable ONLY by a real
+    // pointer crossing into the svg, which locks out docs pages, capture tooling,
+    // and touch devices entirely.
+    el.__lxPrecedencePlay = cascade;
     svg.addEventListener('mouseleave', function () {
       for (var t = 0; t < timers.length; t++) { clearTimeout(timers[t]); }
       timers = [];
@@ -2124,6 +2129,9 @@
       // enter: play once on load.
       if (enter) {
         play(el, enter, dur);
+        // Arming effects animate nothing at arm time; enter means "play on load",
+        // so fire the cascade once now (reduced-motion is honored inside it).
+        if (enter === 'precedence' && el.__lxPrecedencePlay) { el.__lxPrecedencePlay(); }
         // enter=fade holds opacity:1 only via the animation's `both` fill; a
         // LATER transform effect (hover/click) reassigns el.style.animation and
         // drops that hold, so the element would revert to its base opacity:0 and
@@ -2151,6 +2159,25 @@
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
+  }
+
+  // PUBLIC PAGE API (plan 51051447): one supported programmatic trigger, so pages,
+  // galleries, capture tooling, and touch UIs can play an element's configured
+  // effect without dispatching synthetic pointer events into runtime internals.
+  // Exposes ONLY a function taking a DOM element; reads nothing back; adds no
+  // new capability beyond what a physical hover already triggers.
+  if (typeof window !== 'undefined') {
+    window.LatteXFx = window.LatteXFx || {};
+    window.LatteXFx.play = function (el) {
+      if (!el || !el.getAttribute) { return false; }
+      var name = el.getAttribute('data-lx-fx-hover')
+              || el.getAttribute('data-lx-fx-enter')
+              || el.getAttribute('data-lx-fx-click');
+      if (!name) { return false; }
+      play(el, name, el.getAttribute('data-lx-fx-duration') || '400ms');
+      if (el.__lxPrecedencePlay) { el.__lxPrecedencePlay(); }
+      return true;
+    };
   }
 
   // TEST SEAM (fx-runtime JS harness, plan e09b28be): hand the internals to a

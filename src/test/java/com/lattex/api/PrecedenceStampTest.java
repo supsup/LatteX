@@ -42,6 +42,18 @@ class PrecedenceStampTest {
             "record seam stamps the same groupmap as the string seam");
     }
 
+    @Test
+    void enterTriggeredPrecedenceStampsTheSameGroupmap() {
+        // fx.enter=precedence (autoplay, plan 51051447): the stamp gate is
+        // trigger-agnostic (containsValue(PRECEDENCE)), so the enter variant must carry
+        // the identical sidecar the hover variant gets — the runtime's autoplay path
+        // reads the same attribute.
+        String hover = groupmapAttr("\\lx[fx.hover=precedence]{\\left(a + b\\right) + c}");
+        String enter = groupmapAttr("\\lx[fx.enter=precedence]{\\left(a + b\\right) + c}");
+        assertTrue(enter != null && enter.equals(hover),
+            "enter and hover stamp identically: enter=" + enter + " hover=" + hover);
+    }
+
     // -- MUST-DEGRADE: absence assertions (the safety load) -----------------------------
 
     @Test
