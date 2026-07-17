@@ -1131,7 +1131,12 @@ public final class LayoutEngine {
         double natural = font.advanceWidth(font.glyphId(arrowCp)) * scale;
         double pad = XARROW_SIDE_PAD_MU * ctx.mu();
         double target = Math.max(natural, labelWidth) + 2.0 * pad;
-        Box arrowBox = horizontalStretchBox(ctx, arrowCp, target);
+        // \xlongequal is a DOUBLE line: U+003D has no horizontal MATH construction,
+        // so draw two in-alphabet rules spanning the target width (like a CD @=),
+        // never the last-resort uniform glyph scale that would thicken a single bar.
+        Box arrowBox = xa.kind() == MathNode.XArrowKind.LONGEQUAL
+            ? doubleRuleBox(ctx, target)
+            : horizontalStretchBox(ctx, arrowCp, target);
 
         double width = Math.max(arrowBox.width(), labelWidth);
 
@@ -1154,6 +1159,23 @@ public final class LayoutEngine {
         }
 
         return new Box(glyphs, rules, width, Math.max(0.0, -top), Math.max(0.0, bottom));
+    }
+
+    /**
+     * A horizontal double rule ({@code =}) of the given width, centred on the math
+     * axis — the extensible shaft for {@code \xlongequal}. Two {@code <rect>}s
+     * (in-alphabet); U+003D has no horizontal MATH construction to stretch.
+     */
+    private static Box doubleRuleBox(LayoutContext ctx, double width) {
+        double axis = ctx.constants().axisHeight() * ctx.scale();
+        double t = ctx.constants().fractionRuleThickness() * ctx.scale();
+        double sep = 1.6 * t;
+        List<Rule> rules = new ArrayList<>();
+        rules.add(new Rule(0, -axis - sep / 2 - t, width, t));   // upper bar
+        rules.add(new Rule(0, -axis + sep / 2, width, t));       // lower bar
+        double height = axis + sep / 2 + t;
+        double depth = Math.max(0.0, -axis + sep / 2 + t);
+        return new Box(List.of(), rules, width, height, depth);
     }
 
     // ------------------------------------------------------------------

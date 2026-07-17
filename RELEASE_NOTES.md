@@ -4,11 +4,12 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, + precedence cascade fx
+## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, `\xlongequal`, + precedence cascade fx
 
 On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
 release bump ships when consumers are ready to re-pin).
 
+<<<<<<< HEAD
 - **`\begin{CD}` — amscd commutative diagrams.** The `@`-connector grammar
   (`@>label>>` / `@<<<` / `@VVV` / `@AAA` right/left/down/up, plus `@=` `@|` `@.`)
   renders as a grid whose object cells are ordinary math and whose connectors
@@ -24,6 +25,11 @@ release bump ships when consumers are ready to re-pin).
   padding; the frame is four `<rect>`s (in-alphabet), the box behaves as an
   ordinary atom (sits correctly inline, e.g. `E = \boxed{mc^2}`), and the frame
   sizes to the body (a boxed fraction grows the frame to the taller content).
+- **`\xlongequal` — the labelled extensible double-equals.** `A \xlongequal{\text{def}} B`
+  draws a stretchable double line (`=`) with its label(s) above/below, the
+  definitional-equals sibling of `\xrightarrow`. U+003D has no horizontal MATH
+  construction, so the shaft is two in-alphabet `<rect>`s that stretch to the label
+  width (never a thickened single bar); it composes with the other `\x…` arrows.
 
 - **`precedence` fx effect — the order-of-operations cascade.** Hover a fenced
   expression and it lights up in *evaluation order*: the innermost group first,

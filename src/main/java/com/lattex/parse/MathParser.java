@@ -456,6 +456,7 @@ public final class MathParser {
             case "xhookrightarrow" -> MathNode.XArrowKind.HOOK_RIGHT;
             case "xhookleftarrow" -> MathNode.XArrowKind.HOOK_LEFT;
             case "xrightleftharpoons" -> MathNode.XArrowKind.RIGHTLEFTHARPOONS;
+            case "xlongequal" -> MathNode.XArrowKind.LONGEQUAL;
             default -> throw new IllegalStateException("not an extensible arrow: " + name);
         };
     }
@@ -869,7 +870,8 @@ public final class MathParser {
             }
             case "xrightarrow", "xleftarrow", "xleftrightarrow",
                  "xRightarrow", "xLeftarrow", "xLeftrightarrow",
-                 "xmapsto", "xhookrightarrow", "xhookleftarrow", "xrightleftharpoons" -> {
+                 "xmapsto", "xhookrightarrow", "xhookleftarrow", "xrightleftharpoons",
+                 "xlongequal" -> {
                 // amsmath's extensible labelled arrows (the whole \x... family): an
                 // optional [below] label FIRST, then the required {above} label. The '['
                 // is only taken as the optional argument when a matching ']' closes it
@@ -1438,7 +1440,7 @@ public final class MathParser {
         "limits", "nolimits", "begin", "end",
         "xrightarrow", "xleftarrow", "xleftrightarrow", "xRightarrow", "xLeftarrow",
         "xLeftrightarrow", "xmapsto", "xhookrightarrow", "xhookleftarrow",
-        "xrightleftharpoons");
+        "xrightleftharpoons", "xlongequal");
 
     /**
      * A {@code " — did you mean \frac?"} suffix for an unknown command {@code name}

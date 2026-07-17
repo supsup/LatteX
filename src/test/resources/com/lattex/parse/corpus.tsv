@@ -184,3 +184,6 @@ PARSES-NOW	boxed	\boxed{x+1}	framed sub-formula — \boxed rule rectangle (amsma
 PARSES-NOW	boxed	\boxed{x^* = f(x^*)}	boxed fixed-point identity
 PARSES-NOW	boxed	\fbox{a+b}	\fbox accepted as the math-mode frame analogue
 PARSES-NOW	boxed	\boxed{\frac{a}{b}}	boxed fraction — frame sizes to the taller body
+# ==== extensible arrows (amsmath \x...) ============================
+PARSES-NOW	xarrow	A \xlongequal{\text{def}} B	labelled extensible double-equals — \xlongequal (two in-alphabet rules)
+PARSES-NOW	xarrow	\xlongequal[y]{x}	\xlongequal with above + below labels
