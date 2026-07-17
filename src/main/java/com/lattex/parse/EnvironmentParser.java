@@ -45,6 +45,12 @@ final class EnvironmentParser {
      */
     static MathNode parseEnvironment(MathParser parser) {
         String env = readBraceName(parser, "\\begin");
+        if (env.equals("CD")) {
+            // amscd commutative diagrams have their own @-connector grammar (no & / column
+            // spec), so they branch out before the ENVIRONMENTS spec lookup, exactly as the
+            // eqnarray special-case does inside the spec path.
+            return parseCd(parser);
+        }
         EnvSpec spec = ENVIRONMENTS.get(env);
         if (spec == null) {
             String suggestion = FuzzyMatch.nearest(env, ENVIRONMENTS.keySet())
@@ -139,6 +145,213 @@ final class EnvironmentParser {
         }
 
         return buildMatrix(env, spec, specAligns, specVlines, rawRows, hlines);
+    }
+
+    // ------------------------------------------------------------------
+    // amscd commutative diagrams — \begin{CD} … \end{CD}
+    // ------------------------------------------------------------------
+
+    /** One connector spec after {@code @}: the kind and its (already-parsed) labels. */
+    private record CdConnector(MathNode.CdArrowKind kind, MathNode labelA, MathNode labelB) {
+    }
+
+    /** A parsed CD row: its cells in author order, and whether any cell is an object. */
+    private record CdRow(List<Object> items, boolean hasObject) {
+    }
+
+    /**
+     * Parses {@code \begin{CD} … \end{CD}} into a {@link Matrix} with
+     * {@link MatrixKind#CD}. The current token is just past {@code \begin{CD}}.
+     *
+     * <p>amscd has no {@code &} and no column spec: a row is a run of object cells
+     * and {@code @}-connectors. An OBJECT row alternates object / horizontal-connector
+     * (placed at columns 0,1,2,…); a CONNECTOR row is only vertical connectors,
+     * placed at the even (object) columns 0,2,4,… with the odd columns left empty so
+     * they line up under the objects above and below. Fails loud (a positioned
+     * {@link MathSyntaxException}) on a malformed {@code @}-construct or a missing
+     * {@code \end{CD}}; never throws anything else.
+     */
+    private static MathNode parseCd(MathParser parser) {
+        List<CdRow> rows = new ArrayList<>();
+        List<Object> rowItems = new ArrayList<>();
+        List<MathNode> objectCell = new ArrayList<>();
+        boolean rowHasObject = false;
+
+        while (true) {
+            Token t = parser.peek();
+            if (t.kind() == Kind.EOF) {
+                throw new MathSyntaxException("Unterminated \\begin{CD}: missing \\end{CD}");
+            }
+            if (parser.isCommand(t, "end")) {
+                parser.next();
+                String endEnv = readBraceName(parser, "\\end");
+                if (!endEnv.equals("CD")) {
+                    throw new MathSyntaxException("\\begin{CD} closed by \\end{" + endEnv + "}");
+                }
+                break;
+            }
+            if (parser.isCommand(t, "\\") || parser.isCommand(t, "cr")) {
+                parser.next();
+                skipRowBreakOptions(parser);
+                if (!objectCell.isEmpty()) {
+                    rowItems.add(MathParser.wrap(objectCell));
+                    objectCell = new ArrayList<>();
+                    rowHasObject = true;
+                }
+                rows.add(new CdRow(rowItems, rowHasObject));
+                rowItems = new ArrayList<>();
+                rowHasObject = false;
+                continue;
+            }
+            if (t.kind() == Kind.CHAR && t.codePoint() == '@') {
+                // An object cell ends where the connector begins.
+                if (!objectCell.isEmpty()) {
+                    rowItems.add(MathParser.wrap(objectCell));
+                    objectCell = new ArrayList<>();
+                    rowHasObject = true;
+                }
+                rowItems.add(readCdConnector(parser));
+                continue;
+            }
+            objectCell.add(parser.parseComponent());
+        }
+        // Finalize a trailing row (content with no closing \\).
+        if (!objectCell.isEmpty()) {
+            rowItems.add(MathParser.wrap(objectCell));
+            rowHasObject = true;
+        }
+        if (!rowItems.isEmpty()) {
+            rows.add(new CdRow(rowItems, rowHasObject));
+        }
+        if (rows.isEmpty()) {
+            throw new MathSyntaxException("empty \\begin{CD} environment");
+        }
+        return buildCdMatrix(rows);
+    }
+
+    /**
+     * Reads one {@code @}-connector, the cursor sitting on the {@code @}. Consumes
+     * the {@code @}, the type char, and (for arrows) the two label slots delimited by
+     * repeats of the type char: {@code @D <labelA> D <labelB> D} where {@code D} is
+     * {@code >}/{@code <}/{@code V}/{@code A}. The non-arrow forms {@code @=}, {@code @|},
+     * {@code @.} take no labels.
+     */
+    private static CdConnector readCdConnector(MathParser parser) {
+        int atOffset = parser.currentOffset();
+        parser.next(); // consume '@'
+        Token typeTok = parser.peek();
+        if (typeTok.kind() != Kind.CHAR) {
+            throw new MathSyntaxException(
+                "expected a CD connector type (> < V A = | .) after '@'", atOffset);
+        }
+        int type = typeTok.codePoint();
+        parser.next(); // consume the type char
+        switch (type) {
+            case '=' -> { return new CdConnector(MathNode.CdArrowKind.EQUAL, null, null); }
+            case '|' -> { return new CdConnector(MathNode.CdArrowKind.VEQUAL, null, null); }
+            case '.' -> { return new CdConnector(MathNode.CdArrowKind.EMPTY, null, null); }
+            case '>' -> { return readCdArrow(parser, '>', MathNode.CdArrowKind.RIGHT, atOffset); }
+            case '<' -> { return readCdArrow(parser, '<', MathNode.CdArrowKind.LEFT, atOffset); }
+            case 'V' -> { return readCdArrow(parser, 'V', MathNode.CdArrowKind.DOWN, atOffset); }
+            case 'A' -> { return readCdArrow(parser, 'A', MathNode.CdArrowKind.UP, atOffset); }
+            default -> throw new MathSyntaxException(
+                "'" + new String(Character.toChars(type)) + "' is not a CD connector type"
+                    + " (expected > < V A = | .)", atOffset);
+        }
+    }
+
+    /**
+     * Reads the two delimiter-separated label slots of an arrow connector whose type
+     * char {@code d} was already consumed: {@code <labelA> d <labelB> d}. Each label
+     * is a run of math components up to the next top-level {@code d} CHAR (a {@code d}
+     * inside a braced group is part of the label, since {@link MathParser#parseComponent}
+     * consumes the whole group). An empty slot yields a {@code null} label.
+     */
+    private static CdConnector readCdArrow(MathParser parser, char d, MathNode.CdArrowKind kind,
+                                           int atOffset) {
+        MathNode labelA = readCdLabel(parser, d, atOffset);
+        MathNode labelB = readCdLabel(parser, d, atOffset);
+        return new CdConnector(kind, labelA, labelB);
+    }
+
+    /** One label slot up to (and consuming) the next top-level delimiter {@code d}. */
+    private static MathNode readCdLabel(MathParser parser, char d, int atOffset) {
+        List<MathNode> label = new ArrayList<>();
+        while (true) {
+            Token t = parser.peek();
+            if (t.kind() == Kind.EOF || parser.isCommand(t, "end")) {
+                throw new MathSyntaxException(
+                    "unterminated CD connector: missing '" + d + "' delimiter", atOffset);
+            }
+            if (t.kind() == Kind.CHAR && t.codePoint() == d) {
+                parser.next(); // consume the delimiter
+                return label.isEmpty() ? null : MathParser.wrap(label);
+            }
+            label.add(parser.parseComponent());
+        }
+    }
+
+    /**
+     * Assembles parsed CD rows into a rectangular {@link Matrix} with the CD column
+     * model (objects at even columns, horizontal connectors at odd columns; a
+     * connector row's vertical connectors placed at the even columns).
+     */
+    private static MathNode buildCdMatrix(List<CdRow> rows) {
+        int cols = 0;
+        for (CdRow r : rows) {
+            int rowCols = r.hasObject() ? r.items().size() : 2 * r.items().size() - 1;
+            cols = Math.max(cols, rowCols);
+        }
+        cols = Math.max(cols, 1);
+        long totalCells = (long) rows.size() * cols;
+        if (totalCells > MAX_MATRIX_CELLS) {
+            throw new MathSyntaxException("CD too large: " + rows.size() + " rows x " + cols
+                + " cols = " + totalCells + " cells exceeds the " + MAX_MATRIX_CELLS + "-cell limit");
+        }
+        MathNode empty = new MathList(List.of());
+        List<List<MathNode>> grid = new ArrayList<>(rows.size());
+        for (CdRow r : rows) {
+            List<MathNode> gridRow = new ArrayList<>(cols);
+            for (int c = 0; c < cols; c++) {
+                gridRow.add(empty);
+            }
+            if (r.hasObject()) {
+                for (int i = 0; i < r.items().size() && i < cols; i++) {
+                    gridRow.set(i, asCell(r.items().get(i)));
+                }
+            } else {
+                // connector row: place the k-th connector at even column 2k
+                for (int k = 0; k < r.items().size(); k++) {
+                    int c = 2 * k;
+                    if (c < cols) {
+                        gridRow.set(c, asCell(r.items().get(k)));
+                    }
+                }
+            }
+            grid.add(gridRow);
+        }
+        List<ColumnAlign> aligns = new ArrayList<>(cols);
+        List<Integer> vlines = new ArrayList<>(cols + 1);
+        for (int c = 0; c < cols; c++) {
+            aligns.add(ColumnAlign.CENTER);
+        }
+        for (int c = 0; c <= cols; c++) {
+            vlines.add(0);
+        }
+        List<RowRule> rowRules = new ArrayList<>(grid.size() + 1);
+        for (int g = 0; g <= grid.size(); g++) {
+            rowRules.add(RowRule.NONE);
+        }
+        return new Matrix(grid, aligns, vlines, rowRules,
+            MathNode.Fenced.NULL_DELIMITER, MathNode.Fenced.NULL_DELIMITER, MatrixKind.CD);
+    }
+
+    /** An object item is already a MathNode; a connector item becomes a {@link MathNode.CdArrow}. */
+    private static MathNode asCell(Object item) {
+        if (item instanceof CdConnector cc) {
+            return new MathNode.CdArrow(cc.kind(), cc.labelA(), cc.labelB());
+        }
+        return (MathNode) item;
     }
 
     /**
@@ -268,9 +481,11 @@ final class EnvironmentParser {
     }
 
     /**
-     * Reads a {@code {name}} argument of plain ASCII-letter characters (the
-     * environment name after {@code \begin}/{@code \end}). Rejects anything that is
-     * not a run of letters, so a malformed {@code \begin{...}} fails cleanly.
+     * Reads a {@code {name}} argument — the run of CHAR tokens between the braces
+     * (the environment name after {@code \begin}/{@code \end}). The name is only ever
+     * looked up in {@code ENVIRONMENTS} (or exact-matched for {@code CD}), never
+     * emitted, so a non-environment name simply fails that lookup cleanly; a missing
+     * opening/closing brace fails loud here.
      */
     private static String readBraceName(MathParser parser, String context) {
         if (parser.peek().kind() != Kind.LBRACE) {

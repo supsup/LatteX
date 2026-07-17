@@ -1280,7 +1280,7 @@ public final class MathParser {
             return switch (t.name()) {
                 case "{" -> '{';
                 case "}" -> '}';
-                case "|" -> '|';
+                case "|" -> 0x2016;      // \| is the double bar ‖ (synonym of \Vert)
                 case "Vert" -> 0x2016;   // ‖
                 case "vert" -> '|';
                 case "langle" -> 0x27E8; // ⟨

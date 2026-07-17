@@ -57,7 +57,8 @@ PARSES-NOW	delim-fixed	(a)	round parentheses
 PARSES-NOW	delim-fixed	[b]	square brackets
 PARSES-NOW	delim-fixed	\{c\}	escaped curly braces
 PARSES-NOW	delim-fixed	|d|	vertical bars
-PARSES-NOW	delim-fixed	\|e\|	double-bar (note: parses, but \| currently maps to single | glyph)
+PARSES-NOW	delim-fixed	\|e\|	double-bar norm delimiters (\| maps to ‖, U+2016, like \Vert)
+PARSES-NOW	delim-fixed	\left\| \frac{x}{y} \right\|	stretchy double-bar norm around tall content
 PARSES-NOW	delim-fixed	\langle f\rangle	angle brackets as ordinary symbols (outside \left..\right)
 PARSES-NOW	delim-fixed	\lfloor g\rfloor	floor delimiters as ordinary symbols
 PARSES-NOW	delim-fixed	\lceil h\rceil	ceiling delimiters as ordinary symbols
@@ -171,3 +172,10 @@ PARSES-NOW	lx	\lx[intent=ratio,concept=normalized_score]{\frac{a+b}{c}}	lx macro
 PARSES-NOW	lx	\lx[a11y.label="normalized score"]{\frac{a}{b}}	lx macro — accessibility label
 PARSES-NOW	lx	\lx[data.source=calc_12]{x^2}	lx macro — data attribute
 PARSES-NOW	lx	\lx[style.color=#333,fx.enter=fade,intent=ratio,a11y.label="a ratio"]{\frac{a}{b}}	lx macro — combined options
+
+# ==== commutative diagrams (amscd \begin{CD}) ====================
+PARSES-NOW	cd	\begin{CD} A @>f>> B @VVV C \end{CD}	CD — object row + a horizontal and a vertical arrow
+PARSES-NOW	cd	\begin{CD} A @>f>> B \\ @VgVV @VVhV \\ C @>>k> D \end{CD}	CD — the commutative square (both label sides)
+PARSES-NOW	cd	\begin{CD} X @>>> Y \\ @| @VVV \\ X @>>> Z \end{CD}	CD — vertical double-bar connector (@|)
+PARSES-NOW	cd	\begin{CD} A @= B @>>> C \end{CD}	CD — horizontal double-line connector (@=)
+PARSES-NOW	cd	\begin{CD} A @<<< B @AAA C \end{CD}	CD — leftward and upward arrows
