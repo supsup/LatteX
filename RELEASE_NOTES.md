@@ -4,10 +4,15 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — precedence cascade fx
+## Unreleased (mainline) — precedence cascade fx, physics braket
 
 On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
 release bump ships when consumers are ready to re-pin).
+
+- **`\bra` / `\ket` / `\braket` — physics bra-ket notation.** `\bra{\psi}` → ⟨ψ|,
+  `\ket{\phi}` → |φ⟩, `\braket{a|b}` → ⟨a|b⟩. Pure parser sugar over the existing
+  angle-bracket + vertical-bar atoms, so a braket renders byte-identically to its
+  manual `\langle…\rangle` form. Fixed-size v1 (stretchy braket is a follow-up).
 
 - **`precedence` fx effect — the order-of-operations cascade.** Hover a fenced
   expression and it lights up in *evaluation order*: the innermost group first,
