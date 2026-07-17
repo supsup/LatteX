@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **170 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **168**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **172 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **170**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -314,6 +314,8 @@ following once the node exists.
 | `\text{half is $\frac{1}{2}$}` | nested span is a full recursive parse — commands work inside | `PARSES-NOW` |
 | `\textbf{bold $x$ run}` | nested math splits in every text family, not just \\text | `PARSES-NOW` |
 | `\text{cost \$5}` | escaped \\$ stays a literal dollar — never a math toggle | `PARSES-NOW` |
+| `\text{the value $x^{10}$ is large}` | multi-char braced arg inside a span survives (the F1 class: braces carried verbatim) | `PARSES-NOW` |
+| `\text{$\frac{12}{34}$}` | multi-digit fraction inside text — regression lock for silent brace-strip corruption | `PARSES-NOW` |
 
 ---
 

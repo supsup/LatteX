@@ -83,13 +83,15 @@ class TextNestedMathTest {
     }
 
     @Test
-    void deepDollarTextNestingFailsCleanlyNotStackOverflow() {
+    void deepDollarTextNestingHitsTheDepthGuardNotStackOverflow() {
         // The inner parse CONTINUES the outer parser's depth, so pathological
         // \text{$\text{$…}$} nesting hits MAX_DEPTH as a clean MathSyntaxException —
-        // never a StackOverflowError (the PARSER-BUG class the corpus outlaws).
+        // never a StackOverflowError. Asserting the MESSAGE, not just the type:
+        // the first version of this test passed for the wrong reason (the
+        // brace-blind $ scan mis-paired at level 1 and never reached the guard —
+        // Conf review lattex/210 F2). "nesting too deep" proves the guard fired.
         StringBuilder sb = new StringBuilder();
         int levels = 600; // > MAX_DEPTH (512)
-        sb.append("x".repeat(0));
         for (int i = 0; i < levels; i++) {
             sb.append("\\text{$");
         }
@@ -97,7 +99,53 @@ class TextNestedMathTest {
         for (int i = 0; i < levels; i++) {
             sb.append("$}");
         }
-        assertThrows(MathSyntaxException.class, () -> MathParser.parse(sb.toString()));
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse(sb.toString()));
+        assertTrue(e.getMessage().contains("nesting too deep"),
+            "the MAX_DEPTH guard must be the failure, not a mis-pairing: " + e.getMessage());
+    }
+
+    @Test
+    void multiCharBracedArgumentsInsideSpansSurviveIntact() {
+        // lattex/210 F1: brace-stripping silently corrupted any nested span with a
+        // multi-char braced argument (\text{$\frac{12}{34}$} became \frac1234 →
+        // Fraction(1,2) then 3 then 4). The span now re-parses with its braces
+        // verbatim, so it must equal the same math parsed OUTSIDE text.
+        assertEquals(MathParserTest.pp(MathParser.parse("\\frac{12}{34}")),
+            MathParserTest.pp(MathParser.parse("\\text{$\\frac{12}{34}$}")),
+            "\\frac{12}{34} in a span == the same math outside text");
+        assertEquals(MathParserTest.pp(MathParser.parse("x^{12}")),
+            MathParserTest.pp(MathParser.parse("\\text{$x^{12}$}")),
+            "multi-char superscript group survives");
+        assertEquals(MathParserTest.pp(MathParser.parse("x_{ab}")),
+            MathParserTest.pp(MathParser.parse("\\text{$x_{ab}$}")),
+            "multi-char subscript group survives");
+        assertEquals(MathParserTest.pp(MathParser.parse("\\sqrt{xy}")),
+            MathParserTest.pp(MathParser.parse("\\text{$\\sqrt{xy}$}")),
+            "\\sqrt{xy} parses instead of rejecting as \\sqrtxy");
+    }
+
+    @Test
+    void nestedTextInsideAMathSpanPairsCorrectly() {
+        // lattex/210 F2 companion: the $ scanner skips a nested text-family
+        // command's ENTIRE braced argument, so \text{$\text{$x$}$} pairs the
+        // outer span around the whole inner \text instead of mis-pairing at the
+        // first inner $. Two levels must parse cleanly.
+        MathNode node = MathParser.parse("\\text{$\\text{$x$}$}");
+        assertEquals(MathParserTest.pp(MathParser.parse("\\text{$x$}")),
+            MathParserTest.pp(node),
+            "one $-level of text wrapping is transparent around the same inner math");
+    }
+
+    @Test
+    void literalTextBracesStayInvisibleAsBefore() {
+        // The verbatim token now carries interior braces; the LITERAL segments must
+        // still render them invisible (the pre-change lexer behavior, relocated).
+        assertEquals("Txt[ROMAN](a b c)",
+            MathParserTest.pp(MathParser.parse("\\text{a {b} c}")));
+        // And a plain group is NOT opaque to the toggle: $ inside {…} still toggles.
+        assertEquals("L(Txt[ROMAN](a b ) A(x,ORD) Txt[ROMAN]( c))",
+            MathParserTest.pp(MathParser.parse("\\text{a {b $x$} c}")));
     }
 
     @Test

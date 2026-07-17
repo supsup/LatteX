@@ -198,10 +198,12 @@ public final class MathParser {
      * Reads the {@code {…}} argument of a text-family command starting at index
      * {@code i} (just past the command name), emitting a single {@link Kind#TEXT}
      * token, and returns the index just past the closing brace. Spaces are kept
-     * verbatim (text mode is space-significant); grouping braces are stripped
-     * (invisible, as in LaTeX). The raw content is carried verbatim on the token;
-     * nested-math ({@code $…$}) splitting happens at parse time in
-     * {@link #textWithNestedMath} — the lexer stays a plain brace-matcher.
+     * verbatim (text mode is space-significant), and the content — INCLUDING its
+     * interior grouping braces — is carried verbatim on the token: a nested
+     * {@code $…$} span needs the brace structure for its re-parse (stripping here
+     * silently corrupted {@code \text{$\frac{12}{34}$}} into {@code \frac1234} —
+     * Conf review lattex/210 F1). Brace-invisibility for the LITERAL text runs is
+     * applied later, in {@link #textWithNestedMath}, never to a math span.
      */
     private static int lexTextArgument(String s, String command, int i, List<Token> out, int start) {
         int n = s.length();
@@ -219,6 +221,7 @@ public final class MathParser {
             char c = s.charAt(i);
             if (c == '{') {
                 depth++;
+                sb.append(c); // interior brace: KEEP (verbatim content)
                 i++;
             } else if (c == '}') {
                 depth--;
@@ -227,6 +230,7 @@ public final class MathParser {
                     out.add(Token.text(command, sb.toString(), start));
                     return i;
                 }
+                sb.append(c); // interior brace: KEEP (verbatim content)
             } else {
                 int cp = s.codePointAt(i);
                 sb.appendCodePoint(cp);
@@ -1453,10 +1457,10 @@ public final class MathParser {
      * cannot recurse past {@link #MAX_DEPTH}.
      */
     private MathNode textWithNestedMath(Token t) {
-        String raw = t.text();
+        String raw = t.text(); // verbatim, braces included (lexTextArgument keeps them)
         TextStyle style = TEXT_COMMANDS.get(t.name());
         if (indexOfUnescapedDollar(raw, 0) < 0) {
-            return new TextRun(unescapeDollar(raw), style); // fast path: one literal run
+            return new TextRun(literalText(raw), style); // fast path: one literal run
         }
         List<MathNode> items = new ArrayList<>();
         int i = 0;
@@ -1464,17 +1468,20 @@ public final class MathParser {
         while (i < n) {
             int open = indexOfUnescapedDollar(raw, i);
             if (open < 0) {
-                items.add(new TextRun(unescapeDollar(raw.substring(i)), style));
+                items.add(new TextRun(literalText(raw.substring(i)), style));
                 break;
             }
             if (open > i) {
-                items.add(new TextRun(unescapeDollar(raw.substring(i, open)), style));
+                items.add(new TextRun(literalText(raw.substring(i, open)), style));
             }
             int close = indexOfUnescapedDollar(raw, open + 1);
             if (close < 0) {
                 throw new MathSyntaxException(
                     "Unpaired '$' in \\" + t.name() + " argument", t.offset());
             }
+            // The math span keeps its braces VERBATIM — the re-parse needs the group
+            // structure (\frac{12}{34}, x^{10}); stripping here silently corrupted
+            // multi-char braced arguments (Conf review lattex/210 F1).
             String span = raw.substring(open + 1, close);
             if (!span.isBlank()) {
                 try {
@@ -1493,26 +1500,74 @@ public final class MathParser {
     }
 
     /**
-     * {@code \$} → {@code $} in a literal text segment. Now that an unescaped
-     * {@code $} toggles math mode, the escape is the ONLY way to write a literal
-     * dollar in text — so it must render as the dollar, not backslash-dollar
-     * (matches LaTeX). Other escapes are left untouched (out of scope here).
+     * A LITERAL text segment: grouping braces become invisible (exactly the old
+     * lexer-level stripping, relocated here so math spans keep theirs), and
+     * {@code \$} → {@code $} — with {@code $} toggling math, the escape is the
+     * only way to write a literal dollar in text (matches LaTeX).
      */
-    private static String unescapeDollar(String s) {
-        return s.indexOf('\\') < 0 ? s : s.replace("\\$", "$");
+    private static String literalText(String s) {
+        if (s.indexOf('{') < 0 && s.indexOf('}') < 0 && s.indexOf('\\') < 0) {
+            return s;
+        }
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\' && i + 1 < s.length() && s.charAt(i + 1) == '$') {
+                sb.append('$');
+                i++;
+            } else if (c != '{' && c != '}') {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     /**
-     * The index of the next {@code $} at or after {@code from} that is not
-     * preceded by a backslash ({@code \$} is the literal-dollar escape), or -1.
+     * The index of the next math-toggling {@code $} at or after {@code from}, or
+     * -1. Skips: {@code \$} (the literal-dollar escape); and the ENTIRE braced
+     * argument of a nested text-family command ({@code \text{…}} inside this
+     * argument) — those {@code $}s belong to the inner command's own re-parse,
+     * not this level's pairing. Without that skip, {@code \text{$\text{$x$}$}}
+     * mis-paired the outer span at the first inner {@code $} and the depth-guard
+     * path was unreachable (Conf review lattex/210 F2). A plain {@code {…}} group
+     * is NOT opaque: {@code $} inside it still toggles, as in LaTeX.
      */
     private static int indexOfUnescapedDollar(String s, int from) {
-        for (int i = from; i < s.length(); i++) {
+        int i = from;
+        int n = s.length();
+        while (i < n) {
             char c = s.charAt(i);
             if (c == '\\') {
-                i++; // the next char is escaped — never a toggle
+                int j = i + 1;
+                while (j < n && Character.isLetter(s.charAt(j))) {
+                    j++;
+                }
+                if (j > i + 1 && TEXT_COMMANDS.containsKey(s.substring(i + 1, j))) {
+                    // nested text-family command: skip its whole braced argument
+                    while (j < n && isWhitespace(s.charAt(j))) {
+                        j++;
+                    }
+                    if (j < n && s.charAt(j) == '{') {
+                        int depth = 1;
+                        j++;
+                        while (j < n && depth > 0) {
+                            char d = s.charAt(j);
+                            if (d == '\\') {
+                                j++; // escaped char inside the nested argument
+                            } else if (d == '{') {
+                                depth++;
+                            } else if (d == '}') {
+                                depth--;
+                            }
+                            j++;
+                        }
+                    }
+                }
+                i = Math.max(j, i + 2); // command word skipped, or \X escape
             } else if (c == '$') {
                 return i;
+            } else {
+                i++;
             }
         }
         return -1;

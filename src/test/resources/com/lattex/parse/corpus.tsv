@@ -211,3 +211,5 @@ PARSES-NOW	text	\text{if $x>0$ then } y	nested $…$ inside \text re-enters math
 PARSES-NOW	text	\text{half is $\frac{1}{2}$}	nested span is a full recursive parse — commands work inside
 PARSES-NOW	text	\textbf{bold $x$ run}	nested math splits in every text family, not just \text
 PARSES-NOW	text	\text{cost \$5}	escaped \$ stays a literal dollar — never a math toggle
+PARSES-NOW	text	\text{the value $x^{10}$ is large}	multi-char braced arg inside a span survives (the F1 class: braces carried verbatim)
+PARSES-NOW	text	\text{$\frac{12}{34}$}	multi-digit fraction inside text — regression lock for silent brace-strip corruption
