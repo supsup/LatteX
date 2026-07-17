@@ -1442,7 +1442,10 @@ public final class MathParser {
             case '(', '[' -> MathClass.OPEN;
             case ')', ']' -> MathClass.CLOSE;
             case ',', ';' -> MathClass.PUNCT;
-            default -> MathClass.ORD;
+            // A literal pasted Unicode operator (≤ → × ∈ …) classifies like its
+            // \command form via the reverse symbol table, so it gets correct
+            // relation/binary spacing instead of the old default ORD.
+            default -> Symbols.classForCodePoint(cp);
         };
     }
 

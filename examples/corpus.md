@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **161 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **159**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **166 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **164**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -290,6 +290,21 @@ following once the node exists.
 | --- | --- | --- |
 | `\prescript{14}{6}{\mathrm{C}}` | left-attached scripts — carbon-14 (pre-super/pre-sub via empty-base SupSub) | `PARSES-NOW` |
 | `\prescript{a}{b}{T}` | tensor pre-indices | `PARSES-NOW` |
+
+## Literal Unicode operators (classified via the reverse symbol table)
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `a ≤ b` | literal ≤ (U+2264) classifies as Rel like \\le — relation spacing, not Ord | `PARSES-NOW` |
+| `x × y → z` | literal × (Bin) and → (Rel) get \\times/\\rightarrow spacing from the reverse table | `PARSES-NOW` |
+| `p ∈ A ∩ B` | literal ∈ (Rel) and ∩ (Bin) — pasted set notation gets correct atom spacing | `PARSES-NOW` |
+
+## Multi-integral side limits (display keeps limits beside, like \int)
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\oint_0^{2\pi} F\,d\theta` | contour integral keeps SIDE limits in display (U+222B..U+2233 block) | `PARSES-NOW` |
+| `\idotsint_{\Omega} f` | \\idotsint (U+2A0C) also keeps side limits, not stacked | `PARSES-NOW` |
 
 ---
 

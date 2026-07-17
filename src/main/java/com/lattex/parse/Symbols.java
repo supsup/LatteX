@@ -34,6 +34,33 @@ final class Symbols {
 
     static final Map<String, Sym> SYMBOLS = buildSymbols();
 
+    /**
+     * Code point &rarr; atom class, derived from the command symbol table so a
+     * LITERAL pasted Unicode operator gets the same class — and therefore the same
+     * inter-atom spacing — as its {@code \command} form. Without this, {@code a ≤ b}
+     * (a pasted U+2264) classified as {@code default -> ORD} and rendered with no
+     * relation spacing, while {@code a \leq b} was correct. ASCII code points are
+     * excluded (the parser's own {@code classify} switch owns them); the first
+     * mapping wins on a shared code point. Clean-room: the class travels with the
+     * code point from the TeXbook assignment already encoded in {@link #SYMBOLS}.
+     */
+    static final Map<Integer, MathClass> CLASS_BY_CODEPOINT = buildClassByCodepoint();
+
+    private static Map<Integer, MathClass> buildClassByCodepoint() {
+        Map<Integer, MathClass> m = new java.util.HashMap<>();
+        for (Sym s : SYMBOLS.values()) {
+            if (s.codePoint() > 0x7F) { // non-ASCII only; ASCII is the classify() switch's job
+                m.putIfAbsent(s.codePoint(), s.mathClass());
+            }
+        }
+        return Map.copyOf(m);
+    }
+
+    /** The atom class for a literal code point, or {@code ORD} when unmapped. */
+    static MathClass classForCodePoint(int cp) {
+        return CLASS_BY_CODEPOINT.getOrDefault(cp, MathClass.ORD);
+    }
+
     // Large operators, handled specially (they take limits).
     static final Map<String, Sym> BIG_OPERATORS = Map.ofEntries(
         Map.entry("sum", new Sym(0x2211, MathClass.OP)),      // ∑

@@ -280,6 +280,30 @@ class LayoutS4Test {
     }
 
     @Test
+    void multiIntegralsKeepSideLimitsLikeInt() {
+        // \iint (U+222C), \iiint (U+222D) and \oint (U+222E) are integral-family
+        // operators and, like \int, keep SIDE limits in display style rather than
+        // stacking (the whole U+222B..U+2233 block does). Before the range fix only
+        // U+222B matched, so these three stacked their limits above/below — wrong.
+        //
+        // Discriminator (same as nolimitsForcesSideScriptsOnSum): a SIDE-limit form
+        // is vertically shorter than the same operator with \limits forcing a STACK,
+        // because stacking adds limit height above AND below the sign. Under the
+        // pre-fix equality bug the default form would stack and be the SAME height as
+        // \limits — so this fails on the mutant, unlike a "right-of-left-edge" check
+        // which a centred stacked limit also satisfies.
+        for (String op : List.of("\\iint", "\\iiint", "\\oint", "\\idotsint")) {
+            Layout side = layout(op + "_0^\\infty");           // default → should stay beside
+            Layout stacked = layout(op + "\\limits_0^\\infty"); // \limits → forced above/below
+            double sideH = side.maxY() - side.minY();
+            double stackedH = stacked.maxY() - stacked.minY();
+            assertTrue(sideH < stackedH,
+                op + ": default keeps side limits (height " + sideH
+                    + ") so is shorter than the \\limits-stacked form (height " + stackedH + ")");
+        }
+    }
+
+    @Test
     void nolimitsForcesSideScriptsOnSum() {
         // \nolimits overrides the display default: the sum's limits go beside.
         Layout stacked = layout("\\sum_{i=1}^{10} t_i");

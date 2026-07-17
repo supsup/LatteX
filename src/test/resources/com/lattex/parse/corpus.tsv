@@ -199,3 +199,10 @@ PARSES-NOW	spacing	x\mkern18mu y	bare-form dimensioned glue — \mkern18mu (1em)
 # ==== prescript (left-attached scripts) ===========================
 PARSES-NOW	prescript	\prescript{14}{6}{\mathrm{C}}	left-attached scripts — carbon-14 (pre-super/pre-sub via empty-base SupSub)
 PARSES-NOW	prescript	\prescript{a}{b}{T}	tensor pre-indices
+# ==== literal Unicode operators (classified via the reverse symbol table) =====
+PARSES-NOW	unicode	a ≤ b	literal ≤ (U+2264) classifies as Rel like \le — relation spacing, not Ord
+PARSES-NOW	unicode	x × y → z	literal × (Bin) and → (Rel) get \times/\rightarrow spacing from the reverse table
+PARSES-NOW	unicode	p ∈ A ∩ B	literal ∈ (Rel) and ∩ (Bin) — pasted set notation gets correct atom spacing
+# ==== multi-integral side limits (display keeps limits beside, like \int) =====
+PARSES-NOW	bigops	\oint_0^{2\pi} F\,d\theta	contour integral keeps SIDE limits in display (U+222B..U+2233 block)
+PARSES-NOW	bigops	\idotsint_{\Omega} f	\idotsint (U+2A0C) also keeps side limits, not stacked

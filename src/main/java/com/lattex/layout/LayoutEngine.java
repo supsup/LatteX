@@ -60,6 +60,26 @@ public final class LayoutEngine {
     private static final int INTEGRAL_CODEPOINT = 0x222B;
 
     /**
+     * U+2233 ANTICLOCKWISE CONTOUR INTEGRAL — the top of the contiguous integral
+     * block U+222B..U+2233 (∫ ∬ ∭ ∮ ∯ ∰ ∱ ∲ ∳). Every glyph in this range is an
+     * integral variant that conventionally keeps side limits in display style, so
+     * {@code \iint \iiint \oint} match {@code \int} rather than stacking.
+     */
+    private static final int INTEGRAL_CODEPOINT_MAX = 0x2233;
+
+    /** U+2A0C QUADRUPLE INTEGRAL (\idotsint) — the one integral LatteX maps outside
+     *  the contiguous U+222B..U+2233 block; it keeps side limits like the rest. */
+    private static final int QUAD_INTEGRAL_CODEPOINT = 0x2A0C;
+
+    /** True for any integral-family operator — keeps side limits even in display
+     *  style. Covers the contiguous block ∫..∳ (U+222B..U+2233: \int \iint \iiint
+     *  \oint \oiint \oiiint) plus \idotsint (U+2A0C). */
+    private static boolean isIntegral(int cp) {
+        return (cp >= INTEGRAL_CODEPOINT && cp <= INTEGRAL_CODEPOINT_MAX)
+            || cp == QUAD_INTEGRAL_CODEPOINT;
+    }
+
+    /**
      * Fraction of the axis-symmetric body span a {@code \left..\right} delimiter
      * must reach (TeXbook Appendix-G / plain TeX {@code \delimiterfactor}=901).
      * A delimiter need only cover ~90% of the content, so the smallest adequate
@@ -902,7 +922,7 @@ public final class LayoutEngine {
         boolean sideLimits = switch (mode) {
             case LIMITS -> false;
             case NOLIMITS -> true;
-            case DEFAULT -> !display || op.codePoint() == INTEGRAL_CODEPOINT;
+            case DEFAULT -> !display || isIntegral(op.codePoint());
         };
         Box upperBox = upper == null ? null : layoutBox(upper, ctx.superscript());
         Box lowerBox = lower == null ? null : layoutBox(lower, ctx.subscript());
