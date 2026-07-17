@@ -215,12 +215,28 @@ Each GIF is clipped to its own equation and loops forever; the trigger is shown 
 
 ---
 
-## The first semantic effect
+## Semantic effects
+
+These read structure the renderer emits as a sidecar, so the animation reflects
+what the equation *means*, not just how its glyphs sit.
 
 `fx.thread` — hover a variable and every occurrence lights up, driven by the
 `data-lx-glyphmap` sidecar ([source page](thread-preview.html)):
 
 ![thread preview](thread-preview.png)
+
+`fx.enter=precedence` — the order-of-operations cascade. A fenced expression
+lights up in *evaluation order* (innermost group first, then outward), driven by
+the renderer-emitted `data-lx-groupmap` sidecar so the runtime never guesses
+precedence from presentation markup. Fenced-only and fail-honest: when grouping
+can't be reconstructed from the delimiters the effect degrades to inert rather
+than teach wrong binding.
+
+```
+\lx[fx.enter=precedence]{ \left( a + b \right) \times \left( c - d \right) }
+```
+
+![precedence cascade](fx-play-precedence.gif)
 
 ---
 
