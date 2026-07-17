@@ -4,11 +4,22 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, `\overparen`, dimensioned glue, `\prescript`, + precedence cascade fx
+## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, `\overparen`, dimensioned glue, `\prescript`, multi-integral & Unicode-operator fidelity, + precedence cascade fx
 
 On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
 release bump ships when consumers are ready to re-pin).
 
+- **Multi-integral side limits — `\oint` / `\iint` / `\iiint` / `\oiint` / `\oiiint`
+  / `\idotsint` now keep their limits *beside* the sign in display style**, like
+  `\int`, instead of stacking them above/below. The limit-placement test matched only
+  U+222B (`\int`), so every other integral fell through to the display-stack path; it
+  now recognizes the whole integral block (U+222B–U+2233) plus `\idotsint` (U+2A0C).
+  `\sum` / `\prod` still stack, as they should.
+- **Literal pasted Unicode operators get correct spacing.** A pasted `≤`, `×`, `→`,
+  `∈`, `∩`, … classified as `default → Ord` (no relation/binary spacing), so `a ≤ b`
+  rendered visibly tighter than `a \le b`. Atom classification now consults a reverse
+  symbol table derived from the `\command` table, so a literal operator carries the
+  same class — and spacing — as its command form. Unmapped code points stay `Ord`.
 - **`\prescript{sup}{sub}{base}` — left-attached scripts.** Physics / tensor
   pre-indices, e.g. carbon-14 as `\prescript{14}{6}{\mathrm{C}}`. Pure parser sugar
   over an empty-base `SupSub` (the `{}^{…}_{…}` idiom) followed by the base, so it

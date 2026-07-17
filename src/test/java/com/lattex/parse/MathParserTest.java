@@ -547,6 +547,30 @@ class MathParserTest {
     }
 
     @Test
+    void literalUnicodeOperatorsClassifyLikeTheirCommandForm() {
+        // A pasted literal Unicode operator gets the same atom class — and therefore
+        // the same inter-atom spacing — as its \command form, via the reverse symbol
+        // table. Before the fix classify() only knew ASCII and these fell to the
+        // default ORD, so `a ≤ b` rendered relation-less.
+        assertEquals(MathClass.REL, midClass("x≤y"), "≤ classifies like \\leq (REL)");
+        assertEquals(MathClass.REL, midClass("x≥y"), "≥ classifies like \\geq (REL)");
+        assertEquals(MathClass.REL, midClass("x→y"), "→ classifies like \\rightarrow (REL)");
+        assertEquals(MathClass.REL, midClass("x∈y"), "∈ classifies like \\in (REL)");
+        assertEquals(MathClass.BIN, midClass("x×y"), "× classifies like \\times (BIN)");
+        assertEquals(MathClass.BIN, midClass("x÷y"), "÷ classifies like \\div (BIN)");
+        assertEquals(MathClass.BIN, midClass("x∩y"), "∩ classifies like \\cap (BIN)");
+        // A code point in no symbol table still defaults to ORD (here U+2603 ☃).
+        assertEquals(MathClass.ORD, midClass("x☃y"), "an unmapped code point stays ORD");
+    }
+
+    /** The atom class of the middle atom of a three-atom `x <op> y` list. */
+    private static MathClass midClass(String latex) {
+        MathNode mid = assertInstanceOf(MathNode.MathList.class, MathParser.parse(latex))
+            .items().get(1);
+        return assertInstanceOf(Atom.class, mid).mathClass();
+    }
+
+    @Test
     void bigOperatorNodeShape() {
         BigOperator bo = assertInstanceOf(BigOperator.class,
             MathParser.parse("\\prod_{k}^{m}"));
