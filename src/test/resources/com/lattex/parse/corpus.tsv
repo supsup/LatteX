@@ -193,3 +193,6 @@ PARSES-NOW	braket	\bra{\phi}\ket{\psi}	\bra ⟨φ| and \ket |ψ⟩ juxtaposed
 # ==== stretchy over-parenthesis accent ============================
 PARSES-NOW	accents	\overparen{AB}	stretchy over-parenthesis accent (⏜ sized to the base)
 PARSES-NOW	accents	\overparen{x+y+z+w}	\overparen stretches to a wide base
+# ==== dimensioned glue (\hspace \mkern \kern) ====================
+PARSES-NOW	spacing	a\hspace{2em}b	dimensioned horizontal glue — \hspace{2em} (36mu)
+PARSES-NOW	spacing	x\mkern18mu y	bare-form dimensioned glue — \mkern18mu (1em)

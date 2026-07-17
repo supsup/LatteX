@@ -702,6 +702,74 @@ public final class MathParser {
     }
 
     /**
+     * Reads a braced dimension argument ({@code {2em}} / {@code {18mu}} / {@code {3pt}})
+     * and returns its width in math units (18mu = 1em). em-relative units (em/ex/mu) are
+     * exact against the current size; pt is approximated at a 10pt em (1pt = 1.8mu).
+     * Throws a positioned {@link MathSyntaxException} on a missing brace, empty arg,
+     * malformed number, or an unknown unit.
+     */
+    private double parseDimensionMu(String command, int offset) {
+        StringBuilder sb = new StringBuilder();
+        if (peek().kind() == Kind.LBRACE) {
+            // Braced form: \hspace{2em}. Read every CHAR up to the closing brace.
+            next(); // consume '{'
+            while (peek().kind() != Kind.RBRACE) {
+                Token t = peek();
+                if (t.kind() == Kind.EOF) {
+                    throw new MathSyntaxException("\\" + command + ": unterminated {dimension}", offset);
+                }
+                if (t.kind() != Kind.CHAR) {
+                    throw new MathSyntaxException(
+                        "\\" + command + ": a dimension is <number><unit>, not " + describe(t), offset);
+                }
+                sb.appendCodePoint(t.codePoint());
+                next();
+            }
+            next(); // consume '}'
+        } else {
+            // Bare form: \mkern18mu / \kern3pt. Read the numeric run, then exactly the
+            // 1-2 unit letters (TeX units are two letters); stop so following math is untouched.
+            while (peek().kind() == Kind.CHAR && isDimensionNumberChar(peek().codePoint())) {
+                sb.appendCodePoint(peek().codePoint());
+                next();
+            }
+            for (int i = 0; i < 2 && peek().kind() == Kind.CHAR
+                    && Character.isLetter(peek().codePoint()); i++) {
+                sb.appendCodePoint(peek().codePoint());
+                next();
+            }
+        }
+        String dim = sb.toString().strip();
+        int u = dim.length();
+        while (u > 0 && (Character.isLetter(dim.charAt(u - 1)))) {
+            u--;
+        }
+        String numberPart = dim.substring(0, u).strip();
+        String unit = dim.substring(u).strip();
+        double value;
+        try {
+            value = Double.parseDouble(numberPart);
+        } catch (NumberFormatException bad) {
+            throw new MathSyntaxException(
+                "\\" + command + ": '" + dim + "' is not a <number><unit> dimension", offset);
+        }
+        double muPerUnit = switch (unit) {
+            case "em" -> 18.0;      // 1em = 18mu
+            case "mu" -> 1.0;
+            case "ex" -> 8.0;       // ~0.43em
+            case "pt" -> 1.8;       // approx at a 10pt em (absolute lengths are a follow-up)
+            default -> throw new MathSyntaxException(
+                "\\" + command + ": unknown unit '" + unit + "' (use em / ex / mu / pt)", offset);
+        };
+        return value * muPerUnit;
+    }
+
+    /** A char that can appear in the numeric prefix of a bare dimension ({@code -1.5em}). */
+    private static boolean isDimensionNumberChar(int cp) {
+        return (cp >= '0' && cp <= '9') || cp == '.' || cp == '-' || cp == '+';
+    }
+
+    /**
      * A binomial coefficient {@code \binom{n}{r}} (and {@code \dbinom} /
      * {@code \tbinom}): an upper-over-lower stack with <em>no</em> fraction rule,
      * wrapped in parentheses. Clean-room from the TeXbook — {@code \binom} is
@@ -840,6 +908,18 @@ public final class MathParser {
                 MathNode body = parseArgument("\\braket body");
                 return new MathList(List.of(
                     new Atom(0x27E8, MathClass.OPEN), body, new Atom(0x27E9, MathClass.CLOSE)));
+            }
+            case "hspace", "mkern", "kern", "mskip" -> {
+                // Dimensioned horizontal glue: \hspace{2em} / \mkern{18mu} / \kern{3pt} —
+                // a braced <number><unit> whose width becomes a Spacing node in math units
+                // (18mu = 1em). \hspace* is accepted (the star is a no-op here — we never
+                // discard glue at a line break). em-relative units (em/ex/mu) are exact;
+                // pt is approximated at a 10pt em (1pt ≈ 1.8mu) — absolute lengths are a
+                // follow-up. A malformed dimension throws a positioned MathSyntaxException.
+                if (peek().kind() == Kind.CHAR && peek().codePoint() == '*') {
+                    next(); // \hspace* — consume the star
+                }
+                return new Spacing(parseDimensionMu(name, commandOffset));
             }
             case "binom" -> {
                 return binom(MathNode.FractionStyle.INHERIT);
