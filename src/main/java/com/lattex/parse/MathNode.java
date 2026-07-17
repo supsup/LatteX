@@ -926,7 +926,11 @@ public sealed interface MathNode {
         MAPSTO(0x21A6, "&#x21A6;", "|->", "maps-to"),                       // \xmapsto
         HOOK_RIGHT(0x21AA, "&#x21AA;", "R(", "rightwards hook"),            // \xhookrightarrow
         HOOK_LEFT(0x21A9, "&#x21A9;", "L)", "leftwards hook"),              // \xhookleftarrow
-        RIGHTLEFTHARPOONS(0x21CC, "&#x21CC;", "RLh", "right-left harpoons");// \xrightleftharpoons
+        RIGHTLEFTHARPOONS(0x21CC, "&#x21CC;", "RLh", "right-left harpoons"),// \xrightleftharpoons
+        // \xlongequal — an extensible DOUBLE line. U+003D has no horizontal MATH
+        // construction, so layout draws it as two stacked in-alphabet rules (like a
+        // CD @=), NOT a stretched glyph; the codePoint is kept for the MathML <mo>.
+        LONGEQUAL(0x003D, "&#x003D;", "==", "long equals");                 // \xlongequal
 
         private final int codePoint;
         private final String mathmlEntity;

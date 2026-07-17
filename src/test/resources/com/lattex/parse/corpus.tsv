@@ -179,3 +179,6 @@ PARSES-NOW	cd	\begin{CD} A @>f>> B \\ @VgVV @VVhV \\ C @>>k> D \end{CD}	CD — t
 PARSES-NOW	cd	\begin{CD} X @>>> Y \\ @| @VVV \\ X @>>> Z \end{CD}	CD — vertical double-bar connector (@|)
 PARSES-NOW	cd	\begin{CD} A @= B @>>> C \end{CD}	CD — horizontal double-line connector (@=)
 PARSES-NOW	cd	\begin{CD} A @<<< B @AAA C \end{CD}	CD — leftward and upward arrows
+# ==== extensible arrows (amsmath \x...) ============================
+PARSES-NOW	xarrow	A \xlongequal{\text{def}} B	labelled extensible double-equals — \xlongequal (two in-alphabet rules)
+PARSES-NOW	xarrow	\xlongequal[y]{x}	\xlongequal with above + below labels

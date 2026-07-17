@@ -173,6 +173,7 @@ class XArrowLayoutTest {
                 case LEFT_DBL -> "xLeftarrow"; case LEFTRIGHT_DBL -> "xLeftrightarrow";
                 case MAPSTO -> "xmapsto"; case HOOK_RIGHT -> "xhookrightarrow";
                 case HOOK_LEFT -> "xhookleftarrow"; case RIGHTLEFTHARPOONS -> "xrightleftharpoons";
+                case LONGEQUAL -> "xlongequal";
             };
             String latex = "\\" + cmd + "{f}";
             String svg = com.lattex.api.LatteX.render(latex);
