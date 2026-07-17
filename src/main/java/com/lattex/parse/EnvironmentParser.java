@@ -481,9 +481,11 @@ final class EnvironmentParser {
     }
 
     /**
-     * Reads a {@code {name}} argument of plain ASCII-letter characters (the
-     * environment name after {@code \begin}/{@code \end}). Rejects anything that is
-     * not a run of letters, so a malformed {@code \begin{...}} fails cleanly.
+     * Reads a {@code {name}} argument — the run of CHAR tokens between the braces
+     * (the environment name after {@code \begin}/{@code \end}). The name is only ever
+     * looked up in {@code ENVIRONMENTS} (or exact-matched for {@code CD}), never
+     * emitted, so a non-environment name simply fails that lookup cleanly; a missing
+     * opening/closing brace fails loud here.
      */
     private static String readBraceName(MathParser parser, String context) {
         if (parser.peek().kind() != Kind.LBRACE) {
