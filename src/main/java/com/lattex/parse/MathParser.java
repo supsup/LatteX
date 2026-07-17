@@ -921,6 +921,16 @@ public final class MathParser {
                 }
                 return new Spacing(parseDimensionMu(name, commandOffset));
             }
+            case "prescript" -> {
+                // \prescript{sup}{sub}{base} = {}^{sup}_{sub} base — left-attached scripts.
+                // Pure sugar over an empty-base SupSub (the {}^3 idiom) followed by the base;
+                // an empty {} slot renders no script on that side.
+                MathNode preSup = parseArgument("\\prescript superscript");
+                MathNode preSub = parseArgument("\\prescript subscript");
+                MathNode base = parseArgument("\\prescript base");
+                return new MathList(List.of(
+                    new SupSub(new MathList(List.of()), preSup, preSub), base));
+            }
             case "binom" -> {
                 return binom(MathNode.FractionStyle.INHERIT);
             }

@@ -196,3 +196,6 @@ PARSES-NOW	accents	\overparen{x+y+z+w}	\overparen stretches to a wide base
 # ==== dimensioned glue (\hspace \mkern \kern) ====================
 PARSES-NOW	spacing	a\hspace{2em}b	dimensioned horizontal glue — \hspace{2em} (36mu)
 PARSES-NOW	spacing	x\mkern18mu y	bare-form dimensioned glue — \mkern18mu (1em)
+# ==== prescript (left-attached scripts) ===========================
+PARSES-NOW	prescript	\prescript{14}{6}{\mathrm{C}}	left-attached scripts — carbon-14 (pre-super/pre-sub via empty-base SupSub)
+PARSES-NOW	prescript	\prescript{a}{b}{T}	tensor pre-indices

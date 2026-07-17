@@ -4,10 +4,16 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, `\overparen`, dimensioned glue, + precedence cascade fx
+## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, `\overparen`, dimensioned glue, `\prescript`, + precedence cascade fx
 
 On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
 release bump ships when consumers are ready to re-pin).
+
+- **`\prescript{sup}{sub}{base}` — left-attached scripts.** Physics / tensor
+  pre-indices, e.g. carbon-14 as `\prescript{14}{6}{\mathrm{C}}`. Pure parser sugar
+  over an empty-base `SupSub` (the `{}^{…}_{…}` idiom) followed by the base, so it
+  renders identically to the manual form; an empty `{}` slot renders no script on
+  that side. No new node, layout, or switch.
 
 - **`\begin{CD}` — amscd commutative diagrams.** The `@`-connector grammar
   (`@>label>>` / `@<<<` / `@VVV` / `@AAA` right/left/down/up, plus `@=` `@|` `@.`)

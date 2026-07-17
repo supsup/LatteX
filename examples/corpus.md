@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **159 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **157**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **161 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **159**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -283,6 +283,13 @@ following once the node exists.
 | --- | --- | --- |
 | `a\hspace{2em}b` | dimensioned horizontal glue — \\hspace{2em} (36mu) | `PARSES-NOW` |
 | `x\mkern18mu y` | bare-form dimensioned glue — \\mkern18mu (1em) | `PARSES-NOW` |
+
+## Prescript (left-attached scripts)
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\prescript{14}{6}{\mathrm{C}}` | left-attached scripts — carbon-14 (pre-super/pre-sub via empty-base SupSub) | `PARSES-NOW` |
+| `\prescript{a}{b}{T}` | tensor pre-indices | `PARSES-NOW` |
 
 ---
 
