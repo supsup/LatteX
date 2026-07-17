@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **142 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **140**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **147 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **145**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -236,6 +236,16 @@ following once the node exists.
 | `\lx[a11y.label="normalized score"]{\frac{a}{b}}` | lx macro — accessibility label | `PARSES-NOW` |
 | `\lx[data.source=calc_12]{x^2}` | lx macro — data attribute | `PARSES-NOW` |
 | `\lx[style.color=#333,fx.enter=fade,intent=ratio,a11y.label="a ratio"]{\frac{a}{b}}` | lx macro — combined options | `PARSES-NOW` |
+
+## Commutative diagrams (amscd \begin{CD})
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\begin{CD} A @>f>> B @VVV C \end{CD}` | CD — object row + a horizontal and a vertical arrow | `PARSES-NOW` |
+| `\begin{CD} A @>f>> B \\ @VgVV @VVhV \\ C @>>k> D \end{CD}` | CD — the commutative square (both label sides) | `PARSES-NOW` |
+| `\begin{CD} X @>>> Y \\ @\| @VVV \\ X @>>> Z \end{CD}` | CD — vertical double-bar connector (@\|) | `PARSES-NOW` |
+| `\begin{CD} A @= B @>>> C \end{CD}` | CD — horizontal double-line connector (@=) | `PARSES-NOW` |
+| `\begin{CD} A @<<< B @AAA C \end{CD}` | CD — leftward and upward arrows | `PARSES-NOW` |
 
 ---
 

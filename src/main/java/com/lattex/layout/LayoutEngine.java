@@ -161,6 +161,10 @@ public final class LayoutEngine {
             case Matrix matrix -> matrixBox(matrix, ctx);
             case MathNode.Stack stack -> stackBox(stack, ctx);
             case MathNode.XArrow xArrow -> xArrowBox(xArrow, ctx);
+            // A CdArrow only ever appears as a CD-grid cell (laid out by cdBox with its
+            // column/row context); this arm is the exhaustiveness fallback for a bare arrow,
+            // rendered at natural size.
+            case MathNode.CdArrow cdArrow -> cdArrowStandaloneBox(cdArrow, ctx);
             case MathNode.Tagged(var body, var label) -> taggedBox(body, label, ctx);
             // A top-level \lx wrapper: its RenderOptions (scale / mathStyle / color)
             // are applied at the render entry by seeding the LayoutContext + the
@@ -528,6 +532,7 @@ public final class LayoutEngine {
             // An extensible labelled arrow spaces exactly like the plain arrow
             // relation it stretches (amsmath: xrightarrow is a mathrel).
             case MathNode.XArrow _ -> MathClass.REL;
+            case MathNode.CdArrow _ -> MathClass.REL;  // a connector behaves as a relation
             case Spacing _ -> null;           // classless glue (handled by caller)
             case StyledMath sm -> classOf(sm.body()); // wrapper is transparent to spacing
             case MathNode.StyleSwitch sw -> classOf(sw.body()); // ditto — style is invisible to spacing
@@ -1310,7 +1315,231 @@ public final class LayoutEngine {
     // smallmatrix in script style), like a fraction's numerator, never in display.
     // ------------------------------------------------------------------
 
+    // ------------------------------------------------------------------
+    // CD — amscd commutative diagram. A grid whose object cells are ordinary
+    // math and whose connector cells are CdArrows: horizontal arrows stretch to
+    // the COLUMN width, vertical arrows span a fixed ROW pitch, each carrying
+    // script-size side labels. Two passes: (1) lay out objects + arrow labels to
+    // get column widths and row extents WITHOUT any stretch feedback (the shaft
+    // never feeds its own column width); (2) build stretched connector boxes and
+    // place every cell centred in its column on its row baseline.
+    // ------------------------------------------------------------------
+
+    private static final double CD_MIN_H_ARROW_EM = 2.2;  // min horizontal arrow/label span
+    private static final double CD_V_ARROW_SPAN_EM = 1.5;  // vertical arrow span (row connector)
+    private static final double CD_LABEL_PAD_EM = 0.25;    // gap between a vertical arrow and its side label
+    private static final double CD_ROW_GAP_EM = 0.35;      // extra breathing room between rows
+    private static final double CD_COL_GAP_EM = 0.4;       // extra breathing room between columns
+
+    private static boolean isCdArrow(MathNode n) {
+        return n instanceof MathNode.CdArrow;
+    }
+
+    private static Box cdBox(Matrix mx, LayoutContext ctx) {
+        var c = ctx.constants();
+        double scale = ctx.scale();
+        double axis = c.axisHeight() * scale;
+        double em = 18.0 * ctx.mu();
+        double ruleThick = c.fractionRuleThickness() * scale;
+        SfntFont font = ctx.font();
+
+        int rows = mx.rows().size();
+        int cols = mx.columnCount();
+        LayoutContext cellCtx =
+            new LayoutContext(font, c, ctx.fontSize(), MathStyle.TEXT, false, ctx.fenceDepth());
+        LayoutContext labelCtx = cellCtx.superscript();  // script-size side/over labels
+
+        double minHArrow = CD_MIN_H_ARROW_EM * em;
+        double vSpan = CD_V_ARROW_SPAN_EM * em;
+        double labelPad = CD_LABEL_PAD_EM * em;
+
+        // --- Pass 1: object boxes + connector label boxes; column widths + row extents. ---
+        Box[][] objectBox = new Box[rows][cols];        // non-arrow cells
+        Box[][] labelA = new Box[rows][cols];
+        Box[][] labelB = new Box[rows][cols];
+        double[] colWidth = new double[cols];
+        double[] rowHeight = new double[rows];
+        double[] rowDepth = new double[rows];
+
+        for (int r = 0; r < rows; r++) {
+            for (int col = 0; col < cols; col++) {
+                MathNode cellNode = mx.rows().get(r).get(col);
+                if (cellNode instanceof MathNode.CdArrow arrow) {
+                    Box la = arrow.labelA() == null ? null : layoutBox(arrow.labelA(), labelCtx);
+                    Box lb = arrow.labelB() == null ? null : layoutBox(arrow.labelB(), labelCtx);
+                    labelA[r][col] = la;
+                    labelB[r][col] = lb;
+                    double lblW = Math.max(la == null ? 0 : la.width(), lb == null ? 0 : lb.width());
+                    if (arrow.kind().horizontal()) {
+                        double w = arrow.kind() == MathNode.CdArrowKind.EMPTY ? 0 : Math.max(lblW, minHArrow);
+                        colWidth[col] = Math.max(colWidth[col], w);
+                        // Above/below labels add height/depth to this (object) row.
+                        rowHeight[r] = Math.max(rowHeight[r], la == null ? 0 : la.height() + la.depth() + axis);
+                        rowDepth[r] = Math.max(rowDepth[r], lb == null ? 0 : lb.height() + lb.depth());
+                    } else {
+                        double shaftW = arrow.kind().codePoint() == 0
+                            ? 2 * ruleThick + labelPad
+                            : font.advanceWidth(font.glyphId(arrow.kind().codePoint())) * scale;
+                        double sideW = (la == null ? 0 : la.width()) + (lb == null ? 0 : lb.width());
+                        colWidth[col] = Math.max(colWidth[col], shaftW + sideW + 2 * labelPad);
+                        rowHeight[r] = Math.max(rowHeight[r], vSpan / 2 + axis);
+                        rowDepth[r] = Math.max(rowDepth[r], vSpan / 2);
+                    }
+                } else {
+                    Box b = layoutBox(cellNode, cellCtx);
+                    objectBox[r][col] = b;
+                    colWidth[col] = Math.max(colWidth[col], b.width());
+                    rowHeight[r] = Math.max(rowHeight[r], b.height());
+                    rowDepth[r] = Math.max(rowDepth[r], b.depth());
+                }
+            }
+        }
+
+        // --- Pass 2: build final cell boxes (connectors now stretch to col/row). ---
+        Box[][] cell = new Box[rows][cols];
+        for (int r = 0; r < rows; r++) {
+            for (int col = 0; col < cols; col++) {
+                MathNode cellNode = mx.rows().get(r).get(col);
+                if (cellNode instanceof MathNode.CdArrow arrow) {
+                    cell[r][col] = cdConnectorBox(arrow, colWidth[col], vSpan, labelA[r][col],
+                        labelB[r][col], ctx, axis, ruleThick, labelPad);
+                } else {
+                    cell[r][col] = objectBox[r][col];
+                }
+            }
+        }
+
+        // --- Placement: rows stacked by pitch, cells centred in their column. ---
+        double rowGap = CD_ROW_GAP_EM * em;
+        double colGap = CD_COL_GAP_EM * em;
+        double[] baseline = new double[rows];
+        for (int r = 1; r < rows; r++) {
+            baseline[r] = baseline[r - 1] + rowDepth[r - 1] + rowGap + rowHeight[r];
+        }
+        double gridTop = -rowHeight[0];
+        double gridBottom = baseline[rows - 1] + rowDepth[rows - 1];
+        double shift = -axis - (gridTop + gridBottom) / 2.0;
+        for (int r = 0; r < rows; r++) {
+            baseline[r] += shift;
+        }
+        double[] colX = new double[cols];
+        double x = 0;
+        for (int col = 0; col < cols; col++) {
+            colX[col] = x;
+            x += colWidth[col] + (col < cols - 1 ? colGap : 0);
+        }
+        double totalWidth = x;
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        for (int r = 0; r < rows; r++) {
+            for (int col = 0; col < cols; col++) {
+                Box b = cell[r][col];
+                if (b == null) {
+                    continue;
+                }
+                double cx = colX[col] + (colWidth[col] - b.width()) / 2.0;
+                b.drawInto(glyphs, rules, cx, baseline[r]);
+            }
+        }
+        double boxHeight = -(gridTop + shift);
+        double boxDepth = gridBottom + shift;
+        return new Box(glyphs, rules, totalWidth, Math.max(0, boxHeight), Math.max(0, boxDepth));
+    }
+
+    /**
+     * Builds one CD connector cell centred on the baseline: a horizontal arrow
+     * stretched to {@code colWidth} with above/below labels, a vertical arrow
+     * spanning {@code vSpan} with left/right labels, the {@code =}/{@code |} double
+     * rules, or an empty spacer. The returned box is centred on the math axis.
+     */
+    private static Box cdConnectorBox(MathNode.CdArrow arrow, double colWidth, double vSpan,
+                                      Box la, Box lb, LayoutContext ctx, double axis,
+                                      double ruleThick, double labelPad) {
+        var c = ctx.constants();
+        double scale = ctx.scale();
+        double gap = c.stackGapMin() * scale;
+        SfntFont font = ctx.font();
+        MathNode.CdArrowKind kind = arrow.kind();
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+
+        if (kind == MathNode.CdArrowKind.EMPTY) {
+            return Box.glue(colWidth);
+        }
+        if (kind.horizontal()) {
+            double width = colWidth;
+            if (kind == MathNode.CdArrowKind.EQUAL) {
+                // Two horizontal rules on the axis (a double line), U+003D has no
+                // horizontal MATH construction so it is drawn in-alphabet as rects.
+                double sep = 1.5 * ruleThick;
+                rules.add(new Rule(0, -axis - sep / 2 - ruleThick, width, ruleThick));
+                rules.add(new Rule(0, -axis + sep / 2, width, ruleThick));
+                return new Box(glyphs, rules, width, axis + sep / 2 + ruleThick, 0);
+            }
+            Box shaft = horizontalStretchBox(ctx, kind.codePoint(), Math.max(width * 0.9, width - 2 * labelPad));
+            double h = shaft.height();
+            double d = shaft.depth();
+            shaft.drawInto(glyphs, rules, (width - shaft.width()) / 2.0, 0.0);
+            double top = -h;
+            if (la != null) {
+                double aBase = top - gap - la.depth();
+                la.drawInto(glyphs, rules, (width - la.width()) / 2.0, aBase);
+                top = aBase - la.height();
+            }
+            double bottom = d;
+            if (lb != null) {
+                double bBase = d + gap + lb.height();
+                lb.drawInto(glyphs, rules, (width - lb.width()) / 2.0, bBase);
+                bottom = bBase + lb.depth();
+            }
+            return new Box(glyphs, rules, width, Math.max(0, -top), Math.max(0, bottom));
+        }
+        // Vertical: shaft spanning vSpan, centred on the axis, labels to the sides.
+        double laW = la == null ? 0 : la.width();
+        double lbW = lb == null ? 0 : lb.width();
+        double shaftW;
+        double inkTopY = -axis - vSpan / 2.0;
+        if (kind == MathNode.CdArrowKind.VEQUAL) {
+            // Two vertical rules (a double bar) spanning vSpan, in-alphabet rects.
+            double sep = 1.5 * ruleThick;
+            double xL = laW + labelPad;
+            rules.add(new Rule(xL, inkTopY, ruleThick, vSpan));
+            rules.add(new Rule(xL + sep + ruleThick, inkTopY, ruleThick, vSpan));
+            shaftW = sep + 2 * ruleThick;
+        } else {
+            StretchyGlyph sg = stretchVertical(font, font.glyphId(kind.codePoint()), vSpan, scale);
+            sg.placeInto(glyphs, laW + labelPad, inkTopY);
+            shaftW = sg.width();
+        }
+        double width = laW + lbW + shaftW + 2 * labelPad;
+        double midY = -axis;  // vertical centre for the side labels
+        if (la != null) {
+            la.drawInto(glyphs, rules, 0, midY + (la.height() - la.depth()) / 2.0);
+        }
+        if (lb != null) {
+            lb.drawInto(glyphs, rules, laW + labelPad + shaftW + labelPad,
+                midY + (lb.height() - lb.depth()) / 2.0);
+        }
+        double halfSpan = vSpan / 2.0;
+        return new Box(glyphs, rules, width, Math.max(0, axis + halfSpan), Math.max(0, halfSpan - axis));
+    }
+
+    /** Natural-size fallback for a bare {@link MathNode.CdArrow} outside a CD grid. */
+    private static Box cdArrowStandaloneBox(MathNode.CdArrow arrow, LayoutContext ctx) {
+        double em = 18.0 * ctx.mu();
+        double axis = ctx.constants().axisHeight() * ctx.scale();
+        double ruleThick = ctx.constants().fractionRuleThickness() * ctx.scale();
+        Box la = arrow.labelA() == null ? null : layoutBox(arrow.labelA(), ctx.superscript());
+        Box lb = arrow.labelB() == null ? null : layoutBox(arrow.labelB(), ctx.superscript());
+        return cdConnectorBox(arrow, CD_MIN_H_ARROW_EM * em, CD_V_ARROW_SPAN_EM * em,
+            la, lb, ctx, axis, ruleThick, CD_LABEL_PAD_EM * em);
+    }
+
     private static Box matrixBox(Matrix mx, LayoutContext ctx) {
+        if (mx.kind() == MatrixKind.CD) {
+            return cdBox(mx, ctx);
+        }
         var c = ctx.constants();
         double scale = ctx.scale();
         double axis = c.axisHeight() * scale;

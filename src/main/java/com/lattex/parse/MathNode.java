@@ -686,7 +686,14 @@ public sealed interface MathNode {
          * the first line is flush-left, the last line flush-right, middle lines centred.
          * A single-column grid whose alignment is applied per ROW in layout. Display style.
          */
-        MULTLINE
+        MULTLINE,
+        /**
+         * {@code CD} — an amscd commutative diagram. Object cells are ordinary math
+         * nodes; connector cells are {@link CdArrow}s whose horizontal shafts stretch
+         * to the column width and whose vertical shafts stretch to the row pitch.
+         * Roomier inter-row spacing than {@code MATRIX}; no enclosing delimiters.
+         */
+        CD
     }
 
     /**
@@ -949,6 +956,101 @@ public sealed interface MathNode {
         }
 
         /** Human-readable arrow name for a11y prose ({@code LatteX} describe()). */
+        public String a11yName() {
+            return a11yName;
+        }
+    }
+
+    /**
+     * One {@code @}-construct cell of an {@code amscd} commutative diagram
+     * ({@code \begin{CD}}). A CD grid is a {@link Matrix} with {@link MatrixKind#CD};
+     * its object cells are ordinary math nodes and its connector cells are
+     * {@code CdArrow}s. Unlike an {@link XArrow} (which stretches to its own label
+     * width), a CD arrow stretches to the grid COLUMN (horizontal) or ROW
+     * (vertical) it spans, so it is a distinct node the CD layout recognizes.
+     *
+     * <p>The two label slots follow amscd's syntax-order convention, reinterpreted
+     * per direction by the layout: for a horizontal arrow {@code labelA} sits ABOVE
+     * and {@code labelB} BELOW; for a vertical arrow {@code labelA} sits to the LEFT
+     * and {@code labelB} to the RIGHT. Either may be {@code null} (absent). For
+     * {@link CdArrowKind#EQUAL}/{@link CdArrowKind#VEQUAL}/{@link CdArrowKind#EMPTY}
+     * both are {@code null} (those connectors carry no label in amscd).
+     *
+     * @param kind   which connector (direction + whether it is an arrow, a double
+     *               line, or empty)
+     * @param labelA the above/left label, or {@code null}
+     * @param labelB the below/right label, or {@code null}
+     */
+    record CdArrow(CdArrowKind kind, MathNode labelA, MathNode labelB) implements MathNode {
+        public CdArrow {
+            if (kind == null) {
+                throw new IllegalArgumentException("CdArrow kind must not be null");
+            }
+        }
+
+        /** The above/left label, if present. */
+        public Optional<MathNode> aboveOrLeft() {
+            return Optional.ofNullable(labelA);
+        }
+
+        /** The below/right label, if present. */
+        public Optional<MathNode> belowOrRight() {
+            return Optional.ofNullable(labelB);
+        }
+    }
+
+    /**
+     * The {@code amscd} connector family. Each kind carries the shaft
+     * {@code codePoint} the layout stretches (arrows only; {@code 0} for the
+     * non-glyph connectors drawn as rules or nothing), whether it is
+     * {@link #horizontal}, the Presentation-MathML {@code <mo>} entity, a short
+     * {@code ppTag} for structural test dumps, and an {@code a11yName}. Adding a
+     * connector is one row here, mirroring {@link XArrowKind}.
+     */
+    enum CdArrowKind {
+        RIGHT(0x2192, true, "&#x2192;", "R", "rightwards"),   // @>>> / @>l>> / @>>l>
+        LEFT(0x2190, true, "&#x2190;", "L", "leftwards"),     // @<<< / @<l<< / @<<l<
+        UP(0x2191, false, "&#x2191;", "U", "upwards"),        // @AAA / @AlAA / @AAlA
+        DOWN(0x2193, false, "&#x2193;", "D", "downwards"),    // @VVV / @VlVV / @VVlV
+        EQUAL(0, true, "=", "=", "equals"),                   // @= — horizontal double rule
+        VEQUAL(0, false, "&#x2016;", "V=", "vertical equals"), // @| — vertical double rule
+        EMPTY(0, true, "", ".", "no connector");              // @. — a blank connector cell
+
+        private final int codePoint;
+        private final boolean horizontal;
+        private final String mathmlEntity;
+        private final String ppTag;
+        private final String a11yName;
+
+        CdArrowKind(int codePoint, boolean horizontal, String mathmlEntity, String ppTag, String a11yName) {
+            this.codePoint = codePoint;
+            this.horizontal = horizontal;
+            this.mathmlEntity = mathmlEntity;
+            this.ppTag = ppTag;
+            this.a11yName = a11yName;
+        }
+
+        /** The shaft glyph the layout stretches, or {@code 0} for a non-glyph connector. */
+        public int codePoint() {
+            return codePoint;
+        }
+
+        /** True for a horizontal connector (spans a column), false for a vertical one (spans a row). */
+        public boolean horizontal() {
+            return horizontal;
+        }
+
+        /** The Presentation-MathML {@code <mo>} content. */
+        public String mathmlEntity() {
+            return mathmlEntity;
+        }
+
+        /** A short structural tag for pretty-printed test dumps. */
+        public String ppTag() {
+            return ppTag;
+        }
+
+        /** Human-readable connector name for a11y prose. */
         public String a11yName() {
             return a11yName;
         }

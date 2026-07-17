@@ -285,6 +285,11 @@ public final class MathVariant {
                 apply(style, xa.above()),
                 xa.below() == null ? null : apply(style, xa.below()),
                 xa.kind());
+            // A CD connector: restyle its side labels; the shaft is a synthesized glyph.
+            case MathNode.CdArrow cd -> new MathNode.CdArrow(
+                cd.kind(),
+                cd.labelA() == null ? null : apply(style, cd.labelA()),
+                cd.labelB() == null ? null : apply(style, cd.labelB()));
             // A \lx wrapper is top-level-only (nested \lx is rejected by the parser),
             // so this arm is unreachable in practice; restyle the body for totality.
             case StyledMath sm -> new StyledMath(

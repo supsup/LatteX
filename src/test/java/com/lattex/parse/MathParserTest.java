@@ -134,6 +134,16 @@ class MathParserTest {
                 }
                 yield sb.append(')').toString();
             }
+            case MathNode.CdArrow cd -> {
+                StringBuilder sb = new StringBuilder("Cd[").append(cd.kind().ppTag()).append("](");
+                if (cd.labelA() != null) {
+                    sb.append("A:").append(pp(cd.labelA()));
+                }
+                if (cd.labelB() != null) {
+                    sb.append(cd.labelA() == null ? "" : ",").append("B:").append(pp(cd.labelB()));
+                }
+                yield sb.append(')').toString();
+            }
             case MathNode.StyledMath sm -> "Lx(" + pp(sm.body()) + ")";
             case MathNode.StyleSwitch sw -> "Style(" + sw.level() + " " + pp(sw.body()) + ")";
         };

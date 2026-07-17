@@ -635,6 +635,16 @@ public final class LatteX {
                     : dir + " arrow labelled " + describe(xa.above())
                         + " over " + describe(xa.below());
             }
+            case MathNode.CdArrow cd -> {
+                StringBuilder sb = new StringBuilder(cd.kind().a11yName());
+                if (cd.labelA() != null) {
+                    sb.append(" labelled ").append(describe(cd.labelA()));
+                }
+                if (cd.labelB() != null) {
+                    sb.append(cd.labelA() == null ? " labelled " : " and ").append(describe(cd.labelB()));
+                }
+                yield sb.toString();
+            }
             case StyledMath sm -> describe(sm.body()); // the wrapper is transparent to a11y
             case MathNode.StyleSwitch sw -> describe(sw.body()); // style is invisible to a11y prose
         };
@@ -748,6 +758,19 @@ public final class LatteX {
                 yield xa.below() == null
                     ? "<mover>" + arrow + toMathML(xa.above()) + "</mover>"
                     : "<munderover>" + arrow + toMathML(xa.below()) + toMathML(xa.above()) + "</munderover>";
+            }
+            case MathNode.CdArrow cd -> {
+                if (cd.kind() == MathNode.CdArrowKind.EMPTY) {
+                    yield "<mspace width=\"1em\"/>";
+                }
+                String op = "<mo>" + cd.kind().mathmlEntity() + "</mo>";
+                if (cd.labelA() == null && cd.labelB() == null) {
+                    yield op;
+                }
+                // labelA over/above, labelB under/below (mirrors the XArrow serialization).
+                String over = cd.labelA() == null ? "<none/>" : toMathML(cd.labelA());
+                String under = cd.labelB() == null ? "<none/>" : toMathML(cd.labelB());
+                yield "<munderover>" + op + under + over + "</munderover>";
             }
             case StyledMath sm -> toMathML(sm.body()); // the \lx wrapper is transparent to MathML
             case MathNode.StyleSwitch sw -> toMathML(sw.body()); // \displaystyle etc.: presentation, not structure
