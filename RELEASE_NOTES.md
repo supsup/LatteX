@@ -4,10 +4,16 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — precedence cascade fx
+## Unreleased (mainline) — precedence cascade fx, dimensioned glue
 
 On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
 release bump ships when consumers are ready to re-pin).
+
+- **Dimensioned horizontal glue — `\hspace{2em}` / `\mkern18mu` / `\kern` / `\mskip`.**
+  A `<number><unit>` width (braced for `\hspace`, bare or braced for `\mkern`/`\kern`;
+  `\hspace*` accepted) becomes a `Spacing` node in math units (18mu = 1em). em/ex/mu
+  are exact; `pt` is approximated at a 10pt em (1pt ≈ 1.8mu) — absolute lengths are a
+  follow-up. A malformed dimension or unknown unit throws a positioned parse error.
 
 - **`precedence` fx effect — the order-of-operations cascade.** Hover a fenced
   expression and it lights up in *evaluation order*: the innermost group first,

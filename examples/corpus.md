@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **147 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **145**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **149 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **147**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -246,6 +246,13 @@ following once the node exists.
 | `\begin{CD} X @>>> Y \\ @\| @VVV \\ X @>>> Z \end{CD}` | CD — vertical double-bar connector (@\|) | `PARSES-NOW` |
 | `\begin{CD} A @= B @>>> C \end{CD}` | CD — horizontal double-line connector (@=) | `PARSES-NOW` |
 | `\begin{CD} A @<<< B @AAA C \end{CD}` | CD — leftward and upward arrows | `PARSES-NOW` |
+
+## Dimensioned glue (\hspace \mkern \kern)
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `a\hspace{2em}b` | dimensioned horizontal glue — \\hspace{2em} (36mu) | `PARSES-NOW` |
+| `x\mkern18mu y` | bare-form dimensioned glue — \\mkern18mu (1em) | `PARSES-NOW` |
 
 ---
 
