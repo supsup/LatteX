@@ -821,6 +821,26 @@ public final class MathParser {
                 MathNode body = parseArgument("\\" + name + " body");
                 return new MathNode.Boxed(body);
             }
+            case "bra" -> {
+                // \bra{ψ} = ⟨ψ| — a fixed-size angle-bracket + vertical bar (physics braket).
+                MathNode body = parseArgument("\\bra body");
+                return new MathList(List.of(
+                    new Atom(0x27E8, MathClass.OPEN), body, new Atom('|', MathClass.CLOSE)));
+            }
+            case "ket" -> {
+                // \ket{ψ} = |ψ⟩ — a vertical bar + closing angle bracket.
+                MathNode body = parseArgument("\\ket body");
+                return new MathList(List.of(
+                    new Atom('|', MathClass.OPEN), body, new Atom(0x27E9, MathClass.CLOSE)));
+            }
+            case "braket" -> {
+                // \braket{a|b} = ⟨a|b⟩ — angle brackets around the body; an inner | (the
+                // inner product's mid bar) renders as-is inside. Fixed-size v1 (the manual
+                // \langle a|b\rangle already renders; stretchy braket is a follow-up).
+                MathNode body = parseArgument("\\braket body");
+                return new MathList(List.of(
+                    new Atom(0x27E8, MathClass.OPEN), body, new Atom(0x27E9, MathClass.CLOSE)));
+            }
             case "binom" -> {
                 return binom(MathNode.FractionStyle.INHERIT);
             }
