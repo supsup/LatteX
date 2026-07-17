@@ -90,6 +90,7 @@ class MathParserTest {
             }
             case MathNode.Colored(var body, var color) ->
                 "Col[" + color.svgValue() + "](" + pp(body) + ")";
+            case MathNode.Boxed(var body) -> "Box(" + pp(body) + ")";
             case MathNode.Tagged(var body, var label) ->
                 "Tag(" + pp(body) + "|" + pp(label) + ")";
             case MathNode.OperatorName(var name, var takesLimits) ->

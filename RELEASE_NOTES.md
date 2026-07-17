@@ -4,10 +4,26 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — precedence cascade fx
+## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, + precedence cascade fx
 
 On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
 release bump ships when consumers are ready to re-pin).
+
+- **`\begin{CD}` — amscd commutative diagrams.** The `@`-connector grammar
+  (`@>label>>` / `@<<<` / `@VVV` / `@AAA` right/left/down/up, plus `@=` `@|` `@.`)
+  renders as a grid whose object cells are ordinary math and whose connectors
+  stretch — horizontal arrows to the column width, vertical arrows across the row
+  pitch — each carrying script-size side labels. `@=`/`@|` draw as in-alphabet
+  rules (U+003D has no horizontal MATH construction); no `<line>`/`<marker>`.
+- **`\|` renders the double bar ‖ (U+2016), not a single `|`.** The norm
+  delimiter was a fidelity bug: both the symbol table and the `\left`/`\right`
+  path mapped `\|` to a single bar. It now matches `\Vert`; the bare `|`
+  character stays single, and stretchy `\left\|…\right\|` assembles.
+- **`\boxed{…}` (and `\fbox{…}` as its math-mode analogue) — a framed
+  sub-formula.** The body laid out normally inside a rule rectangle at fixed
+  padding; the frame is four `<rect>`s (in-alphabet), the box behaves as an
+  ordinary atom (sits correctly inline, e.g. `E = \boxed{mc^2}`), and the frame
+  sizes to the body (a boxed fraction grows the frame to the taller content).
 
 - **`precedence` fx effect — the order-of-operations cascade.** Hover a fenced
   expression and it lights up in *evaluation order*: the innermost group first,

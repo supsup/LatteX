@@ -144,6 +144,7 @@ public final class LayoutEngine {
             case Radical(var radicand, var index) -> radicalBox(radicand, index, ctx);
             case Spacing(var muWidth) -> Box.glue(muWidth * ctx.mu());
             case Colored(var body, var color) -> coloredBox(body, color, ctx);
+            case MathNode.Boxed(var body) -> boxedBox(body, ctx);
             case Phantom(var content, var keepW, var keepV) ->
                 phantomBox(content, keepW, keepV, ctx);
             case BigOperator(var op, var lower, var upper, var limitsMode) ->
@@ -479,6 +480,34 @@ public final class LayoutEngine {
     }
 
     /**
+     * {@code \boxed{body}}: the body inside a rule-rectangle frame at a fixed
+     * padding ({@code \fboxsep}) and thickness ({@code \fboxrule}). The frame is
+     * four {@code <rect>}s (in-alphabet); the box is one atom wider/taller than the
+     * body by the padding + frame on every side, centred on the body's baseline.
+     */
+    private static Box boxedBox(MathNode body, LayoutContext ctx) {
+        Box b = layoutBox(body, ctx);
+        double em = 18.0 * ctx.mu();
+        double t = Math.max(ctx.constants().fractionRuleThickness() * ctx.scale(), 0.6 * ctx.mu());
+        double pad = 0.25 * em;                       // ~\fboxsep
+        double w = b.width() + 2 * (pad + t);
+        double innerTop = -b.height() - pad;          // padding above the body ink
+        double innerBottom = b.depth() + pad;         // padding below
+        double outerTop = innerTop - t;
+        double outerBottom = innerBottom + t;
+        double frameH = outerBottom - outerTop;
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        b.drawInto(glyphs, rules, t + pad, 0.0);       // body sits inside the frame
+        rules.add(new Rule(0, outerTop, w, t));        // top
+        rules.add(new Rule(0, innerBottom, w, t));     // bottom
+        rules.add(new Rule(0, outerTop, t, frameH));   // left
+        rules.add(new Rule(w - t, outerTop, t, frameH)); // right
+        return new Box(glyphs, rules, w, -outerTop, outerBottom);
+    }
+
+    /**
      * A {@code \tag'd} equation: the body, then the label auto-wrapped in ordinary
      * parentheses ({@code \tag{1}} renders as {@code (1)}) and placed flush-right
      * after a {@code \qquad}-sized gap. {@code \tag} is equation-global, so this only
@@ -514,6 +543,7 @@ public final class LayoutEngine {
             case MathList _ -> MathClass.ORD; // a {group} behaves as an Ord atom
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
             case Colored c -> classOf(c.body()); // color is transparent: take the body's class
+            case MathNode.Boxed _ -> MathClass.ORD; // a framed box behaves as an Ord atom
             case MathNode.Tagged t -> classOf(t.body()); // the tag rides outside; class = body's
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
             case OperatorName _ -> MathClass.OP; // a named operator is class Op
