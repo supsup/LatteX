@@ -484,8 +484,8 @@ public final class LatteX {
      * {@link Layout}, the indices cannot desync — the drift a separate attrs call would risk.
      *
      * <p>Failure semantics mirror the consumer-side {@code tryRender}: ANY failure (parse
-     * error, layout overflow, emit fault) yields {@link Optional#empty()} so the caller falls
-     * back to the plain source text — fail-inert, never a half-rendered pair.
+     * error, layout overflow, emit fault) yields {@link java.util.Optional#empty()} so the
+     * caller falls back to the plain source text — fail-inert, never a half-rendered pair.
      *
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @return the render-coupled pair, or empty on any failure

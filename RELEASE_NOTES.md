@@ -4,10 +4,10 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, `\overparen`, dimensioned glue, `\prescript`, multi-integral & Unicode-operator fidelity, + precedence cascade fx
+## 0.8.0 · 2026-07-17 — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, `\overparen`, dimensioned glue, `\prescript`, multi-integral & Unicode-operator fidelity, + precedence cascade fx
 
-On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
-release bump ships when consumers are ready to re-pin).
+The release Stafficy `/docs` re-pins (vendored as `lattex-0.8.0.jar`, replacing
+0.7.0). Everything below landed on mainline via individually Conf-RTM'd branches.
 
 - **Multi-integral side limits — `\oint` / `\iint` / `\iiint` / `\oiint` / `\oiiint`
   / `\idotsint` now keep their limits *beside* the sign in display style**, like
