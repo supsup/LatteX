@@ -198,9 +198,12 @@ public final class MathParser {
      * Reads the {@code {…}} argument of a text-family command starting at index
      * {@code i} (just past the command name), emitting a single {@link Kind#TEXT}
      * token, and returns the index just past the closing brace. Spaces are kept
-     * verbatim (text mode is space-significant); grouping braces are stripped
-     * (invisible, as in LaTeX). Nested-math ({@code $…$}) inside the argument is a
-     * documented follow-up — the content is taken literally here.
+     * verbatim (text mode is space-significant), and the content — INCLUDING its
+     * interior grouping braces — is carried verbatim on the token: a nested
+     * {@code $…$} span needs the brace structure for its re-parse (stripping here
+     * silently corrupted {@code \text{$\frac{12}{34}$}} into {@code \frac1234} —
+     * Conf review lattex/210 F1). Brace-invisibility for the LITERAL text runs is
+     * applied later, in {@link #textWithNestedMath}, never to a math span.
      */
     private static int lexTextArgument(String s, String command, int i, List<Token> out, int start) {
         int n = s.length();
@@ -218,6 +221,7 @@ public final class MathParser {
             char c = s.charAt(i);
             if (c == '{') {
                 depth++;
+                sb.append(c); // interior brace: KEEP (verbatim content)
                 i++;
             } else if (c == '}') {
                 depth--;
@@ -226,6 +230,7 @@ public final class MathParser {
                     out.add(Token.text(command, sb.toString(), start));
                     return i;
                 }
+                sb.append(c); // interior brace: KEEP (verbatim content)
             } else {
                 int cp = s.codePointAt(i);
                 sb.appendCodePoint(cp);
@@ -270,8 +275,20 @@ public final class MathParser {
 
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */
     static MathNode parseMath(String latex) {
+        return parseMath(latex, 0);
+    }
+
+    /**
+     * Parses ordinary LaTeX math seeded at {@code initialDepth}. Used by the
+     * nested-math text split ({@code \text{a $x$ b}}): the inner span's parser
+     * CONTINUES the outer parser's depth so the {@link #MAX_DEPTH} guard is global
+     * across {@code $}-nesting — a fresh counter per level would let
+     * {@code \text{$\text{$…}$}} recurse past the guard into a stack overflow.
+     */
+    static MathNode parseMath(String latex, int initialDepth) {
         try {
             MathParser parser = new MathParser(latex);
+            parser.depth = initialDepth;
             MathNode node = parser.parseTopLevel();
             if (parser.peek().kind() != Kind.EOF) {
                 throw new MathSyntaxException(
@@ -819,7 +836,7 @@ public final class MathParser {
             }
             case TEXT -> {
                 next();
-                yield new TextRun(t.text(), TEXT_COMMANDS.get(t.name()));
+                yield textWithNestedMath(t);
             }
             case COMMAND -> parseCommand();
             case SUP -> throw new MathSyntaxException(
@@ -1425,6 +1442,135 @@ public final class MathParser {
             return items.get(0);
         }
         return new MathList(items);
+    }
+
+    /**
+     * Turns a {@link Kind#TEXT} token into its node, honoring nested inline math:
+     * an unescaped {@code $…$} span inside a text-family argument re-enters math
+     * mode (LaTeX's text-mode toggle), so {@code \text{if $x>0$ then}} splits into
+     * literal {@link TextRun}s and recursively-parsed math segments. {@code \$}
+     * stays a literal (verbatim, exactly the pre-split behavior — never a toggle).
+     * A plain argument (no unescaped {@code $}) yields the byte-identical single
+     * {@link TextRun} it always did. An unpaired {@code $} is a positioned error;
+     * an empty {@code $$} span contributes nothing. The inner parse CONTINUES this
+     * parser's depth (see {@link #parseMath(String, int)}) so {@code $}-nesting
+     * cannot recurse past {@link #MAX_DEPTH}.
+     */
+    private MathNode textWithNestedMath(Token t) {
+        String raw = t.text(); // verbatim, braces included (lexTextArgument keeps them)
+        TextStyle style = TEXT_COMMANDS.get(t.name());
+        if (indexOfUnescapedDollar(raw, 0) < 0) {
+            return new TextRun(literalText(raw), style); // fast path: one literal run
+        }
+        List<MathNode> items = new ArrayList<>();
+        int i = 0;
+        int n = raw.length();
+        while (i < n) {
+            int open = indexOfUnescapedDollar(raw, i);
+            if (open < 0) {
+                items.add(new TextRun(literalText(raw.substring(i)), style));
+                break;
+            }
+            if (open > i) {
+                items.add(new TextRun(literalText(raw.substring(i, open)), style));
+            }
+            int close = indexOfUnescapedDollar(raw, open + 1);
+            if (close < 0) {
+                throw new MathSyntaxException(
+                    "Unpaired '$' in \\" + t.name() + " argument", t.offset());
+            }
+            // The math span keeps its braces VERBATIM — the re-parse needs the group
+            // structure (\frac{12}{34}, x^{10}); stripping here silently corrupted
+            // multi-char braced arguments (Conf review lattex/210 F1).
+            String span = raw.substring(open + 1, close);
+            if (!span.isBlank()) {
+                try {
+                    items.add(parseMath(span, depth));
+                } catch (MathSyntaxException e) {
+                    throw new MathSyntaxException("in \\" + t.name() + " nested math '$"
+                        + span + "$': " + e.getMessage(), t.offset());
+                }
+            }
+            i = close + 1;
+        }
+        if (items.size() == 1) {
+            return items.get(0);
+        }
+        return new MathList(List.copyOf(items));
+    }
+
+    /**
+     * A LITERAL text segment: grouping braces become invisible (exactly the old
+     * lexer-level stripping, relocated here so math spans keep theirs), and
+     * {@code \$} → {@code $} — with {@code $} toggling math, the escape is the
+     * only way to write a literal dollar in text (matches LaTeX).
+     */
+    private static String literalText(String s) {
+        if (s.indexOf('{') < 0 && s.indexOf('}') < 0 && s.indexOf('\\') < 0) {
+            return s;
+        }
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\' && i + 1 < s.length() && s.charAt(i + 1) == '$') {
+                sb.append('$');
+                i++;
+            } else if (c != '{' && c != '}') {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * The index of the next math-toggling {@code $} at or after {@code from}, or
+     * -1. Skips: {@code \$} (the literal-dollar escape); and the ENTIRE braced
+     * argument of a nested text-family command ({@code \text{…}} inside this
+     * argument) — those {@code $}s belong to the inner command's own re-parse,
+     * not this level's pairing. Without that skip, {@code \text{$\text{$x$}$}}
+     * mis-paired the outer span at the first inner {@code $} and the depth-guard
+     * path was unreachable (Conf review lattex/210 F2). A plain {@code {…}} group
+     * is NOT opaque: {@code $} inside it still toggles, as in LaTeX.
+     */
+    private static int indexOfUnescapedDollar(String s, int from) {
+        int i = from;
+        int n = s.length();
+        while (i < n) {
+            char c = s.charAt(i);
+            if (c == '\\') {
+                int j = i + 1;
+                while (j < n && Character.isLetter(s.charAt(j))) {
+                    j++;
+                }
+                if (j > i + 1 && TEXT_COMMANDS.containsKey(s.substring(i + 1, j))) {
+                    // nested text-family command: skip its whole braced argument
+                    while (j < n && isWhitespace(s.charAt(j))) {
+                        j++;
+                    }
+                    if (j < n && s.charAt(j) == '{') {
+                        int depth = 1;
+                        j++;
+                        while (j < n && depth > 0) {
+                            char d = s.charAt(j);
+                            if (d == '\\') {
+                                j++; // escaped char inside the nested argument
+                            } else if (d == '{') {
+                                depth++;
+                            } else if (d == '}') {
+                                depth--;
+                            }
+                            j++;
+                        }
+                    }
+                }
+                i = Math.max(j, i + 2); // command word skipped, or \X escape
+            } else if (c == '$') {
+                return i;
+            } else {
+                i++;
+            }
+        }
+        return -1;
     }
 
     /** A single-character atom, classified per the TeXbook atom-class tables. */
