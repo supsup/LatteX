@@ -356,6 +356,23 @@ public sealed interface MathNode {
     }
 
     /**
+     * A framed sub-formula — amsmath's {@code \boxed{…}} (and {@code \fbox{…}}
+     * treated as its math-mode analogue): the {@code body} laid out normally with a
+     * rectangular rule frame drawn around it at a fixed padding. The frame is four
+     * {@code <rect>}s (in the allow-listed SVG alphabet); the box behaves as an
+     * ordinary atom (class Ord). {@code body} is non-null.
+     *
+     * @param body the framed content
+     */
+    record Boxed(MathNode body) implements MathNode {
+        public Boxed {
+            if (body == null) {
+                throw new IllegalArgumentException("Boxed body must not be null");
+            }
+        }
+    }
+
+    /**
      * A display equation carrying a {@code \tag{label}} — the {@code body} equation
      * plus a {@code label} rendered flush-right, auto-wrapped in parentheses (LaTeX
      * renders {@code \tag{1}} as {@code (1)}). {@code \tag} is equation-global, so it

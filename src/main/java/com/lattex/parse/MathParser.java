@@ -813,6 +813,13 @@ public final class MathParser {
             case "color" -> {
                 return parseColorSwitch();
             }
+            case "boxed", "fbox" -> {
+                // \boxed{body} (amsmath) frames a math sub-formula in a rule rectangle.
+                // \fbox is text-mode in LaTeX; here it is accepted as the math-mode
+                // analogue (a clean-room simplification — the frame is identical).
+                MathNode body = parseArgument("\\" + name + " body");
+                return new MathNode.Boxed(body);
+            }
             case "binom" -> {
                 return binom(MathNode.FractionStyle.INHERIT);
             }
