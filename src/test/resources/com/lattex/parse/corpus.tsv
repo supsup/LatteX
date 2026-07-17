@@ -57,7 +57,8 @@ PARSES-NOW	delim-fixed	(a)	round parentheses
 PARSES-NOW	delim-fixed	[b]	square brackets
 PARSES-NOW	delim-fixed	\{c\}	escaped curly braces
 PARSES-NOW	delim-fixed	|d|	vertical bars
-PARSES-NOW	delim-fixed	\|e\|	double-bar (note: parses, but \| currently maps to single | glyph)
+PARSES-NOW	delim-fixed	\|e\|	double-bar norm delimiters (\| maps to ‖, U+2016, like \Vert)
+PARSES-NOW	delim-fixed	\left\| \frac{x}{y} \right\|	stretchy double-bar norm around tall content
 PARSES-NOW	delim-fixed	\langle f\rangle	angle brackets as ordinary symbols (outside \left..\right)
 PARSES-NOW	delim-fixed	\lfloor g\rfloor	floor delimiters as ordinary symbols
 PARSES-NOW	delim-fixed	\lceil h\rceil	ceiling delimiters as ordinary symbols

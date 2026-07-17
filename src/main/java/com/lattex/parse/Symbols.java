@@ -569,7 +569,7 @@ final class Symbols {
         // -- Delimiters usable as ordinary symbols (outside \left..\right) ---
         m.put("{", new Sym('{', MathClass.OPEN));
         m.put("}", new Sym('}', MathClass.CLOSE));
-        m.put("|", new Sym('|', MathClass.ORD));
+        m.put("|", new Sym(0x2016, MathClass.ORD));       // \| is the double bar ‖ (synonym of \Vert)
         m.put("Vert", new Sym(0x2016, MathClass.ORD));    // ‖
         m.put("langle", new Sym(0x27E8, MathClass.OPEN)); // ⟨
         m.put("rangle", new Sym(0x27E9, MathClass.CLOSE)); // ⟩
