@@ -1608,6 +1608,25 @@ public final class LayoutEngine {
             la, lb, ctx, axis, ruleThick, CD_LABEL_PAD_EM * em);
     }
 
+    /**
+     * The more-shrunk of two math styles by glyph scale
+     * ({@code SCRIPT_SCRIPT} &lt; {@code SCRIPT} &lt; {@code DISPLAY} ≈ {@code TEXT}); on a
+     * scale tie the first argument (the caller's intended style) wins, preserving the
+     * display-vs-text distinction that matters for layout even at equal scale. Used to
+     * clamp a matrix cell's style to its enclosing context.
+     */
+    private static MathStyle smallerStyle(MathStyle a, MathStyle b) {
+        return styleRank(b) > styleRank(a) ? b : a;
+    }
+
+    private static int styleRank(MathStyle s) {
+        return switch (s) {
+            case SCRIPT_SCRIPT -> 2;
+            case SCRIPT -> 1;
+            case DISPLAY, TEXT -> 0;
+        };
+    }
+
     private static Box matrixBox(Matrix mx, LayoutContext ctx) {
         if (mx.kind() == MatrixKind.CD) {
             return cdBox(mx, ctx);
@@ -1621,19 +1640,26 @@ public final class LayoutEngine {
 
         // Cell math style: matrices/array/cases sit one style down (text),
         // smallmatrix two down (script); aligned-equation environments keep each
-        // equation in display style (full-size fractions, big-op limits), un-cramped.
-        MathStyle cellStyle = switch (mx.kind()) {
+        // equation in display style (full-size fractions, big-op limits).
+        MathStyle kindStyle = switch (mx.kind()) {
             case SMALL, SUBSTACK -> MathStyle.SCRIPT;
             case ALIGN, GATHER, MULTLINE -> MathStyle.DISPLAY;
             default -> MathStyle.TEXT;
         };
+        // Derive the cell style from the SURROUNDING style, never re-seed it absolute:
+        // a matrix nested in a script (e.g. x^{\begin{pmatrix}…\end{pmatrix}}) must shrink
+        // with its context, so the cell style is the SMALLER of the kind's default and the
+        // enclosing style — and cramping is inherited (a matrix in a subscript stays
+        // cramped). The old code hard-seeded kindStyle + un-cramped, rendering a matrix in
+        // a superscript full-size and un-cramped (fidelity plan bc9b12ff #6).
+        MathStyle cellStyle = smallerStyle(kindStyle, ctx.style());
         // Preserve the ENCLOSING fence depth into the cell (Fixpoint F1, lattex/176): a matrix
         // is not a precedence boundary, so a cell atom inside a \left..\right fence must keep
         // that depth — the 5-arg form would reset it to 0 and emit a confidently-wrong groupmap
         // (the matrix-cell atom ranked WITH atoms outside the fence). A fence INSIDE a cell then
         // correctly deepens from the cell's inherited level.
         LayoutContext cellCtx =
-            new LayoutContext(font, c, ctx.fontSize(), cellStyle, false, ctx.fenceDepth());
+            new LayoutContext(font, c, ctx.fontSize(), cellStyle, ctx.cramped(), ctx.fenceDepth());
 
         int rows = mx.rows().size();
         int cols = mx.columnCount();

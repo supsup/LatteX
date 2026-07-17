@@ -210,4 +210,53 @@ class MatrixLayoutTest {
             }
         }
     }
+
+    // ---- Cell style is derived from the surrounding style (fidelity bc9b12ff #6) -----
+
+    /**
+     * The scale of the CELL glyph 'a' — targeted by its source code point so it isolates
+     * the matrix's own cell content from the stretched delimiters (which always shrink
+     * with the outer style regardless of the cell-style clamp, and so cannot discriminate
+     * this fix). Construction glyphs carry {@code NO_SOURCE}; only atoms carry a code point.
+     */
+    private static double cellGlyphScale(Layout l) {
+        return l.glyphs().stream()
+            .filter(g -> g.sourceCodePoint() == 'a')
+            .mapToDouble(PositionedGlyph::scale)
+            .findFirst().orElseThrow();
+    }
+
+    @Test
+    void aMatrixInASuperscriptShrinksItsCellsWithTheContext() {
+        // The cell style used to be re-seeded ABSOLUTE (always TEXT for a pmatrix), so a
+        // matrix inside a superscript rendered its CELLS at full size even though the
+        // superscript shrank everything around them. Now the cell style is clamped to the
+        // enclosing (script) style, so the 'a' cell is smaller in a superscript than at
+        // top level. (Measured on the cell glyph, not the delimiters — the delimiters
+        // shrink via the outer scale either way and cannot detect this fix.)
+        double topLevel = cellGlyphScale(layout("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}"));
+        double inScript = cellGlyphScale(layout("x^{\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}}"));
+        assertTrue(inScript < topLevel,
+            "a matrix cell in a superscript must shrink: script cell scale " + inScript
+                + " should be < top-level " + topLevel);
+    }
+
+    @Test
+    void aTopLevelMatrixCellIsUnchangedByTheClamp() {
+        // The common case: at display/text the clamp is a no-op, so cells stay text-style
+        // (full scale). Guards against the fix accidentally shrinking ordinary matrices.
+        double baseScale = 40.0 / FONT.unitsPerEm();
+        assertEquals(baseScale, cellGlyphScale(layout("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}")),
+            1e-9, "a top-level matrix's cell stays at full (text-style) scale");
+    }
+
+    @Test
+    void aMatrixInASubscriptAlsoShrinksAndStaysInAlphabet() {
+        // Cramping is now inherited (was hard-set false) and the subscript style shrinks
+        // the cell too. Also a smoke that the cramped cell context lays out cleanly.
+        assertAlphabet(LatteX.render("y_{\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}}"));
+        double inSub = cellGlyphScale(layout("y_{\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}}"));
+        double topLevel = cellGlyphScale(layout("\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}"));
+        assertTrue(inSub < topLevel, "a matrix cell in a subscript also shrinks with its context");
+    }
 }

@@ -4,10 +4,19 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — nested inline math inside `\text{…}`
+## Unreleased (mainline) — nested inline math inside `\text{…}`, matrix-cell style fidelity
 
 On mainline, not yet cut as a version (the vendored jar is `0.8.0`; the next
 release bump picks this up).
+
+- **A matrix nested in a script shrinks with its context.** A matrix's cell style
+  was re-seeded *absolute* (always text style, un-cramped), so
+  `x^{\begin{pmatrix}…\end{pmatrix}}` rendered its cells at full size instead of
+  script size, and a matrix in a subscript dropped the `cramped` style. The cell
+  style is now the smaller of the matrix kind's default and the enclosing style, and
+  cramping is inherited — so a matrix in a super/subscript shrinks correctly while a
+  top-level matrix and `smallmatrix` are unchanged (fidelity plan bc9b12ff #6, the
+  last item on that plan).
 
 - **Nested inline math inside text — `\text{if $x>0$ then}`.** An unescaped
   `$…$` span inside a text-family argument (`\text` `\textrm` `\mathrm` `\textbf`
