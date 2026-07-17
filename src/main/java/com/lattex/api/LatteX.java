@@ -105,7 +105,7 @@ public final class LatteX {
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
             stage = "emit";
-            String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
             return new RenderResult(svg, new Diagnostics(Outcome.OK, "emit",
                 "Rendered successfully.", -1, "", -1, ""));
         } catch (MathSyntaxException e) {
@@ -202,7 +202,7 @@ public final class LatteX {
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 DISPLAY_FONT_SIZE * fStyle.scale(), fStyle.mathStyle(), false);
             Layout layout = LayoutEngine.layout(fBody, ctx);
-            return SvgEmitter.emit(layout, font, describe(fBody), fStyle.color().svgValue());
+            return SvgEmitter.emit(layout, font, describe(fBody), fStyle.color());
         });
     }
 
@@ -242,7 +242,7 @@ public final class LatteX {
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 fontSize, fStyle.mathStyle(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
-            String svg = SvgEmitter.emit(layout, font, describe(body), fStyle.color().svgValue());
+            String svg = SvgEmitter.emit(layout, font, describe(body), fStyle.color());
             double depthEm = Math.max(0.0, layout.maxY()) / fontSize;
             double heightEm = Math.max(0.0, -layout.minY()) / fontSize;
             return new InlineSvgResult(svg, depthEm, heightEm);
@@ -369,7 +369,7 @@ public final class LatteX {
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
-            String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
 
             // The `thread` effect reads data-lx-glyphmap to light up every occurrence of a
             // hovered token. Stamp the sidecar only when a thread effect is present — it is
@@ -500,7 +500,7 @@ public final class LatteX {
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
-            String svg = SvgEmitter.emit(layout, font, describe(body), style.color().svgValue());
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
             String glyphmap = fx.effects().containsValue(Effect.THREAD)
                 ? SvgEmitter.glyphmap(layout, font) : "";
             String groupmap = precedenceGroupmap(fx, layout, font);

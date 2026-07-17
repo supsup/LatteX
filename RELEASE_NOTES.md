@@ -4,10 +4,30 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — nested inline math inside `\text{…}`
+## Unreleased (mainline) — nested inline math inside `\text{…}`, container drift guard + type-safe fill
 
 On mainline, not yet cut as a version (the vendored jar is `0.8.0`; the next
 release bump picks this up).
+
+- **Container drift guard — the `<span class="lx-math">` attribute surface is now
+  build-pinned.** The inner-SVG alphabet has long been closed and guarded
+  (`S8LeftContainmentTest`); the *outer* container that `renderStyledHtml` stamps
+  had no equivalent, so a future `fx.*` or semantics feature adding an attribute name
+  or forwarding an unescaped value could ship undetected. A new test asserts two
+  universal invariants over a positive + hostile battery: every container attribute is
+  in a closed allow-list (`class` / `aria-label` / the five `data-lx-fx-*` /
+  `data-lx-glyphmap` / `data-lx-groupmap` / the open `data-lx-<identifier>` data-attr
+  lane), and no attribute value can break out of the tag (no unescaped `<`/`>`/`"`, `&`
+  only as an entity). Mutation-verified — an injected `onclick` or a hyphenated
+  `data-lx-fx-<new>` fails the build (plan fd6bd568 S2).
+- **The emitter fill contract is compiler-enforced.** `SvgEmitter.emit`/`emitFragment`
+  took the fill as a `String` with a Javadoc-only "must be a `Color.svgValue()`" rule —
+  a future internal caller passing author-derived text would have been a one-line
+  containment break with no test. The parameter is now a typed `Color`, so only a
+  validated `currentColor`/`#rrggbb` literal can reach the `fill` attribute (plan
+  fd6bd568 S3). *(The plan's S1 parse-time DoS guard — a nested-brace bomb throwing a
+  clean `MathSyntaxException` instead of a `StackOverflowError` — already landed via
+  `MAX_DEPTH`/`MAX_SOURCE_LENGTH`, closing that slice; this branch completes the plan.)*
 
 - **Nested inline math inside text — `\text{if $x>0$ then}`.** An unescaped
   `$…$` span inside a text-family argument (`\text` `\textrm` `\mathrm` `\textbf`
