@@ -4,10 +4,15 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — precedence cascade fx
+## Unreleased (mainline) — precedence cascade fx, `\overparen`
 
 On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
 release bump ships when consumers are ready to re-pin).
+
+- **`\overparen{…}` — the stretchy over-parenthesis accent** (⏜, U+23DC), sized to
+  the base like `\widehat`, riding the existing wide-accent machinery (STIX carries
+  the glyph + horizontal construction). (`\underparen` — a stretchy glyph *under* the
+  base — needs an Accent-node change and is filed as a follow-up.)
 
 - **`precedence` fx effect — the order-of-operations cascade.** Hover a fenced
   expression and it lights up in *evaluation order*: the innermost group first,
