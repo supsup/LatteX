@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **153 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **151**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **155 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **153**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -262,6 +262,13 @@ following once the node exists.
 | --- | --- | --- |
 | `A \xlongequal{\text{def}} B` | labelled extensible double-equals — \\xlongequal (two in-alphabet rules) | `PARSES-NOW` |
 | `\xlongequal[y]{x}` | \\xlongequal with above + below labels | `PARSES-NOW` |
+
+## Physics braket (\bra \ket \braket)
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\braket{\psi \| \hat{H} \| \psi}` | physics braket sugar — ⟨ψ\|Ĥ\|ψ⟩ over angle-bracket atoms | `PARSES-NOW` |
+| `\bra{\phi}\ket{\psi}` | \\bra ⟨φ\| and \\ket \|ψ⟩ juxtaposed | `PARSES-NOW` |
 
 ---
 
