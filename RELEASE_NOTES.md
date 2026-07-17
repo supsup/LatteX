@@ -4,7 +4,7 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, + precedence cascade fx
+## Unreleased (mainline) — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, `\overparen`, + precedence cascade fx
 
 On mainline, not yet cut as a version or vendored (the jar is still `0.7.0`; a
 release bump ships when consumers are ready to re-pin).
@@ -33,6 +33,10 @@ release bump ships when consumers are ready to re-pin).
   `\ket{\phi}` → |φ⟩, `\braket{a|b}` → ⟨a|b⟩. Pure parser sugar over the existing
   angle-bracket + vertical-bar atoms, so a braket renders byte-identically to its
   manual `\langle…\rangle` form. Fixed-size v1 (stretchy braket is a follow-up).
+- **`\overparen{…}` — the stretchy over-parenthesis accent** (⏜, U+23DC), sized to
+  the base like `\widehat`, riding the existing wide-accent machinery (STIX carries
+  the glyph + horizontal construction). (`\underparen` — a stretchy glyph *under* the
+  base — needs an Accent-node change and is filed as a follow-up.)
 
 - **`precedence` fx effect — the order-of-operations cascade.** Hover a fenced
   expression and it lights up in *evaluation order*: the innermost group first,

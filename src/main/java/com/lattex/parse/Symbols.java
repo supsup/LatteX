@@ -149,6 +149,11 @@ final class Symbols {
         Map.entry("overrightarrow", new AccentSpec(0x20D7, true, false)),
         Map.entry("overleftarrow", new AccentSpec(0x20D6, true, false)),   // ◌⃖ left arrow above
         Map.entry("overleftrightarrow", new AccentSpec(0x20E1, true, false)), // ◌⃡
+        // Stretchy over-parenthesis accent (top parenthesis, sized to the base).
+        // (underparen — a stretchy glyph UNDER the base — needs an Accent-node change:
+        // the node currently permits only a RULE decoration under the base; filed as a
+        // follow-up.)
+        Map.entry("overparen", new AccentSpec(0x23DC, true, false)),   // top parenthesis U+23DC
         // Line decorations (drawn as a rule, in-alphabet).
         Map.entry("overline", new AccentSpec(Accent.RULE, false, false)),
         Map.entry("underline", new AccentSpec(Accent.RULE, false, true)));
