@@ -206,3 +206,8 @@ PARSES-NOW	unicode	p ∈ A ∩ B	literal ∈ (Rel) and ∩ (Bin) — pasted set 
 # ==== multi-integral side limits (display keeps limits beside, like \int) =====
 PARSES-NOW	bigops	\oint_0^{2\pi} F\,d\theta	contour integral keeps SIDE limits in display (U+222B..U+2233 block)
 PARSES-NOW	bigops	\idotsint_{\Omega} f	\idotsint (U+2A0C) also keeps side limits, not stacked
+# ==== nested inline math inside text (\text{a $x$ b}) =============
+PARSES-NOW	text	\text{if $x>0$ then } y	nested $…$ inside \text re-enters math mode (text-mode toggle)
+PARSES-NOW	text	\text{half is $\frac{1}{2}$}	nested span is a full recursive parse — commands work inside
+PARSES-NOW	text	\textbf{bold $x$ run}	nested math splits in every text family, not just \text
+PARSES-NOW	text	\text{cost \$5}	escaped \$ stays a literal dollar — never a math toggle

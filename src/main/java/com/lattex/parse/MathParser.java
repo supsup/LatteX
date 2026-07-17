@@ -199,8 +199,9 @@ public final class MathParser {
      * {@code i} (just past the command name), emitting a single {@link Kind#TEXT}
      * token, and returns the index just past the closing brace. Spaces are kept
      * verbatim (text mode is space-significant); grouping braces are stripped
-     * (invisible, as in LaTeX). Nested-math ({@code $…$}) inside the argument is a
-     * documented follow-up — the content is taken literally here.
+     * (invisible, as in LaTeX). The raw content is carried verbatim on the token;
+     * nested-math ({@code $…$}) splitting happens at parse time in
+     * {@link #textWithNestedMath} — the lexer stays a plain brace-matcher.
      */
     private static int lexTextArgument(String s, String command, int i, List<Token> out, int start) {
         int n = s.length();
@@ -270,8 +271,20 @@ public final class MathParser {
 
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */
     static MathNode parseMath(String latex) {
+        return parseMath(latex, 0);
+    }
+
+    /**
+     * Parses ordinary LaTeX math seeded at {@code initialDepth}. Used by the
+     * nested-math text split ({@code \text{a $x$ b}}): the inner span's parser
+     * CONTINUES the outer parser's depth so the {@link #MAX_DEPTH} guard is global
+     * across {@code $}-nesting — a fresh counter per level would let
+     * {@code \text{$\text{$…}$}} recurse past the guard into a stack overflow.
+     */
+    static MathNode parseMath(String latex, int initialDepth) {
         try {
             MathParser parser = new MathParser(latex);
+            parser.depth = initialDepth;
             MathNode node = parser.parseTopLevel();
             if (parser.peek().kind() != Kind.EOF) {
                 throw new MathSyntaxException(
@@ -819,7 +832,7 @@ public final class MathParser {
             }
             case TEXT -> {
                 next();
-                yield new TextRun(t.text(), TEXT_COMMANDS.get(t.name()));
+                yield textWithNestedMath(t);
             }
             case COMMAND -> parseCommand();
             case SUP -> throw new MathSyntaxException(
@@ -1425,6 +1438,84 @@ public final class MathParser {
             return items.get(0);
         }
         return new MathList(items);
+    }
+
+    /**
+     * Turns a {@link Kind#TEXT} token into its node, honoring nested inline math:
+     * an unescaped {@code $…$} span inside a text-family argument re-enters math
+     * mode (LaTeX's text-mode toggle), so {@code \text{if $x>0$ then}} splits into
+     * literal {@link TextRun}s and recursively-parsed math segments. {@code \$}
+     * stays a literal (verbatim, exactly the pre-split behavior — never a toggle).
+     * A plain argument (no unescaped {@code $}) yields the byte-identical single
+     * {@link TextRun} it always did. An unpaired {@code $} is a positioned error;
+     * an empty {@code $$} span contributes nothing. The inner parse CONTINUES this
+     * parser's depth (see {@link #parseMath(String, int)}) so {@code $}-nesting
+     * cannot recurse past {@link #MAX_DEPTH}.
+     */
+    private MathNode textWithNestedMath(Token t) {
+        String raw = t.text();
+        TextStyle style = TEXT_COMMANDS.get(t.name());
+        if (indexOfUnescapedDollar(raw, 0) < 0) {
+            return new TextRun(unescapeDollar(raw), style); // fast path: one literal run
+        }
+        List<MathNode> items = new ArrayList<>();
+        int i = 0;
+        int n = raw.length();
+        while (i < n) {
+            int open = indexOfUnescapedDollar(raw, i);
+            if (open < 0) {
+                items.add(new TextRun(unescapeDollar(raw.substring(i)), style));
+                break;
+            }
+            if (open > i) {
+                items.add(new TextRun(unescapeDollar(raw.substring(i, open)), style));
+            }
+            int close = indexOfUnescapedDollar(raw, open + 1);
+            if (close < 0) {
+                throw new MathSyntaxException(
+                    "Unpaired '$' in \\" + t.name() + " argument", t.offset());
+            }
+            String span = raw.substring(open + 1, close);
+            if (!span.isBlank()) {
+                try {
+                    items.add(parseMath(span, depth));
+                } catch (MathSyntaxException e) {
+                    throw new MathSyntaxException("in \\" + t.name() + " nested math '$"
+                        + span + "$': " + e.getMessage(), t.offset());
+                }
+            }
+            i = close + 1;
+        }
+        if (items.size() == 1) {
+            return items.get(0);
+        }
+        return new MathList(List.copyOf(items));
+    }
+
+    /**
+     * {@code \$} → {@code $} in a literal text segment. Now that an unescaped
+     * {@code $} toggles math mode, the escape is the ONLY way to write a literal
+     * dollar in text — so it must render as the dollar, not backslash-dollar
+     * (matches LaTeX). Other escapes are left untouched (out of scope here).
+     */
+    private static String unescapeDollar(String s) {
+        return s.indexOf('\\') < 0 ? s : s.replace("\\$", "$");
+    }
+
+    /**
+     * The index of the next {@code $} at or after {@code from} that is not
+     * preceded by a backslash ({@code \$} is the literal-dollar escape), or -1.
+     */
+    private static int indexOfUnescapedDollar(String s, int from) {
+        for (int i = from; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\\') {
+                i++; // the next char is escaped — never a toggle
+            } else if (c == '$') {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** A single-character atom, classified per the TeXbook atom-class tables. */

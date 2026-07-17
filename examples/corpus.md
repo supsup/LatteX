@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **166 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **164**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **170 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **168**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -305,6 +305,15 @@ following once the node exists.
 | --- | --- | --- |
 | `\oint_0^{2\pi} F\,d\theta` | contour integral keeps SIDE limits in display (U+222B..U+2233 block) | `PARSES-NOW` |
 | `\idotsint_{\Omega} f` | \\idotsint (U+2A0C) also keeps side limits, not stacked | `PARSES-NOW` |
+
+## Nested inline math inside text (\text{a $x$ b})
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\text{if $x>0$ then } y` | nested $…$ inside \\text re-enters math mode (text-mode toggle) | `PARSES-NOW` |
+| `\text{half is $\frac{1}{2}$}` | nested span is a full recursive parse — commands work inside | `PARSES-NOW` |
+| `\textbf{bold $x$ run}` | nested math splits in every text family, not just \\text | `PARSES-NOW` |
+| `\text{cost \$5}` | escaped \\$ stays a literal dollar — never a math toggle | `PARSES-NOW` |
 
 ---
 

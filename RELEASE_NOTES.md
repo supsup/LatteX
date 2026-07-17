@@ -4,6 +4,27 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased (mainline) — nested inline math inside `\text{…}`
+
+On mainline, not yet cut as a version (the vendored jar is `0.8.0`; the next
+release bump picks this up).
+
+- **Nested inline math inside text — `\text{if $x>0$ then}`.** An unescaped
+  `$…$` span inside a text-family argument (`\text` `\textrm` `\mathrm` `\textbf`
+  `\textit` `\texttt`) re-enters math mode, LaTeX's text-mode toggle: the argument
+  splits into literal text runs and recursively-parsed math segments — a full
+  parse, so commands (`$\frac{1}{2}$`) work inside. `\$` is the literal-dollar
+  escape and now renders a plain `$` (the backslash is consumed, matching LaTeX —
+  with `$` toggling, the escape is the only way to write a dollar in text); an
+  unpaired `$` is a positioned error, an empty `$$` contributes nothing, and a
+  plain no-`$` argument parses to the same single run it always did. The inner
+  parse **continues the outer parser's depth**, so
+  pathological `\text{$\text{$…}$}` nesting hits the `MAX_DEPTH` guard as a clean
+  parse error — never a stack overflow. Closed the #1 remaining text-mode
+  coverage gap (plan a93c96b3).
+
+---
+
 ## 0.8.0 · 2026-07-17 — commutative diagrams, the norm bar, boxed, `\xlongequal`, braket, `\overparen`, dimensioned glue, `\prescript`, multi-integral & Unicode-operator fidelity, + precedence cascade fx
 
 The release Stafficy `/docs` re-pins (vendored as `lattex-0.8.0.jar`, replacing
