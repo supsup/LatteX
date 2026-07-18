@@ -19,13 +19,16 @@ jobs:
           java-version: '25'
       - name: Build + full suite (javadoc, containment, corpus, browser pins)
         run: ./gradlew build --no-daemon
-      - name: Upload visual references (gallery artifacts)
+      - name: Clean-tree gate (the hermetic-suite proof — plan 32148cc8 S3)
+        # `test` must not touch the working tree: examples/ generators live in the
+        # separate generateExamples task, BrewShot captures land in build/. Any diff
+        # here means a test wrote into the checkout — fail the build.
+        run: git diff --exit-code
+      - name: Upload visual references (BrewShot captures from the test run)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: examples-gallery
-          path: |
-            examples/*.png
-            examples/*.gif
+          name: brewshot-refs
+          path: build/brewshot-refs/
           if-no-files-found: ignore
           retention-days: 14
