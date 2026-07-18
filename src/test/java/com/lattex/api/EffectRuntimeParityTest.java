@@ -91,4 +91,37 @@ class EffectRuntimeParityTest {
         // Sanity: token casing convention holds (enum name lowercased == token).
         assertEquals("shatter", Effect.SHATTER.token().toLowerCase(Locale.ROOT));
     }
+
+    @Test
+    void everyEffectKeyframeInTheCssBelongsToTheVocabPath() {
+        // The reverse CSS direction (plan 32148cc8 S5): an `@keyframes lx-<token>`
+        // whose token is an Effect NOT in VOCAB is dead CSS shadowing a JS-routine
+        // effect (play() returns before the keyframe path) — flag it. Non-token
+        // lx-* keyframes (e.g. lx-holo-scan) are internal helpers and stay allowed.
+        Set<String> vocab = new HashSet<>();
+        Matcher block = VOCAB_BLOCK.matcher(LatteX.fxRuntimeJs());
+        assertTrue(block.find());
+        Matcher key = VOCAB_KEY.matcher(block.group(1));
+        while (key.find()) {
+            vocab.add(key.group(1));
+        }
+        Set<String> tokens = new HashSet<>();
+        for (Effect effect : Effect.values()) {
+            tokens.add(effect.token());
+        }
+        Matcher keyframes = Pattern.compile("@keyframes lx-([a-z-]+)")
+            .matcher(LatteX.fxStylesCss());
+        int seen = 0;
+        while (keyframes.find()) {
+            seen++;
+            String name = keyframes.group(1);
+            if (tokens.contains(name)) {
+                assertTrue(vocab.contains(name),
+                    "lattex-fx.css has @keyframes lx-" + name + " but '" + name
+                        + "' is a JS-routine effect, not a VOCAB keyframe effect — "
+                        + "that keyframe can never play (dead CSS, or a mis-wired effect)");
+            }
+        }
+        assertTrue(seen >= 5, "expected the keyframe blocks to be scanned, saw " + seen);
+    }
 }
