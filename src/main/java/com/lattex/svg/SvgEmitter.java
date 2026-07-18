@@ -1,5 +1,6 @@
 package com.lattex.svg;
 
+import com.lattex.api.Color;
 import com.lattex.font.SfntFont;
 import com.lattex.layout.Layout;
 import com.lattex.layout.PositionedGlyph;
@@ -25,7 +26,7 @@ public final class SvgEmitter {
     /** Small margin (user units) so glyph ink is not flush against the edge. */
     private static final double MARGIN = 2.0;
     /** The default glyph fill — opaque black. */
-    private static final String GLYPH_FILL = "#000000";
+    private static final Color GLYPH_FILL = Color.BLACK;
 
     private SvgEmitter() {
     }
@@ -36,15 +37,16 @@ public final class SvgEmitter {
     }
 
     /**
-     * Emits the SVG document for a laid-out formula with an explicit fill value.
+     * Emits the SVG document for a laid-out formula with an explicit fill.
      *
-     * @param fill the SVG {@code fill} value — MUST already be an allow-listed
-     *             literal ({@code currentColor} or a {@code #rrggbb} hex), i.e. a
-     *             {@link com.lattex.api.Color#svgValue()}. This is a fill VALUE
-     *             only; it never introduces a new element or attribute, so the
-     *             minimal-alphabet contract is preserved.
+     * @param fill the glyph fill — a typed {@link Color}, so the "must be an
+     *             allow-listed {@code currentColor}/{@code #rrggbb} literal" contract
+     *             is now COMPILER-enforced, not Javadoc-only: only a validated
+     *             {@link Color#svgValue()} can reach the {@code fill} attribute, so no
+     *             raw author string can. It is a fill VALUE only — never a new element
+     *             or attribute — so the minimal-alphabet contract is preserved.
      */
-    public static String emit(Layout layout, SfntFont font, String ariaLabel, String fill) {
+    public static String emit(Layout layout, SfntFont font, String ariaLabel, Color fill) {
         double vbX = layout.minX() - MARGIN;
         double vbY = layout.minY() - MARGIN;
         double vbW = layout.width() + 2 * MARGIN;
@@ -70,7 +72,7 @@ public final class SvgEmitter {
      * the {@code <g>/<path>/<rect>} elements WITHOUT the surrounding {@code <svg>}
      * wrapper, viewBox, or aria — using the default black fill.
      *
-     * @see #emitFragment(Layout, SfntFont, String)
+     * @see #emitFragment(Layout, SfntFont, com.lattex.api.Color)
      */
     public static String emitFragment(Layout layout, SfntFont font) {
         return emitFragment(layout, font, GLYPH_FILL);
@@ -90,7 +92,7 @@ public final class SvgEmitter {
      * @param fill the default group {@code fill} value (an allow-listed literal); a
      *             per-glyph {@code \color}/{@code \textcolor} override still wins.
      */
-    public static String emitFragment(Layout layout, SfntFont font, String fill) {
+    public static String emitFragment(Layout layout, SfntFont font, Color fill) {
         StringBuilder out = new StringBuilder();
         // Re-base x so the left ink edge lands at x=0; the baseline is already y=0.
         emitInner(out, layout, font, fill, -layout.minX(), 0.0);
@@ -106,9 +108,9 @@ public final class SvgEmitter {
      * (default group fill + {@code \color}/{@code \textcolor} overrides) are emitted
      * unchanged.
      */
-    static void emitInner(StringBuilder out, Layout layout, SfntFont font, String fill,
+    static void emitInner(StringBuilder out, Layout layout, SfntFont font, Color fill,
                           double dx, double dy) {
-        out.append("  <g fill=\"").append(fill).append("\">\n");
+        out.append("  <g fill=\"").append(fill.svgValue()).append("\">\n");
         // ONE producer decides which glyphs emit a <path> and in what order
         // (emittedGlyphs); glyphmap() keys off the SAME sequence, so a path index in
         // the SVG and a path index in the data-lx-glyphmap sidecar can never diverge.
