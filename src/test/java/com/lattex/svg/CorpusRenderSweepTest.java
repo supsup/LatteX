@@ -38,7 +38,13 @@ import static org.junit.jupiter.api.Assertions.fail;
  */
 class CorpusRenderSweepTest {
 
-    private record Row(String tier, String latex) {}
+    private record Row(int line, String tier, String latex) {
+
+        /** The failure-message handle: names the corpus LINE so a red points at its input. */
+        String at() {
+            return "corpus.tsv:" + line + " [" + latex + "]";
+        }
+    }
 
     private static List<Row> loadCorpus() throws IOException {
         List<Row> rows = new ArrayList<>();
@@ -47,13 +53,15 @@ class CorpusRenderSweepTest {
             assertNotNull(in, "vendored corpus resource missing");
             BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
             String line;
+            int lineNo = 0;
             while ((line = reader.readLine()) != null) {
+                lineNo++;
                 if (line.isBlank() || line.startsWith("#")) {
                     continue;
                 }
                 String[] cols = line.split("\t");
                 if (cols.length >= 3) {
-                    rows.add(new Row(cols[0].trim(), cols[2]));
+                    rows.add(new Row(lineNo, cols[0].trim(), cols[2]));
                 }
             }
         }
@@ -80,12 +88,12 @@ class CorpusRenderSweepTest {
                     svg = inline ? LatteX.renderInline(row.latex()) : LatteX.render(row.latex());
                 } catch (RuntimeException e) {
                     if (mustRender) {
-                        failures.add("PARSES-NOW row threw in " + mode + " [" + row.latex() + "]: " + e);
+                        failures.add("PARSES-NOW row threw in " + mode + " " + row.at() + ": " + e);
                     }
                     continue; // NEEDS-S4-LAYOUT: a caught RuntimeException is the accepted degrade
                 }
-                scannedTags += S8LeftContainmentTest.auditOne(row.latex() + " (" + mode + ")", svg, failures);
-                auditCanvas(row.latex(), mode, svg, failures);
+                scannedTags += S8LeftContainmentTest.auditOne(row.at() + " (" + mode + ")", svg, failures);
+                auditCanvas(row.at(), mode, svg, failures);
             }
         }
 
@@ -100,26 +108,26 @@ class CorpusRenderSweepTest {
     }
 
     /** A rendered canvas must be real: viewBox = four finite numbers, width/height > 0. */
-    private static void auditCanvas(String latex, String mode, String svg, List<String> failures) {
-        int at = svg.indexOf("viewBox=\"");
-        if (at < 0) {
-            failures.add("no viewBox in " + mode + " [" + latex + "]");
+    private static void auditCanvas(String at, String mode, String svg, List<String> failures) {
+        int vb = svg.indexOf("viewBox=\"");
+        if (vb < 0) {
+            failures.add("no viewBox in " + mode + " " + at);
             return;
         }
-        int end = svg.indexOf('"', at + 9);
-        String[] nums = svg.substring(at + 9, end).trim().split("[\\s,]+");
+        int end = svg.indexOf('"', vb + 9);
+        String[] nums = svg.substring(vb + 9, end).trim().split("[\\s,]+");
         if (nums.length != 4) {
-            failures.add("viewBox is not 4 numbers in " + mode + " [" + latex + "]");
+            failures.add("viewBox is not 4 numbers in " + mode + " " + at);
             return;
         }
         try {
             double w = Double.parseDouble(nums[2]);
             double h = Double.parseDouble(nums[3]);
             if (!Double.isFinite(w) || !Double.isFinite(h) || w <= 0 || h <= 0) {
-                failures.add("degenerate canvas " + w + "x" + h + " in " + mode + " [" + latex + "]");
+                failures.add("degenerate canvas " + w + "x" + h + " in " + mode + " " + at);
             }
         } catch (NumberFormatException e) {
-            failures.add("non-numeric viewBox in " + mode + " [" + latex + "]: " + e.getMessage());
+            failures.add("non-numeric viewBox in " + mode + " " + at + ": " + e.getMessage());
         }
     }
 }
