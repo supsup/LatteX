@@ -4,10 +4,11 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill
+## 0.9.0 · 2026-07-18 — nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
 
-On mainline, not yet cut as a version (the vendored jar is `0.8.0`; the next
-release bump picks this up).
+Renderer changes are the post-0.8.0 mainline set below; the build itself also
+hardened (last three items). Stafficy `/docs` still vendors `0.8.0` until it
+re-pins this version.
 
 - **A matrix nested in a script shrinks with its context.** A matrix's cell style
   was re-seeded *absolute* (always text style, un-cramped), so
@@ -50,6 +51,17 @@ release bump picks this up).
   pathological `\text{$\text{$…}$}` nesting hits the `MAX_DEPTH` guard as a clean
   parse error — never a stack overflow. Closed the #1 remaining text-mode
   coverage gap (plan a93c96b3).
+
+- **Full-corpus render sweep.** Every renderable `corpus.tsv` row (170 `PARSES-NOW`
+  entries) now runs through the complete `render`/`renderInline` pipeline — no-throw,
+  the S8 output-alphabet containment audit, and a non-degenerate canvas — per row, in
+  both modes; failures name the `corpus.tsv` line (plan 32148cc8 S1).
+- **Hermetic test suite.** The `examples/` page generators moved out of `test` into a
+  `generateExamples` task, and BrewShot reference captures land in `build/` during
+  `test` — `./gradlew test` leaves the working tree clean; regenerate the tracked
+  examples on demand with `./gradlew generateExamples` (plan 32148cc8 S2).
+- **CI clean-tree gate.** The GitHub Actions build now runs `git diff --exit-code`
+  after the full suite, so a test writing into the checkout fails CI (plan 32148cc8 S3).
 
 ---
 

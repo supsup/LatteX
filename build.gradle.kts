@@ -10,11 +10,11 @@ group = "com.lattex"
 // republish, so a pinned consumer can never silently go stale (plan 38cf48e4). Bump on
 // each release that downstream should pick up.
 //
-// 0.2.0-rc1: this branch's pre-release (25 effects + fxContainerAttrs) so the Stafficy
-// Phase-B branch can vendor + verify end-to-end ahead of the official 0.2.0 train
-// (coord 5737: + the DoS parse-guard). The final cut re-stamps this to "0.2.0";
-// downstream keeps 0.1.0 untouched (immutable) beside the rc.
-version = "0.8.0"
+// 0.9.0: nested inline math inside \text{…}, matrix-cell style fidelity, container
+// drift guard + type-safe emitter fill — the post-0.8.0 mainline set — plus the
+// hermetic test suite / generateExamples split, the full-corpus render sweep, and
+// the CI clean-tree gate (plan 32148cc8). See RELEASE_NOTES.md.
+version = "0.9.0"
 
 java {
     toolchain {
@@ -79,6 +79,10 @@ val generateExamples by tasks.registering(Test::class) {
 // hardcode read 0.2.1 against a 0.5.0 artifact). Present in both the jar and the
 // test classpath (unlike the jar manifest, which is null under `gradle test`).
 tasks.processResources {
+    // The version must be a declared task input: without it an incremental build
+    // after a version bump keeps the previously-expanded properties file, and the
+    // jar reports the OLD version (observed on the 0.8.0 → 0.9.0 bump).
+    inputs.property("lattexVersion", project.version.toString())
     filesMatching("lattex-version.properties") {
         expand(mapOf("version" to project.version.toString()))
     }
