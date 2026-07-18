@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -49,6 +50,7 @@ import org.junit.jupiter.api.Test;
  * <p>No parser/layout/emitter code is touched — this is pure presentation +
  * page-side runtime over the public {@code renderStyledHtml} API.
  */
+@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
 class EffectsPageTest {
 
     /**

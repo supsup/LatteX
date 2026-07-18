@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.Test;
  * <p>Like the other page generators the file is regenerated (and asserted) on every
  * build, so the demo can never drift from the actual emitter output.
  */
+@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
 class GraphPageTest {
 
     /** One graphable specimen: the {@code \lx} source + a human caption. */

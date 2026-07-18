@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
  * <p>Regenerated every suite run (the effects.html pattern); the committed
  * copy is the browsable artifact.
  */
+@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
 class ShowcasePageTest {
 
     private record Item(String caption, String latex) { }

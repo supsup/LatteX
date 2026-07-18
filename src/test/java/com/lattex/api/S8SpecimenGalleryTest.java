@@ -7,19 +7,21 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
  * Generates {@code examples/gallery-specimen.html} — a categorised specimen
  * grid of every SUPPORTED construct + symbol the renderer can draw today, each
  * cell showing the LaTeX source above its rendered SVG. A one-glance "what
- * LatteX can render" page, regenerated from live output on every build so it
- * cannot drift from the emitter.
+ * LatteX can render" page, regenerated from live output by the
+ * {@code generateExamples} task so it cannot drift from the emitter.
  *
  * <p>The specimen list is <em>curated</em> from what {@link com.lattex.parse.MathParser}
  * accepts (there is no programmatic supported-symbol API yet). The harness is a
  * simple category → specimen table: adding a symbol later is one line here.
  */
+@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
 class S8SpecimenGalleryTest {
 
     /** One rendered cell: LaTeX source + a human label. */

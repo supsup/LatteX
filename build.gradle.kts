@@ -44,8 +44,33 @@ dependencies {
     testImplementation("org.graalvm.polyglot:js-community:24.2.2")
 }
 
+// Hermetic `test` (plan 32148cc8 S2): the examples/-page GENERATORS (JUnit classes
+// tagged "examples") are excluded here and run via `generateExamples` below, and the
+// BrewShot capture tests (tagged "capture") write their references into build/ during
+// `test` — so `./gradlew test` never touches the working tree. Verify: run `test`,
+// then `git status --porcelain` must be empty.
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("examples")
+    }
+}
+
+// Regenerates the tracked examples/ artifacts on demand: the HTML pages ("examples"
+// generators, byte-identical for an unchanged emitter) plus the BrewShot visual
+// references ("capture" tests re-run with -Dlattex.examples.write=true so their
+// PNG/GIF output lands beside the pages; references, not byte-goldens — animation
+// frames differ run to run). NOT wired into `check`/`build`; run explicitly, review
+// the diff, commit.
+val generateExamples by tasks.registering(Test::class) {
+    group = "documentation"
+    description = "Regenerates the tracked examples/ pages + BrewShot visual references."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("examples", "capture")
+    }
+    systemProperty("lattex.examples.write", "true")
+    outputs.upToDateWhen { false } // regeneration is the point — never skip as up-to-date
 }
 
 // Single-source the version: stamp `project.version` into lattex-version.properties

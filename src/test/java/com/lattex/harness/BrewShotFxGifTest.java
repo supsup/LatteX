@@ -11,10 +11,12 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
- * Records showpiece effects as looping GIFs beside the example pages — the
+ * Records showpiece effects as looping GIFs (beside the example pages via
+ * {@code generateExamples}; into {@code build/brewshot-refs} during {@code test}) — the
  * "hover state you can't see in a still" (Charles). Each capture: scroll the
  * card into view, dispatch the trigger, then grab clipped frames of just that
  * card while the animation runs; JDK-only GIF assembly ({@link GifWriter}).
@@ -24,6 +26,8 @@ import org.junit.jupiter.api.Test;
  * frames (a dead trigger or a no-op effect produces identical frames and
  * fails), which pins trigger wiring + animation liveness per effect.
  */
+@Tag("capture") // liveness pin stays in `test` (GIFs land in build/);
+                // `generateExamples` re-runs it writing beside the pages (plan 32148cc8 S2)
 class BrewShotFxGifTest {
 
     private static final int FRAMES = 14;
@@ -42,6 +46,17 @@ class BrewShotFxGifTest {
         return Path.of("examples").toAbsolutePath();
     }
 
+    /** Where captured references land: beside the pages when regenerating
+     * (`generateExamples` sets {@code -Dlattex.examples.write=true}), into
+     * {@code build/brewshot-refs} during `test` so the working tree stays
+     * clean (plan 32148cc8 S2). */
+    private static Path refsOut() throws java.io.IOException {
+        Path dir = Boolean.getBoolean("lattex.examples.write")
+            ? examples() : Path.of("build", "brewshot-refs").toAbsolutePath();
+        Files.createDirectories(dir);
+        return dir;
+    }
+
     @Test
     void recordsShowpieceGifsBesideTheHtml() throws Exception {
         assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
@@ -49,7 +64,7 @@ class BrewShotFxGifTest {
         assumeTrue(Files.exists(page), "examples/effects.html not generated");
         assumeTrue(Files.readString(page).contains("data-lx-fx-overlay"),
             "stale examples/effects.html (predates the current runtime) — "
-                + "full-suite runs regenerate it first (class ordering)");
+                + "run ./gradlew generateExamples and commit the refreshed page");
 
         try (BrewShot chrome = BrewShot.launch(1200, 900)) {
             chrome.open(page.toUri().toString());
@@ -146,7 +161,7 @@ class BrewShotFxGifTest {
                 + "carries the cascade stroke-width signature — the cascade never ran");
         }
 
-        Path out = examples().resolve("fx-" + trigger + "-" + effect + ".gif");
+        Path out = refsOut().resolve("fx-" + trigger + "-" + effect + ".gif");
         BrewShot.gif(frames, FRAME_DELAY_MS, out);
         assertTrue(Files.size(out) > 5_000, "suspiciously small GIF at " + out);
     }

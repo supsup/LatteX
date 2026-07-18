@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -25,14 +26,17 @@ import org.junit.jupiter.api.Test;
  * bounding box may exceed ~2x its own SVG's box. A compose regression renders
  * glyphs at raw font units (~25x) and fails loudly here.
  *
- * <p>THE SCREENSHOTS: full-page PNGs written next to the example .html files
- * (examples/effects.png, examples/thread-preview.png) as visual references —
- * regenerate alongside the pages; they are references, not byte-goldens
- * (animation frames differ run to run).
+ * <p>THE SCREENSHOTS: full-page PNGs captured as visual references — written
+ * next to the example .html files (examples/effects.png, examples/thread-preview.png)
+ * when run via {@code generateExamples}, into {@code build/brewshot-refs} during
+ * {@code test}; they are references, not byte-goldens (animation frames differ run
+ * to run).
  *
  * <p>Skips (does not fail) when no local Chrome exists or the example page has
  * not been generated (EffectsPageTest/ThreadPreviewPageTest write them).
  */
+@Tag("capture") // browser pin stays in `test` (reference writes land in build/);
+                // `generateExamples` re-runs it writing beside the pages (plan 32148cc8 S2)
 class BrewShotEffectsPageTest {
 
     /** JS audit: any glyph path whose box exceeds ~2x its svg box is a blob. */
@@ -59,6 +63,17 @@ class BrewShotEffectsPageTest {
         return Path.of("examples").toAbsolutePath();
     }
 
+    /** Where captured references land: beside the pages when regenerating
+     * (`generateExamples` sets {@code -Dlattex.examples.write=true}), into
+     * {@code build/brewshot-refs} during `test` so the working tree stays
+     * clean (plan 32148cc8 S2). */
+    private static Path refsOut() throws java.io.IOException {
+        Path dir = Boolean.getBoolean("lattex.examples.write")
+            ? examples() : Path.of("build", "brewshot-refs").toAbsolutePath();
+        Files.createDirectories(dir);
+        return dir;
+    }
+
     @Test
     void effectsPageRendersWithoutBlobsAndWritesReferenceScreenshot() throws Exception {
         assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
@@ -66,7 +81,7 @@ class BrewShotEffectsPageTest {
         assumeTrue(Files.exists(page), "examples/effects.html not generated");
         assumeTrue(Files.readString(page).contains("data-lx-fx-overlay"),
             "stale examples/effects.html (predates the current runtime) — "
-                + "full-suite runs regenerate it first (class ordering)");
+                + "run ./gradlew generateExamples and commit the refreshed page");
 
         try (BrewShot chrome = BrewShot.launch(1200, 900)) {
             chrome.open(page.toUri().toString());
@@ -78,7 +93,7 @@ class BrewShotEffectsPageTest {
             chrome.settle(1200);
             Object settled = chrome.eval(BLOB_AUDIT);
 
-            chrome.screenshot(examples().resolve("effects.png"));
+            chrome.screenshot(refsOut().resolve("effects.png"));
 
             assertEquals(List.of(), early,
                 "glyph blobs mid-animation (placement-compose regressed?)");
@@ -117,7 +132,7 @@ class BrewShotEffectsPageTest {
                 })()
                 """);
             chrome.settle(250);
-            chrome.screenshot(examples().resolve("thread-preview.png"));
+            chrome.screenshot(refsOut().resolve("thread-preview.png"));
         }
     }
 }

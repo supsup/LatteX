@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
  * counts and a grand total. The test asserts one rendered SVG per enumerated
  * command — enforcing the "exhaustive + drift-free" property.
  */
+@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
 class SymbolIndexPageTest {
 
     @Test

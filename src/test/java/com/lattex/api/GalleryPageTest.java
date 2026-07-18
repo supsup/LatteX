@@ -6,16 +6,18 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
  * Drives the whole pipeline for the S4 constructs (fractions, roots, scripts,
  * spaced rows) and writes browser-openable HTML pages to the tracked
- * {@code examples/} directory — genuine golden output, regenerated on every run.
+ * {@code examples/} directory — genuine golden output, regenerated on every {@code generateExamples} run.
  * A diff in these files means the emitter's geometry changed and should be
  * reviewed. Mirrors {@link SkeletonPageTest}'s single-page pattern, scaled up to
  * a small gallery so the S4 work is visible from a checkout.
  */
+@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
 class GalleryPageTest {
 
     private record Example(String file, String latex, String title, String caption) {

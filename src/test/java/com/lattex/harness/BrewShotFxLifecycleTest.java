@@ -41,7 +41,7 @@ class BrewShotFxLifecycleTest {
         assumeTrue(Files.exists(page), "examples/effects.html not generated");
         assumeTrue(Files.readString(page).contains("data-lx-fx-overlay"),
             "stale examples/effects.html (predates the current runtime) — "
-                + "full-suite runs regenerate it first (class ordering)");
+                + "run ./gradlew generateExamples and commit the refreshed page");
 
         // Short viewport so the page is scrollable (the kill needs a REAL scroll).
         try (BrewShot chrome = BrewShot.launch(1200, 800)) {

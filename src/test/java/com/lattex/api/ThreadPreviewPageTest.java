@@ -1,5 +1,6 @@
 package com.lattex.api;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -24,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Hover any {@code x} on the page: all three light up and pop while the plusses
  * recede; hover a {@code +}: the two plusses thread. Leave the svg: restore.
  */
+@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
 class ThreadPreviewPageTest {
 
     private static final String LATEX = "x + x + x";
