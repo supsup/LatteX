@@ -52,10 +52,13 @@ re-pins this version.
   parse error — never a stack overflow. Closed the #1 remaining text-mode
   coverage gap (plan a93c96b3).
 
-- **Full-corpus render sweep.** Every renderable `corpus.tsv` row (170 `PARSES-NOW`
-  entries) now runs through the complete `render`/`renderInline` pipeline — no-throw,
-  the S8 output-alphabet containment audit, and a non-degenerate canvas — per row, in
-  both modes; failures name the `corpus.tsv` line (plan 32148cc8 S1).
+- **Full-corpus render sweep — now points at its input on failure.** The sweep that
+  runs every renderable `corpus.tsv` row (170 `PARSES-NOW` entries) through the complete
+  `render`/`renderInline` pipeline — no-throw, the S8 output-alphabet containment audit,
+  and a non-degenerate canvas, per row in both modes — landed on mainline earlier
+  (`57efc52`); this cut versions it. Plan 32148cc8 S1's contribution is the failure
+  handle: a red now names the exact `corpus.tsv:<line> [latex]` instead of the LaTeX
+  alone, so a regression identifies its own input row.
 - **Hermetic test suite.** The `examples/` page generators moved out of `test` into a
   `generateExamples` task, and BrewShot reference captures land in `build/` during
   `test` — `./gradlew test` leaves the working tree clean; regenerate the tracked
