@@ -23,20 +23,26 @@ import org.junit.jupiter.api.Test;
  * a stale stats line and a "ranked frontier" roadmap that listed already-shipped
  * features as still-needed).
  *
- * <p>Mirrors the specimen/gallery generator pattern ({@code S8SpecimenGalleryTest}):
- * a JUnit test that WRITES a tracked file AND asserts it matches, so a tsv edit
- * without regenerating fails the build. The hand-written intro + the Coverage
- * tiers table are preserved verbatim as a {@link #HEADER} constant; everything
- * downstream (per-category tables, the stats line, the not-yet frontier) is
- * generated from the tsv, so it is always accurate.
+ * <p>Follows the hermetic generator split (plan 32148cc8, reviewer 234 F1): under
+ * the ordinary {@code test} suite this writes ONLY {@code build/examples/corpus.md}
+ * and the drift assertion against the tracked copy is READ-ONLY — a normal test run
+ * never touches (and can never erase) working-tree content. Only
+ * {@code generateExamples} ({@code -Dlattex.examples.write=true}, which includes the
+ * {@code examples} tag) regenerates the tracked file; a stale committed copy fails
+ * the normal build with the regenerate-and-commit instruction. The hand-written
+ * intro + the Coverage tiers table are preserved verbatim as a {@link #HEADER}
+ * constant; everything downstream (per-category tables, the stats line, the
+ * not-yet frontier) is generated from the tsv, so it is always accurate.
  *
  * <p>Sibling to {@link CorpusParseTest}, which verifies each tsv tier against the
  * actual {@code parse()} outcome; this test turns the same tsv into the doc.
  */
+@org.junit.jupiter.api.Tag("examples")
 class CorpusDocTest {
 
     private static final String CORPUS_RESOURCE = "/com/lattex/parse/corpus.tsv";
-    private static final Path OUT = Path.of("examples", "corpus.md");
+    /** The committed copy — READ-ONLY under the ordinary test suite. */
+    private static final Path TRACKED = Path.of("examples", "corpus.md");
 
     /** A single corpus row. */
     private record Entry(String tier, String group, String latex, String description) {
@@ -68,16 +74,24 @@ class CorpusDocTest {
         List<Section> sections = loadSections();
         String generated = render(sections);
 
-        // Capture the committed copy BEFORE overwriting, so the assertion sees drift.
-        String committed = Files.exists(OUT) ? Files.readString(OUT) : "";
+        // WHERE this writes follows the ExampleOutputs split (reviewer 234 F1):
+        // ordinary `test` -> build/examples/corpus.md only, so a normal run can
+        // never overwrite tracked content or erase uncommitted local work; only
+        // generateExamples (-Dlattex.examples.write=true) writes the tracked file.
+        java.nio.file.Path out = com.lattex.api.ExampleOutputs.dir().resolve("corpus.md");
+        Files.createDirectories(out.getParent());
+        Files.writeString(out, generated);
 
-        // Regenerate on disk so a developer running the build just commits the diff.
-        Files.createDirectories(OUT.getParent());
-        Files.writeString(OUT, generated);
-
+        // READ-ONLY drift gate against the committed copy. Under generateExamples
+        // the tracked file was just regenerated above, so this always passes there
+        // (regeneration is the point); under `test` it fails on real drift with
+        // the regenerate instruction — without having touched the checkout.
+        String committed = Files.exists(TRACKED) ? Files.readString(TRACKED) : "";
         assertEquals(generated, committed,
-            "examples/corpus.md is stale — it has been regenerated from corpus.tsv; "
-                + "commit the updated examples/corpus.md.");
+            "examples/corpus.md is stale relative to corpus.tsv — regenerate the "
+                + "tracked copy with `./gradlew generateExamples` and commit the diff "
+                + "(a normal test run writes only build/examples/corpus.md and never "
+                + "touches the tracked file).");
     }
 
     // ------------------------------------------------------------------

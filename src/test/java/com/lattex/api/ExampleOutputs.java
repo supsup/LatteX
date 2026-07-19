@@ -13,7 +13,7 @@ import java.nio.file.Path;
  * {@code -Dlattex.examples.write=true} — writes the tracked {@code examples/}
  * directory. This mirrors the BrewShot capture tests' {@code refsOut()} split.
  */
-final class ExampleOutputs {
+public final class ExampleOutputs {
 
     private ExampleOutputs() {
     }
@@ -23,7 +23,7 @@ final class ExampleOutputs {
      * ({@code generateExamples} sets {@code lattex.examples.write=true}); otherwise
      * {@code build/examples}, so a normal {@code test} run never dirties the checkout.
      */
-    static Path dir() {
+    public static Path dir() {
         return Boolean.getBoolean("lattex.examples.write")
             ? Path.of("examples")
             : Path.of("build", "examples");
