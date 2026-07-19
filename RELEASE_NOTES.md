@@ -4,11 +4,22 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill
+## Unreleased (mainline) — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill
 
 On mainline, not yet cut as a version (the vendored jar is `0.8.0`; the next
 release bump picks this up).
 
+- **A wide, shallow formula can no longer exhaust memory — the layout box budget.**
+  The engine already capped nesting *depth* (`MAX_DEPTH`), but not *breadth*: a
+  formula that stays shallow while fanning out to hundreds of thousands of atoms
+  (e.g. a giant `matrix` or a long flat run) would build every layout box before any
+  guard fired. A new `MAX_LAYOUT_BOXES` budget counts boxes as they are laid out and
+  trips **before** the runaway box is built, throwing a clean `MathSyntaxException`
+  typed as a resource cap (`OUTPUT_CAP_EXCEEDED`) rather than an `OutOfMemoryError`.
+  The per-thread counter resets only at the public `layout()` entry (internal
+  recursion goes through `layoutBox`, so it can't be defeated mid-formula), and the
+  `SvgEmitter` gained a matching incremental output cap that fires during buffer
+  growth. Bounds the axis the depth cap couldn't see (plan ba144f79).
 - **A matrix nested in a script shrinks with its context.** A matrix's cell style
   was re-seeded *absolute* (always text style, un-cramped), so
   `x^{\begin{pmatrix}…\end{pmatrix}}` rendered its cells at full size instead of
