@@ -59,12 +59,22 @@ re-pins this version.
   (`57efc52`); this cut versions it. Plan 32148cc8 S1's contribution is the failure
   handle: a red now names the exact `corpus.tsv:<line> [latex]` instead of the LaTeX
   alone, so a regression identifies its own input row.
-- **Hermetic test suite.** The `examples/` page generators moved out of `test` into a
-  `generateExamples` task, and BrewShot reference captures land in `build/` during
-  `test` — `./gradlew test` leaves the working tree clean; regenerate the tracked
-  examples on demand with `./gradlew generateExamples` (plan 32148cc8 S2).
-- **CI clean-tree gate.** The GitHub Actions build now runs `git diff --exit-code`
-  after the full suite, so a test writing into the checkout fails CI (plan 32148cc8 S3).
+- **Hermetic test suite — without dropping a single assertion.** The `examples/` page
+  generators (and the BrewShot capture pins) run in the normal `test` suite, so their
+  containment / runtime / alphabet / safe-evaluator / grammar-pin assertions always
+  execute in CI. Hermeticity comes from *where* they write, not from excluding them:
+  under `test` the generators write into `build/examples` and the captures into
+  `build/`, so `./gradlew test` leaves the working tree clean. Only
+  `./gradlew generateExamples` writes the tracked `examples/` pages + visual
+  references. The BrewShot browser pins load a fixture rebuilt from the *current*
+  runtime sources into `build/` (a `@BeforeAll`), so they exercise the live
+  `lattex-fx.js` / `lattex-fx.css` / page template rather than a stale committed page
+  (plan 32148cc8 S2).
+- **CI clean-tree gate — a new step on the existing GitHub Actions build.** LatteX
+  already had a CI workflow (`c6c5174`); this cut adds a post-suite step that fails the
+  build if the test run dirtied the checkout, and redirects generated artifacts to
+  `build/`. The gate asserts `git status --porcelain` is empty, so a *new untracked*
+  file trips it too — not just a tracked-file diff (plan 32148cc8 S3).
 
 ---
 
