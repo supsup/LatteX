@@ -113,9 +113,13 @@ public final class LatteX {
             // position; a later-stage typed throw (depth guard, contained internal
             // failure) is classified RENDER_BUG — the pipeline, not the author. A parse-stage
             // throw flagged as an unknown command/environment is UNSUPPORTED_CONSTRUCT, so a
-            // typo ("did you mean \frac?") is distinguishable from malformed syntax.
+            // typo ("did you mean \frac?") is distinguishable from malformed syntax. A resource-
+            // cap trip (output bytes / layout boxes) wins over both — it is OUTPUT_CAP_EXCEEDED
+            // regardless of stage, so a hostile blow-up reads as a cap, not a bug or a typo.
             Outcome outcome;
-            if ("parse".equals(stage)) {
+            if (e.isCapExceeded()) {
+                outcome = Outcome.OUTPUT_CAP_EXCEEDED;
+            } else if ("parse".equals(stage)) {
                 outcome = e.isUnsupportedConstruct() ? Outcome.UNSUPPORTED_CONSTRUCT : Outcome.PARSE_ERROR;
             } else {
                 outcome = Outcome.RENDER_BUG;

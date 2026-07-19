@@ -101,6 +101,7 @@ public final class LayoutEngine {
 
     /** Lays out a math tree at the origin; returns positioned glyphs/rules + bbox. */
     public static Layout layout(MathNode root, LayoutContext ctx) {
+        LAYOUT_BOXES.get()[0] = 0; // fresh L10 box budget per top-level layout
         Box box = layoutBox(root, ctx);
         List<PositionedGlyph> glyphs = new ArrayList<>();
         List<Rule> rules = new ArrayList<>();
@@ -138,10 +139,27 @@ public final class LayoutEngine {
      */
     static final int MAX_LAYOUT_DEPTH = 512;
 
+    /// L10 (plan lattex-hostile-input-hardening): total-box budget per top-level
+    /// layout. Depth alone bounds NESTING but not FAN-OUT — a wide-but-shallow tree
+    /// (huge matrices of matrices) can build an enormous object graph while never
+    /// exceeding depth. This cap fails BEFORE the runaway graph exists, and the trip
+    /// is a typed cap (OUTPUT_CAP_EXCEEDED via renderWithDiagnostics), not a bug.
+    /// 100k boxes is ~40x the largest wild-corpus formula — headroom, not a squeeze.
+    static final int MAX_LAYOUT_BOXES = 100_000;
+
     /** Per-thread layout recursion depth (the engine is static/stateless). */
     private static final ThreadLocal<int[]> LAYOUT_DEPTH = ThreadLocal.withInitial(() -> new int[1]);
 
+    /** Per-thread total-box counter for the L10 budget; reset at each top-level layout. */
+    private static final ThreadLocal<int[]> LAYOUT_BOXES = ThreadLocal.withInitial(() -> new int[1]);
+
     private static Box layoutBox(MathNode node, LayoutContext ctx) {
+        int[] boxes = LAYOUT_BOXES.get();
+        if (++boxes[0] > MAX_LAYOUT_BOXES) {
+            throw MathSyntaxException.capExceeded(
+                "layout box budget exceeded: more than " + MAX_LAYOUT_BOXES
+                + " boxes for one formula");
+        }
         int[] depth = LAYOUT_DEPTH.get();
         if (++depth[0] > MAX_LAYOUT_DEPTH) {
             depth[0]--; // balance the counter before unwinding
