@@ -29,7 +29,9 @@ import org.junit.jupiter.api.Test;
  * counts and a grand total. The test asserts one rendered SVG per enumerated
  * command — enforcing the "exhaustive + drift-free" property.
  */
-@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
+@Tag("examples") // page generator: runs in normal `test` (writes build/examples, all
+                 // assertions execute in CI) AND under `generateExamples`, which writes
+                 // the tracked examples/ (plan 32148cc8 S2, reviewer F1)
 class SymbolIndexPageTest {
 
     @Test
@@ -63,7 +65,7 @@ class SymbolIndexPageTest {
         }
 
         String html = page(total, sections.toString());
-        Path out = Path.of("examples", "symbol-index.html");
+        Path out = ExampleOutputs.dir().resolve("symbol-index.html");
         Files.createDirectories(out.getParent());
         Files.writeString(out, html);
 

@@ -17,7 +17,9 @@ import org.junit.jupiter.api.Test;
  * reviewed. Mirrors {@link SkeletonPageTest}'s single-page pattern, scaled up to
  * a small gallery so the S4 work is visible from a checkout.
  */
-@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
+@Tag("examples") // page generator: runs in normal `test` (writes build/examples, all
+                 // assertions execute in CI) AND under `generateExamples`, which writes
+                 // the tracked examples/ (plan 32148cc8 S2, reviewer F1)
 class GalleryPageTest {
 
     private record Example(String file, String latex, String title, String caption) {
@@ -42,7 +44,7 @@ class GalleryPageTest {
         for (Example ex : EXAMPLES) {
             String svg = LatteX.render(ex.latex());
             String html = page(ex.title(), card(ex.latex(), svg, ex.caption()));
-            Path out = Path.of("examples", ex.file());
+            Path out = ExampleOutputs.dir().resolve(ex.file());
             Files.createDirectories(out.getParent());
             Files.writeString(out, html);
             assertTrue(Files.size(out) > 0, ex.file() + " non-empty");
@@ -73,7 +75,7 @@ class GalleryPageTest {
             cards.append('\n');
         }
         String html = galleryPage("LatteX — S4 gallery", cards.toString());
-        Path out = Path.of("examples", "gallery.html");
+        Path out = ExampleOutputs.dir().resolve("gallery.html");
         Files.createDirectories(out.getParent());
         Files.writeString(out, html);
 

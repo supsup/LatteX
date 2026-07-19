@@ -25,8 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Hover any {@code x} on the page: all three light up and pop while the plusses
  * recede; hover a {@code +}: the two plusses thread. Leave the svg: restore.
  */
-@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
-class ThreadPreviewPageTest {
+@Tag("examples") // page generator: runs in normal `test` (writes build/examples, keeping
+                 // the glyph-count fixture assertion in CI) AND under `generateExamples`,
+                 // which writes the tracked examples/ (plan 32148cc8 S2, reviewer F1)
+// Public so the BrewShot harness (com.lattex.harness) can call buildThreadPreviewHtml()
+// to regenerate the browser fixture from current sources (reviewer F2).
+public class ThreadPreviewPageTest {
 
     private static final String LATEX = "x + x + x";
     private static final String GLYPHMAP = "78:0,2,4;2b:1,3"; // x → 0,2,4 ; + → 1,3
@@ -44,10 +48,26 @@ class ThreadPreviewPageTest {
         }
         assertEquals(5, count, "fixture expects one path per glyph of '" + LATEX + "'");
 
+        String html = buildThreadPreviewHtml();
+        Path out = ExampleOutputs.dir().resolve("thread-preview.html");
+        Files.createDirectories(out.getParent());
+        Files.writeString(out, html, StandardCharsets.UTF_8);
+        assertTrue(Files.size(out) > 1000);
+    }
+
+    /**
+     * Builds {@code thread-preview.html} from the CURRENT runtime sources — the math
+     * rendered live via {@link LatteX#render(String)} and the page wired with the
+     * bundled {@link LatteX#fxRuntimeJs()} / {@link LatteX#fxStylesCss()}. Public and
+     * assertion-free so the BrewShot harness can regenerate the browser fixture into
+     * {@code build/} straight from live sources before it captures (reviewer F2).
+     */
+    public static String buildThreadPreviewHtml() {
+        String svg = LatteX.render(LATEX);
         String wrapper = "<div class=\"lx-math math-display\" data-lx-fx-enter=\"thread\""
             + " data-lx-glyphmap=\"" + GLYPHMAP + "\">" + svg + "</div>";
 
-        String html = "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
+        return "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
             + "<title>fx.thread preview — hover a glyph</title>\n"
             + "<style>\n" + LatteX.fxStylesCss() + "\n"
             + "body { font-family: system-ui; max-width: 40rem; margin: 3rem auto; }\n"
@@ -60,11 +80,6 @@ class ThreadPreviewPageTest {
             + wrapper + "\n"
             + "<script>\n" + LatteX.fxRuntimeJs() + "\n</script>\n"
             + "</body></html>\n";
-
-        Path out = Path.of("examples", "thread-preview.html");
-        Files.createDirectories(out.getParent());
-        Files.writeString(out, html, StandardCharsets.UTF_8);
-        assertTrue(Files.size(out) > 1000);
     }
 
     /** Drift-guard: the runtime's glyphmap grammar literal matches the contract's. */

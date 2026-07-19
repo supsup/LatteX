@@ -44,15 +44,17 @@ dependencies {
     testImplementation("org.graalvm.polyglot:js-community:24.2.2")
 }
 
-// Hermetic `test` (plan 32148cc8 S2): the examples/-page GENERATORS (JUnit classes
-// tagged "examples") are excluded here and run via `generateExamples` below, and the
-// BrewShot capture tests (tagged "capture") write their references into build/ during
-// `test` — so `./gradlew test` never touches the working tree. Verify: run `test`,
-// then `git status --porcelain` must be empty.
+// Hermetic `test` (plan 32148cc8 S2, reviewer F1): every test — including the
+// examples/-page GENERATORS (tagged "examples") and the BrewShot capture tests
+// (tagged "capture") — runs in the normal suite, so their security / runtime /
+// alphabet / safe-evaluator / grammar-pin assertions ALWAYS execute in CI.
+// Hermeticity comes from WHERE they write, not from excluding assertions: under
+// `test` the generators write into build/examples and the captures into build/,
+// so `./gradlew test` never touches the working tree. Only `generateExamples`
+// below (which sets -Dlattex.examples.write=true) writes the tracked examples/
+// dir. Verify: run `test`, then `git status --porcelain` must be empty.
 tasks.test {
-    useJUnitPlatform {
-        excludeTags("examples")
-    }
+    useJUnitPlatform()
 }
 
 // Regenerates the tracked examples/ artifacts on demand: the HTML pages ("examples"

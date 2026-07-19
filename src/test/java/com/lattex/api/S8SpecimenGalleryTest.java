@@ -21,7 +21,9 @@ import org.junit.jupiter.api.Test;
  * accepts (there is no programmatic supported-symbol API yet). The harness is a
  * simple category → specimen table: adding a symbol later is one line here.
  */
-@Tag("examples") // generator, not a test: runs under `generateExamples`, not `test` (plan 32148cc8 S2)
+@Tag("examples") // page generator: runs in normal `test` (writes build/examples, all
+                 // assertions execute in CI) AND under `generateExamples`, which writes
+                 // the tracked examples/ (plan 32148cc8 S2, reviewer F1)
 class S8SpecimenGalleryTest {
 
     /** One rendered cell: LaTeX source + a human label. */
@@ -203,7 +205,7 @@ class S8SpecimenGalleryTest {
         }
 
         String html = page(specimenCount, sections.toString());
-        Path out = Path.of("examples", "gallery-specimen.html");
+        Path out = ExampleOutputs.dir().resolve("gallery-specimen.html");
         Files.createDirectories(out.getParent());
         Files.writeString(out, html);
 
