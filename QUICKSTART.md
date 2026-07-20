@@ -195,7 +195,11 @@ prefixed `internal render failure`, original failure preserved as the cause) —
 caught.) For batch pipelines that must degrade per-formula instead of per-page, use
 `renderWithDiagnostics` — it NEVER throws and returns `RenderResult{svg, Diagnostics}`
 with a Sirentide-parity outcome (`OK`/`PARSE_ERROR`/`RENDER_BUG`…), stage, message, and
-the caret as data — one consumer code path for a failed diagram and a failed formula.
+the caret as data — one consumer code path for a failed diagram and a failed formula. Rendering is hardened for
+UNTRUSTED input: caps on source length, nesting depth, layout box count, and output size
+(the latter enforced incrementally so a runaway SVG is never built), plus control-char
+stripping so the output stays within the `svg/g/path/rect` alphabet — a cap trip surfaces
+as `OUTPUT_CAP_EXCEEDED`, never an escaped error.
 
 ```java
 try {

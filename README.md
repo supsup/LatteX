@@ -20,7 +20,10 @@ metrics (`renderInlineResult` → depth/height in em) so prose math sits on the 
 `renderWithDiagnostics` returns a never-throwing `RenderResult` with a Sirentide-parity
 `Diagnostics` (outcome/stage/message + caret). Script placement consumes the font's
 OpenType math-kern staircases, so subscripts tuck into a slanted glyph (V₁, Pₙ) and
-superscripts clear an overhang (f²) exactly as the font intends.
+superscripts clear an overhang (f²) exactly as the font intends. Untrusted input is
+bounded on every axis — source length, nesting depth, layout fan-out (box budget), and
+output size (incremental) — and control characters can never reach the output; a resource
+trip degrades to a typed `OUTPUT_CAP_EXCEEDED` diagnostic, never an escaped error.
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus

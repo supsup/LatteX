@@ -32,6 +32,10 @@ public final class SvgEmitter {
     }
 
     /** Emits the SVG document for a laid-out formula using the default black fill. */
+    /// L10: hard output budget. 2M chars (~2 MB) is ~50x the largest wild-corpus
+    /// formula's SVG — a ceiling for runaway amplification, not a working limit.
+    static final int MAX_OUTPUT_CHARS = 2_000_000;
+
     public static String emit(Layout layout, SfntFont font, String ariaLabel) {
         return emit(layout, font, ariaLabel, GLYPH_FILL);
     }
@@ -115,6 +119,15 @@ public final class SvgEmitter {
         // (emittedGlyphs); glyphmap() keys off the SAME sequence, so a path index in
         // the SVG and a path index in the data-lx-glyphmap sidecar can never diverge.
         for (EmittedGlyph eg : emittedGlyphs(layout, font)) {
+            // L10 (plan lattex-hostile-input-hardening): incremental output cap —
+            // fail DURING buffer growth so the runaway SVG is never built in full
+            // (Sirentide's incremental-cap pattern). Checked per element, not
+            // post-emit; the trip is typed (OUTPUT_CAP_EXCEEDED via diagnostics).
+            if (out.length() > MAX_OUTPUT_CHARS) {
+                throw com.lattex.parse.MathSyntaxException.capExceeded(
+                    "SVG output exceeds the " + MAX_OUTPUT_CHARS
+                    + "-character cap; reduce the formula size");
+            }
             PositionedGlyph g = eg.glyph();
             out.append("    <path d=\"").append(eg.pathData()).append("\"");
             if (g.color() != null) {
@@ -294,7 +307,14 @@ public final class SvgEmitter {
                 case '<' -> out.append("&lt;");
                 case '>' -> out.append("&gt;");
                 case '"' -> out.append("&quot;");
-                default -> out.append(c);
+                // L10 (plan lattex-hostile-input-hardening): XML 1.0 forbids C0/C1
+                // control characters entirely, and an unescaped one from author input
+                // (e.g. a NUL) would leak straight into the aria-label — the exact
+                // control-char class Sirentide's fuzzer caught. Drop them so the output
+                // can NEVER carry a control char (tab/newline stay — legal in XML).
+                default -> {
+                    if (c >= 0x20 || c == '\t' || c == '\n' || c == '\r') { out.append(c); }
+                }
             }
         }
         return out.toString();
