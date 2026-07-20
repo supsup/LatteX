@@ -4,6 +4,16 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased — `\underparen`
+
+- **`\underparen{…}` — the stretchy under-parenthesis accent** (⏝, U+23DD), the
+  mirror of `\overparen` (U+23DC): sized to the base and positioned below it
+  instead of above. STIX Two Math carries U+23DD with a full OpenType MATH
+  horizontal construction (variants + assembly), matching U+23DC, so this rides
+  the same wide-accent machinery as `\overparen` — `LayoutEngine` just needed to
+  learn to place a glyph accent under the base, the one case the `Accent` node
+  previously restricted to rule decorations (`\overline`/`\underline`).
+
 ## 0.9.0 · 2026-07-20 — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
 
 The post-0.8.0 set below, cut as **0.9.0** — the version the build pins and the consumer docs
