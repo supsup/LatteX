@@ -947,6 +947,8 @@ public final class LatteX {
             case "mathring" -> "ring over";
             case "overline" -> "line over";
             case "underline" -> "line under";
+            case "overparen" -> "parenthesis over";
+            case "underparen" -> "parenthesis under";
             default -> command + " over";
         };
     }

@@ -4,6 +4,24 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased — `\underparen`
+
+- **`\underparen{…}` — the stretchy under-parenthesis accent** (⏝, U+23DD), the
+  mirror of `\overparen` (U+23DC): sized to the base and positioned below it
+  instead of above. STIX Two Math carries U+23DD with a full OpenType MATH
+  horizontal construction (variants + assembly), matching U+23DC, so this rides
+  the same wide-accent machinery as `\overparen` — `LayoutEngine` just needed to
+  learn to place a glyph accent under the base, the one case the `Accent` node
+  previously restricted to rule decorations (`\overline`/`\underline`).
+  The accent is placed from **actual ink extents**: its ink top is pinned a
+  positive `stretchStackGapBelowMin` (the OpenType MATH under-stack / `\underbrace`
+  gap — there is no under-equivalent of `accentBaseHeight`, so this stretchy-stack
+  constant is the right clearance) below the base's ink bottom, measured over the
+  chosen pieces (single glyph, wide variant, or assembled row), so the arc clears
+  descenders (`g_j`) and deep denominators (`\frac{a}{b}`) instead of cutting
+  through them. A separation test (`accentInkTop ≥ baseInkBottom + clearance`)
+  guards it across a descender, a fraction, a shallow base, and a wide assembly.
+
 ## Unreleased — the cancel family
 
 - **Struck-through sub-formulas — the `cancel` package family.** Four new wrapper

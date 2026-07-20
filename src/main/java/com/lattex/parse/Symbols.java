@@ -176,11 +176,13 @@ final class Symbols {
         Map.entry("overrightarrow", new AccentSpec(0x20D7, true, false)),
         Map.entry("overleftarrow", new AccentSpec(0x20D6, true, false)),   // ◌⃖ left arrow above
         Map.entry("overleftrightarrow", new AccentSpec(0x20E1, true, false)), // ◌⃡
-        // Stretchy over-parenthesis accent (top parenthesis, sized to the base).
-        // (underparen — a stretchy glyph UNDER the base — needs an Accent-node change:
-        // the node currently permits only a RULE decoration under the base; filed as a
-        // follow-up.)
+        // Stretchy over/under-parenthesis accents (sized to the base). STIX Two
+        // Math carries both U+23DC and its under-glyph mirror U+23DD with matching
+        // horizontal MATH constructions (variants + assembly), so \\underparen rides
+        // the same wide-accent machinery as \overparen — glyphAccentBox positions it
+        // below the base via Accent.under() (see MathNode.Accent).
         Map.entry("overparen", new AccentSpec(0x23DC, true, false)),   // top parenthesis U+23DC
+        Map.entry("underparen", new AccentSpec(0x23DD, true, true)),   // bottom parenthesis U+23DD
         // Line decorations (drawn as a rule, in-alphabet).
         Map.entry("overline", new AccentSpec(Accent.RULE, false, false)),
         Map.entry("underline", new AccentSpec(Accent.RULE, false, true)));

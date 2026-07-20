@@ -124,11 +124,108 @@ class AccentLayoutTest {
         // Accents nest with scripts, fractions, and each other without throwing.
         for (String latex : List.of(
                 "\\hat{a}^2", "\\frac{\\vec{v}}{\\bar{x}}",
-                "\\hat{\\hat{a}}", "\\overline{a+b}", "\\sqrt{\\hat{x}}")) {
+                "\\hat{\\hat{a}}", "\\overline{a+b}", "\\sqrt{\\hat{x}}",
+                "\\underparen{a+b}")) {
             Layout l = layout(latex);
             assertTrue(l.width() > 0 && l.height() > 0, latex + ": non-degenerate box");
             assertAlphabet(LatteX.render(latex));
         }
+    }
+
+    @Test
+    void underparenSitsBelowTheBaseAndIsCentred() {
+        // The mirror of accentSitsAboveBaseAndIsCentred/overlineIsARuleAboveTheBase:
+        // \\underparen is a GLYPH (not a rule, unlike \\underline), so this asserts the
+        // ink-below-the-base relationship the way wideAccentStretchesToSpanTheBase
+        // asserts width — on the actual positioned glyph, not just a bounding box.
+        Layout l = layout("\\underparen{a}");
+        // Unlike the over case, an under-accent's own baseline commonly ties the
+        // base's, so picking "highest/lowest y" can't distinguish accent from base —
+        // use glyphAccentBox's draw order instead (base first, then the accent piece).
+        PositionedGlyph accent = bottomGlyph(l);
+        PositionedGlyph base = l.glyphs().stream()
+            .filter(g -> g.glyphId() == FONT.glyphId('a')).findFirst().orElseThrow();
+        // Accent ink centre lands near the base's horizontal centre (no per-glyph
+        // "bottom attachment" table exists in OpenType MATH, unlike the over case).
+        double baseWidth = FONT.advanceWidth(base.glyphId()) * SCALE;
+        double baseCentreX = base.originX() + baseWidth / 2.0;
+        var ao = FONT.outline(accent.glyphId());
+        double accentCentre = accent.originX() + SCALE * (ao.xMin() + ao.xMax()) / 2.0;
+        assertEquals(baseCentreX, accentCentre, 2.0, "accent centred under the base");
+        // SEPARATION (not the old vacuous bottom-below-bottom): the accent ink TOP
+        // clears the base ink BOTTOM by the documented gap. See the dedicated
+        // separation test below for the descender/fraction/wide cases.
+        assertUnderSeparation("a");
+        assertAlphabet(LatteX.render("\\underparen{a}"));
+    }
+
+    /**
+     * SEPARATION oracle (reviewer NEEDS-FIX repair): the under-accent's ink TOP must
+     * sit at or below the base's ink BOTTOM plus a positive documented clearance —
+     * {@code stretchStackGapBelowMin} (the OpenType MATH under-stack / {@code
+     * \\underbrace} gap), the constant {@code glyphAccentBox} places against. The old
+     * check only asserted the accent's own BOTTOM was below the base bottom, which is
+     * true even while the arc cuts up through the base; this asserts the gap the arc
+     * must leave. Covers a descender+script base, a deep fraction, a shallow control,
+     * and a wide base that forces an ASSEMBLED accent (many pieces). Every case FAILS
+     * the pre-fix placement (overlaps of 12–17 units on the descender/fraction bases).
+     */
+    @Test
+    void underparenInkClearsBaseInkBySeparationGap() {
+        assertUnderSeparation("g_j");          // descender glyph + subscript
+        assertUnderSeparation("\\frac{a}{b}"); // deep fraction denominator
+        assertUnderSeparation("a+b");          // shallow control
+        assertUnderSeparation("a+b+c+d+e");    // wide base -> assembled accent row
+    }
+
+    /**
+     * Asserts {@code \\underparen{inner}} leaves at least the documented clearance
+     * between the accent's ink top and the base's ink bottom. Base ink is measured
+     * from the base glyphs (the first N, N = the bare base's glyph count, since
+     * glyphAccentBox draws the base first then appends the accent pieces), each at its
+     * OWN scale (a subscript renders smaller); accent ink from the remaining pieces.
+     */
+    private static void assertUnderSeparation(String inner) {
+        int baseGlyphs = layout(inner).glyphs().size();
+        List<PositionedGlyph> gs = layout("\\underparen{" + inner + "}").glyphs();
+        assertTrue(gs.size() > baseGlyphs, inner + ": the accent adds at least one glyph");
+        double baseInkBottom = Double.NEGATIVE_INFINITY;
+        for (int i = 0; i < baseGlyphs; i++) {
+            PositionedGlyph g = gs.get(i);
+            baseInkBottom = Math.max(baseInkBottom,
+                g.baselineY() - g.scale() * FONT.outline(g.glyphId()).yMin());
+        }
+        double accentInkTop = Double.POSITIVE_INFINITY;
+        for (int i = baseGlyphs; i < gs.size(); i++) {
+            PositionedGlyph g = gs.get(i);
+            accentInkTop = Math.min(accentInkTop,
+                g.baselineY() - g.scale() * FONT.outline(g.glyphId()).yMax());
+        }
+        double clearance = SCALE * FONT.mathConstants().stretchStackGapBelowMin();
+        assertTrue(accentInkTop >= baseInkBottom + clearance - 0.05,
+            inner + ": accent ink top " + accentInkTop + " must be >= base ink bottom "
+                + baseInkBottom + " + clearance " + clearance + " (SEP="
+                + (accentInkTop - baseInkBottom) + ")");
+        assertTrue(accentInkTop > baseInkBottom,
+            inner + ": accent ink must not intersect the base ink");
+    }
+
+    @Test
+    void underparenStretchesToSpanTheBase() {
+        // The mirror of wideAccentStretchesToSpanTheBase: a wider base selects a
+        // wider MATH horizontal variant of U+23DD than the narrow one.
+        Layout narrow = layout("\\underparen{i}");
+        Layout wide = layout("\\underparen{AAA}");
+        int narrowAccentGid = bottomGlyph(narrow).glyphId();
+        int wideAccentGid = bottomGlyph(wide).glyphId();
+        assertTrue(wideAccentGid != narrowAccentGid,
+            "a wider base selects a wider under-parenthesis variant");
+        double baseWidth = baseWidthOf(wide);
+        var o = FONT.outline(wideAccentGid);
+        double accentInkWidth = SCALE * (o.xMax() - o.xMin());
+        assertTrue(accentInkWidth > 0.5 * baseWidth,
+            "wide accent ink covers most of the base width");
+        assertAlphabet(LatteX.render("\\underparen{AAA}"));
     }
 
     // ---- helpers ---------------------------------------------------------
@@ -147,6 +244,19 @@ class AccentLayoutTest {
     private static PositionedGlyph topGlyph(Layout l) {
         return l.glyphs().stream()
             .min((p, q) -> Double.compare(p.baselineY(), q.baselineY())).orElseThrow();
+    }
+
+    /**
+     * The mirror of {@link #topGlyph}: an under-accent's glyph. Unlike the over
+     * case, a "most positive baselineY" search can tie with the base (an
+     * under-accent's own baseline is 0.0 whenever the base's depth doesn't exceed
+     * {@code accentBaseHeight}, true for most bases), so this instead relies on
+     * draw order: {@code glyphAccentBox} always draws the base first, then appends
+     * the accent piece(s) — the last glyph in the list is always part of the accent.
+     */
+    private static PositionedGlyph bottomGlyph(Layout l) {
+        List<PositionedGlyph> glyphs = l.glyphs();
+        return glyphs.get(glyphs.size() - 1);
     }
 
     // ---- alphabet guard (mirrors LayoutS4Test) ---------------------------
