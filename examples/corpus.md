@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **172 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **170**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **175 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **173**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -316,6 +316,9 @@ following once the node exists.
 | `\text{cost \$5}` | escaped \\$ stays a literal dollar — never a math toggle | `PARSES-NOW` |
 | `\text{the value $x^{10}$ is large}` | multi-char braced arg inside a span survives (the F1 class: braces carried verbatim) | `PARSES-NOW` |
 | `\text{$\frac{12}{34}$}` | multi-digit fraction inside text — regression lock for silent brace-strip corruption | `PARSES-NOW` |
+| `\newcommand{\half}{\frac{1}{2}} \half + \half` | L8: inline \\newcommand defines and expands (additive-only namespace) | `PARSES-NOW` |
+| `\newcommand{\inner}[2]{\langle #1, #2 \rangle} \inner{u}{v}` | L8: #1..#9 argument splicing into the body | `PARSES-NOW` |
+| `\def\avg{\frac{#1+#2}{2}} \avg{a}{b}` | L8: \\def subset with arity inferred from the highest #k | `PARSES-NOW` |
 
 ---
 
