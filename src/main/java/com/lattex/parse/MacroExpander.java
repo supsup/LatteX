@@ -341,19 +341,28 @@ final class MacroExpander {
             }
         }
 
-        // The output-token budget (lattex 253 F2): count what THIS invocation will
-        // materialize (body + spliced argument runs) before building it, so the
-        // 1,000x1,000 amplification trips at the budget, not at the allocator.
-        int willMaterialize = def.body().size();
-        for (List<Token> arg : args) {
-            willMaterialize += arg.size();
+        // The output-token budget (lattex 253 F2, exact-count repair lattex 261): count
+        // what THIS invocation will materialize before building it — non-placeholder body
+        // tokens plus each argument's size once PER PLACEHOLDER OCCURRENCE (a body that
+        // repeats #1 splices that many copies; charging each argument once let repeated
+        // references amplify past the ceiling). Long arithmetic so the per-occurrence
+        // products cannot overflow before the comparison.
+        long willMaterialize = 0;
+        for (int b = 0; b < def.body().size(); b++) {
+            Token bt = def.body().get(b);
+            if (isChar(bt, '#')) {
+                willMaterialize += args.get(def.body().get(b + 1).codePoint() - '1').size();
+                b++;
+            } else {
+                willMaterialize++;
+            }
         }
-        outputTokens += willMaterialize;
-        if (outputTokens > MAX_MACRO_OUTPUT_TOKENS) {
+        if (outputTokens + willMaterialize > MAX_MACRO_OUTPUT_TOKENS) {
             throw MathSyntaxException.capExceeded(
                 "macro expansion output budget exceeded: more than " + MAX_MACRO_OUTPUT_TOKENS
                     + " materialized replacement tokens in one input");
         }
+        outputTokens += (int) willMaterialize;
         List<Token> substituted = new ArrayList<>(def.body().size());
         for (int b = 0; b < def.body().size(); b++) {
             Token bt = def.body().get(b);

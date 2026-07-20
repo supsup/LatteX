@@ -184,6 +184,25 @@ class MacroExpansionTest {
             MathParser.parse("\\newcommand{\\bigrun}{" + body + "}" + "\\bigrun ".repeat(90)));
     }
 
+    /// lattex 261: repeated PLACEHOLDER references are the second amplification axis — a body
+    /// of six `#1`s splices six copies of the argument per invocation, so charging each argument
+    /// once under-counted 6x. 6 refs x 1,000-token arg x 20 invocations = 120,000 materialized
+    /// tokens from ~40KB of source (source ceiling, invocation count, and depth all green); the
+    /// exact per-occurrence count must trip the output budget as a resource cap.
+    @org.junit.jupiter.api.Test
+    void repeatedPlaceholderReferencesAreChargedPerOccurrence() {
+        String arg = "x ".repeat(1000).strip();                // 1,000 CHAR tokens
+        String def = "\\newcommand{\\rep}[1]{#1#1#1#1#1#1}";
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse(def + ("\\rep{" + arg + "} ").repeat(20)));
+        assertTrue(e.getMessage().contains("output budget"), e.getMessage());
+        assertTrue(e.isCapExceeded(), "placeholder amplification is a resource cap");
+        // just-under control: 16 invocations x 6,000 spliced tokens = 96,000 < 100,000,
+        // node-equal to its hand form.
+        assertEquals(MathParser.parse("x".repeat(96_000)),
+            MathParser.parse(def + ("\\rep{" + arg + "} ").repeat(16)));
+    }
+
     /// lattex 253 F2b: preset bodies lex through the same lexer as source, so the source ceiling
     /// applies to them (cumulatively — the map is one input), used or not.
     @org.junit.jupiter.api.Test
