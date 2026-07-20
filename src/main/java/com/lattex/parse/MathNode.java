@@ -398,13 +398,16 @@ public sealed interface MathNode {
      * families of TeX accent commands:
      *
      * <ul>
-     *   <li><strong>Glyph accents</strong> — an accent glyph centred over the
-     *       base. <em>Narrow</em> ({@code \hat \bar \vec \dot \ddot \tilde \check
-     *       \breve \acute \grave \mathring}) draw the accent at its natural size;
-     *       <em>stretchy</em> ({@code \widehat \widetilde \overrightarrow
-     *       \overleftarrow \overleftrightarrow}) size the accent to the base width
-     *       via the OpenType MATH horizontal glyph construction. In both cases
-     *       {@link #accentCodePoint} is the accent glyph's code point.</li>
+     *   <li><strong>Glyph accents</strong> — an accent glyph centred over (or, for
+     *       {@code \\underparen}, under) the base. <em>Narrow</em> ({@code \hat \bar
+     *       \vec \dot \ddot \tilde \check \breve \acute \grave \mathring}) draw the
+     *       accent at its natural size, always over the base; <em>stretchy</em>
+     *       ({@code \widehat \widetilde \overrightarrow \overleftarrow
+     *       \overleftrightarrow \overparen \\underparen}) size the accent to the
+     *       base width via the OpenType MATH horizontal glyph construction — every
+     *       one over the base except {@code \\underparen}, the one stretchy glyph
+     *       accent that sits under it. In all cases {@link #accentCodePoint} is the
+     *       accent glyph's code point.</li>
      *   <li><strong>Line decorations</strong> — {@code \overline} and
      *       {@code \\underline}, drawn as a rule (not a glyph). These carry
      *       {@link #accentCodePoint} == {@link #RULE}; {@link #under} selects an
@@ -415,16 +418,20 @@ public sealed interface MathNode {
      * decorates). Positioning is clean-room from Knuth's TeXbook (Appendix G, the
      * accent rule) and the public OpenType MATH spec
      * ({@code MathTopAccentAttachment}, {@code accentBaseHeight}, the over/underbar
-     * constants, and {@code MathVariants} for stretchy sizing).
+     * constants, and {@code MathVariants} for stretchy sizing). OpenType MATH has
+     * no per-glyph attachment table or base-clearance constant for an UNDER glyph
+     * accent (only over-accents get one), so {@code \\underparen} reuses
+     * {@code accentBaseHeight} against the base's depth instead of its height — a
+     * deliberate mirror of the over-accent rule, not a distinct font constant.
      *
      * @param command         the LaTeX command name (without backslash), for a11y
      * @param base            the decorated nucleus
      * @param accentCodePoint the accent glyph's code point, or {@link #RULE} for
      *                        {@code \overline}/{@code \\underline}
      * @param stretchy        whether the accent glyph is sized to the base width
-     * @param under           whether the decoration sits below the base (only the
-     *                        {@code \\underline} rule); {@code false} for every
-     *                        over-accent and the over-line
+     * @param under           whether the decoration sits below the base ({@code
+     *                        \\underline}'s rule, or {@code \\underparen}'s
+     *                        stretchy glyph); {@code false} for every other accent
      */
     record Accent(String command, MathNode base, int accentCodePoint,
                   boolean stretchy, boolean under) implements MathNode {
@@ -439,8 +446,9 @@ public sealed interface MathNode {
             if (base == null) {
                 throw new IllegalArgumentException("Accent base must not be null");
             }
-            if (under && accentCodePoint != RULE) {
-                throw new IllegalArgumentException("only a rule decoration may be under the base");
+            if (under && accentCodePoint != RULE && !stretchy) {
+                throw new IllegalArgumentException(
+                    "only a rule decoration or a stretchy glyph accent may be under the base");
             }
             if (stretchy && accentCodePoint == RULE) {
                 throw new IllegalArgumentException("a rule decoration is not stretchy");
