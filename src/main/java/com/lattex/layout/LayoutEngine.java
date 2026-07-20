@@ -1910,10 +1910,14 @@ public final class LayoutEngine {
      * rule lifts an over-accent by {@code max(0, baseHeight − accentBaseHeight)},
      * so a tall base pushes the accent up while a short one lets it hug — the
      * combining accent glyph's intrinsic ink height supplies the clearance.
-     * {@code \\underparen} mirrors this against the base's <em>depth</em>
-     * (OpenType MATH defines no distinct "under" clearance constant, so
-     * {@code accentBaseHeight} is reused by design, not a font-specific value). A
-     * stretchy accent is first sized to the base width.
+     * {@code \\underparen} does <em>not</em> reuse {@code accentBaseHeight} (a
+     * top-attachment height with no under equivalent); instead it is placed from
+     * ACTUAL INK EXTENTS — the accent's ink top is pinned a positive
+     * {@code stretchStackGapBelowMin} (the OpenType MATH under-stack /
+     * {@code \\underbrace} gap) below the base's ink bottom, and the box depth is
+     * then derived from the positioned accent's ink bottom. A stretchy accent is
+     * first sized to the base width; its ink is measured over the actual pieces
+     * (single glyph, wide variant, or assembled row).
      */
     private static Box glyphAccentBox(Accent accent, Box baseBox, LayoutContext ctx) {
         SfntFont font = ctx.font();
@@ -1971,13 +1975,31 @@ public final class LayoutEngine {
         baseBox.drawInto(glyphs, rules, 0.0, 0.0);
 
         if (under) {
-            double lower = Math.max(0.0, baseBox.depth() - c.accentBaseHeight() * scale);
-            double accentBaselineY = lower;
+            // Ink-driven clearance: pin the accent's ink TOP a positive gap BELOW the
+            // base's ink bottom, so U+23DD sits clear of the base instead of cutting
+            // into it. accentBaseHeight is a TOP-attachment height (OpenType MATH has
+            // no under equivalent); the correct constant for a stretchy glyph stacked
+            // below a base is stretchStackGapBelowMin (the under-stack / underbrace
+            // gap). baseBox.depth() is the base's bottom extent — the exact ink bottom
+            // for a glyph and an ink-encompassing bound for a composite (fraction,
+            // scripts), so placing below it clears the real base ink too.
+            //
+            // Box coords are y-down: a glyph on baseline y draws design-point dy at
+            // (y - scale*dy). inkYMax/inkYMin are the accent's design-space ink top/
+            // bottom over ITS ACTUAL pieces (single glyph, wide variant, or assembled
+            // row — the loop above scanned them all). Solving
+            //   accentInkTop == baseBox.depth() + gap
+            //   accentBaselineY - scale*inkYMax == baseBox.depth() + gap
+            // gives the baseline that puts the ink top exactly one gap below the base:
+            double gap = c.stretchStackGapBelowMin() * scale;
+            double accentBaselineY = baseBox.depth() + gap + scale * inkYMax;
             for (AccentPiece p : pieces) {
                 glyphs.add(new PositionedGlyph(
                     p.gid(), accentOriginX + scale * p.dx(), accentBaselineY, scale));
             }
-            double depth = Math.max(baseBox.depth(), lower - scale * inkYMin);
+            // Depth reaches the accent's ink bottom; = baseBox.depth() + gap +
+            // scale*(inkYMax - inkYMin) >= baseBox.depth(), so it always grows the box.
+            double depth = accentBaselineY - scale * inkYMin;
             // Advance is the base width (an under-accent never widens the row).
             return new Box(glyphs, rules, baseBox.width(), baseBox.height(), depth);
         }
