@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -49,7 +50,13 @@ import org.junit.jupiter.api.Test;
  * <p>No parser/layout/emitter code is touched — this is pure presentation +
  * page-side runtime over the public {@code renderStyledHtml} API.
  */
-class EffectsPageTest {
+@Tag("examples") // page generator: runs in normal `test` (writes build/examples, keeping
+                 // the containment/affordance-free assertions in CI) AND under
+                 // `generateExamples`, which writes the tracked examples/ (plan 32148cc8 S2,
+                 // reviewer F1)
+// Public so the BrewShot harness (com.lattex.harness) can call buildEffectsHtml()
+// to regenerate the browser fixture from current sources (reviewer F2).
+public class EffectsPageTest {
 
     /**
      * One fx specimen: the {@code \lx[…]{…}} source, a human caption, and a
@@ -151,28 +158,21 @@ class EffectsPageTest {
 
     @Test
     void writesEffectsPage() throws IOException {
-        StringBuilder cards = new StringBuilder();
-        int svgCount = 0;
-
+        // --- Containment guard (runs in the normal `test` suite): every specimen's
+        // fx metadata rides the CONTAINER, and the extracted inner <svg> stays
+        // affordance-free (no data-*/on*/script/style). ---
         for (Fx fx : SPECIMENS) {
             String fragment = LatteX.renderStyledHtml(fx.latex());
-            svgCount++;
-
-            // --- Containment guard: the fx metadata rides the CONTAINER, and the
-            // extracted inner <svg> stays affordance-free (no data-*/on*/script/style). ---
             assertTrue(fragment.startsWith("<span class=\"lx-math\""),
                 "fragment is a container span: " + fragment);
-            String svg = extractSvg(fragment);
-            assertAffordanceFree(fx.latex(), svg);
+            assertAffordanceFree(fx.latex(), extractSvg(fragment));
             // The container really does carry the fx attribute the caption promises.
             assertTrue(fragment.substring(0, fragment.indexOf("<svg")).contains("data-lx-fx-"),
                 "container carries a data-lx-fx-* attribute for [" + fx.latex() + "]");
-
-            cards.append(card(fx, fragment)).append('\n');
         }
 
-        String html = page(cards.toString());
-        Path out = Path.of("examples", "effects.html");
+        String html = buildEffectsHtml();
+        Path out = ExampleOutputs.dir().resolve("effects.html");
         Files.createDirectories(out.getParent());
         Files.writeString(out, html);
 
@@ -181,7 +181,7 @@ class EffectsPageTest {
         assertTrue(Files.size(out) > 0, "effects.html non-empty");
         // Count emitter output specifically (`<svg xmlns…`), not the word "svg"
         // in page chrome (the tagline mentions <svg>, a CSS comment does too).
-        assertEquals(svgCount, countOccurrences(written, "<svg xmlns"),
+        assertEquals(SPECIMENS.size(), countOccurrences(written, "<svg xmlns"),
             "one rendered SVG per specimen");
         // The runtime is embedded inline (CSS keyframes + the JS wirer).
         assertTrue(written.contains("@keyframes lx-boom"), "boom keyframes embedded");
@@ -314,6 +314,23 @@ class EffectsPageTest {
         for (String svg : allSvgs(written)) {
             assertAffordanceFree("page svg", svg);
         }
+    }
+
+    /**
+     * Builds {@code effects.html} from the CURRENT runtime sources — every specimen
+     * rendered live via {@link LatteX#renderStyledHtml(String)} and the page wired
+     * with the bundled {@link LatteX#fxRuntimeJs()} / {@link LatteX#fxStylesCss()}.
+     * Public and assertion-free so the BrewShot harness can regenerate the browser
+     * fixture into {@code build/} straight from live sources before it captures —
+     * so the pins exercise the current runtime, not a stale checked-in page
+     * (reviewer F2).
+     */
+    public static String buildEffectsHtml() {
+        StringBuilder cards = new StringBuilder();
+        for (Fx fx : SPECIMENS) {
+            cards.append(card(fx, LatteX.renderStyledHtml(fx.latex()))).append('\n');
+        }
+        return page(cards.toString());
     }
 
     // -------------------------------------------------------------------------

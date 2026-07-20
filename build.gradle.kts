@@ -10,11 +10,11 @@ group = "com.lattex"
 // republish, so a pinned consumer can never silently go stale (plan 38cf48e4). Bump on
 // each release that downstream should pick up.
 //
-// 0.2.0-rc1: this branch's pre-release (25 effects + fxContainerAttrs) so the Stafficy
-// Phase-B branch can vendor + verify end-to-end ahead of the official 0.2.0 train
-// (coord 5737: + the DoS parse-guard). The final cut re-stamps this to "0.2.0";
-// downstream keeps 0.1.0 untouched (immutable) beside the rc.
-version = "0.8.0"
+// 0.9.0: nested inline math inside \text{…}, matrix-cell style fidelity, container
+// drift guard + type-safe emitter fill — the post-0.8.0 mainline set — plus the
+// hermetic test suite / generateExamples split, the full-corpus render sweep, and
+// the CI clean-tree gate (plan 32148cc8). See RELEASE_NOTES.md.
+version = "0.9.0"
 
 java {
     toolchain {
@@ -44,8 +44,35 @@ dependencies {
     testImplementation("org.graalvm.polyglot:js-community:24.2.2")
 }
 
+// Hermetic `test` (plan 32148cc8 S2, reviewer F1): every test — including the
+// examples/-page GENERATORS (tagged "examples") and the BrewShot capture tests
+// (tagged "capture") — runs in the normal suite, so their security / runtime /
+// alphabet / safe-evaluator / grammar-pin assertions ALWAYS execute in CI.
+// Hermeticity comes from WHERE they write, not from excluding assertions: under
+// `test` the generators write into build/examples and the captures into build/,
+// so `./gradlew test` never touches the working tree. Only `generateExamples`
+// below (which sets -Dlattex.examples.write=true) writes the tracked examples/
+// dir. Verify: run `test`, then `git status --porcelain` must be empty.
 tasks.test {
     useJUnitPlatform()
+}
+
+// Regenerates the tracked examples/ artifacts on demand: the HTML pages ("examples"
+// generators, byte-identical for an unchanged emitter) plus the BrewShot visual
+// references ("capture" tests re-run with -Dlattex.examples.write=true so their
+// PNG/GIF output lands beside the pages; references, not byte-goldens — animation
+// frames differ run to run). NOT wired into `check`/`build`; run explicitly, review
+// the diff, commit.
+val generateExamples by tasks.registering(Test::class) {
+    group = "documentation"
+    description = "Regenerates the tracked examples/ pages + BrewShot visual references."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("examples", "capture")
+    }
+    systemProperty("lattex.examples.write", "true")
+    outputs.upToDateWhen { false } // regeneration is the point — never skip as up-to-date
 }
 
 // Single-source the version: stamp `project.version` into lattex-version.properties
@@ -54,6 +81,10 @@ tasks.test {
 // hardcode read 0.2.1 against a 0.5.0 artifact). Present in both the jar and the
 // test classpath (unlike the jar manifest, which is null under `gradle test`).
 tasks.processResources {
+    // The version must be a declared task input: without it an incremental build
+    // after a version bump keeps the previously-expanded properties file, and the
+    // jar reports the OLD version (observed on the 0.8.0 → 0.9.0 bump).
+    inputs.property("lattexVersion", project.version.toString())
     filesMatching("lattex-version.properties") {
         expand(mapOf("version" to project.version.toString()))
     }

@@ -2,13 +2,17 @@ package com.lattex.harness;
 
 import com.brewshot.BrewShot;
 import com.brewshot.MiniJson;
+import com.lattex.api.EffectsPageTest;
+import com.lattex.api.ThreadPreviewPageTest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -30,18 +34,28 @@ import org.junit.jupiter.api.Test;
  */
 class BrewShotFxLifecycleTest {
 
-    private static Path examples() {
-        return Path.of("examples").toAbsolutePath();
+    /** The browser fixtures, regenerated from CURRENT sources into {@code build/}
+     * by {@link #buildFixturesFromCurrentSources()} — the lifecycle pins exercise
+     * the live runtime, never a stale committed page (reviewer F2). */
+    private static Path pagesDir() {
+        return Path.of("build", "examples").toAbsolutePath();
+    }
+
+    /** Rebuild the example pages this class loads from the live runtime sources,
+     * into {@code build/examples}, BEFORE any capture runs (reviewer F2). */
+    @BeforeAll
+    static void buildFixturesFromCurrentSources() throws IOException {
+        Files.createDirectories(pagesDir());
+        Files.writeString(pagesDir().resolve("effects.html"),
+            EffectsPageTest.buildEffectsHtml(), StandardCharsets.UTF_8);
+        Files.writeString(pagesDir().resolve("thread-preview.html"),
+            ThreadPreviewPageTest.buildThreadPreviewHtml(), StandardCharsets.UTF_8);
     }
 
     @Test
     void hologramAndNeonsignTearDownOnScroll() throws Exception {
-        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
-        Path page = examples().resolve("effects.html");
-        assumeTrue(Files.exists(page), "examples/effects.html not generated");
-        assumeTrue(Files.readString(page).contains("data-lx-fx-overlay"),
-            "stale examples/effects.html (predates the current runtime) — "
-                + "full-suite runs regenerate it first (class ordering)");
+        BrowserGate.browserPin();
+        Path page = pagesDir().resolve("effects.html"); // built from current sources in @BeforeAll
 
         // Short viewport so the page is scrollable (the kill needs a REAL scroll).
         try (BrewShot chrome = BrewShot.launch(1200, 800)) {
@@ -99,9 +113,8 @@ class BrewShotFxLifecycleTest {
 
     @Test
     void threadGlyphmapBoldsExactlyTheHoveredCodepointGroup() throws Exception {
-        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
-        Path page = examples().resolve("thread-preview.html");
-        assumeTrue(Files.exists(page), "examples/thread-preview.html not generated");
+        BrowserGate.browserPin();
+        Path page = pagesDir().resolve("thread-preview.html"); // built from current sources in @BeforeAll
 
         try (BrewShot chrome = BrewShot.launch(900, 700)) {
             chrome.open(page.toUri().toString());

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -18,6 +19,9 @@ import org.junit.jupiter.api.Test;
  * <p>Regenerated every suite run (the effects.html pattern); the committed
  * copy is the browsable artifact.
  */
+@Tag("examples") // page generator: runs in normal `test` (writes build/examples, all
+                 // assertions execute in CI) AND under `generateExamples`, which writes
+                 // the tracked examples/ (plan 32148cc8 S2, reviewer F1)
 class ShowcasePageTest {
 
     private record Item(String caption, String latex) { }
@@ -120,7 +124,7 @@ class ShowcasePageTest {
             can never advertise something a change broke. Current wild coverage:
             484/484 real-world formulas (100%).</p>
             """ + cards + "</main></body></html>\n";
-        Path out = Path.of("examples", "showcase.html");
+        Path out = ExampleOutputs.dir().resolve("showcase.html");
         Files.createDirectories(out.getParent());
         Files.writeString(out, page);
         assertTrue(Files.size(out) > 5_000);

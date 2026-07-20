@@ -29,7 +29,7 @@ trip degrades to a typed `OUTPUT_CAP_EXCEEDED` diagnostic, never an escaped erro
 LatteX renders (every formula on it is regression-locked by the wild-corpus
 ratchet: 484/484 real-world formulas, 100%, and only allowed to go up). For the
 fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
-26 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
+27 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
 captured previews (every effect as its own looping GIF). For the parallel MathML
 output, **[examples/mathml.html](examples/mathml.html)** shows each formula's SVG
 render beside its `toMathML()` serialization — same parse, two products.
@@ -68,11 +68,11 @@ LatteX.fxStylesCss()   // the styles — serve as /css/lattex-fx.css, or inline 
 Not on the JVM? They're plain jar resources — extract them at build time in any stack:
 
 ```bash
-unzip -p lattex-0.5.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
-unzip -p lattex-0.5.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
+unzip -p lattex-0.9.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
+unzip -p lattex-0.9.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
 ```
 
-Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the whole catalogue live in `examples/effects.html` — or see it without building anything: **[the fx gallery](examples/GALLERY.md)** has real-browser screenshots and GIFs of the effects in motion, captured by [BrewShot](https://github.com/supsup/BrewShot) on every full test run.
+Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the whole catalogue live in `examples/effects.html` — or see it without building anything: **[the fx gallery](examples/GALLERY.md)** has real-browser screenshots and GIFs of the effects in motion, captured by [BrewShot](https://github.com/supsup/BrewShot) on every `./gradlew generateExamples` run.
 
 ## PNG export — `bin/lattex-shot`
 

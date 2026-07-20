@@ -1,7 +1,9 @@
 # LatteX CI — every push/PR runs the FULL gate: build (incl. javadoc, the
-# release path), the whole test suite, and — because GitHub runners ship
-# Chrome — the BrewShot real-browser pins (blob audit, fx lifecycle, GIF
-# liveness) that laptop-less-Chrome environments assume-skip.
+# release path), the whole test suite, and the BrewShot real-browser pins
+# (blob audit, fx lifecycle, GIF liveness). The pins are REQUIRED here, not
+# assumed: a verify step proves Chrome is present and LATTEX_REQUIRE_BROWSER=1
+# turns an availability skip into a build FAILURE — a runner-image regression
+# must go red, never green-minus-the-safety-net (review lattex 246 F2).
 name: ci
 on:
   push:
@@ -17,15 +19,33 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-      - name: Build + full suite (javadoc, containment, corpus, browser pins)
+      - name: Verify Chrome present (the pins REQUIRE it; no silent skip)
+        run: google-chrome --version
+      - name: Build + full suite (javadoc, containment, corpus, browser pins REQUIRED)
         run: ./gradlew build --no-daemon
-      - name: Upload visual references (gallery artifacts)
+        env:
+          LATTEX_REQUIRE_BROWSER: '1'
+      - name: Clean-tree gate (the hermetic-suite proof — plan 32148cc8 S3)
+        # `test` must not touch the working tree: the examples/ generators write into
+        # build/examples under `test` (only generateExamples writes tracked examples/),
+        # BrewShot captures land in build/. Any change here — a modified TRACKED file
+        # OR a NEW untracked one — means a test wrote into the checkout, so fail the
+        # build. `git diff --exit-code` alone IGNORES untracked files (reviewer F3),
+        # so gate on `git status --porcelain` being empty, which catches both.
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Test run dirtied the working tree — the suite is not hermetic."
+            echo "Offending paths (git status --porcelain):"
+            git status --porcelain
+            echo "Tracked-file changes (git diff):"
+            git diff
+            exit 1
+          fi
+      - name: Upload visual references (BrewShot captures from the test run)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: examples-gallery
-          path: |
-            examples/*.png
-            examples/*.gif
+          name: brewshot-refs
+          path: build/brewshot-refs/
           if-no-files-found: ignore
           retention-days: 14

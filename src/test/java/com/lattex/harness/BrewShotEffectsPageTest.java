@@ -2,14 +2,19 @@ package com.lattex.harness;
 
 import com.brewshot.BrewShot;
 import com.brewshot.MiniJson;
+import com.lattex.api.EffectsPageTest;
+import com.lattex.api.ThreadPreviewPageTest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -25,14 +30,24 @@ import org.junit.jupiter.api.Test;
  * bounding box may exceed ~2x its own SVG's box. A compose regression renders
  * glyphs at raw font units (~25x) and fails loudly here.
  *
- * <p>THE SCREENSHOTS: full-page PNGs written next to the example .html files
- * (examples/effects.png, examples/thread-preview.png) as visual references —
- * regenerate alongside the pages; they are references, not byte-goldens
- * (animation frames differ run to run).
+ * <p>THE SCREENSHOTS: full-page PNGs captured as visual references — written
+ * next to the example .html files (examples/effects.png, examples/thread-preview.png)
+ * when run via {@code generateExamples}, into {@code build/brewshot-refs} during
+ * {@code test}; they are references, not byte-goldens (animation frames differ run
+ * to run).
  *
- * <p>Skips (does not fail) when no local Chrome exists or the example page has
- * not been generated (EffectsPageTest/ThreadPreviewPageTest write them).
+ * <p><strong>Fixtures from CURRENT sources (reviewer F2).</strong> The pages the
+ * browser loads are regenerated into {@code build/examples} from the live runtime
+ * sources ({@link EffectsPageTest#buildEffectsHtml()} /
+ * {@link ThreadPreviewPageTest#buildThreadPreviewHtml()}) in a {@code @BeforeAll} —
+ * never the checked-in {@code examples/*.html}. So a change to lattex-fx.js /
+ * lattex-fx.css / the page template is exercised by this pin immediately; it can
+ * no longer pass against a stale committed page.
+ *
+ * <p>Skips (does not fail) when no local Chrome exists.
  */
+@Tag("capture") // browser pin stays in `test` (reference writes land in build/);
+                // `generateExamples` re-runs it writing beside the pages (plan 32148cc8 S2)
 class BrewShotEffectsPageTest {
 
     /** JS audit: any glyph path whose box exceeds ~2x its svg box is a blob. */
@@ -59,14 +74,40 @@ class BrewShotEffectsPageTest {
         return Path.of("examples").toAbsolutePath();
     }
 
+    /** The browser fixtures, regenerated from CURRENT sources into {@code build/}
+     * by {@link #buildFixturesFromCurrentSources()}. The pins load THESE, never the
+     * tracked {@code examples/*.html}, so a stale committed page can't green a
+     * broken runtime (reviewer F2). */
+    private static Path pagesDir() {
+        return Path.of("build", "examples").toAbsolutePath();
+    }
+
+    /** Rebuild the example pages the browser will load from the live runtime
+     * sources, into {@code build/examples}, BEFORE any capture runs (reviewer F2). */
+    @BeforeAll
+    static void buildFixturesFromCurrentSources() throws IOException {
+        Files.createDirectories(pagesDir());
+        Files.writeString(pagesDir().resolve("effects.html"),
+            EffectsPageTest.buildEffectsHtml(), StandardCharsets.UTF_8);
+        Files.writeString(pagesDir().resolve("thread-preview.html"),
+            ThreadPreviewPageTest.buildThreadPreviewHtml(), StandardCharsets.UTF_8);
+    }
+
+    /** Where captured references land: beside the pages when regenerating
+     * (`generateExamples` sets {@code -Dlattex.examples.write=true}), into
+     * {@code build/brewshot-refs} during `test` so the working tree stays
+     * clean (plan 32148cc8 S2). */
+    private static Path refsOut() throws java.io.IOException {
+        Path dir = Boolean.getBoolean("lattex.examples.write")
+            ? examples() : Path.of("build", "brewshot-refs").toAbsolutePath();
+        Files.createDirectories(dir);
+        return dir;
+    }
+
     @Test
     void effectsPageRendersWithoutBlobsAndWritesReferenceScreenshot() throws Exception {
-        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
-        Path page = examples().resolve("effects.html");
-        assumeTrue(Files.exists(page), "examples/effects.html not generated");
-        assumeTrue(Files.readString(page).contains("data-lx-fx-overlay"),
-            "stale examples/effects.html (predates the current runtime) — "
-                + "full-suite runs regenerate it first (class ordering)");
+        BrowserGate.browserPin();
+        Path page = pagesDir().resolve("effects.html"); // built from current sources in @BeforeAll
 
         try (BrewShot chrome = BrewShot.launch(1200, 900)) {
             chrome.open(page.toUri().toString());
@@ -78,7 +119,7 @@ class BrewShotEffectsPageTest {
             chrome.settle(1200);
             Object settled = chrome.eval(BLOB_AUDIT);
 
-            chrome.screenshot(examples().resolve("effects.png"));
+            chrome.screenshot(refsOut().resolve("effects.png"));
 
             assertEquals(List.of(), early,
                 "glyph blobs mid-animation (placement-compose regressed?)");
@@ -100,9 +141,8 @@ class BrewShotEffectsPageTest {
 
     @Test
     void threadPreviewScreenshotAlongsideItsHtml() throws Exception {
-        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
-        Path page = examples().resolve("thread-preview.html");
-        assumeTrue(Files.exists(page), "examples/thread-preview.html not generated");
+        BrowserGate.browserPin();
+        Path page = pagesDir().resolve("thread-preview.html"); // built from current sources in @BeforeAll
 
         try (BrewShot chrome = BrewShot.launch(900, 700)) {
             chrome.open(page.toUri().toString());
@@ -117,7 +157,7 @@ class BrewShotEffectsPageTest {
                 })()
                 """);
             chrome.settle(250);
-            chrome.screenshot(examples().resolve("thread-preview.png"));
+            chrome.screenshot(refsOut().resolve("thread-preview.png"));
         }
     }
 }

@@ -166,14 +166,14 @@ Everything wraps the one core: `render(latex, options) → SVG string`.
 
 ### JVM — Java / Kotlin / Scala — *available*
 
-Depend on the versioned artifact `com.lattex:lattex:0.5.0` (module `com.lattex`,
+Depend on the versioned artifact `com.lattex:lattex:0.9.0` (module `com.lattex`,
 exporting `com.lattex.api`) and call the API directly:
 
 ```kotlin
 // build.gradle.kts — resolve from ~/.m2 after `./gradlew publishToMavenLocal`
 // in the LatteX repo (a published repo can be added later).
 repositories { mavenLocal(); mavenCentral() }
-dependencies { implementation("com.lattex:lattex:0.5.0") }
+dependencies { implementation("com.lattex:lattex:0.9.0") }
 ```
 
 ```java
@@ -261,7 +261,7 @@ value fails loud with exit code 2. A top-level `\lx[...]` in the source still wi
 
 ```bash
 ./gradlew run --args="\frac{a}{b}"                 # via Gradle
-java -jar build/libs/lattex-0.5.0.jar "x^2"            # via the runnable jar
+java -jar build/libs/lattex-0.9.0.jar "x^2"            # via the runnable jar
 ```
 
 ### Performance — native binary vs. `java -jar` vs. `./gradlew run`

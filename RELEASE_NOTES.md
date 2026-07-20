@@ -4,10 +4,11 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill
+## 0.9.0 · 2026-07-20 — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
 
-On mainline, not yet cut as a version (the vendored jar is `0.8.0`; the next
-release bump picks this up).
+The post-0.8.0 set below, cut as **0.9.0** — the version the build pins and the consumer docs
+name; the build itself also hardened (last three items). Stafficy `/docs` still vendors `0.8.0`
+until it re-pins this version.
 
 - **A wide, shallow formula can no longer exhaust memory — the layout box budget.**
   The engine already capped nesting *depth* (`MAX_DEPTH`), but not *breadth*: a
@@ -61,6 +62,34 @@ release bump picks this up).
   pathological `\text{$\text{$…}$}` nesting hits the `MAX_DEPTH` guard as a clean
   parse error — never a stack overflow. Closed the #1 remaining text-mode
   coverage gap (plan a93c96b3).
+
+- **Full-corpus render sweep — now points at its input on failure.** The sweep that
+  runs every renderable `corpus.tsv` row (170 `PARSES-NOW` entries) through the complete
+  `render`/`renderInline` pipeline — no-throw, the S8 output-alphabet containment audit,
+  and a non-degenerate canvas, per row in both modes — landed on mainline earlier
+  (`57efc52`); this cut versions it. Plan 32148cc8 S1's contribution is the failure
+  handle: a red now names the exact `corpus.tsv:<line> [latex]` instead of the LaTeX
+  alone, so a regression identifies its own input row.
+- **Hermetic test suite — without dropping a single assertion.** The `examples/` page
+  generators (and the BrewShot capture pins) run in the normal `test` suite, so their
+  containment / runtime / alphabet / safe-evaluator / grammar-pin assertions always
+  execute in CI. Hermeticity comes from *where* they write, not from excluding them:
+  under `test` the generators write into `build/examples` and the captures into
+  `build/`, so `./gradlew test` leaves the working tree clean. Only
+  `./gradlew generateExamples` writes the tracked `examples/` pages + visual
+  references. The BrewShot browser pins load a fixture rebuilt from the *current*
+  runtime sources into `build/` (a `@BeforeAll`), so they exercise the live
+  `lattex-fx.js` / `lattex-fx.css` / page template rather than a stale committed page
+  (plan 32148cc8 S2).
+- **CI clean-tree gate — a new step on the existing GitHub Actions build.** LatteX
+  already had a CI workflow (`c6c5174`); this cut adds a post-suite step that fails the
+  build if the test run dirtied the checkout, and redirects generated artifacts to
+  `build/`. The gate asserts `git status --porcelain` is empty, so a *new untracked*
+  file trips it too — not just a tracked-file diff (plan 32148cc8 S3). The five real-browser
+  pins are also **required on CI** now: the workflow verifies Chrome and sets
+  `LATTEX_REQUIRE_BROWSER=1`, under which an unavailable browser FAILS the pin instead of
+  assumption-skipping — locally (no flag) the skip behavior is unchanged, and the fail-closed
+  arm has its own seam-injected test rather than executing only on a broken runner.
 
 ---
 

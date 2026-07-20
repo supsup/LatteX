@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -15,6 +16,9 @@ import org.junit.jupiter.api.Test;
  * the emitter's output changed and should be reviewed. S8 will graduate this into
  * a proper regenerated gallery with a staleness guard; for M0 it is a single page.
  */
+@Tag("examples") // page generator: runs in normal `test` (writes build/examples, all
+                 // assertions execute in CI) AND under `generateExamples`, which writes
+                 // the tracked examples/ (plan 32148cc8 S2, reviewer F1)
 class SkeletonPageTest {
 
     @Test
@@ -60,7 +64,7 @@ class SkeletonPageTest {
             </html>
             """.formatted(indent(svg));
 
-        Path out = Path.of("examples", "x-squared.html");
+        Path out = ExampleOutputs.dir().resolve("x-squared.html");
         Files.createDirectories(out.getParent());
         Files.writeString(out, html);
 
