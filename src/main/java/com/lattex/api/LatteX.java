@@ -182,7 +182,10 @@ public final class LatteX {
      */
     public static String render(String latex, RenderOptions opts) {
         java.util.Objects.requireNonNull(opts, "opts");
-        MathNode node = MathParser.parse(latex);
+        // L8: preset macros expand before parsing. A top-level \lx wrapper below may
+        // override the STYLING options, but macros are not part of the \lx
+        // sub-language, so the caller's notation pack applies inside the body too.
+        MathNode node = MathParser.parse(latex, opts.macros());
 
         // A top-level \lx wrapper carries its own validated RenderOptions in the
         // source; that style is what we apply (it overrides `opts`), and we render
