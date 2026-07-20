@@ -184,6 +184,11 @@ PARSES-NOW	boxed	\boxed{x+1}	framed sub-formula — \boxed rule rectangle (amsma
 PARSES-NOW	boxed	\boxed{x^* = f(x^*)}	boxed fixed-point identity
 PARSES-NOW	boxed	\fbox{a+b}	\fbox accepted as the math-mode frame analogue
 PARSES-NOW	boxed	\boxed{\frac{a}{b}}	boxed fraction — frame sizes to the taller body
+# ==== cancel family (cancel package strikes) ======================
+PARSES-NOW	cancel	\cancel{x}	up-diagonal strike (/) through the body — \cancel
+PARSES-NOW	cancel	\bcancel{x}	down-diagonal strike (\) — \bcancel
+PARSES-NOW	cancel	\xcancel{ab}	both diagonals (an X) — \xcancel
+PARSES-NOW	cancel	\cancelto{0}{x^2}	\cancelto — up strike + arrowhead + target value at the tip
 # ==== extensible arrows (amsmath \x...) ============================
 PARSES-NOW	xarrow	A \xlongequal{\text{def}} B	labelled extensible double-equals — \xlongequal (two in-alphabet rules)
 PARSES-NOW	xarrow	\xlongequal[y]{x}	\xlongequal with above + below labels

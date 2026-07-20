@@ -4,6 +4,21 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased — the cancel family
+
+- **Struck-through sub-formulas — the `cancel` package family.** Four new wrapper
+  commands strike a diagonal rule through their argument: `\cancel{x}` (up
+  diagonal `/`), `\bcancel{x}` (down diagonal `\`), `\xcancel{x}` (both, an `X`),
+  and `\cancelto{value}{x}` (an up-diagonal strike carrying a small arrowhead at
+  its tip, with `value` set script-size just beyond it — LaTeX's cancel-package
+  form). The strike spans the body's ink box corner-to-corner with a small
+  overshoot and rides the same rule thickness/fill as a `\boxed` frame. Each
+  diagonal renders as a filled `<path>` (a thin quadrilateral; the arrowhead a
+  triangle) inside the existing minimal SVG alphabet — no new element, attribute,
+  or sanitizer surface — so untouched inputs bake byte-identically. MathML maps to
+  `<menclose notation="updiagonalstrike">` / `downdiagonalstrike` (both for
+  `\xcancel`), and `\cancelto` to the strike with its value as a superscript.
+
 ## 0.9.0 · 2026-07-20 — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
 
 The post-0.8.0 set below, cut as **0.9.0** — the version the build pins and the consumer docs

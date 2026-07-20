@@ -27,7 +27,10 @@ so there are no web fonts to load either. Apache-2.0.
 (100%) from the wild corpus render clean, regression-locked by a coverage
 ratchet that only moves up. Browse the tour: **[examples/showcase.html]
 (examples/showcase.html)** (highlights incl. matrices, cases, align, bra-ket,
-and the mod/logic/dots families); the full command inventory is the generated
+and the mod/logic/dots families); struck-through terms via the cancel family
+— `\cancel{x}` (up `/`), `\bcancel{x}` (down `\`), `\xcancel{x}` (an `X`), and
+`\cancelto{value}{x}` (a struck arrow to a target value); the full command
+inventory is the generated
 [examples/symbol-index.html](examples/symbol-index.html), and the parse-tier
 ledger is [examples/corpus.md](examples/corpus.md).
 
