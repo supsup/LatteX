@@ -120,10 +120,23 @@ public final class MathParser {
     private int p;
 
     private MathParser(String src) {
-        this.tokens = lex(src);
+        this(src, Map.of());
     }
 
-    private static List<Token> lex(String s) {
+    /**
+     * Lexes and then macro-expands {@code src} (L8): user macros — inline
+     * {@code \newcommand}/{@code \renewcommand}/{@code \def} definitions plus
+     * caller-supplied presets — are spliced into the token stream before any
+     * parsing, so the parser only ever sees tokens it already understands. With
+     * no presets and no inline definitions the expansion returns the lexed list
+     * untouched — byte-identical to the pre-macro pipeline.
+     */
+    private MathParser(String src, Map<String, String> macros) {
+        this.tokens = MacroExpander.expand(lex(src), macros);
+    }
+
+    /** Package-private for {@link MacroExpander} (preset bodies lex through the same lexer). */
+    static List<Token> lex(String s) {
         List<Token> out = new ArrayList<>();
         int i = 0;
         int n = s.length();
@@ -259,8 +272,23 @@ public final class MathParser {
      * {@link #parseCommand} as a clear "nested" error (top-level-only for the MVP).
      */
     public static MathNode parse(String latex) {
+        return parse(latex, Map.of());
+    }
+
+    /**
+     * Parses with caller-supplied preset macros (L8, {@code RenderOptions.macros}):
+     * each entry is a user-macro name (ASCII letters, no backslash) mapped to its
+     * replacement body; arity is inferred from the highest {@code #k} in the body.
+     * Presets share one namespace with inline definitions and the same
+     * additive-only rule (no built-in names). An empty map is the byte-identical
+     * fast path.
+     */
+    public static MathNode parse(String latex, Map<String, String> macros) {
         if (latex == null) {
             throw new MathSyntaxException("input must not be null");
+        }
+        if (macros == null) {
+            throw new MathSyntaxException("macros must not be null (use Map.of())");
         }
         if (latex.length() > MAX_SOURCE_LENGTH) {
             throw new MathSyntaxException(
@@ -268,9 +296,9 @@ public final class MathParser {
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
         if (LxOptionsParser.looksLikeTopLevelLx(latex)) {
-            return LxOptionsParser.parseLx(latex.strip());
+            return LxOptionsParser.parseLx(latex.strip(), macros);
         }
-        return parseMath(latex);
+        return parseMath(latex, 0, macros);
     }
 
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */
@@ -286,8 +314,18 @@ public final class MathParser {
      * {@code \text{$\text{$…}$}} recurse past the guard into a stack overflow.
      */
     static MathNode parseMath(String latex, int initialDepth) {
+        return parseMath(latex, initialDepth, Map.of());
+    }
+
+    /**
+     * Full form: depth-seeded (see above) and macro-carrying (L8). Nested
+     * {@code $…$} spans inside {@code \text{…}} re-parse through the two-arg
+     * overload, so user macros do NOT reach them — the documented L8 subset
+     * limit (a nested span is opaque raw text at expansion time).
+     */
+    static MathNode parseMath(String latex, int initialDepth, Map<String, String> macros) {
         try {
-            MathParser parser = new MathParser(latex);
+            MathParser parser = new MathParser(latex, macros);
             parser.depth = initialDepth;
             MathNode node = parser.parseTopLevel();
             if (parser.peek().kind() != Kind.EOF) {

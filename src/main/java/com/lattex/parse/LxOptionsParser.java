@@ -37,6 +37,15 @@ final class LxOptionsParser {
 
     /** Parses a whole-string {@code \lx[options]{body}} into a {@link StyledMath}. */
     static MathNode parseLx(String s) {
+        return parseLx(s, java.util.Map.of());
+    }
+
+    /**
+     * Macro-carrying form (L8): the caller's preset macros apply INSIDE the
+     * {@code \lx} body (the {@code \lx} options sub-language itself takes no
+     * macros — options are typed values, not LaTeX).
+     */
+    static MathNode parseLx(String s, java.util.Map<String, String> macros) {
         int n = s.length();
         int pos = skipWs(s, 3); // past "\lx"
 
@@ -61,7 +70,7 @@ final class LxOptionsParser {
         }
 
         LxOptions opts = parseLxOptions(optionsRaw, body);
-        MathNode bodyNode = MathParser.parseMath(body);
+        MathNode bodyNode = MathParser.parseMath(body, 0, macros);
         return new StyledMath(bodyNode, opts.style(), opts.fx(), opts.sem());
     }
 
