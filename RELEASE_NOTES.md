@@ -59,6 +59,11 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 The #1 adoption blocker vs KaTeX/MathJax closes: LatteX now expands **user macros**
 before parsing, both inline and as caller-supplied presets.
 
+- **Bundled `MacroPacks.PHYSICS`** (follow-on slice): `\abs \norm \ev \dd \dv
+  \pdv \grad` as a ready preset map — Dirac brackets deliberately absent (LatteX
+  ships `\bra \ket \braket` natively, and the additive-only census refuses a pack
+  that shadows a built-in; it refused this pack's own first draft). `MacroPacks.plus`
+  merges a pack with caller macros.
 - **Inline definitions** — `\newcommand{\name}[n]{body}`, `\renewcommand`, and a
   `\def\name{body}` subset (arity inferred from the highest `#k`) work anywhere at
   the top level of an input; invocations splice `#1..#9` argument groups at the
