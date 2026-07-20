@@ -18,8 +18,8 @@ import java.util.Set;
  * from the token stream, invocations are replaced by their substituted bodies,
  * and the parser then sees only tokens it already understands. The pass is
  * <em>additive-only by construction</em>: a macro may not use the name of any
- * built-in command (the structural {@code parseCommand} cases, every
- * {@link Symbols} table, and the text-family commands), so expansion can never
+ * built-in command — decided by asking the PARSER itself (the probe in
+ * {@code denyBuiltin}, one authority, no hand list to drift) — so expansion can never
  * change the meaning of input that parsed before macros existed — the no-macro
  * path returns the token list untouched, byte-identical. {@code \renewcommand}
  * redefines <em>user</em> macros only. This is deliberately narrower than TeX
@@ -47,30 +47,27 @@ final class MacroExpander {
     static final int MAX_MACRO_EXPANSIONS = 10_000;
 
     /**
-     * Structural command names handled by {@code MathParser.parseCommand}'s
-     * switch — not present in any {@link Symbols} table, so they are listed here
-     * for the additive-only deny check. DRIFT NOTE: a structural command added
-     * to the switch but missed here becomes user-shadowable (a soft LaTeX-ward
-     * relaxation, never a parse corruption — expansion output is re-parsed
-     * normally); keep the list in step when touching the switch.
+     * Maximum total MATERIALIZED replacement tokens per input (review lattex 253
+     * F2): invocation count alone cannot see splice VOLUME — a legal ~4KB source
+     * (1,000-token body invoked 1,000 times) materialized 1,000,001 tokens with
+     * every earlier cap green. The third resource axis beside depth and count;
+     * trips as {@link MathSyntaxException#capExceeded} before large lists build.
      */
-    private static final Set<String> STRUCTURAL = Set.of(
-        "atop", "begin", "binom", "boxed", "bra", "brace", "brack", "braket", "cfrac",
-        "choose", "color", "dbinom", "dfrac", "displaystyle", "em", "end", "ex", "frac",
-        "hline", "hphantom", "hspace", "ket", "l", "langle", "lceil", "left", "lfloor",
-        "limits", "lx", "m", "mathstrut", "mu", "not", "operatorname", "over",
-        "overbrace", "overset", "phantom", "prescript", "pt", "r", "rangle", "rceil",
-        "rfloor", "right", "scriptscriptstyle", "scriptstyle", "sqrt", "stackrel",
-        "substack", "tbinom", "textcolor", "textstyle", "tfrac", "underbrace",
-        "underset", "vert", "Vert", "vphantom", "xhookleftarrow", "xhookrightarrow",
-        "xleftarrow", "xLeftarrow", "xleftrightarrow", "xLeftrightarrow", "xlongequal",
-        "xmapsto", "xrightarrow", "xRightarrow", "xrightleftharpoons",
-        "newcommand", "renewcommand", "def");
+    static final int MAX_MACRO_OUTPUT_TOKENS = 100_000;
+
+    /**
+     * The definition keywords themselves — consumed by this expander, unknown to
+     * the parser, so the parser-authority probe below cannot vouch for them.
+     * The ONLY hand-maintained deny entries; everything else asks the parser.
+     */
+    private static final Set<String> DEFINITION_KEYWORDS = Set.of("newcommand", "renewcommand", "def");
 
     private record MacroDef(String name, int numArgs, List<Token> body, boolean inlineSource) {}
 
     private final Map<String, MacroDef> defs = new HashMap<>();
     private int expansions;
+    private int outputTokens;
+    private int presetChars;
 
     private MacroExpander() {
     }
@@ -116,6 +113,15 @@ final class MacroExpander {
         denyBuiltin(name, 0);
         if (body == null) {
             throw new MathSyntaxException("preset macro \\" + name + " has a null body");
+        }
+        // The normal source ceiling applies to preset bodies too (review lattex 253
+        // F2): they lex through the same lexer as source, so an unused 100k+ body
+        // was a resource bypass. CUMULATIVE across the map — the map is one input.
+        presetChars += body.length();
+        if (presetChars > MathParser.MAX_SOURCE_LENGTH) {
+            throw new MathSyntaxException(
+                "preset macro bodies too large: cumulative " + presetChars
+                    + " chars exceeds the " + MathParser.MAX_SOURCE_LENGTH + "-char source ceiling");
         }
         List<Token> bodyTokens;
         try {
@@ -223,18 +229,32 @@ final class MacroExpander {
     }
 
     /**
-     * The additive-only deny check: a user macro may not take a built-in name,
-     * so expansion can never change what already-valid input means.
+     * The additive-only deny check, derived from ONE parser authority (review
+     * lattex 253 F1 — the hand-maintained structural list omitted live commands;
+     * fbox/mkern/kern/mskip/hdashline/nolimits were all shadowable). A name is
+     * built-in iff the PARSER ITSELF does not reject it as an unknown command:
+     * the probe parses {@code \name} with no macros and inspects the failure.
+     * Success, or ANY failure other than "Unknown command: \name" (missing
+     * argument, wrong context, …), means the parser knows the name — deny.
+     * Only a verbatim unknown-command rejection proves the name is free. The
+     * three definition keywords are the sole hand-maintained entries (this
+     * expander consumes them; the parser cannot vouch either way).
      */
     private void denyBuiltin(String name, int offset) {
-        boolean builtin = STRUCTURAL.contains(name)
-            || Symbols.SYMBOLS.containsKey(name)
-            || Symbols.BIG_OPERATORS.containsKey(name)
-            || Symbols.SPACES.containsKey(name)
-            || Symbols.NAMED_OPS.containsKey(name)
-            || Symbols.ACCENTS.containsKey(name)
-            || Symbols.FONT_VARIANTS.containsKey(name)
-            || Symbols.TEXT_COMMANDS.containsKey(name);
+        boolean builtin;
+        if (DEFINITION_KEYWORDS.contains(name)) {
+            builtin = true;
+        } else {
+            try {
+                MathParser.parseMath("\\" + name, 0, Map.of());
+                builtin = true; // parses clean -> the parser owns this name
+            } catch (MathSyntaxException e) {
+                String msg = String.valueOf(e.getMessage());
+                builtin = !msg.startsWith("Unknown command: \\" + name);
+            } catch (RuntimeException anythingElse) {
+                builtin = true; // fail closed: an odd probe failure never frees a name
+            }
+        }
         if (builtin) {
             throw new MathSyntaxException(
                 "cannot define \\" + name + ": it is a built-in command (user macros are "
@@ -321,6 +341,19 @@ final class MacroExpander {
             }
         }
 
+        // The output-token budget (lattex 253 F2): count what THIS invocation will
+        // materialize (body + spliced argument runs) before building it, so the
+        // 1,000x1,000 amplification trips at the budget, not at the allocator.
+        int willMaterialize = def.body().size();
+        for (List<Token> arg : args) {
+            willMaterialize += arg.size();
+        }
+        outputTokens += willMaterialize;
+        if (outputTokens > MAX_MACRO_OUTPUT_TOKENS) {
+            throw MathSyntaxException.capExceeded(
+                "macro expansion output budget exceeded: more than " + MAX_MACRO_OUTPUT_TOKENS
+                    + " materialized replacement tokens in one input");
+        }
         List<Token> substituted = new ArrayList<>(def.body().size());
         for (int b = 0; b < def.body().size(); b++) {
             Token bt = def.body().get(b);

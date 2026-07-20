@@ -152,6 +152,48 @@ class MacroExpansionTest {
         assertTrue(e.getMessage().contains("Unknown command"), e.getMessage());
     }
 
+    /// lattex 253 F1: the deny check must come from ONE parser authority. These six were all
+    /// shadowable under the hand-maintained list (each is parser-known but was absent from it);
+    /// the probe-based check must refuse every one — and still admit a genuinely free name in
+    /// the same fixture, so the probe cannot pass by denying everything.
+    @org.junit.jupiter.api.Test
+    void theSixEscapeesAreDeniedAndFreshNamesStillAdmit() {
+        for (String name : new String[] {"fbox", "mkern", "kern", "mskip", "hdashline", "nolimits"}) {
+            MathSyntaxException e = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("x", Map.of(name, "y")),
+                "parser-known name must be denied: " + name);
+            assertTrue(e.getMessage().contains("built-in"), name + " -> " + e.getMessage());
+        }
+        assertEquals(MathParser.parse("y"), MathParser.parse("\\freshname", Map.of("freshname", "y")));
+    }
+
+    /// lattex 253 F2a: splice VOLUME is its own axis — 1,000-token body x 1,000 invocations is
+    /// ~4KB of source and 1,000,001 materialized tokens; invocation count (1,000 < 10,000) and
+    /// depth (1) never fire. The output budget must trip as a resource cap, and the just-under
+    /// control must still parse.
+    @org.junit.jupiter.api.Test
+    void spliceVolumeTripsTheOutputBudgetAsACap() {
+        String body = "x ".repeat(1000).strip();               // 1,000 CHAR tokens
+        String calls = "\\bigrun ".repeat(1000);
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\newcommand{\\bigrun}{" + body + "}" + calls));
+        assertTrue(e.getMessage().contains("output budget"), e.getMessage());
+        assertTrue(e.isCapExceeded(), "splice volume is a resource cap");
+        // just-under control: 90 invocations x 1,000 tokens = 90,000 < 100,000
+        assertEquals(MathParser.parse("x".repeat(90_000)),
+            MathParser.parse("\\newcommand{\\bigrun}{" + body + "}" + "\\bigrun ".repeat(90)));
+    }
+
+    /// lattex 253 F2b: preset bodies lex through the same lexer as source, so the source ceiling
+    /// applies to them (cumulatively — the map is one input), used or not.
+    @org.junit.jupiter.api.Test
+    void oversizedPresetBodiesAreRefusedEvenWhenUnused() {
+        String huge = "x".repeat(100_001);
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("y", Map.of("unusedbig", huge)));
+        assertTrue(e.getMessage().contains("source ceiling"), e.getMessage());
+    }
+
     // ---- malformed definitions / invocations --------------------------------
 
     @Test
