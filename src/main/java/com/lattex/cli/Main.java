@@ -83,6 +83,12 @@ public final class Main {
             --scale <N>           Output size multiplier (default 1.0), folded into
                                   the vector geometry (crisp, not a CSS zoom). Bounded
                                   to [0.1, 20.0].
+            --macro <NAME=BODY>   Define a user macro before parsing (repeatable) —
+                                  the CLI face of RenderOptions.macros. NAME is ASCII
+                                  letters (no backslash); BODY may use #1..#9 (arity
+                                  is inferred). Additive-only: a built-in name is
+                                  refused. Example:
+                                  --macro 'R=\\mathbb{R}' --macro 'norm=\\lVert #1 \\rVert'
             --color <C>           Ink color: 'currentColor' (default — inherits text
                                   color) or a #rgb / #rrggbb hex literal.
             -h, --help            Show this help and exit.
@@ -148,6 +154,7 @@ public final class Main {
         boolean inline = false;
         Double scale = null;
         com.lattex.api.Color color = null;
+        java.util.Map<String, String> macros = new java.util.LinkedHashMap<>();
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
@@ -195,6 +202,23 @@ public final class Main {
                             return 2;
                         }
                     }
+                    case "--macro" -> {
+                        // L8: --macro name=body, repeatable. Validation (letters-only
+                        // name, additive-only vs built-ins, body lexes) happens at
+                        // parse time with a positioned message; here we only need the
+                        // name=body shape.
+                        if (i + 1 >= args.length) {
+                            err.println("lattex: error: --macro requires a NAME=BODY argument");
+                            return 2;
+                        }
+                        String def = args[++i];
+                        int eq = def.indexOf('=');
+                        if (eq <= 0) {
+                            err.println("lattex: error: --macro expects NAME=BODY, got '" + def + "'");
+                            return 2;
+                        }
+                        macros.put(def.substring(0, eq), def.substring(eq + 1));
+                    }
                     case "--" -> optionsEnded = true;
                     default -> {
                         err.println("lattex: error: unknown option '" + arg + "'");
@@ -224,6 +248,9 @@ public final class Main {
         }
         if (color != null) {
             opts = opts.withColor(color);
+        }
+        if (!macros.isEmpty()) {
+            opts = opts.withMacros(macros);
         }
 
         if (batch) {

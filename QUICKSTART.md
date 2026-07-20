@@ -129,6 +129,35 @@ is insignificant. This is the quickstart view — the full option grammar and ra
 live in the **`lattex-render-styling-options`** design plan. See
 `examples/lx-demo.html` for the macro end-to-end.
 
+## 3.5 User macros — `\newcommand` and notation packs
+
+Real corpora define notation on page one; LatteX expands it before parsing.
+
+Inline, in the expression itself:
+
+```latex
+\newcommand{\norm}[1]{\lVert #1 \rVert} \norm{x + y}
+\def\avg{\frac{#1+#2}{2}} \avg{a}{b}
+```
+
+As a server-side preset pack (per-tenant notation KaTeX's client config can't
+centralize) — applies to every render, `\lx{…}` bodies included:
+
+```java
+RenderOptions opts = RenderOptions.defaults()
+    .withMacros(Map.of("R", "\\mathbb{R}", "inner", "\\langle #1, #2 \\rangle"));
+LatteX.render("\\inner{u}{v} \\in \\R^{n}", opts);
+```
+
+CLI: `lattex --macro 'R=\mathbb{R}' '\R^{2}'` (repeatable).
+
+The namespace is **additive-only**: built-in names are refused (`\renewcommand`
+redefines *user* macros only), so a macro can never change what already-valid
+input means. Runaway recursion and expansion bombs fail closed
+(`MAX_MACRO_DEPTH` / `MAX_MACRO_EXPANSIONS`). Subset limits: definitions are
+global to the input, and macros do not reach nested `$…$` spans inside
+`\text{…}`.
+
 ## 4. Container features
 
 The SVG stays clean; everything interactive rides on a trusted `<span class="lx-math">`

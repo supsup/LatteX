@@ -4,6 +4,37 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased — user macros: `\newcommand` / `\renewcommand` / `\def` + `RenderOptions.macros` (L8)
+
+The #1 adoption blocker vs KaTeX/MathJax closes: LatteX now expands **user macros**
+before parsing, both inline and as caller-supplied presets.
+
+- **Inline definitions** — `\newcommand{\name}[n]{body}`, `\renewcommand`, and a
+  `\def\name{body}` subset (arity inferred from the highest `#k`) work anywhere at
+  the top level of an input; invocations splice `#1..#9` argument groups at the
+  token level, and macros may use other macros.
+- **`RenderOptions.macros(Map)`** — server-side preset packs (per-tenant notation a
+  client-side KaTeX config cannot centralize): `defaults().withMacros(Map.of("R",
+  "\\mathbb{R}"))` applies inside every render, including a top-level `\lx{…}`
+  body (options styling still follows the `\lx` wrapper; macros follow the caller).
+  CLI face: repeatable `--macro NAME=BODY`.
+- **Additive-only namespace, by construction.** A macro may not take any built-in
+  name (structural commands, every symbol/operator/accent table, text-family
+  commands — those are lexer-reserved and cannot even be named), and
+  `\renewcommand` redefines *user* macros only. Expansion therefore can never
+  change the meaning of input that parsed before macros existed, and the no-macro
+  path is byte-identical. Deliberately narrower than TeX; documented subset.
+- **Expansion bombs fail closed, in the existing guard family's shape.** Runaway
+  *recursion* (`\newcommand{\a}{\a}`) trips `MAX_MACRO_DEPTH` (64) as a positioned
+  author-facing error, like `MAX_DEPTH`; a shallow *doubling bomb* trips
+  `MAX_MACRO_EXPANSIONS` (10 000) as a resource cap (`capExceeded`), like
+  `MAX_LAYOUT_BOXES`. Both directions carry over/under discriminator tests.
+- **Subset limits, stated:** definitions are global to the input (no brace
+  scoping); macros do not reach nested `$…$` spans inside `\text{…}`; a bundled
+  physics/braket pack rides a follow-on slice.
+
+---
+
 ## 0.9.0 · 2026-07-20 — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
 
 The post-0.8.0 set below, cut as **0.9.0** — the version the build pins and the consumer docs

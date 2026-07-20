@@ -20,6 +20,47 @@ import org.junit.jupiter.api.Test;
  */
 class RenderOptionsTest {
 
+    // ---- macros (L8): validation, defensive copy, compatibility ----
+
+    @org.junit.jupiter.api.Test
+    void macrosRejectNull() {
+        org.junit.jupiter.api.Assertions.assertThrows(NullPointerException.class,
+            () -> new RenderOptions(1.0, Color.CURRENT, com.lattex.layout.MathStyle.DISPLAY, null));
+    }
+
+    @org.junit.jupiter.api.Test
+    void threeArgConstructorMeansNoMacros() {
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.Map.of(),
+            new RenderOptions(1.0, Color.CURRENT, com.lattex.layout.MathStyle.DISPLAY).macros());
+        org.junit.jupiter.api.Assertions.assertEquals(java.util.Map.of(),
+            RenderOptions.defaults().macros());
+    }
+
+    @org.junit.jupiter.api.Test
+    void withMacrosDefensivelyCopies() {
+        java.util.Map<String, String> src = new java.util.HashMap<>();
+        src.put("half", "\\frac{1}{2}");
+        RenderOptions opts = RenderOptions.defaults().withMacros(src);
+        src.put("half", "\\frac{9}{9}");
+        src.put("smuggled", "y");
+        org.junit.jupiter.api.Assertions.assertEquals(
+            java.util.Map.of("half", "\\frac{1}{2}"), opts.macros(),
+            "mutating the source map after withMacros must not change the options");
+    }
+
+    @org.junit.jupiter.api.Test
+    void macrosVisiblyApplyThroughRender() {
+        String with = LatteX.render("\\half",
+            RenderOptions.defaults().withMacros(java.util.Map.of("half", "\\frac{1}{2}")));
+        String direct = LatteX.render("\\frac{1}{2}", RenderOptions.defaults());
+        org.junit.jupiter.api.Assertions.assertEquals(direct, with,
+            "a preset macro must render byte-identically to its hand-expanded form");
+        org.junit.jupiter.api.Assertions.assertThrows(
+            com.lattex.parse.MathSyntaxException.class,
+            () -> LatteX.render("\\half", RenderOptions.defaults()),
+            "without the preset the same input fails loud — the macro is load-bearing");
+    }
+
     // ---- parseScale: buckets, bounds, clamp, rejection ----
 
     @Test

@@ -28,8 +28,14 @@ import java.util.regex.Pattern;
  * @param scale     output size multiplier, in {@code [MIN_SCALE, MAX_SCALE]}
  * @param color     the validated fill color
  * @param mathStyle the top-level math style
+ * @param macros    preset user macros (L8): name (ASCII letters, no backslash) to
+ *                  replacement body; arity inferred from the highest {@code #k} in
+ *                  the body. Applied before parsing on every render — the
+ *                  server-side per-tenant notation-pack seam. Never null; empty
+ *                  map = the byte-identical no-macro fast path.
  */
-public record RenderOptions(double scale, Color color, MathStyle mathStyle) {
+public record RenderOptions(double scale, Color color, MathStyle mathStyle,
+                            java.util.Map<String, String> macros) {
 
     /** Lower clamp for {@link #scale()} — below this glyphs collapse to nothing. */
     public static final double MIN_SCALE = 0.1;
@@ -42,30 +48,46 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle) {
     public RenderOptions {
         Objects.requireNonNull(color, "color");
         Objects.requireNonNull(mathStyle, "mathStyle");
+        Objects.requireNonNull(macros, "macros");
         if (!Double.isFinite(scale) || scale < MIN_SCALE || scale > MAX_SCALE) {
             throw new IllegalArgumentException(
                 "scale must be a finite value in [" + MIN_SCALE + ", " + MAX_SCALE + "]; got: " + scale);
         }
+        macros = java.util.Map.copyOf(macros); // defensive + null-key/value refusing
+    }
+
+    /** Three-arg compatibility constructor: no preset macros. */
+    public RenderOptions(double scale, Color color, MathStyle mathStyle) {
+        this(scale, color, mathStyle, java.util.Map.of());
     }
 
     /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style. */
     public static RenderOptions defaults() {
-        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY);
+        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of());
     }
 
     /** A copy with a different scale (must be in {@code [MIN_SCALE, MAX_SCALE]}). */
     public RenderOptions withScale(double newScale) {
-        return new RenderOptions(newScale, color, mathStyle);
+        return new RenderOptions(newScale, color, mathStyle, macros);
     }
 
     /** A copy with a different color. */
     public RenderOptions withColor(Color newColor) {
-        return new RenderOptions(scale, newColor, mathStyle);
+        return new RenderOptions(scale, newColor, mathStyle, macros);
     }
 
     /** A copy with a different math style. */
     public RenderOptions withMathStyle(MathStyle newStyle) {
-        return new RenderOptions(scale, color, newStyle);
+        return new RenderOptions(scale, color, newStyle, macros);
+    }
+
+    /**
+     * A copy with preset user macros (L8). The map is defensively copied; parse
+     * rejects built-in names and non-letter names at render time (the same
+     * additive-only rule as inline definitions).
+     */
+    public RenderOptions withMacros(java.util.Map<String, String> newMacros) {
+        return new RenderOptions(scale, color, mathStyle, newMacros);
     }
 
     /**
