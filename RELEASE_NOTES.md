@@ -13,6 +13,14 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   the same wide-accent machinery as `\overparen` — `LayoutEngine` just needed to
   learn to place a glyph accent under the base, the one case the `Accent` node
   previously restricted to rule decorations (`\overline`/`\underline`).
+  The accent is placed from **actual ink extents**: its ink top is pinned a
+  positive `stretchStackGapBelowMin` (the OpenType MATH under-stack / `\underbrace`
+  gap — there is no under-equivalent of `accentBaseHeight`, so this stretchy-stack
+  constant is the right clearance) below the base's ink bottom, measured over the
+  chosen pieces (single glyph, wide variant, or assembled row), so the arc clears
+  descenders (`g_j`) and deep denominators (`\frac{a}{b}`) instead of cutting
+  through them. A separation test (`accentInkTop ≥ baseInkBottom + clearance`)
+  guards it across a descender, a fraction, a shallow base, and a wide assembly.
 
 ## 0.9.0 · 2026-07-20 — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
 
