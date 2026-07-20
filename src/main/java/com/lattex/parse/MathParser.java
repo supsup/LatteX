@@ -906,6 +906,27 @@ public final class MathParser {
                 MathNode body = parseArgument("\\" + name + " body");
                 return new MathNode.Boxed(body);
             }
+            case "cancel", "bcancel", "xcancel" -> {
+                // \cancel{body} (up /), \bcancel (down \), \xcancel (both — an X): the
+                // body is struck through by one or two diagonal rules. The argument is
+                // parsed through the normal group parse (parseArgument -> parseNucleus),
+                // so MAX_DEPTH bounds the recursion exactly as it does for \boxed.
+                MathNode.CancelKind kind = switch (name) {
+                    case "bcancel" -> MathNode.CancelKind.BCANCEL;
+                    case "xcancel" -> MathNode.CancelKind.XCANCEL;
+                    default -> MathNode.CancelKind.CANCEL;
+                };
+                MathNode body = parseArgument("\\" + name + " body");
+                return new MathNode.Cancel(kind, body, null);
+            }
+            case "cancelto" -> {
+                // \cancelto{value}{body}: an up-diagonal strike with an arrowhead at its
+                // tip, the target value set script-size beyond the tip. The VALUE is the
+                // first brace group, the struck body the second (cancel-package order).
+                MathNode to = parseArgument("\\cancelto value");
+                MathNode body = parseArgument("\\cancelto body");
+                return new MathNode.Cancel(MathNode.CancelKind.CANCELTO, body, to);
+            }
             case "bra" -> {
                 // \bra{ψ} = ⟨ψ| — a fixed-size angle-bracket + vertical bar (physics braket).
                 MathNode body = parseArgument("\\bra body");

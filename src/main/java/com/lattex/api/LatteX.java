@@ -596,6 +596,10 @@ public final class LatteX {
             case Spacing _ -> "";
             case MathNode.Colored c -> describe(c.body()); // color is presentation; speak the content
             case MathNode.Boxed bx -> "boxed " + describe(bx.body());
+            case MathNode.Cancel c -> switch (c.kind()) {
+                case CANCELTO -> describe(c.body()) + " cancels to " + describe(c.to());
+                default -> "cancel " + describe(c.body());
+            };
             case MathNode.Tagged t -> describe(t.body()) + ", tagged " + describe(t.label());
             case Phantom _ -> ""; // invisible: reserves space, reads as nothing
             case BigOperator(var op, var lower, var upper, _) -> {
@@ -713,6 +717,17 @@ public final class LatteX {
                     + toMathML(c.body()) + "</mstyle>";
             case MathNode.Boxed bx ->
                 "<menclose notation=\"box\">" + toMathML(bx.body()) + "</menclose>";
+            case MathNode.Cancel c -> switch (c.kind()) {
+                case CANCEL -> "<menclose notation=\"updiagonalstrike\">"
+                    + toMathML(c.body()) + "</menclose>";
+                case BCANCEL -> "<menclose notation=\"downdiagonalstrike\">"
+                    + toMathML(c.body()) + "</menclose>";
+                case XCANCEL -> "<menclose notation=\"updiagonalstrike downdiagonalstrike\">"
+                    + toMathML(c.body()) + "</menclose>";
+                // \cancelto: the struck body with its target as a superscript at the tip.
+                case CANCELTO -> "<msup><menclose notation=\"updiagonalstrike\">"
+                    + toMathML(c.body()) + "</menclose>" + toMathML(c.to()) + "</msup>";
+            };
             case MathNode.Tagged t ->
                 "<mrow>" + toMathML(t.body()) + "<mspace width=\"1em\"/><mo>(</mo>"
                     + toMathML(t.label()) + "<mo>)</mo></mrow>";

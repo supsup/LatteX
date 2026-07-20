@@ -51,7 +51,19 @@ record Box(List<PositionedGlyph> glyphs, List<Rule> rules,
                 g.scale(), g.color(), g.sourceCodePoint(), g.fenceDepth()));
         }
         for (Rule r : rules) {
-            outRules.add(new Rule(r.x() + dx, r.y() + dy, r.width(), r.height(), r.color()));
+            if (r.isPolygon()) {
+                // A filled polygon (cancel strike/arrowhead): translate every vertex,
+                // then rebuild so its rect bbox metrics stay consistent with the points.
+                double[] p = r.polygon();
+                double[] q = new double[p.length];
+                for (int i = 0; i < p.length; i += 2) {
+                    q[i] = p[i] + dx;
+                    q[i + 1] = p[i + 1] + dy;
+                }
+                outRules.add(Rule.polygon(q, r.color()));
+            } else {
+                outRules.add(new Rule(r.x() + dx, r.y() + dy, r.width(), r.height(), r.color()));
+            }
         }
     }
 }

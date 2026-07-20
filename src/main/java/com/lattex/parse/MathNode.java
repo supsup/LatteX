@@ -373,6 +373,61 @@ public sealed interface MathNode {
     }
 
     /**
+     * The LaTeX {@code cancel}-package strike family — a sub-formula struck through
+     * with one or two diagonal rules, optionally annotated with a target value:
+     *
+     * <ul>
+     *   <li>{@link CancelKind#CANCEL} — {@code \cancel{body}}: an up-diagonal strike
+     *       ({@code /}) from the body's lower-left ink corner to its upper-right.</li>
+     *   <li>{@link CancelKind#BCANCEL} — {@code \bcancel{body}}: a down-diagonal strike
+     *       ({@code \}) from the upper-left corner to the lower-right.</li>
+     *   <li>{@link CancelKind#XCANCEL} — {@code \xcancel{body}}: both diagonals (an
+     *       {@code X}).</li>
+     *   <li>{@link CancelKind#CANCELTO} — {@code \cancelto{to}{body}}: an up-diagonal
+     *       strike carrying a small arrowhead at its upper-right tip, with {@code to}
+     *       set script-size just beyond that tip.</li>
+     * </ul>
+     *
+     * <p>The strike behaves as an ordinary Ord atom (like {@code \boxed}); its diagonal
+     * rules ride the same fill conventions as a {@code \boxed} frame (a filled polygon
+     * on the layout rules channel).
+     *
+     * @param kind which strike variant
+     * @param body the struck-through content (non-null)
+     * @param to   the {@code \cancelto} target value — non-null iff {@code kind ==
+     *             CANCELTO}, otherwise null
+     */
+    record Cancel(CancelKind kind, MathNode body, MathNode to) implements MathNode {
+        public Cancel {
+            if (kind == null) {
+                throw new IllegalArgumentException("Cancel kind must not be null");
+            }
+            if (body == null) {
+                throw new IllegalArgumentException("Cancel body must not be null");
+            }
+            if (kind == CancelKind.CANCELTO && to == null) {
+                throw new IllegalArgumentException("\\cancelto requires a target value");
+            }
+            if (kind != CancelKind.CANCELTO && to != null) {
+                throw new IllegalArgumentException(
+                    "only \\cancelto carries a target value, not \\" + kind);
+            }
+        }
+    }
+
+    /** The four members of the {@code cancel} strike family. */
+    enum CancelKind {
+        /** {@code \cancel} — up-diagonal strike ({@code /}). */
+        CANCEL,
+        /** {@code \bcancel} — down-diagonal strike ({@code \}). */
+        BCANCEL,
+        /** {@code \xcancel} — both diagonals (an {@code X}). */
+        XCANCEL,
+        /** {@code \cancelto} — up-diagonal strike + arrowhead + target value at the tip. */
+        CANCELTO
+    }
+
+    /**
      * A display equation carrying a {@code \tag{label}} — the {@code body} equation
      * plus a {@code label} rendered flush-right, auto-wrapped in parentheses (LaTeX
      * renders {@code \tag{1}} as {@code (1)}). {@code \tag} is equation-global, so it
