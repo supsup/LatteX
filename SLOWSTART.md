@@ -418,6 +418,7 @@ calling from.
 | just trying it, or a one-off without building native | **`./gradlew run` / `java -jar`** | `./gradlew run --args="x^2"` | **Built** (dev / one-off) |
 | authoring Markdown/docs and want `$…$` markers understood | **CLI preprocessor now; first-class pipeline later** | shell out per span (§2), or the flexmark extension | CLI **Built**; pipeline **Planned (S8)** |
 | wanting typed styling (scale / color / math-style, `\lx[…]{…}`) | the `RenderOptions` overload + `\lx` macro | *(see QUICKSTART §2–§3)* | on review branches, **merging soon** |
+| defining your own notation (`\newcommand`, per-tenant packs) | inline definitions + `RenderOptions.macros` / `--macro` | *(see QUICKSTART §3.5)* | on a review branch |
 | wanting a hosted `POST LaTeX → SVG` service | HTTP wrapper | — | **Planned / optional** |
 | wanting it to run client-side in the browser | WASM build | — | **Future** |
 
