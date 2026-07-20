@@ -565,6 +565,17 @@ public final class LayoutEngine {
      * The box keeps the body's advance width (the diagonal overshoot is visual bleed,
      * not advance) for the three plain variants; {@code \cancelto} widens to include the
      * annotation. Height/depth grow to cover the strike overshoot, arrowhead, and value.
+     *
+     * <p><b>Zero-extent policy.</b> A strike is a diagonal across the body's ink box, and
+     * its direction is that diagonal's unit vector. When the body has NO ink at all — a
+     * legal empty argument like {@code \cancel{}} lays out to width/height/depth all zero
+     * — the diagonal collapses to a point and its unit vector is undefined ({@code 0/0}),
+     * which would inject {@code NaN} into the strike vertices, arrowhead, and box metrics.
+     * We therefore <em>decorate nothing</em> when the diagonal span is not positive: the
+     * plain variants return the (empty) body undecorated, and {@code \cancelto} still
+     * places its target value at a finite fallback anchor (the body's right edge on the
+     * baseline) so it degrades to the bare annotation. No non-finite coordinate can reach
+     * a {@link Rule}, {@link Box}, or the emitter.
      */
     private static Box cancelBox(MathNode.Cancel cancel, LayoutContext ctx) {
         Box body = layoutBox(cancel.body(), ctx);
@@ -577,6 +588,14 @@ public final class LayoutEngine {
         double t = Math.max(ctx.constants().fractionRuleThickness() * ctx.scale(), 0.6 * ctx.mu());
         double em = 18.0 * ctx.mu();
         double overshoot = 0.06 * em;   // small extension past the ink corners (cancel look)
+
+        // The corner-to-corner diagonal span (same magnitude for the up and down strike:
+        // both run the full width w and the full vertical extent h+d). Zero exactly when
+        // the body has no ink extent at all — the zero-extent policy above. Guarding on
+        // (span > 0) also rejects a non-finite span, so the unit vector below is always
+        // finite before it divides.
+        double span = Math.hypot(w, h + d);
+        boolean degenerate = !(span > 0.0);
 
         List<PositionedGlyph> glyphs = new ArrayList<>();
         List<Rule> rules = new ArrayList<>();
@@ -596,10 +615,11 @@ public final class LayoutEngine {
             || kind == MathNode.CancelKind.XCANCEL;
 
         // Up diagonal "/": lower-left (0, d) -> upper-right (w, -h). Its upper-right end
-        // is the \cancelto tip.
-        double upTipX = 0.0;
+        // is the \cancelto tip. Fallback tip (used only when degenerate): the body's right
+        // edge on the baseline, so \cancelto's value still has a finite anchor.
+        double upTipX = w;
         double upTipY = 0.0;
-        if (up) {
+        if (up && !degenerate) {
             double[] seg = strikeVertices(0.0, d, w, -h, t, overshoot);
             rules.add(Rule.polygon(seg, null));
             for (int i = 0; i < seg.length; i += 2) {
@@ -610,12 +630,11 @@ public final class LayoutEngine {
             // Tip = the (w,-h) end pushed out by the overshoot, along the diagonal.
             double dx = w - 0.0;
             double dy = -h - d;
-            double len = Math.hypot(dx, dy);
-            upTipX = w + dx / len * overshoot;
-            upTipY = -h + dy / len * overshoot;
+            upTipX = w + dx / span * overshoot;
+            upTipY = -h + dy / span * overshoot;
         }
         // Down diagonal "\": upper-left (0, -h) -> lower-right (w, d).
-        if (down) {
+        if (down && !degenerate) {
             double[] seg = strikeVertices(0.0, -h, w, d, t, overshoot);
             rules.add(Rule.polygon(seg, null));
             for (int i = 0; i < seg.length; i += 2) {
@@ -628,37 +647,47 @@ public final class LayoutEngine {
         double width = w;   // plain variants keep the body advance
 
         if (kind == MathNode.CancelKind.CANCELTO) {
-            // Arrowhead at the up-diagonal tip, pointing along the diagonal (small, using
-            // the same filled-polygon idiom — no dedicated arrowhead primitive exists).
-            double dx = w - 0.0;
-            double dy = -h - d;
-            double len = Math.hypot(dx, dy);
-            double ux = dx / len;
-            double uy = dy / len;
-            double arrowLen = Math.max(5.0 * t, 0.11 * em);
-            double arrowHalf = Math.max(2.5 * t, 0.055 * em);
-            double baseX = upTipX - ux * arrowLen;
-            double baseY = upTipY - uy * arrowLen;
-            double nx = -uy;
-            double ny = ux;
-            double[] head = {
-                upTipX, upTipY,
-                baseX + nx * arrowHalf, baseY + ny * arrowHalf,
-                baseX - nx * arrowHalf, baseY - ny * arrowHalf
-            };
-            rules.add(Rule.polygon(head, null));
-            for (int i = 0; i < head.length; i += 2) {
-                maxX = Math.max(maxX, head[i]);
-                minY = Math.min(minY, head[i + 1]);
-                maxY = Math.max(maxY, head[i + 1]);
+            double valueAnchorX = upTipX;
+            double valueAnchorY = upTipY;
+            if (!degenerate) {
+                // Arrowhead BEYOND the strike tip, pointing further along the diagonal
+                // (same filled-polygon idiom — no dedicated arrowhead primitive). Spacing
+                // rule: the arrowhead's BASE sits at the strike tip and its POINT projects
+                // one arrow-length PAST the body ink, so a tall/scripted body (e.g.
+                // \cancelto{0}{x^2}) never has the arrowhead receding back over the
+                // superscript. The target value is then set a legible gap beyond the arrow
+                // point — clear of both the ink and the arrowhead.
+                double ux = (w - 0.0) / span;
+                double uy = (-h - d) / span;
+                double arrowLen = Math.max(5.0 * t, 0.11 * em);
+                double arrowHalf = Math.max(2.5 * t, 0.055 * em);
+                double pointX = upTipX + ux * arrowLen;   // arrow tip, past the body ink
+                double pointY = upTipY + uy * arrowLen;
+                double nx = -uy;
+                double ny = ux;
+                double[] head = {
+                    pointX, pointY,
+                    upTipX + nx * arrowHalf, upTipY + ny * arrowHalf,
+                    upTipX - nx * arrowHalf, upTipY - ny * arrowHalf
+                };
+                rules.add(Rule.polygon(head, null));
+                for (int i = 0; i < head.length; i += 2) {
+                    maxX = Math.max(maxX, head[i]);
+                    minY = Math.min(minY, head[i + 1]);
+                    maxY = Math.max(maxY, head[i + 1]);
+                }
+                valueAnchorX = pointX;
+                valueAnchorY = pointY;
             }
 
-            // The target value, set script-size, its baseline at the tip so it reads like
-            // a superscript just beyond the arrow.
+            // The target value, set script-size, its baseline at the arrow point (or the
+            // finite fallback anchor when degenerate) so it reads like a superscript just
+            // beyond the arrow. The gap is a documented, legible minimum (>= 2mu) so the
+            // value is never crowded against the arrowhead.
             Box toBox = layoutBox(cancel.to(), ctx.atStyle(MathStyle.SCRIPT));
-            double gap = 0.5 * ctx.mu();
-            double valueX = upTipX + gap;
-            double valueBaseline = upTipY;
+            double gap = Math.max(2.0 * ctx.mu(), 0.5 * t);
+            double valueX = valueAnchorX + gap;
+            double valueBaseline = valueAnchorY;
             toBox.drawInto(glyphs, rules, valueX, valueBaseline);
             maxX = Math.max(maxX, valueX + toBox.width());
             minY = Math.min(minY, valueBaseline - toBox.height());

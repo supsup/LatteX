@@ -724,8 +724,11 @@ public final class LatteX {
                     + toMathML(c.body()) + "</menclose>";
                 case XCANCEL -> "<menclose notation=\"updiagonalstrike downdiagonalstrike\">"
                     + toMathML(c.body()) + "</menclose>";
-                // \cancelto: the struck body with its target as a superscript at the tip.
-                case CANCELTO -> "<msup><menclose notation=\"updiagonalstrike\">"
+                // \cancelto: MathML 4 names notation="northeastarrow" as the recommended
+                // encoding for TeX \cancelto (https://www.w3.org/TR/mathml4/#presm_menclose).
+                // The target value rides as a superscript on the arrowed body, so the
+                // "cancels to <value>" semantics stay accessible to a MathML consumer.
+                case CANCELTO -> "<msup><menclose notation=\"northeastarrow\">"
                     + toMathML(c.body()) + "</menclose>" + toMathML(c.to()) + "</msup>";
             };
             case MathNode.Tagged t ->

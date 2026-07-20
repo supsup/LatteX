@@ -53,14 +53,30 @@ public record Rule(double x, double y, double width, double height, Color color,
      * to the polygon's bounding box so the layout bbox accumulation measures it with
      * no special case.
      *
-     * @throws IllegalArgumentException if {@code pts} is null, odd-length, or has fewer
-     *                                  than three vertices (six coordinates)
+     * <p>This factory is the SHARED fail-closed gate for every polygon rule (the layout
+     * engine builds strikes/arrowheads through it, and {@link Box}'s translate rebuilds
+     * through it too). It rejects any non-finite vertex coordinate up front — a {@code
+     * NaN}/{@code Infinity} from a degenerate geometry (e.g. a zero-length diagonal's
+     * undefined unit vector) would otherwise silently poison the box metrics and the
+     * emitted {@code viewBox}. We fail closed (throw), never clamp: a caller that produced
+     * a non-finite vertex has a bug to surface, not a value to guess.
+     *
+     * @throws IllegalArgumentException if {@code pts} is null, odd-length, has fewer than
+     *                                  three vertices (six coordinates), or carries any
+     *                                  non-finite ({@code NaN}/{@code Infinity}) coordinate
      */
     public static Rule polygon(double[] pts, Color color) {
         if (pts == null || pts.length < 6 || pts.length % 2 != 0) {
             throw new IllegalArgumentException(
                 "a polygon rule needs >=3 (x,y) vertices, got "
                 + (pts == null ? "null" : pts.length + " coordinates"));
+        }
+        for (int i = 0; i < pts.length; i++) {
+            if (!Double.isFinite(pts[i])) {
+                throw new IllegalArgumentException(
+                    "a polygon rule needs finite vertex coordinates, got " + pts[i]
+                    + " at index " + i);
+            }
         }
         double minX = pts[0];
         double minY = pts[1];

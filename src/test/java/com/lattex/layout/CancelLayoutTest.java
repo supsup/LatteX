@@ -118,6 +118,59 @@ class CancelLayoutTest {
                 + " past bodyWidth=" + bodyWidth + ")");
     }
 
+    /** The largest x reached by any polygon (strike/arrowhead) vertex in the layout. */
+    private static double maxPolygonX(Layout l) {
+        double max = Double.NEGATIVE_INFINITY;
+        for (Rule poly : polygons(l)) {
+            double[] p = poly.polygon();
+            for (int i = 0; i < p.length; i += 2) {
+                max = Math.max(max, p[i]);
+            }
+        }
+        return max;
+    }
+
+    /**
+     * The scripted/tall-body fixture the reviewer called out ({@code \cancelto{0}{x^2}}):
+     * the arrowhead must project FORWARD (beyond the body ink), not recede back over the
+     * superscript, and the target value must sit clear of the body's right ink edge. This
+     * pins the documented spacing rule so the "arrowhead crowding the superscript" regression
+     * cannot return.
+     */
+    @Test
+    void canceltoArrowheadProjectsForwardAndValueClearsAScriptedBody() {
+        Layout tall = layout("\\cancelto{0}{x^2}");
+        // Finite geometry for the tall body (no NaN leaks into the box metrics).
+        assertTrue(Double.isFinite(tall.width()) && Double.isFinite(tall.height())
+            && tall.width() > 0 && tall.height() > 0, "scripted \\cancelto has a real canvas");
+
+        // Forward-projecting arrowhead: the cancelto decoration reaches FURTHER right than a
+        // plain \cancel strike over the same body would — i.e. the arrowhead points past the
+        // strike tip, not back over the ink (the pre-fix backward arrowhead did not).
+        double plainStrikeRight = maxPolygonX(layout("\\cancel{x^2}"));
+        double toDecorRight = maxPolygonX(tall);
+        assertTrue(toDecorRight > plainStrikeRight + 1e-6,
+            "the \\cancelto arrowhead projects beyond the plain strike tip ("
+                + toDecorRight + " vs " + plainStrikeRight + ")");
+
+        // The target value clears the body's right INK edge (superscript included), so it is
+        // never crowded against the struck superscript.
+        double bodyInkRight = layout("x^2").maxX();
+        double minGlyphScale = Double.MAX_VALUE;
+        for (PositionedGlyph g : tall.glyphs()) {
+            minGlyphScale = Math.min(minGlyphScale, g.scale());
+        }
+        double rightmostValueX = Double.NEGATIVE_INFINITY;
+        for (PositionedGlyph g : tall.glyphs()) {
+            if (g.scale() == minGlyphScale) {
+                rightmostValueX = Math.max(rightmostValueX, g.originX());
+            }
+        }
+        assertTrue(rightmostValueX > bodyInkRight,
+            "the \\cancelto value lands clear of the scripted body's right ink edge ("
+                + rightmostValueX + " past " + bodyInkRight + ")");
+    }
+
     @Test
     void cancelRendersInAlphabetAsFilledPaths() {
         String svg = LatteX.render("\\xcancel{ab}");

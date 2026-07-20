@@ -17,7 +17,24 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   triangle) inside the existing minimal SVG alphabet — no new element, attribute,
   or sanitizer surface — so untouched inputs bake byte-identically. MathML maps to
   `<menclose notation="updiagonalstrike">` / `downdiagonalstrike` (both for
-  `\xcancel`), and `\cancelto` to the strike with its value as a superscript.
+  `\xcancel`), and `\cancelto` to `<menclose notation="northeastarrow">` — MathML 4's
+  recommended encoding for TeX `\cancelto` — with its target value kept as an
+  accessible superscript on the arrowed body.
+  - **Empty/zero-extent bodies (zero-extent policy).** A legal empty argument
+    (`\cancel{}`, `\bcancel{}`, `\xcancel{}`, `\cancelto{0}{}`) lays out to a body
+    with no ink extent, so the corner-to-corner diagonal collapses to a point whose
+    unit vector is undefined. The strike direction is therefore computed only when the
+    diagonal span is positive: the plain variants leave an empty body **undecorated**,
+    and `\cancelto` still places its target value at a finite fallback anchor (the
+    body's right edge on the baseline). No non-finite coordinate can reach a rule, box,
+    or the SVG — and `Rule.polygon`, the single factory every strike/arrowhead is built
+    through, now **fails closed** (throws) on any non-finite vertex, so no future caller
+    can silently inject a `NaN`/`Infinity` coordinate.
+  - **`\cancelto` arrowhead spacing.** The arrowhead's base sits at the strike tip and
+    its point projects one arrow-length **past** the body ink (rather than receding back
+    over it), and the target value is set a legible minimum gap (`≥ 2 mu`) beyond the
+    arrow point — so a tall/scripted body such as `\cancelto{0}{x^2}` no longer crowds
+    the arrowhead against the superscript.
 
 ## 0.9.0 · 2026-07-20 — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
 

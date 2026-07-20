@@ -103,4 +103,29 @@ class MathMLTest {
         String nolim = LatteX.toMathML("\\int\\nolimits_a^b f");
         assertTrue(nolim.contains("<msubsup>"), "\\nolimits should emit msubsup: " + nolim);
     }
+
+    @Test
+    void cancelFamilyMapsToMencloseStrikesAndCanceltoUsesTheArrowNotation() {
+        // Plain strikes carry the diagonal-strike notations.
+        assertTrue(LatteX.toMathML("\\cancel{x}").contains("notation=\"updiagonalstrike\""),
+            LatteX.toMathML("\\cancel{x}"));
+        assertTrue(LatteX.toMathML("\\bcancel{x}").contains("notation=\"downdiagonalstrike\""),
+            LatteX.toMathML("\\bcancel{x}"));
+        assertTrue(LatteX.toMathML("\\xcancel{x}")
+                .contains("notation=\"updiagonalstrike downdiagonalstrike\""),
+            LatteX.toMathML("\\xcancel{x}"));
+
+        // \cancelto uses MathML 4's recommended northeastarrow notation (NOT a plain
+        // diagonal strike), and still carries its target value accessibly (as the
+        // superscript on the arrowed body).
+        String to = LatteX.toMathML("\\cancelto{0}{x^2}");
+        assertTrue(to.contains("notation=\"northeastarrow\""),
+            "\\cancelto should use menclose northeastarrow: " + to);
+        assertFalse(to.contains("notation=\"updiagonalstrike\""),
+            "\\cancelto is an arrow, not a plain strike: " + to);
+        assertTrue(to.contains("<msup>") && to.contains("<mn>0</mn>"),
+            "\\cancelto keeps its target value accessible: " + to);
+        assertWellFormed(to);
+        assertWellFormed(LatteX.toMathML("\\xcancel{\\frac{a}{b}}"));
+    }
 }
