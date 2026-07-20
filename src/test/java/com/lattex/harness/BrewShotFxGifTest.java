@@ -5,7 +5,6 @@ import com.brewshot.MiniJson;
 import com.lattex.api.EffectsPageTest;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -79,7 +78,7 @@ class BrewShotFxGifTest {
 
     @Test
     void recordsShowpieceGifsBesideTheHtml() throws Exception {
-        assumeTrue(BrewShot.available(), "no local Chrome; skipping browser pin");
+        BrowserGate.browserPin();
         Path page = pagesDir().resolve("effects.html"); // built from current sources in @BeforeAll
 
         try (BrewShot chrome = BrewShot.launch(1200, 900)) {

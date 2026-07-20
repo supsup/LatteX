@@ -4,11 +4,11 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased (mainline) — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
+## 0.9.0 · 2026-07-20 — layout box budget, nested inline math inside `\text{…}`, matrix-cell style fidelity, container drift guard + type-safe fill, hermetic test suite + CI clean-tree gate
 
-Renderer changes are the post-0.8.0 mainline set below; the build itself also
-hardened (last three items). Stafficy `/docs` still vendors `0.8.0` until it
-re-pins this version.
+The post-0.8.0 set below, cut as **0.9.0** — the version the build pins and the consumer docs
+name; the build itself also hardened (last three items). Stafficy `/docs` still vendors `0.8.0`
+until it re-pins this version.
 
 - **A wide, shallow formula can no longer exhaust memory — the layout box budget.**
   The engine already capped nesting *depth* (`MAX_DEPTH`), but not *breadth*: a
@@ -85,7 +85,11 @@ re-pins this version.
   already had a CI workflow (`c6c5174`); this cut adds a post-suite step that fails the
   build if the test run dirtied the checkout, and redirects generated artifacts to
   `build/`. The gate asserts `git status --porcelain` is empty, so a *new untracked*
-  file trips it too — not just a tracked-file diff (plan 32148cc8 S3).
+  file trips it too — not just a tracked-file diff (plan 32148cc8 S3). The five real-browser
+  pins are also **required on CI** now: the workflow verifies Chrome and sets
+  `LATTEX_REQUIRE_BROWSER=1`, under which an unavailable browser FAILS the pin instead of
+  assumption-skipping — locally (no flag) the skip behavior is unchanged, and the fail-closed
+  arm has its own seam-injected test rather than executing only on a broken runner.
 
 ---
 
