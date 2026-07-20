@@ -139,7 +139,26 @@ public final class SvgEmitter {
                 .append(") scale(").append(num(g.scale())).append(' ').append(num(-g.scale()))
                 .append(")\"/>\n");
         }
+        // Rules emit AFTER all glyph <path>s, so a polygon rule's <path> lands past the
+        // glyph paths the data-lx-glyphmap indexes — the glyph path indices are unchanged
+        // and a strike/arrowhead is never a thread target.
         for (Rule r : layout.rules()) {
+            if (r.isPolygon()) {
+                // A filled convex polygon (cancel strike / arrowhead) — same fill
+                // conventions as a rect rule, emitted as a filled <path> (in-alphabet).
+                double[] p = r.polygon();
+                out.append("    <path d=\"");
+                for (int i = 0; i < p.length; i += 2) {
+                    out.append(i == 0 ? "M " : " L ")
+                        .append(num(p[i] + dx)).append(' ').append(num(p[i + 1] + dy));
+                }
+                out.append(" Z\"");
+                if (r.color() != null) {
+                    out.append(" fill=\"").append(r.color().svgValue()).append("\"");
+                }
+                out.append("/>\n");
+                continue;
+            }
             out.append("    <rect x=\"").append(num(r.x() + dx)).append("\"")
                 .append(" y=\"").append(num(r.y() + dy)).append("\"")
                 .append(" width=\"").append(num(r.width())).append("\"")

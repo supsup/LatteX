@@ -4,6 +4,38 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased — the cancel family
+
+- **Struck-through sub-formulas — the `cancel` package family.** Four new wrapper
+  commands strike a diagonal rule through their argument: `\cancel{x}` (up
+  diagonal `/`), `\bcancel{x}` (down diagonal `\`), `\xcancel{x}` (both, an `X`),
+  and `\cancelto{value}{x}` (an up-diagonal strike carrying a small arrowhead at
+  its tip, with `value` set script-size just beyond it — LaTeX's cancel-package
+  form). The strike spans the body's ink box corner-to-corner with a small
+  overshoot and rides the same rule thickness/fill as a `\boxed` frame. Each
+  diagonal renders as a filled `<path>` (a thin quadrilateral; the arrowhead a
+  triangle) inside the existing minimal SVG alphabet — no new element, attribute,
+  or sanitizer surface — so untouched inputs bake byte-identically. MathML maps to
+  `<menclose notation="updiagonalstrike">` / `downdiagonalstrike` (both for
+  `\xcancel`), and `\cancelto` to `<menclose notation="northeastarrow">` — MathML 4's
+  recommended encoding for TeX `\cancelto` — with its target value kept as an
+  accessible superscript on the arrowed body.
+  - **Empty/zero-extent bodies (zero-extent policy).** A legal empty argument
+    (`\cancel{}`, `\bcancel{}`, `\xcancel{}`, `\cancelto{0}{}`) lays out to a body
+    with no ink extent, so the corner-to-corner diagonal collapses to a point whose
+    unit vector is undefined. The strike direction is therefore computed only when the
+    diagonal span is positive: the plain variants leave an empty body **undecorated**,
+    and `\cancelto` still places its target value at a finite fallback anchor (the
+    body's right edge on the baseline). No non-finite coordinate can reach a rule, box,
+    or the SVG — and `Rule.polygon`, the single factory every strike/arrowhead is built
+    through, now **fails closed** (throws) on any non-finite vertex, so no future caller
+    can silently inject a `NaN`/`Infinity` coordinate.
+  - **`\cancelto` arrowhead spacing.** The arrowhead's base sits at the strike tip and
+    its point projects one arrow-length **past** the body ink (rather than receding back
+    over it), and the target value is set a legible minimum gap (`≥ 2 mu`) beyond the
+    arrow point — so a tall/scripted body such as `\cancelto{0}{x^2}` no longer crowds
+    the arrowhead against the superscript.
+
 ## Unreleased — user macros: `\newcommand` / `\renewcommand` / `\def` + `RenderOptions.macros` (L8)
 
 The #1 adoption blocker vs KaTeX/MathJax closes: LatteX now expands **user macros**

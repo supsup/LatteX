@@ -255,6 +255,8 @@ public final class MathVariant {
                 apply(style, p.content()), p.keepWidth(), p.keepVertical());
             case MathNode.Colored c -> new MathNode.Colored(apply(style, c.body()), c.color());
             case MathNode.Boxed bx -> new MathNode.Boxed(apply(style, bx.body()));
+            case MathNode.Cancel c -> new MathNode.Cancel(c.kind(), apply(style, c.body()),
+                c.to() == null ? null : apply(style, c.to()));
             case MathNode.Tagged t ->
                 new MathNode.Tagged(apply(style, t.body()), apply(style, t.label()));
             // Glue, roman operator words, and text-mode runs carry no math letter to restyle.

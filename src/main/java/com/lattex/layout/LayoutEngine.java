@@ -183,6 +183,7 @@ public final class LayoutEngine {
             case Spacing(var muWidth) -> Box.glue(muWidth * ctx.mu());
             case Colored(var body, var color) -> coloredBox(body, color, ctx);
             case MathNode.Boxed(var body) -> boxedBox(body, ctx);
+            case MathNode.Cancel cancel -> cancelBox(cancel, ctx);
             case Phantom(var content, var keepW, var keepV) ->
                 phantomBox(content, keepW, keepV, ctx);
             case BigOperator(var op, var lower, var upper, var limitsMode) ->
@@ -546,6 +547,190 @@ public final class LayoutEngine {
     }
 
     /**
+     * The {@code cancel}-package strike family. The body is laid out normally; one or
+     * two diagonal rules cross its ink bounding box corner-to-corner with a small
+     * overshoot, riding the same thickness/fill as a {@code \boxed} frame rule but
+     * emitted as filled {@code <path>} polygons (see {@link Rule#polygon}).
+     *
+     * <ul>
+     *   <li>{@code \cancel} — up diagonal: lower-left {@code (0,depth)} to upper-right
+     *       {@code (width,-height)}.</li>
+     *   <li>{@code \bcancel} — down diagonal: upper-left {@code (0,-height)} to
+     *       lower-right {@code (width,depth)}.</li>
+     *   <li>{@code \xcancel} — both diagonals.</li>
+     *   <li>{@code \cancelto{to}{body}} — the up diagonal plus a small arrowhead at the
+     *       upper-right tip and the {@code to} value set script-size just beyond it.</li>
+     * </ul>
+     *
+     * The box keeps the body's advance width (the diagonal overshoot is visual bleed,
+     * not advance) for the three plain variants; {@code \cancelto} widens to include the
+     * annotation. Height/depth grow to cover the strike overshoot, arrowhead, and value.
+     *
+     * <p><b>Zero-extent policy.</b> A strike is a diagonal across the body's ink box, and
+     * its direction is that diagonal's unit vector. When the body has NO ink at all — a
+     * legal empty argument like {@code \cancel{}} lays out to width/height/depth all zero
+     * — the diagonal collapses to a point and its unit vector is undefined ({@code 0/0}),
+     * which would inject {@code NaN} into the strike vertices, arrowhead, and box metrics.
+     * We therefore <em>decorate nothing</em> when the diagonal span is not positive: the
+     * plain variants return the (empty) body undecorated, and {@code \cancelto} still
+     * places its target value at a finite fallback anchor (the body's right edge on the
+     * baseline) so it degrades to the bare annotation. No non-finite coordinate can reach
+     * a {@link Rule}, {@link Box}, or the emitter.
+     */
+    private static Box cancelBox(MathNode.Cancel cancel, LayoutContext ctx) {
+        Box body = layoutBox(cancel.body(), ctx);
+        double w = body.width();
+        double h = body.height();   // ink extent above the baseline (>= 0)
+        double d = body.depth();    // ink extent below the baseline (>= 0)
+
+        // Strike thickness == the \boxed frame rule thickness (fraction-rule thickness,
+        // floored) so the whole "decorated wrapper" family shares one stroke weight.
+        double t = Math.max(ctx.constants().fractionRuleThickness() * ctx.scale(), 0.6 * ctx.mu());
+        double em = 18.0 * ctx.mu();
+        double overshoot = 0.06 * em;   // small extension past the ink corners (cancel look)
+
+        // The corner-to-corner diagonal span (same magnitude for the up and down strike:
+        // both run the full width w and the full vertical extent h+d). Zero exactly when
+        // the body has no ink extent at all — the zero-extent policy above. Guarding on
+        // (span > 0) also rejects a non-finite span, so the unit vector below is always
+        // finite before it divides.
+        double span = Math.hypot(w, h + d);
+        boolean degenerate = !(span > 0.0);
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        body.drawInto(glyphs, rules, 0.0, 0.0);   // the struck content, unmoved
+
+        // Running bounds of everything drawn (body ink box seeds it), so the box metrics
+        // enclose the strike overshoot / arrowhead / value.
+        double minY = -h;
+        double maxY = d;
+        double maxX = w;
+
+        MathNode.CancelKind kind = cancel.kind();
+        boolean up = kind == MathNode.CancelKind.CANCEL
+            || kind == MathNode.CancelKind.XCANCEL
+            || kind == MathNode.CancelKind.CANCELTO;
+        boolean down = kind == MathNode.CancelKind.BCANCEL
+            || kind == MathNode.CancelKind.XCANCEL;
+
+        // Up diagonal "/": lower-left (0, d) -> upper-right (w, -h). Its upper-right end
+        // is the \cancelto tip. Fallback tip (used only when degenerate): the body's right
+        // edge on the baseline, so \cancelto's value still has a finite anchor.
+        double upTipX = w;
+        double upTipY = 0.0;
+        if (up && !degenerate) {
+            double[] seg = strikeVertices(0.0, d, w, -h, t, overshoot);
+            rules.add(Rule.polygon(seg, null));
+            for (int i = 0; i < seg.length; i += 2) {
+                maxX = Math.max(maxX, seg[i]);
+                minY = Math.min(minY, seg[i + 1]);
+                maxY = Math.max(maxY, seg[i + 1]);
+            }
+            // Tip = the (w,-h) end pushed out by the overshoot, along the diagonal.
+            double dx = w - 0.0;
+            double dy = -h - d;
+            upTipX = w + dx / span * overshoot;
+            upTipY = -h + dy / span * overshoot;
+        }
+        // Down diagonal "\": upper-left (0, -h) -> lower-right (w, d).
+        if (down && !degenerate) {
+            double[] seg = strikeVertices(0.0, -h, w, d, t, overshoot);
+            rules.add(Rule.polygon(seg, null));
+            for (int i = 0; i < seg.length; i += 2) {
+                maxX = Math.max(maxX, seg[i]);
+                minY = Math.min(minY, seg[i + 1]);
+                maxY = Math.max(maxY, seg[i + 1]);
+            }
+        }
+
+        double width = w;   // plain variants keep the body advance
+
+        if (kind == MathNode.CancelKind.CANCELTO) {
+            double valueAnchorX = upTipX;
+            double valueAnchorY = upTipY;
+            if (!degenerate) {
+                // Arrowhead BEYOND the strike tip, pointing further along the diagonal
+                // (same filled-polygon idiom — no dedicated arrowhead primitive). Spacing
+                // rule: the arrowhead's BASE sits at the strike tip and its POINT projects
+                // one arrow-length PAST the body ink, so a tall/scripted body (e.g.
+                // \cancelto{0}{x^2}) never has the arrowhead receding back over the
+                // superscript. The target value is then set a legible gap beyond the arrow
+                // point — clear of both the ink and the arrowhead.
+                double ux = (w - 0.0) / span;
+                double uy = (-h - d) / span;
+                double arrowLen = Math.max(5.0 * t, 0.11 * em);
+                double arrowHalf = Math.max(2.5 * t, 0.055 * em);
+                double pointX = upTipX + ux * arrowLen;   // arrow tip, past the body ink
+                double pointY = upTipY + uy * arrowLen;
+                double nx = -uy;
+                double ny = ux;
+                double[] head = {
+                    pointX, pointY,
+                    upTipX + nx * arrowHalf, upTipY + ny * arrowHalf,
+                    upTipX - nx * arrowHalf, upTipY - ny * arrowHalf
+                };
+                rules.add(Rule.polygon(head, null));
+                for (int i = 0; i < head.length; i += 2) {
+                    maxX = Math.max(maxX, head[i]);
+                    minY = Math.min(minY, head[i + 1]);
+                    maxY = Math.max(maxY, head[i + 1]);
+                }
+                valueAnchorX = pointX;
+                valueAnchorY = pointY;
+            }
+
+            // The target value, set script-size, its baseline at the arrow point (or the
+            // finite fallback anchor when degenerate) so it reads like a superscript just
+            // beyond the arrow. The gap is a documented, legible minimum (>= 2mu) so the
+            // value is never crowded against the arrowhead.
+            Box toBox = layoutBox(cancel.to(), ctx.atStyle(MathStyle.SCRIPT));
+            double gap = Math.max(2.0 * ctx.mu(), 0.5 * t);
+            double valueX = valueAnchorX + gap;
+            double valueBaseline = valueAnchorY;
+            toBox.drawInto(glyphs, rules, valueX, valueBaseline);
+            maxX = Math.max(maxX, valueX + toBox.width());
+            minY = Math.min(minY, valueBaseline - toBox.height());
+            maxY = Math.max(maxY, valueBaseline + toBox.depth());
+            width = Math.max(width, valueX + toBox.width());
+        }
+
+        double height = Math.max(0.0, -minY);
+        double depth = Math.max(0.0, maxY);
+        return new Box(glyphs, rules, width, height, depth);
+    }
+
+    /**
+     * The four vertices (flat {@code [x0,y0,…]}) of a thickness-{@code t} filled
+     * quadrilateral centred on the segment {@code (x1,y1)->(x2,y2)}, extended by
+     * {@code overshoot} past each end along the segment direction. This is how a
+     * diagonal strike is drawn as a filled polygon (the emitter's alphabet has no
+     * stroked line — only filled {@code <path>}/{@code <rect>}).
+     */
+    private static double[] strikeVertices(double x1, double y1, double x2, double y2,
+                                           double t, double overshoot) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double len = Math.hypot(dx, dy);
+        double ux = dx / len;   // unit vector along the segment
+        double uy = dy / len;
+        double nx = -uy;        // unit normal
+        double ny = ux;
+        double ex1 = x1 - ux * overshoot;   // ends pushed out by the overshoot
+        double ey1 = y1 - uy * overshoot;
+        double ex2 = x2 + ux * overshoot;
+        double ey2 = y2 + uy * overshoot;
+        double hx = nx * t / 2.0;           // half-thickness offset
+        double hy = ny * t / 2.0;
+        return new double[] {
+            ex1 + hx, ey1 + hy,
+            ex2 + hx, ey2 + hy,
+            ex2 - hx, ey2 - hy,
+            ex1 - hx, ey1 - hy
+        };
+    }
+
+    /**
      * A {@code \tag'd} equation: the body, then the label auto-wrapped in ordinary
      * parentheses ({@code \tag{1}} renders as {@code (1)}) and placed flush-right
      * after a {@code \qquad}-sized gap. {@code \tag} is equation-global, so this only
@@ -582,6 +767,7 @@ public final class LayoutEngine {
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
             case Colored c -> classOf(c.body()); // color is transparent: take the body's class
             case MathNode.Boxed _ -> MathClass.ORD; // a framed box behaves as an Ord atom
+            case MathNode.Cancel _ -> MathClass.ORD; // a struck sub-formula behaves as an Ord atom
             case MathNode.Tagged t -> classOf(t.body()); // the tag rides outside; class = body's
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
             case OperatorName _ -> MathClass.OP; // a named operator is class Op

@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **175 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **173**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **179 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **177**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -255,6 +255,15 @@ following once the node exists.
 | `\boxed{x^* = f(x^*)}` | boxed fixed-point identity | `PARSES-NOW` |
 | `\fbox{a+b}` | \\fbox accepted as the math-mode frame analogue | `PARSES-NOW` |
 | `\boxed{\frac{a}{b}}` | boxed fraction — frame sizes to the taller body | `PARSES-NOW` |
+
+## Cancel family (cancel package strikes)
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `\cancel{x}` | up-diagonal strike (/) through the body — \\cancel | `PARSES-NOW` |
+| `\bcancel{x}` | down-diagonal strike (\\) — \\bcancel | `PARSES-NOW` |
+| `\xcancel{ab}` | both diagonals (an X) — \\xcancel | `PARSES-NOW` |
+| `\cancelto{0}{x^2}` | \\cancelto — up strike + arrowhead + target value at the tip | `PARSES-NOW` |
 
 ## Extensible arrows (amsmath \x...)
 
