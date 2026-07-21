@@ -2156,21 +2156,41 @@
 
     var timers = [];
     function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
-    function restore() {
+
+    // ONE shared exit for every way the show ends — a fresh replay, a scroll,
+    // and (on the animated path) normal completion — routed through
+    // scrollKillable exactly like lightning's bolts. The strikes live on a
+    // position:fixed body <svg> drawn from the glyphs' TRIGGER-TIME rects: scroll
+    // the page and they'd float over unrelated content, and the reduced static
+    // overlay (which has no timer) would hang there forever (Charles's smoke
+    // sweep, 2026-07-06). So a scroll fires die(), sharing the teardown with the
+    // normal end. `scrollAbort` picks the glyph end-state at that exit: on a
+    // scroll or a replay it stays true → a TOTAL restore (overlay gone, pending
+    // puff timers cleared, glyph opacity/transform back to pristine) so a replay
+    // re-triggers cleanly, matching lightning's total-abort; normal completion
+    // sets it false to KEEP the grayed "cancelled" ghost — this effect's
+    // deliverable — while still going through die() to clear the (spent) timers,
+    // drop the overlay, and release the scroll listener.
+    var scrollAbort = true;
+    function teardown() {
       for (var t = 0; t < timers.length; t++) { clearTimeout(timers[t]); }
       timers = [];
       overlay.remove(); // idempotent — safe whether or not the puff already removed it
       struck.forEach(function (idx) {
         var p = paths[idx];
-        p.style.opacity = ''; p.style.transition = '';
+        p.style.transition = '';
         clearPathDelta(p);
-      });
+        if (scrollAbort) { p.style.opacity = ''; } // scroll/replay: un-gray to pristine
+      });                                          // normal end: leave the grayed ghost
       el.__lxCancelRestore = null;
     }
-    el.__lxCancelRestore = restore;
+    var die = scrollKillable(teardown);
+    el.__lxCancelRestore = die;
 
     // Reduced motion: no draw-on, no puff frames — snap to the static end-state (strike
-    // fully drawn + glyphs grayed), the precedence lightUpTo(0) posture.
+    // fully drawn + glyphs grayed), the precedence lightUpTo(0) posture. die() (armed
+    // above) is the ONLY teardown on this path — there are no timers, so a scroll is what
+    // removes the otherwise-permanent fixed overlay (and restores the glyphs to pristine).
     if (reduced) {
       lines.forEach(function (l) { l.style.strokeDashoffset = '0'; });
       struck.forEach(function (idx) { paths[idx].style.opacity = GHOST; });
@@ -2203,7 +2223,8 @@
         });
         overlay.style.transition = 'opacity ' + FADE + 'ms ease';
         overlay.style.opacity = '0';
-        later(function () { overlay.remove(); }, FADE + 40);
+        // Normal end: the SAME shared exit as a scroll-abort, but keep the ghost.
+        later(function () { scrollAbort = false; die(); }, FADE + 40);
       }, PUFF_UP);
     }, DRAW + HOLD);
   }

@@ -313,4 +313,82 @@ class FxRuntimeLifecycleTest {
         assertEquals(1, intOf("__lxBodyChildren()"),
             "a replay must restore the prior run first — exactly one strike overlay, never two");
     }
+
+    // ---- cancel: scroll-abort routes through scrollKillable (reviewer HIGH, lattex 287) ----
+
+    /** Normal-motion scroll-abort: the strike overlay is a position:fixed body {@code <svg>}
+     *  drawn from the glyphs' trigger-time rects, so a mid-sequence scroll must tear the WHOLE
+     *  show down. Mirrors Lattice's probe for the first assertion (play → scroll → body
+     *  children 1 → 0), then proves no puff/settle/fade timer survives to resurrect the overlay
+     *  or gray the ghost back in once the clock runs past the ~1.15s sequence, and (my
+     *  documented choice) the glyphs fully restore to pristine so a replay re-triggers cleanly. */
+    @Test
+    void cancelNormalMotionScrollAbortTearsDownOverlayTimersAndGlyphs() throws IOException {
+        boot(false);
+        Value el = js("globalThis.__c = __lxMakeEl({" + PAIR + "}, 2); __c");
+
+        fx.getMember("play").execute(el, "cancel", "400ms");
+        assertEquals(1, intOf("__lxBodyChildren()"),
+            "the strike overlay arms on the body while the sequence runs");
+        assertTrue(intOf("__lxActiveTimeouts()") >= 1, "the puff timer is pending mid-run");
+        assertTrue(intOf("__lxScrollListeners()") >= 1, "the scroll-kill listener is armed");
+
+        // Lattice's exact probe: a real (>4px) scroll drops the fixed overlay to zero.
+        js("__lxFireScroll(0, 10)");
+        assertEquals(0, intOf("__lxBodyChildren()"),
+            "scroll must remove the fixed strike overlay from the body (was 1)");
+        assertEquals(0, intOf("__lxActiveTimeouts()"),
+            "scroll teardown must clear every pending puff/settle/fade timer");
+        assertEquals(0, intOf("__lxScrollListeners()"),
+            "the scroll-kill listener must release itself");
+        assertEquals("", valueOrEmpty(js("__c.__paths[0].style.opacity")),
+            "scroll-abort restores the first glyph to pristine (documented full-restore)");
+        assertEquals("", valueOrEmpty(js("__c.__paths[1].style.opacity")),
+            "scroll-abort restores the second glyph to pristine");
+
+        // Advance the clock PAST the whole sequence: no timer may resurrect the overlay or
+        // gray the ghost back in (the leak these tests pin).
+        js("__lxRunTimeouts(6)");
+        assertEquals(0, intOf("__lxBodyChildren()"), "no overlay resurrects after the abort");
+        assertEquals(0, intOf("__lxActiveTimeouts()"), "no timer re-arms after the abort");
+        assertEquals("", valueOrEmpty(js("__c.__paths[0].style.opacity")),
+            "the killed puff must NOT resurrect the grayed ghost after the abort");
+        assertEquals("", valueOrEmpty(js("__c.__paths[1].style.opacity")),
+            "the killed puff must NOT resurrect the grayed ghost after the abort");
+    }
+
+    /** Reduced-motion scroll-abort: the reduced path snaps to a STATIC struck-ghost end-state
+     *  with NO timer, so before this fix its fixed overlay hung on the body indefinitely after
+     *  a scroll (over unrelated content). Now die() — armed even on the timer-less reduced path
+     *  — removes it: overlay gone, listener released, glyphs restored, nothing resurrects. */
+    @Test
+    void cancelReducedMotionScrollAbortRemovesTheStaticOverlay() throws IOException {
+        boot(true);
+        Value el = js("globalThis.__c = __lxMakeEl({" + PAIR + "}, 2); __c");
+
+        fx.getMember("play").execute(el, "cancel", "400ms");
+        assertEquals(1, intOf("__lxBodyChildren()"),
+            "the reduced static strike overlay is present as the end-state");
+        assertEquals("0.18", js("__c.__paths[0].style.opacity").asString(),
+            "reduced motion grays the first glyph to the ghost");
+        assertTrue(intOf("__lxScrollListeners()") >= 1,
+            "even the timer-less reduced path must arm the scroll-kill listener");
+        assertEquals(0, intOf("__lxActiveTimeouts()"), "reduced motion schedules no timers");
+
+        // The bug: the static overlay had no timer and outlived a scroll indefinitely.
+        js("__lxFireScroll(0, 10)");
+        assertEquals(0, intOf("__lxBodyChildren()"),
+            "scroll must remove the otherwise-permanent reduced overlay (was 1)");
+        assertEquals(0, intOf("__lxScrollListeners()"),
+            "the scroll-kill listener must release itself");
+        assertEquals("", valueOrEmpty(js("__c.__paths[0].style.opacity")),
+            "scroll-abort restores the first glyph to pristine (documented full-restore)");
+        assertEquals("", valueOrEmpty(js("__c.__paths[1].style.opacity")),
+            "scroll-abort restores the second glyph to pristine");
+
+        // No timer exists to resurrect anything; advancing the clock keeps it clean.
+        js("__lxRunTimeouts(6)");
+        assertEquals(0, intOf("__lxBodyChildren()"), "nothing resurrects the reduced overlay");
+        assertEquals(0, intOf("__lxActiveTimeouts()"), "no timer appears after the abort");
+    }
 }
