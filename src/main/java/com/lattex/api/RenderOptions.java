@@ -33,9 +33,16 @@ import java.util.regex.Pattern;
  *                  the body. Applied before parsing on every render — the
  *                  server-side per-tenant notation-pack seam. Never null; empty
  *                  map = the byte-identical no-macro fast path.
+ * @param interactiveExpansion the HOST gate for the opt-in numeric-expansion pass
+ *                  (fx.*=unfold). Default {@code false}: LatteX is a pure typesetter
+ *                  and {@link com.lattex.parse.SumExpansion} never runs — even an
+ *                  {@code fx.*=unfold} directive degrades INERT (the sum typesets
+ *                  normally; no payload is stamped). {@code true} arms the pass, which
+ *                  still fires ONLY on an equation that opted in via the directive.
  */
 public record RenderOptions(double scale, Color color, MathStyle mathStyle,
-                            java.util.Map<String, String> macros) {
+                            java.util.Map<String, String> macros,
+                            boolean interactiveExpansion) {
 
     /** Lower clamp for {@link #scale()} — below this glyphs collapse to nothing. */
     public static final double MIN_SCALE = 0.1;
@@ -56,29 +63,35 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
         macros = java.util.Map.copyOf(macros); // defensive + null-key/value refusing
     }
 
-    /** Three-arg compatibility constructor: no preset macros. */
+    /** Three-arg compatibility constructor: no preset macros, expansion off. */
     public RenderOptions(double scale, Color color, MathStyle mathStyle) {
-        this(scale, color, mathStyle, java.util.Map.of());
+        this(scale, color, mathStyle, java.util.Map.of(), false);
     }
 
-    /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style. */
+    /** Four-arg compatibility constructor: preset macros, interactive expansion off. */
+    public RenderOptions(double scale, Color color, MathStyle mathStyle,
+                         java.util.Map<String, String> macros) {
+        this(scale, color, mathStyle, macros, false);
+    }
+
+    /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style, expansion off. */
     public static RenderOptions defaults() {
-        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of());
+        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of(), false);
     }
 
     /** A copy with a different scale (must be in {@code [MIN_SCALE, MAX_SCALE]}). */
     public RenderOptions withScale(double newScale) {
-        return new RenderOptions(newScale, color, mathStyle, macros);
+        return new RenderOptions(newScale, color, mathStyle, macros, interactiveExpansion);
     }
 
     /** A copy with a different color. */
     public RenderOptions withColor(Color newColor) {
-        return new RenderOptions(scale, newColor, mathStyle, macros);
+        return new RenderOptions(scale, newColor, mathStyle, macros, interactiveExpansion);
     }
 
     /** A copy with a different math style. */
     public RenderOptions withMathStyle(MathStyle newStyle) {
-        return new RenderOptions(scale, color, newStyle, macros);
+        return new RenderOptions(scale, color, newStyle, macros, interactiveExpansion);
     }
 
     /**
@@ -87,7 +100,18 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      * additive-only rule as inline definitions).
      */
     public RenderOptions withMacros(java.util.Map<String, String> newMacros) {
-        return new RenderOptions(scale, color, mathStyle, newMacros);
+        return new RenderOptions(scale, color, mathStyle, newMacros, interactiveExpansion);
+    }
+
+    /**
+     * A copy with the host's opt-in numeric-expansion pass enabled or disabled
+     * (default disabled). The HOST gate for {@code fx.*=unfold}: with it {@code false}
+     * the {@link com.lattex.parse.SumExpansion} pass never runs and an
+     * {@code fx.*=unfold} directive degrades inert; with it {@code true} the pass fires
+     * ONLY on an equation that authored the directive. A plain page pays zero cost.
+     */
+    public RenderOptions withInteractiveExpansion(boolean enabled) {
+        return new RenderOptions(scale, color, mathStyle, macros, enabled);
     }
 
     /**

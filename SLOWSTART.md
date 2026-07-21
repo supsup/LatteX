@@ -249,6 +249,17 @@ real production `/docs` integration ran, minus its framework:
 4. **If your pipeline sanitizes HTML** (rehype-sanitize and friends), allow-list
    the wrapper: `class` on `span`/`div` plus the five `data-lx-fx-*` attributes —
    or your sanitizer strips the effects as silently as step 0 ignored them.
+   `unfold` needs a few more allow-list entries beyond the base five: the
+   `unfold` value itself on `fx.click`/`fx.enter`/`fx.hover`, the
+   `data-lx-fx-expand` marker attribute, the nested `lx-fx-expanded` class (a
+   `span` one level inside the wrapper, holding the pre-rendered payload
+   `<svg>`), and its pre-JS `hidden` boolean attribute (the payload must stay
+   hidden until the runtime clears it — a sanitizer that strips `hidden` would
+   flash both states on load). **A Stafficy `/docs` host does not yet allow
+   these** — its sanitizer strips `data-lx-fx-expand`/`lx-fx-expanded`/`hidden`
+   on the math wrapper today, so `unfold` on `/docs` is **pending** a separate
+   sanitizer allow-list slice; a LatteX-standalone host that adds the extra
+   attributes/class above gets full `unfold` now.
 
 Skip all four and Sam's original promise holds: static math, zero runtime. Do
 them and the same pages get the full catalogue — with JavaScript off, readers

@@ -2229,6 +2229,53 @@
     }, DRAW + HOLD);
   }
 
+  // ---- unfold: a bounded \sum blooms into its explicit terms --------------
+  // The expanded form is PRE-RENDERED by LatteX into a hidden sibling <svg>
+  // wrapped in `.lx-fx-expanded` inside the same .lx-math span (the runtime cannot
+  // lay out LaTeX). unfold(el) TOGGLES between the collapsed sum and that payload.
+  //
+  // ELEMENT-ANCHORED by construction: the payload is a sibling INSIDE the span, so
+  // it rides scroll/reflow for free. Unlike fx.cancel — whose strike is a
+  // position:fixed BODY overlay drawn from trigger-time getBoundingClientRect() and
+  // MUST be torn down on scroll (scrollKillable) — unfold has NO fixed/body overlay,
+  // so it needs NO scrollKillable. Do not bolt a fixed overlay onto it.
+  //
+  // Idempotent: a per-element flag (el.__lxUnfolded) tracks state so re-click /
+  // LatteXFx.play re-entry cannot desync. If the element carries no pre-rendered
+  // payload (host flag was off, or the sum was unsupported → inert), unfold is a no-op.
+  function unfold(el) {
+    var collapsed = el.querySelector(':scope > svg');
+    var expanded = el.querySelector(':scope > .lx-fx-expanded');
+    if (!collapsed || !expanded) { return; } // inert: no payload to arm
+
+    var toExpanded = !el.__lxUnfolded;
+    var show = toExpanded ? expanded : collapsed;
+    var hide = toExpanded ? collapsed : expanded;
+    el.__lxUnfolded = toExpanded;
+
+    // Swap: hide the outgoing immediately (no side-by-side reflow) and reveal the
+    // incoming. A held `hidden` attr survives on the payload until now (no flash of
+    // both states before the JS runs); clear it to show. `.lx-fx-expanded` is
+    // display:none in the CSS, so an explicit inline-block is needed to reveal it.
+    hide.hidden = true;
+    hide.style.display = 'none';
+    show.hidden = false;
+    show.style.display = 'inline-block';
+
+    if (reduced) {
+      // Reduced motion: instant, no fade (symmetric collapse).
+      show.style.opacity = '1';
+      return;
+    }
+    // Fade the incoming in — a whole-expression bloom, element-anchored so it rides
+    // scroll. (A true simultaneous cross-fade would need absolute stacking; the
+    // fade-in swap is robust and reads as a bloom. Staggered sprout is DEFERRED.)
+    show.style.opacity = '0';
+    show.style.transition = 'opacity 220ms ease';
+    var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+    raf(function () { show.style.opacity = '1'; });
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -2257,6 +2304,7 @@
     if (name === 'thread') { thread(el); return; } // arming effect: binds per-glyph hover
     if (name === 'precedence') { precedence(el); return; } // arming: binds the hover cascade
     if (name === 'cancel') { cancel(el); return; } // semantic: strike + puff the exactly-twice pair
+    if (name === 'unfold') { unfold(el); return; } // semantic: toggle \sum ⇄ pre-rendered terms
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -2346,6 +2394,7 @@
       parseGlyphmap: parseGlyphmap,
       scrollKillable: scrollKillable,
       cancel: cancel,
+      unfold: unfold,
       play: play,
       init: init
     });

@@ -95,6 +95,50 @@ class FxRuntimeJsHarnessTest {
             "element with no fx attributes refuses");
     }
 
+    // ---- pin 0b: fx.unfold toggle (element-anchored, idempotent) ----------------
+
+    @Test
+    void unfoldTogglesBetweenCollapsedAndPayloadAndIsIdempotent() {
+        // A .lx-math with a collapsed <svg> child and a hidden .lx-fx-expanded payload.
+        context.eval(Source.create("js",
+            "globalThis.__lxCollapsed = __lxMakeEl({});"
+            + "globalThis.__lxPayload = __lxMakeEl({}); globalThis.__lxPayload.hidden = true;"
+            + "globalThis.__lxUnfoldEl = __lxMakeEl({});"
+            + "globalThis.__lxUnfoldEl.querySelector = function (sel) {"
+            + "  if (sel === ':scope > svg') return globalThis.__lxCollapsed;"
+            + "  if (sel === ':scope > .lx-fx-expanded') return globalThis.__lxPayload;"
+            + "  return null; };"));
+        Value el = context.getBindings("js").getMember("__lxUnfoldEl");
+        Value collapsed = context.getBindings("js").getMember("__lxCollapsed");
+        Value payload = context.getBindings("js").getMember("__lxPayload");
+
+        // First trigger: expand — payload revealed, collapsed hidden, state flagged.
+        fx.getMember("unfold").execute(el);
+        assertTrue(el.getMember("__lxUnfolded").asBoolean(), "first trigger expands");
+        assertFalse(payload.getMember("hidden").asBoolean(), "payload revealed");
+        assertEquals("inline-block", payload.getMember("style").getMember("display").asString());
+        assertTrue(collapsed.getMember("hidden").asBoolean(), "collapsed hidden");
+        assertEquals("none", collapsed.getMember("style").getMember("display").asString());
+        // The bloom fade-in commits on the next animation frame.
+        context.eval(Source.create("js", "__lxFlushRaf(4)"));
+        assertEquals("1", payload.getMember("style").getMember("opacity").asString(), "payload fades in");
+
+        // Second trigger: collapse — the toggle is idempotent (no desync on re-entry).
+        fx.getMember("unfold").execute(el);
+        assertFalse(el.getMember("__lxUnfolded").asBoolean(), "second trigger collapses");
+        assertFalse(collapsed.getMember("hidden").asBoolean(), "collapsed shown again");
+        assertTrue(payload.getMember("hidden").asBoolean(), "payload hidden again");
+    }
+
+    @Test
+    void unfoldWithNoPayloadIsAnInertNoOp() {
+        // Host flag off / unsupported sum → no payload sibling. unfold must no-op
+        // (and never throw), leaving no state on the element.
+        Value el = makeEl("__lxMakeEl({})"); // querySelector returns null (no payload)
+        fx.getMember("unfold").execute(el);
+        assertFalse(el.hasMember("__lxUnfolded"), "inert unfold sets no toggle state");
+    }
+
     // ---- pin 1: placement compose + transform-origin ---------------------------
 
     @Test

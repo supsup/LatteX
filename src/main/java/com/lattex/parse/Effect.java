@@ -240,6 +240,33 @@ public enum Effect {
      * and re-triggers are idempotent. Slice 1 is {@code fx.enter} only.
      */
     CANCEL,
+    /**
+     * A bounded {@code \sum} blooms open into its explicit terms:
+     * {@code \sum_{i=1}^{4} f(i)} swaps to {@code f(1)+f(2)+f(3)+f(4)} on click,
+     * and collapses back on the next click. This is the ONE effect that needs LatteX to
+     * COMPUTE new material — the page-side runtime cannot lay out LaTeX, so the expanded
+     * form is PRE-RENDERED by LatteX into a hidden sibling {@code <svg>} inside the
+     * {@code .lx-math} span. On click the runtime hides the outgoing expression
+     * immediately, takes the new layout width, then fades the incoming one in (a swap
+     * with a fade-in, not a simultaneous cross-fade). The payload is element-anchored so
+     * it rides scroll for free (NO fixed overlay, so — unlike {@code cancel} — no
+     * scrollKillable teardown).
+     *
+     * <p><strong>Double gated, opt-out by default.</strong> The expansion pass
+     * ({@link SumExpansion}) runs ONLY when the host enabled
+     * {@link com.lattex.api.RenderOptions#interactiveExpansion()} (default OFF) AND the
+     * equation carries this directive. With the flag off, {@code unfold} degrades INERT:
+     * the sum typesets normally and the interaction simply never arms. LatteX stays a pure
+     * typesetter by default.
+     *
+     * <p><strong>Slice-1 scope</strong> (fail-INERT everywhere else): {@code \sum} only,
+     * LITERAL-INTEGER bounds, a single letter index, a bare trailing summand with no
+     * top-level {@code +}/{@code -}/{@code =}, at most {@link SumExpansion#MAX_TERMS}
+     * terms. Substitution is by atom code point on the parsed tree (so the {@code i} in
+     * {@code \sin} is never touched). Reduced-motion snaps instantly. Staggered
+     * term-by-term sprout, {@code \prod}/{@code \int}, and symbolic bounds are deferred.
+     */
+    UNFOLD,
     /** Explicitly no effect. */
     NONE;
 
@@ -284,6 +311,7 @@ public enum Effect {
             case "thread" -> THREAD;
             case "precedence" -> PRECEDENCE;
             case "cancel" -> CANCEL;
+            case "unfold" -> UNFOLD;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
@@ -291,7 +319,7 @@ public enum Effect {
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
                     + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
                     + "|shatter|glitch|sparkler|quantum|typeset|constellation|thread"
-                    + "|precedence|cancel|none)");
+                    + "|precedence|cancel|unfold|none)");
         };
     }
 
