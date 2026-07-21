@@ -39,7 +39,12 @@ class ContainerDriftTest {
         // (`data.put("…-…")` across src/main) confirms these three are the ONLY hyphenated
         // stamped keys; a new hyphenated stamp without a matching entry here is caught by
         // graphMetadataStampsRideTheAllowList below.
-        "data-lx-graph-expr", "data-lx-graph-domain", "data-lx-graph-open");
+        "data-lx-graph-expr", "data-lx-graph-domain", "data-lx-graph-open",
+        // The fx.unfold term-count marker (renderer-derived, [0-9]+) — hyphenated, so it
+        // is a code-owned exact member, NOT the identifier lane (mirrors the fx-*/graph-*
+        // policy). Stamped only when the double-gated expansion pass produced a payload;
+        // its value shape is pinned by unfoldExpandMarkerRidesTheAllowList below.
+        "data-lx-fx-expand");
 
     /// The open data-attr lane: `data.<key>` / `intent` / `concept` stamp
     /// `data-lx-<identifier>` (keys are parse-time-validated identifiers, no hyphens).
@@ -162,6 +167,33 @@ class ContainerDriftTest {
         assertNoInjection(tag, "graph metadata");
     }
 
+    /// The fx.unfold marker contract, made NON-VACUOUS: with the host expansion flag ON and
+    /// an author `fx.click=unfold` opt-in, the container stamps the hyphenated
+    /// `data-lx-fx-expand=<term-count>` — which the identifier-only {@link #DATA_ATTR} lane
+    /// does NOT admit, so without its exact allow-list entry this would (correctly)
+    /// drift-fail. This EXERCISES that path (the entry is load-bearing): the marker is
+    /// actually stamped, admitted only by an exact entry, its value is `[0-9]+`, and the
+    /// whole tag stays drift-free + injection-free. Rendered through the flag-ON overload
+    /// because the marker exists only when the double-gated expansion pass ran.
+    @Test
+    void unfoldExpandMarkerRidesTheAllowList() {
+        RenderOptions flagOn = RenderOptions.defaults().withInteractiveExpansion(true);
+        String tag = openTagOf(LatteX.renderStyledHtml(
+            "\\lx[fx.click=unfold]{\\sum_{i=1}^{4} f(i)}", flagOn));
+        List<String> names = attrNames(tag);
+        assertTrue(names.contains("data-lx-fx-expand"),
+            "fx.unfold (flag ON) must stamp data-lx-fx-expand (contract non-vacuity) — tag: " + tag);
+        assertTrue(ALLOWED_EXACT.contains("data-lx-fx-expand"),
+            "data-lx-fx-expand must be a code-owned ALLOWED_EXACT member (hyphenated, outside DATA_ATTR)");
+        assertTrue(!DATA_ATTR.matcher("data-lx-fx-expand").matches(),
+            "data-lx-fx-expand is hyphenated and must NOT ride the identifier-only DATA_ATTR lane");
+        assertValue(tag, "data-lx-fx-expand", "[0-9]+");
+        for (String name : names) {
+            assertTrue(isAllowed(name), "unfold marker drift: '" + name + "' — tag: " + tag);
+        }
+        assertNoInjection(tag, "unfold marker");
+    }
+
     // ---- battery -----------------------------------------------------------------------
 
     private static List<String> positiveBattery() {
@@ -171,6 +203,7 @@ class ContainerDriftTest {
             "\\lx[fx.hover=thread]{x + x}",                            // glyphmap sidecar
             "\\lx[fx.enter=cancel]{\\frac{x}{x}}",                     // glyphmap sidecar (2nd consumer)
             "\\lx[fx.click=shatter]{x}",
+            "\\lx[fx.click=unfold]{\\sum_{i=1}^{4} f(i)}",             // unfold directive (flag-off inert)
             "\\lx[fx.enter=precedence]{\\left(a+b\\right)\\times c}",  // groupmap sidecar
             "\\lx[fx.enter=glow, fx.duration=800ms, fx.glow-color=currentColor]{x}",
             "\\lx[intent=ratio]{\\frac{a}{b}}",

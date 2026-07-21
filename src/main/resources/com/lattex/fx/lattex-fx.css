@@ -16,6 +16,13 @@ html.lx-fx .lx-math[data-lx-fx-enter="fade"] { opacity: 0; }
 html.lx-fx .lx-math[data-lx-fx-enter="inkdrop"] { opacity: 0; }
 html.lx-fx .lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
 
+/* fx.*=unfold payload: the pre-rendered expanded <svg> rides a `.lx-fx-expanded`
+   wrapper span and starts HIDDEN. Unlike the enter-hides above this is NOT keyed on
+   html.lx-fx: the safe degraded state is "show the collapsed sum only", so the payload
+   must stay hidden even if the JS never runs (a page with no runtime shows the plain
+   sum, effect inert — never both states at once). The runtime toggles it on click. */
+.lx-math > .lx-fx-expanded { display: none; }
+
 @keyframes lx-boom {
   0%   { transform: scale(1); }
   30%  { transform: scale(1.45); }

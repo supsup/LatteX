@@ -5,6 +5,7 @@ import com.lattex.layout.Layout;
 import com.lattex.layout.LayoutContext;
 import com.lattex.layout.LayoutEngine;
 import com.lattex.parse.MathNode;
+import com.lattex.parse.SumExpansion;
 import com.lattex.parse.MathNode.Accent;
 import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
@@ -35,6 +36,14 @@ import java.util.Map;
  * <p>Renders math to self-contained SVG using a bundled OFL math font
  * (STIX Two Math), emitting glyphs as inline filled {@code <path>}s in a
  * minimal, sanitizer-safe element subset. Zero runtime dependencies.
+ *
+ * <p><strong>A pure typesetter by default.</strong> LatteX lays out the math it is
+ * given and computes nothing from it. The one exception is opt-in and doubly gated:
+ * an {@code fx.*=unfold} effect can pre-render a bounded {@code \sum} into its explicit
+ * terms ({@link com.lattex.parse.SumExpansion}), but ONLY when the host enables
+ * {@link RenderOptions#interactiveExpansion()} (default {@code false}) AND the equation
+ * opted in with the directive. With the flag off — the default — that pass never runs
+ * and the directive degrades inert; a plain render is byte-identical to today.
  *
  * <p><strong>Status:</strong> the full font &rarr; parse &rarr; layout &rarr; SVG
  * pipeline renders fractions, roots, sub/superscripts, big-operator limits,
@@ -363,13 +372,47 @@ public final class LatteX {
      * @return an HTML fragment: {@code <span class="lx-math" …>…<svg>…</svg></span>}
      */
     public static String renderStyledHtml(String latex) {
-        MathNode node = MathParser.parse(latex);
+        return renderStyledHtml(latex, RenderOptions.defaults());
+    }
+
+    /**
+     * Render an {@code \lx}-annotated formula to an HTML fragment, honoring the HOST's
+     * {@link RenderOptions#interactiveExpansion()} gate. Identical to
+     * {@link #renderStyledHtml(String)} EXCEPT that when the host has enabled interactive
+     * expansion AND the equation opted in with an {@code fx.*=unfold} directive, a bounded
+     * {@code \sum} is pre-rendered into a hidden SIBLING {@code <svg>} payload inside the
+     * same {@code <span>} — on click the runtime swaps the collapsed sum for the expanded
+     * form (hiding the outgoing immediately, then fading the incoming one in; a swap with
+     * a fade-in, not a simultaneous cross-fade) — and the container is stamped with the
+     * {@code data-lx-fx-expand="<term-count>"} marker.
+     *
+     * <p><strong>Double gate (opt-out by default).</strong> The expansion pass runs iff
+     * {@code opts.interactiveExpansion()} is {@code true} (host flag, default OFF) AND the
+     * source carries an {@code fx.*=unfold} effect (author opt-in). With the flag off, an
+     * {@code fx.*=unfold} equation degrades INERT — the sum typesets normally, no payload,
+     * no marker, byte-identical to a page that never asked for unfold. With the flag on, a
+     * plain equation with no unfold directive is byte-identical to today. The visual
+     * styling ({@code style.*}) still comes from the equation's own {@code \lx} wrapper;
+     * the flag is orthogonal.
+     *
+     * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
+     * @param opts  the host render options carrying the {@link RenderOptions#interactiveExpansion()} gate
+     * @return an HTML fragment: {@code <span class="lx-math" …>…<svg>…</svg>[payload]</span>}
+     */
+    public static String renderStyledHtml(String latex, RenderOptions opts) {
+        java.util.Objects.requireNonNull(opts, "opts");
+        // Honor the host options with the SAME semantics as render(latex, opts): preset
+        // macros expand before parsing (RenderOptions' public contract), and when there
+        // is no top-level \lx wrapper the host's scale/color/mathStyle apply. A source
+        // \lx wrapper still overrides the STYLING (macros are not part of the \lx
+        // sub-language, so the notation pack applies inside the body regardless).
+        MathNode node = MathParser.parse(latex, opts.macros());
         EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
         Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
 
         // Lay out once, and reuse the layout for BOTH the SVG and the glyphmap — the
         // sidecar's path indices must line up with this exact emission.
-        RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
+        RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
         MathNode body = node instanceof StyledMath sm ? sm.body() : node;
         return containRender(() -> {
             SfntFont font = FontHolder.FONT;
@@ -385,8 +428,53 @@ public final class LatteX {
             String glyphmap = usesGlyphmap(fx)
                 ? SvgEmitter.glyphmap(layout, font) : "";
             String groupmap = precedenceGroupmap(fx, layout, font);
-            return openTag(fx, sem, glyphmap, groupmap) + svg + "</span>";
+
+            // fx.*=unfold — the DOUBLE-GATED numeric-expansion pass. Runs only when the host
+            // enabled the flag AND the author opted in; otherwise this whole block is skipped
+            // and the sum typesets inert (no payload, no marker). See RenderOptions#interactiveExpansion.
+            String payload = "";
+            String expandMarker = "";
+            if (opts.interactiveExpansion() && usesUnfold(fx)) {
+                // FAIL-INERT BOUNDARY (review lattex-308 blocker 1): the unfold payload is
+                // OPTIONAL decoration — arming it must never break an already-valid collapsed
+                // formula. If the expanded form cannot be rendered for any bounded reason (e.g.
+                // its SVG exceeds SvgEmitter's cap, which the collapsed sum does not hit), we
+                // degrade INERT: keep the collapsed `svg` emitted above, and omit payload +
+                // marker. Catch RuntimeException (covers MathSyntaxException = the cap throw)
+                // but let JVM-fatal Errors (OOM, StackOverflow) propagate unswallowed.
+                try {
+                    java.util.Optional<SumExpansion.Result> expanded = SumExpansion.expand(body);
+                    if (expanded.isPresent()) {
+                        MathNode expandedBody = expanded.get().expanded();
+                        LayoutContext ectx = new LayoutContext(font, font.mathConstants(),
+                            DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+                        Layout elayout = LayoutEngine.layout(expandedBody, ectx);
+                        // The payload rides the SAME LayoutEngine.layout + SvgEmitter.emit path,
+                        // so it is independently within the emitter's minimal SVG alphabet. It is
+                        // hidden in a wrapper <span> (never an svg attribute S8 would reject), so
+                        // the pre-rendered svg stays pristine.
+                        String esvg = SvgEmitter.emit(elayout, font, describe(expandedBody), style.color());
+                        payload = "<span class=\"lx-fx-expanded\" hidden>" + esvg + "</span>";
+                        expandMarker = Integer.toString(expanded.get().termCount());
+                    }
+                } catch (RuntimeException degradeInert) {
+                    // Optional payload unrenderable → no payload, no marker; the collapsed
+                    // formula still typesets. Decoration never breaks the math.
+                    payload = "";
+                    expandMarker = "";
+                }
+            }
+            return openTag(fx, sem, glyphmap, groupmap, expandMarker) + svg + payload + "</span>";
         });
+    }
+
+    /**
+     * Whether {@code fx} carries an {@code unfold} effect on any trigger — the per-equation
+     * author opt-in half of the double gate for the numeric-expansion pass. The host-flag
+     * half is {@link RenderOptions#interactiveExpansion()}.
+     */
+    private static boolean usesUnfold(EffectSpec fx) {
+        return fx.effects().containsValue(Effect.UNFOLD);
     }
 
     /**
@@ -418,7 +506,8 @@ public final class LatteX {
      * duration matches {@code \d{1,5}ms}, the a11y label is HTML-escaped), so no raw
      * author string reaches the attribute unescaped.
      */
-    private static String openTag(EffectSpec fx, Semantics sem, String glyphmap, String groupmap) {
+    private static String openTag(EffectSpec fx, Semantics sem, String glyphmap, String groupmap,
+                                  String expandMarker) {
         StringBuilder sb = new StringBuilder("<span class=\"lx-math\"");
         sem.intentValue().ifPresent(v -> sb.append(" data-lx-intent=\"").append(v).append('"'));
         sem.conceptValue().ifPresent(v -> sb.append(" data-lx-concept=\"").append(v).append('"'));
@@ -432,6 +521,13 @@ public final class LatteX {
         // Precedence-group sidecar for the `precedence` effect (renderer-derived, [0-9:,;]).
         if (!groupmap.isEmpty()) {
             sb.append(" data-lx-groupmap=\"").append(groupmap).append('"');
+        }
+        // Unfold term-count marker (renderer-derived, [0-9]+) — stamped only when the
+        // double-gated expansion pass produced a payload. Pairs the interaction name
+        // (data-lx-fx-*=unfold) with the pre-rendered sibling svg; reserves the future
+        // staggered-sprout addressing.
+        if (!expandMarker.isEmpty()) {
+            sb.append(" data-lx-fx-expand=\"").append(expandMarker).append('"');
         }
         // data.* attributes (keys already identifier-validated) — iterated in sorted
         // key order so the generated HTML is deterministic regardless of the source
