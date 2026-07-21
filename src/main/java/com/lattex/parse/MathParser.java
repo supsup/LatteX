@@ -1115,6 +1115,9 @@ public final class MathParser {
             case "begin" -> {
                 return EnvironmentParser.parseEnvironment(this);
             }
+            case "bordermatrix" -> {
+                return parseBorderMatrix();
+            }
             case "end" -> throw new MathSyntaxException(
                 "\\end without a matching \\begin");
             case "hline", "hdashline" -> throw new MathSyntaxException(
@@ -1263,6 +1266,115 @@ public final class MathParser {
         }
         return new Matrix(rows, aligns, vlines, rowRules,
             Fenced.NULL_DELIMITER, Fenced.NULL_DELIMITER, MatrixKind.SUBSTACK);
+    }
+
+    /**
+     * Parses {@code \bordermatrix{ &c1&c2 \\ r1&a&b \\ r2&c&d }} into a
+     * {@link MathNode.BorderMatrix}. Unlike the matrix ENVIRONMENTS (which are
+     * {@code \begin{env}…\end{env}}), {@code \bordermatrix} takes a single BRACE
+     * argument whose content is {@code &}/{@code \\}-delimited exactly like a matrix
+     * body — so the brace group is run through the same row/cell splitter as
+     * {@link EnvironmentParser}, but terminated by the closing {@code '}'} (mirroring
+     * {@link #parseSubstack}'s brace-group loop rather than the {@code \end} loop).
+     *
+     * <p>Clean-room from the TeXbook ({@code \bordermatrix}, Appendix B / plain.tex):
+     * the FIRST ROW is the header — its first cell is the (conventionally empty)
+     * corner and the rest are the column labels; each SUBSEQUENT row's first cell is
+     * that row's label and the rest are the body cells. Short rows pad with empty
+     * cells, like a matrix.
+     */
+    private MathNode parseBorderMatrix() {
+        if (peek().kind() != Kind.LBRACE) {
+            throw new MathSyntaxException(
+                "\\bordermatrix expects a '{...}' argument but found " + describe(peek()));
+        }
+        next(); // consume '{'
+        List<List<MathNode>> rawRows = new ArrayList<>();
+        List<MathNode> row = new ArrayList<>();
+        List<MathNode> cell = new ArrayList<>();
+        while (true) {
+            Token t = peek();
+            if (t.kind() == Kind.RBRACE) {
+                next(); // consume '}'
+                break;
+            }
+            if (t.kind() == Kind.EOF) {
+                throw new MathSyntaxException("Unbalanced brace in \\bordermatrix argument");
+            }
+            if (isCommand(t, "\\") || isCommand(t, "cr")) {
+                next();
+                row.add(wrap(cell));
+                cell = new ArrayList<>();
+                rawRows.add(row);
+                row = new ArrayList<>();
+                continue;
+            }
+            if (t.kind() == Kind.CHAR && t.codePoint() == '&') {
+                next();
+                row.add(wrap(cell));
+                cell = new ArrayList<>();
+                continue;
+            }
+            cell.add(parseComponent());
+        }
+        // Finalize a trailing row (content with no closing \\). A bare trailing \\
+        // (row + cell both empty) adds no phantom row, matching LaTeX's \halign.
+        if (!cell.isEmpty() || !row.isEmpty()) {
+            row.add(wrap(cell));
+            rawRows.add(row);
+        }
+        if (rawRows.isEmpty()) {
+            throw new MathSyntaxException("empty \\bordermatrix");
+        }
+        return buildBorderMatrix(rawRows);
+    }
+
+    /**
+     * Partitions the parsed {@code \bordermatrix} rows into corner + column labels +
+     * row labels + a rectangular body. Row 0 is the header (corner, then column
+     * labels); rows 1.. contribute a row label (first cell) and body cells (the rest).
+     * The column count is the widest of {@code (header labels)} and {@code (body row
+     * cells)}; short header/body rows pad with empty cells. Fails loud on a
+     * header-only bordermatrix (no fenced grid to draw) or a cell-count blow-up.
+     */
+    private static MathNode buildBorderMatrix(List<List<MathNode>> rawRows) {
+        MathNode empty = wrap(List.of());
+        List<MathNode> header = rawRows.get(0);
+        MathNode corner = header.isEmpty() ? empty : header.get(0);
+
+        int bodyCols = Math.max(0, header.size() - 1); // header labels after the corner
+        for (int r = 1; r < rawRows.size(); r++) {
+            bodyCols = Math.max(bodyCols, rawRows.get(r).size() - 1); // body cells after the label
+        }
+
+        List<MathNode> columnLabels = new ArrayList<>(bodyCols);
+        for (int c = 0; c < bodyCols; c++) {
+            columnLabels.add(c + 1 < header.size() ? header.get(c + 1) : empty);
+        }
+
+        List<MathNode> rowLabels = new ArrayList<>();
+        List<List<MathNode>> body = new ArrayList<>();
+        for (int r = 1; r < rawRows.size(); r++) {
+            List<MathNode> src = rawRows.get(r);
+            rowLabels.add(src.isEmpty() ? empty : src.get(0));
+            List<MathNode> bodyRow = new ArrayList<>(bodyCols);
+            for (int c = 0; c < bodyCols; c++) {
+                bodyRow.add(c + 1 < src.size() ? src.get(c + 1) : empty);
+            }
+            body.add(bodyRow);
+        }
+        if (body.isEmpty()) {
+            throw new MathSyntaxException(
+                "\\bordermatrix needs at least one body row after the column-label row");
+        }
+        // Breadth guard (mirrors EnvironmentParser's matrix cap): count the labelled
+        // frame too, so an adversarial \lx-hosted grid can't force an OOM-scale layout.
+        long totalCells = (long) (body.size() + 1) * (bodyCols + 1);
+        if (totalCells > EnvironmentParser.MAX_MATRIX_CELLS) {
+            throw new MathSyntaxException("bordermatrix too large: " + totalCells
+                + " cells exceeds the " + EnvironmentParser.MAX_MATRIX_CELLS + "-cell limit");
+        }
+        return new MathNode.BorderMatrix(body, columnLabels, rowLabels, corner);
     }
 
     /** Parses the body of {@code \left..\right}, consuming the {@code \right}. */

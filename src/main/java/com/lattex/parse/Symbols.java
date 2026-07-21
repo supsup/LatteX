@@ -583,6 +583,11 @@ final class Symbols {
         m.put("maltese", new Sym(0x2720, MathClass.ORD)); // ✠
         m.put("imath", new Sym(0x0131, MathClass.ORD));   // ı
         m.put("jmath", new Sym(0x0237, MathClass.ORD));   // ȷ
+        // \aa is the letter å (a-with-ring, U+00E5), a single precomposed code
+        // point — NOT \mathring{a} (which composes a ring accent over an 'a'). STIX
+        // Two Math carries the precomposed glyph (verified: U+00E5 -> "aring"), so
+        // it rides the ordinary symbol path (SymbolCoverageTest asserts the glyph).
+        m.put("aa", new Sym(0x00E5, MathClass.ORD));       // å
 
         // -- Dots ------------------------------------------------------------
         m.put("cdots", new Sym(0x22EF, MathClass.INNER)); // ⋯

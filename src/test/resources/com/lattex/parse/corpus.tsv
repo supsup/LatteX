@@ -87,7 +87,7 @@ PARSES-NOW	accents	\breve{a}	breve accent (over base)
 PARSES-NOW	accents	\tilde{a}	tilde accent (over base)
 PARSES-NOW	accents	\vec{a}	vector arrow accent (over base)
 PARSES-NOW	accents	\mathring{a}	ring accent (over base)
-NEEDS-PARSER-NODE	accents	\aa	the letter a-with-ring (å) — needs symbol
+PARSES-NOW	accents	\aa	the letter a-with-ring (å) — single precomposed symbol U+00E5 (not \mathring{a})
 PARSES-NOW	accents	\widehat{AAA}	wide (stretchy) hat sized to the base
 PARSES-NOW	accents	\widetilde{AAA}	wide (stretchy) tilde sized to the base
 PARSES-NOW	accents	\overline{a}	overline (rule over base)
@@ -112,7 +112,7 @@ PARSES-NOW	matrix	\begin{vmatrix}a&b\\c&d\end{vmatrix}	determinant (single-bar) 
 PARSES-NOW	matrix	\begin{Vmatrix}a&b\\c&d\end{Vmatrix}	double-bar (norm) matrix
 PARSES-NOW	matrix	\begin{smallmatrix}a&b\\c&d\end{smallmatrix}	inline small matrix (script style)
 PARSES-NOW	matrix	A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}	full matrix with \cdots \vdots \ddots
-NEEDS-PARSER-NODE	matrix	\bordermatrix{&1&2\\1&a&b\\2&c&d}	bordered matrix with row/col labels — needs \bordermatrix node
+PARSES-NOW	matrix	\bordermatrix{&1&2\\1&a&b\\2&c&d}	bordered matrix with row/col labels — \bordermatrix node (labels outside a paren-fenced body)
 PARSES-NOW	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with vertical and horizontal rules — array node + column spec + \hline
 PARSES-NOW	matrix	\vdots	vertical dots symbol
 PARSES-NOW	matrix	\ddots	diagonal dots symbol

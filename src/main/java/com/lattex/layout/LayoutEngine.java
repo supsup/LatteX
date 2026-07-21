@@ -199,6 +199,7 @@ public final class LayoutEngine {
             case OperatorName opName -> operatorNameBox(opName, ctx);
             case TextRun textRun -> textRunBox(textRun, ctx);
             case Matrix matrix -> matrixBox(matrix, ctx);
+            case MathNode.BorderMatrix bm -> borderMatrixBox(bm, ctx);
             case MathNode.Stack stack -> stackBox(stack, ctx);
             case MathNode.XArrow xArrow -> xArrowBox(xArrow, ctx);
             // A CdArrow only ever appears as a CD-grid cell (laid out by cdBox with its
@@ -775,6 +776,8 @@ public final class LayoutEngine {
             // A delimited grid behaves as an Inner sub-formula (like \left..\right);
             // a bare grid (matrix/array with no fence) behaves as an Ord atom.
             case Matrix m -> m.hasDelimiters() ? MathClass.INNER : MathClass.ORD;
+            // A bordered matrix is a paren-fenced sub-formula ⇒ Inner (like \left..\right).
+            case MathNode.BorderMatrix _ -> MathClass.INNER;
             // A brace stack behaves as an Ord atom in a row (so a following binary op
             // keeps its binary spacing); \stackrel is Rel (TeXbook); \overset/\\underset
             // keep the base's own class.
@@ -2015,6 +2018,140 @@ public final class LayoutEngine {
 
         double height = Math.max(boxHeight, Math.max(leftH, rightH));
         double depth = Math.max(boxDepth, Math.max(leftD, rightD));
+        return new Box(glyphs, rules, totalWidth, height, depth);
+    }
+
+    // ------------------------------------------------------------------
+    // Bordered matrix — Knuth's \bordermatrix: a paren-fenced body grid with column
+    // labels ABOVE the body columns and row labels LEFT of the fence, both OUTSIDE it.
+    // Clean-room from the TeXbook (\bordermatrix in plain.tex): the labels share the
+    // body's columns/rows (so a column's width and a row's height include its label),
+    // but the fence wraps only the body. Reuses the MATRIX spacing template + the
+    // shared placeDelimiter/stretch machinery; the label geometry is integrated here
+    // rather than delegated to matrixBox because the labels must be laid out jointly
+    // with the columns/rows they align to.
+    // ------------------------------------------------------------------
+    private static Box borderMatrixBox(MathNode.BorderMatrix bm, LayoutContext ctx) {
+        var cst = ctx.constants();
+        double scale = ctx.scale();
+        double axis = cst.axisHeight() * scale;
+        double em = 18.0 * ctx.mu();
+        SfntFont font = ctx.font();
+
+        // Labels + body cells sit one style down (text), like a matrix cell, derived
+        // from the surrounding style (a nested bordermatrix shrinks with its context)
+        // and inheriting cramping + the enclosing fence depth (see matrixBox).
+        MathStyle cellStyle = smallerStyle(MathStyle.TEXT, ctx.style());
+        LayoutContext cellCtx =
+            new LayoutContext(font, cst, ctx.fontSize(), cellStyle, ctx.cramped(), ctx.fenceDepth());
+
+        int rows = bm.rowCount();
+        int cols = bm.columnCount();
+
+        // 1. Lay out body cells, column labels, row labels, and the corner. Column
+        // widths grow to fit the column label; row height/depth grow to fit the row label.
+        Box[][] cell = new Box[rows][cols];
+        Box[] colLabel = new Box[cols];
+        Box[] rowLabel = new Box[rows];
+        Box cornerBox = layoutBox(bm.corner(), cellCtx);
+        double[] colWidth = new double[cols];
+        double[] rowHeight = new double[rows];
+        double[] rowDepth = new double[rows];
+        for (int r = 0; r < rows; r++) {
+            for (int col = 0; col < cols; col++) {
+                Box b = layoutBox(bm.body().get(r).get(col), cellCtx);
+                cell[r][col] = b;
+                colWidth[col] = Math.max(colWidth[col], b.width());
+                rowHeight[r] = Math.max(rowHeight[r], b.height());
+                rowDepth[r] = Math.max(rowDepth[r], b.depth());
+            }
+        }
+        for (int col = 0; col < cols; col++) {
+            colLabel[col] = layoutBox(bm.columnLabels().get(col), cellCtx);
+            colWidth[col] = Math.max(colWidth[col], colLabel[col].width());
+        }
+        for (int r = 0; r < rows; r++) {
+            rowLabel[r] = layoutBox(bm.rowLabels().get(r), cellCtx);
+            rowHeight[r] = Math.max(rowHeight[r], rowLabel[r].height());
+            rowDepth[r] = Math.max(rowDepth[r], rowLabel[r].depth());
+        }
+
+        // 2. Body vertical stacking (identical to matrixBox MATRIX): centre on the axis.
+        double interRowGap = 0.3 * em;
+        double[] baseline = new double[rows];
+        for (int r = 1; r < rows; r++) {
+            baseline[r] = baseline[r - 1] + rowDepth[r - 1] + interRowGap + rowHeight[r];
+        }
+        double gridTop = -rowHeight[0];
+        double gridBottom = baseline[rows - 1] + rowDepth[rows - 1];
+        double shift = -axis - (gridTop + gridBottom) / 2.0;
+        double boxHeight = -(gridTop + shift);
+        double boxDepth = gridBottom + shift;
+        double fullSpan = boxHeight + boxDepth;   // body span → paren height
+        double gridTopY = gridTop + shift;        // body top ink boundary (y)
+        for (int r = 0; r < rows; r++) {
+            baseline[r] += shift;
+        }
+
+        // 3. Gutter (row-label column, left of the fence) width; header (column-label
+        // row, above the fence) height/depth. The corner shares both.
+        double gutterWidth = cornerBox.width();
+        for (int r = 0; r < rows; r++) {
+            gutterWidth = Math.max(gutterWidth, rowLabel[r].width());
+        }
+        double headerHeight = cornerBox.height();
+        double headerDepth = cornerBox.depth();
+        for (int col = 0; col < cols; col++) {
+            headerHeight = Math.max(headerHeight, colLabel[col].height());
+            headerDepth = Math.max(headerDepth, colLabel[col].depth());
+        }
+        double gutterGap = 0.3 * em;  // between the row-label gutter and the left paren
+        double headerGap = 0.3 * em;  // between the column-label row and the body top
+
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+
+        // 4. Horizontal layout: [gutter] gutterGap ( edgeGap col ... col edgeGap ).
+        double edgeGap = 0.18 * em;
+        double colGap = 0.5 * em;
+        double penX = gutterWidth + gutterGap;
+        double[] lp = placeDelimiter(font, '(', fullSpan, axis, scale, penX, glyphs);
+        penX = lp[0] + edgeGap;
+        double[] colX = new double[cols];
+        for (int col = 0; col < cols; col++) {
+            colX[col] = penX;
+            penX += colWidth[col] + (col == cols - 1 ? edgeGap : colGap);
+        }
+        double[] rp = placeDelimiter(font, ')', fullSpan, axis, scale, penX, glyphs);
+        double totalWidth = rp[0];
+
+        // 5. Stamp body cells, centred in their column, on each row's baseline.
+        for (int r = 0; r < rows; r++) {
+            for (int col = 0; col < cols; col++) {
+                Box b = cell[r][col];
+                b.drawInto(glyphs, rules, colX[col] + (colWidth[col] - b.width()) / 2.0, baseline[r]);
+            }
+        }
+
+        // 6. Column labels: centred over their column, in the header row above the body.
+        double headerBaseline = gridTopY - headerGap - headerDepth;
+        for (int col = 0; col < cols; col++) {
+            Box b = colLabel[col];
+            b.drawInto(glyphs, rules, colX[col] + (colWidth[col] - b.width()) / 2.0, headerBaseline);
+        }
+
+        // 7. Row labels: right-flushed in the gutter (near the fence), on each baseline.
+        for (int r = 0; r < rows; r++) {
+            Box b = rowLabel[r];
+            b.drawInto(glyphs, rules, gutterWidth - b.width(), baseline[r]);
+        }
+
+        // 8. Corner: right-flushed in the gutter, on the header baseline.
+        cornerBox.drawInto(glyphs, rules, gutterWidth - cornerBox.width(), headerBaseline);
+
+        double headerTop = headerBaseline - headerHeight;
+        double height = Math.max(Math.max(boxHeight, lp[1]), -headerTop);
+        double depth = Math.max(boxDepth, lp[2]);
         return new Box(glyphs, rules, totalWidth, height, depth);
     }
 

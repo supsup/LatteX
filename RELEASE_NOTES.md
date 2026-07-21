@@ -4,6 +4,39 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased — corpus frontier close-out
+
+The last two `NEEDS-PARSER-NODE` rows are gone — the tiered LaTeX-math corpus
+([`examples/corpus.md`](examples/corpus.md), driven from `corpus.tsv`) is now
+**100% `PARSES-NOW`** (181/181), with zero robustness bugs.
+
+- **`\aa` — the letter å (a-with-ring, U+00E5).** Not `\mathring{a}` (which
+  composes a *ring accent* over an `a`): `\aa` is a single **precomposed code
+  point**, so it rides the ordinary symbol path as a bare Ord atom. The bundled
+  STIX Two Math font carries the precomposed glyph (verified: U+00E5 → `aring`),
+  so this is an honest single-glyph token — `SymbolCoverageTest` asserts the glyph
+  is real (never a `<text>` fallback), and a parse test pins that `\aa` is *not*
+  node-equal to the `\mathring{a}` accent tree.
+
+- **`\bordermatrix{…}` — Knuth's bordered matrix.** The body is a rectangular
+  grid wrapped in big parentheses (the `pmatrix` fence machinery); the **column
+  labels sit above** the body columns and the **row labels sit to the left** of
+  the paren fence, both *outside* it. The header row's first cell is the
+  (conventionally empty) **corner**; each later row's first cell is that row's
+  label. Unlike the `\begin{env}…\end{env}` matrices, `\bordermatrix` takes a
+  single **brace argument** whose `&`/`\\` content is run through the same
+  row/cell splitter, terminated by the closing `}`. It is a **new `BorderMatrix`
+  node**, not a `Matrix` extension: a `Matrix`'s fence wraps the *whole* grid,
+  whereas a bordered matrix's fence wraps only the body sub-grid with labels
+  outside it — a distinct geometry that would otherwise force optional label
+  slots and a "fence-only-over-inner-cells" mode onto every `Matrix` consumer
+  (this mirrors the choice to reuse `Matrix` for `CD` *only* because a CD is still
+  a fenceless rectangular grid). A geometry oracle pins the invariants: row
+  labels' ink is left of the left paren's ink, column labels' ink is above the
+  body's top ink, and every body cell's ink is inside the fence. Negative control
+  (pinned): with no leading `&`, the header's first cell stays the corner slot,
+  not a column label.
+
 ## 0.10.0 · 2026-07-20 — user macros (L8) + bundled physics pack, the cancel family, `\underparen`
 
 ### `\underparen`

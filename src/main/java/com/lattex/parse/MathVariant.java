@@ -276,6 +276,26 @@ public final class MathVariant {
                 yield new MathNode.Matrix(restyled, mx.columnAligns(), mx.columnRules(),
                     mx.rowRules(), mx.leftDelim(), mx.rightDelim(), mx.kind());
             }
+            // A bordered matrix: restyle the corner, the labels, and every body cell.
+            case MathNode.BorderMatrix bm -> {
+                List<List<MathNode>> body = new ArrayList<>(bm.body().size());
+                for (List<MathNode> gridRow : bm.body()) {
+                    List<MathNode> cells = new ArrayList<>(gridRow.size());
+                    for (MathNode c : gridRow) {
+                        cells.add(apply(style, c));
+                    }
+                    body.add(cells);
+                }
+                List<MathNode> colLabels = new ArrayList<>(bm.columnLabels().size());
+                for (MathNode c : bm.columnLabels()) {
+                    colLabels.add(apply(style, c));
+                }
+                List<MathNode> rowLabels = new ArrayList<>(bm.rowLabels().size());
+                for (MathNode c : bm.rowLabels()) {
+                    rowLabels.add(apply(style, c));
+                }
+                yield new MathNode.BorderMatrix(body, colLabels, rowLabels, apply(style, bm.corner()));
+            }
             // A stack: restyle the base and any above/below marks, preserving the kind.
             case MathNode.Stack st -> new MathNode.Stack(
                 apply(style, st.base()),
