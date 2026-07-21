@@ -87,7 +87,7 @@ PARSES-NOW	accents	\breve{a}	breve accent (over base)
 PARSES-NOW	accents	\tilde{a}	tilde accent (over base)
 PARSES-NOW	accents	\vec{a}	vector arrow accent (over base)
 PARSES-NOW	accents	\mathring{a}	ring accent (over base)
-NEEDS-PARSER-NODE	accents	\aa	the letter a-with-ring (å) — needs symbol
+PARSES-NOW	accents	\aa	the letter a-with-ring (å) — single precomposed symbol U+00E5 (not \mathring{a})
 PARSES-NOW	accents	\widehat{AAA}	wide (stretchy) hat sized to the base
 PARSES-NOW	accents	\widetilde{AAA}	wide (stretchy) tilde sized to the base
 PARSES-NOW	accents	\overline{a}	overline (rule over base)
