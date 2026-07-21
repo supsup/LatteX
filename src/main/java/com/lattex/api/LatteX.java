@@ -629,6 +629,7 @@ public final class LatteX {
             case OperatorName(var name, _) -> name;
             case TextRun(var text, _) -> text;
             case Matrix m -> describeMatrix(m);
+            case MathNode.BorderMatrix bm -> describeBorderMatrix(bm);
             case MathNode.Stack st -> {
                 String base = describe(st.base());
                 yield switch (st.kind()) {
@@ -780,6 +781,7 @@ public final class LatteX {
             case OperatorName(var name, _) -> "<mo>" + xmlEscape(name) + "</mo>";
             case TextRun(var text, _) -> "<mtext>" + xmlEscape(text) + "</mtext>";
             case Matrix m -> matrixMathML(m);
+            case MathNode.BorderMatrix bm -> borderMatrixMathML(bm);
             case MathNode.Stack st -> stackMathML(st);
             case MathNode.XArrow xa -> {
                 String arrow = "<mo>" + xa.kind().mathmlEntity() + "</mo>";
@@ -865,6 +867,69 @@ public final class LatteX {
                 sb.append(fenceMo(m.rightDelim()));
             }
             sb.append("</mrow>");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * MathML {@code <mtable>} for a {@code \bordermatrix}: a full labelled table
+     * whose FIRST row is (corner, column labels) and whose subsequent rows are
+     * (row label, body cells), with the body block wrapped in stretchy paren fences.
+     * MathML has no bordered-matrix primitive, so the border is expressed as the
+     * outer label row/column of one table — the assistive-tech reading of the layout.
+     */
+    private static String borderMatrixMathML(MathNode.BorderMatrix bm) {
+        int cols = bm.columnCount();
+        StringBuilder sb = new StringBuilder("<mtable>");
+        // Header row: corner then the column labels.
+        sb.append("<mtr><mtd>").append(toMathML(bm.corner())).append("</mtd>");
+        for (int c = 0; c < cols; c++) {
+            sb.append("<mtd>").append(toMathML(bm.columnLabels().get(c))).append("</mtd>");
+        }
+        sb.append("</mtr>");
+        // Body rows: the row label, then the paren-fenced body cells.
+        for (int r = 0; r < bm.rowCount(); r++) {
+            sb.append("<mtr><mtd>").append(toMathML(bm.rowLabels().get(r))).append("</mtd>");
+            for (int c = 0; c < cols; c++) {
+                sb.append("<mtd>");
+                if (c == 0) {
+                    sb.append(fenceMo('('));
+                }
+                sb.append(toMathML(bm.body().get(r).get(c)));
+                if (c == cols - 1) {
+                    sb.append(fenceMo(')'));
+                }
+                sb.append("</mtd>");
+            }
+            sb.append("</mtr>");
+        }
+        return sb.append("</mtable>").toString();
+    }
+
+    /** A plain-language label for a {@code \bordermatrix}: the labels, then the body. */
+    private static String describeBorderMatrix(MathNode.BorderMatrix bm) {
+        int rows = bm.rowCount();
+        int cols = bm.columnCount();
+        StringBuilder sb = new StringBuilder("bordered matrix of ")
+            .append(rows).append(" rows and ").append(cols).append(" columns");
+        StringBuilder colls = new StringBuilder();
+        for (int c = 0; c < cols; c++) {
+            if (c > 0) {
+                colls.append(", ");
+            }
+            colls.append(describe(bm.columnLabels().get(c)));
+        }
+        if (colls.length() > 0) {
+            sb.append("; column labels: ").append(colls);
+        }
+        for (int r = 0; r < rows; r++) {
+            sb.append("; row ").append(describe(bm.rowLabels().get(r))).append(": ");
+            for (int c = 0; c < cols; c++) {
+                if (c > 0) {
+                    sb.append(", ");
+                }
+                sb.append(describe(bm.body().get(r).get(c)));
+            }
         }
         return sb.toString();
     }

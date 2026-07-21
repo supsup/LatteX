@@ -847,6 +847,73 @@ public sealed interface MathNode {
     }
 
     /**
+     * A Knuth <em>bordered matrix</em> — {@code \bordermatrix{&c1&c2\\r1&a&b\\r2&c&d}}.
+     * The {@link #body} is a rectangular grid wrapped in big parentheses (exactly the
+     * {@code pmatrix} machinery); the {@link #columnLabels} sit ABOVE the body columns
+     * (aligned per column) and the {@link #rowLabels} sit to the LEFT of the paren
+     * fence (aligned per row), both <em>outside</em> the fence. The {@link #corner}
+     * cell (the header row's first cell — conventionally an empty group, from LaTeX's
+     * leading {@code &}) occupies the header-row × label-gutter intersection.
+     *
+     * <p><strong>Why a dedicated node, not a {@link Matrix} extension.</strong> A
+     * {@code Matrix}'s fence wraps the WHOLE grid; a bordered matrix's fence wraps only
+     * the body sub-grid, with labels outside it — a different geometry that would
+     * otherwise force optional label slots and a "fence-only-over-inner-cells" mode
+     * onto every {@code Matrix} consumer (layout, MathML, a11y), muddying invariants a
+     * plain grid relies on. This mirrors the precedent that CD reused {@code Matrix}
+     * ONLY because a CD is still a fenceless rectangular grid — bordermatrix is not.
+     *
+     * <p>Implied class Inner (a paren-fenced sub-formula, like {@code \left..\right}).
+     *
+     * @param body         the fenced body cells, {@code body[r][c]}, rectangular
+     * @param columnLabels the labels above the body columns (size = body column count)
+     * @param rowLabels    the labels left of the body rows (size = body row count)
+     * @param corner       the top-left corner cell (conventionally an empty group)
+     */
+    record BorderMatrix(List<List<MathNode>> body, List<MathNode> columnLabels,
+                        List<MathNode> rowLabels, MathNode corner) implements MathNode {
+        public BorderMatrix {
+            if (body == null || body.isEmpty()) {
+                throw new IllegalArgumentException("BorderMatrix must have at least one body row");
+            }
+            int cols = body.get(0).size();
+            List<List<MathNode>> copied = new java.util.ArrayList<>(body.size());
+            for (List<MathNode> r : body) {
+                if (r.size() != cols) {
+                    throw new IllegalArgumentException(
+                        "BorderMatrix body row has " + r.size() + " cells, expected " + cols);
+                }
+                copied.add(List.copyOf(r));
+            }
+            body = List.copyOf(copied);
+            columnLabels = List.copyOf(columnLabels);
+            rowLabels = List.copyOf(rowLabels);
+            if (columnLabels.size() != cols) {
+                throw new IllegalArgumentException("BorderMatrix has " + columnLabels.size()
+                    + " column labels, expected " + cols);
+            }
+            if (rowLabels.size() != copied.size()) {
+                throw new IllegalArgumentException("BorderMatrix has " + rowLabels.size()
+                    + " row labels, expected " + copied.size());
+            }
+            if (corner == null) {
+                throw new IllegalArgumentException(
+                    "BorderMatrix corner must not be null (use an empty group)");
+            }
+        }
+
+        /** The number of body columns (== number of column labels). */
+        public int columnCount() {
+            return columnLabels.size();
+        }
+
+        /** The number of body rows (== number of row labels). */
+        public int rowCount() {
+            return body.size();
+        }
+    }
+
+    /**
      * The kind of a {@link Stack} — a base with material set above and/or below it,
      * the shared clean-room mechanism behind five LaTeX commands. Selects both the
      * implied math class of the result and whether a horizontally-stretched brace

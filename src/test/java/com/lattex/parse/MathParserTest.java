@@ -119,6 +119,36 @@ class MathParserTest {
                 }
                 yield sb.append(')').toString();
             }
+            case MathNode.BorderMatrix bm -> {
+                StringBuilder sb = new StringBuilder("BMat(C:").append(pp(bm.corner()));
+                sb.append(";cols:");
+                for (int c = 0; c < bm.columnCount(); c++) {
+                    if (c > 0) {
+                        sb.append('&');
+                    }
+                    sb.append(pp(bm.columnLabels().get(c)));
+                }
+                sb.append(";rows:");
+                for (int r = 0; r < bm.rowCount(); r++) {
+                    if (r > 0) {
+                        sb.append('&');
+                    }
+                    sb.append(pp(bm.rowLabels().get(r)));
+                }
+                sb.append(';');
+                for (int r = 0; r < bm.rowCount(); r++) {
+                    if (r > 0) {
+                        sb.append("\\\\");
+                    }
+                    for (int c = 0; c < bm.columnCount(); c++) {
+                        if (c > 0) {
+                            sb.append('&');
+                        }
+                        sb.append(pp(bm.body().get(r).get(c)));
+                    }
+                }
+                yield sb.append(')').toString();
+            }
             case MathNode.Stack st -> {
                 StringBuilder sb = new StringBuilder("Stk[").append(st.kind()).append("](")
                     .append(pp(st.base()));
@@ -269,6 +299,43 @@ class MathParserTest {
     @Test
     void danglingAccentFailsCleanly() {
         assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\hat"));
+    }
+
+    @Test
+    void bordermatrixPartitionsLabelsFromBody() {
+        // The corpus fixture: first row = (empty corner, column labels 1 2); each later
+        // row's first cell is the row label, the rest are body cells.
+        MathNode n = MathParser.parse("\\bordermatrix{&1&2\\\\1&a&b\\\\2&c&d}");
+        assertEquals(
+            "BMat(C:L();cols:A(1,ORD)&A(2,ORD);rows:A(1,ORD)&A(2,ORD);"
+                + "A(a,ORD)&A(b,ORD)\\\\A(c,ORD)&A(d,ORD))",
+            pp(n));
+        MathNode.BorderMatrix bm = assertInstanceOf(MathNode.BorderMatrix.class, n);
+        assertEquals(2, bm.rowCount());
+        assertEquals(2, bm.columnCount());
+    }
+
+    @Test
+    void bordermatrixWithoutLeadingAmpersandTreatsFirstHeaderCellAsCorner() {
+        // Negative control (pinned behavior): with NO leading '&', the header's first
+        // cell is still the corner slot (not a column label), so a 1-column body keeps
+        // exactly one column label and the corner carries the stray content 'X'.
+        MathNode.BorderMatrix bm = assertInstanceOf(MathNode.BorderMatrix.class,
+            MathParser.parse("\\bordermatrix{X&C\\\\R&a}"));
+        assertEquals(1, bm.columnCount(), "one body column");
+        assertEquals("A(X,ORD)", pp(bm.corner()), "the header's first cell is the corner");
+        assertEquals("A(C,ORD)", pp(bm.columnLabels().get(0)), "the header's second cell is the column label");
+        assertEquals("A(R,ORD)", pp(bm.rowLabels().get(0)));
+        assertEquals("A(a,ORD)", pp(bm.body().get(0).get(0)));
+    }
+
+    @Test
+    void bordermatrixFailsCleanlyOnMalformedInput() {
+        // No brace argument, an unterminated brace, and a header-only grid all fail
+        // with a NAMED MathSyntaxException — never an unnamed crash.
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\bordermatrix a"));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\bordermatrix{&1&2"));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\bordermatrix{&1&2}"));
     }
 
     @Test
