@@ -4,7 +4,9 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased — `\underparen`
+## 0.10.0 · 2026-07-20 — user macros (L8) + bundled physics pack, the cancel family, `\underparen`
+
+### `\underparen`
 
 - **`\underparen{…}` — the stretchy under-parenthesis accent** (⏝, U+23DD), the
   mirror of `\overparen` (U+23DC): sized to the base and positioned below it
@@ -22,7 +24,7 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   through them. A separation test (`accentInkTop ≥ baseInkBottom + clearance`)
   guards it across a descender, a fraction, a shallow base, and a wide assembly.
 
-## Unreleased — the cancel family
+### The cancel family
 
 - **Struck-through sub-formulas — the `cancel` package family.** Four new wrapper
   commands strike a diagonal rule through their argument: `\cancel{x}` (up
@@ -54,7 +56,7 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
     arrow point — so a tall/scripted body such as `\cancelto{0}{x^2}` no longer crowds
     the arrowhead against the superscript.
 
-## Unreleased — user macros: `\newcommand` / `\renewcommand` / `\def` + `RenderOptions.macros` (L8)
+### User macros: `\newcommand` / `\renewcommand` / `\def` + `RenderOptions.macros` (L8) — and the bundled `MacroPacks.PHYSICS`
 
 The #1 adoption blocker vs KaTeX/MathJax closes: LatteX now expands **user macros**
 before parsing, both inline and as caller-supplied presets.

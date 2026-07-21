@@ -14,7 +14,7 @@ group = "com.lattex"
 // drift guard + type-safe emitter fill — the post-0.8.0 mainline set — plus the
 // hermetic test suite / generateExamples split, the full-corpus render sweep, and
 // the CI clean-tree gate (plan 32148cc8). See RELEASE_NOTES.md.
-version = "0.9.0"
+version = "0.10.0"
 
 java {
     toolchain {
