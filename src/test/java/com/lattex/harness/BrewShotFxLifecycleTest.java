@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Real-browser pins for the fx-runtime LIFECYCLE fixes (deep-review HIGHs,
@@ -35,15 +36,42 @@ import org.junit.jupiter.api.Test;
  */
 class BrewShotFxLifecycleTest {
 
-    /** The browser fixtures, regenerated from CURRENT sources into {@code build/}
-     * by {@link #buildFixturesFromCurrentSources()} — the lifecycle pins exercise
-     * the live runtime, never a stale committed page (reviewer F2). */
+    /**
+     * A CLASS-OWNED, isolated fixtures directory that no other task can race.
+     *
+     * <p>WHY not the shared {@code build/examples}: that directory is a common
+     * sink written by many classes with the SAME filenames — the {@code @Tag(
+     * "examples")} page generators ({@code com.lattex.api.EffectsPageTest},
+     * {@code ThreadPreviewPageTest}, {@code CancelPreviewPageTest} via {@code
+     * ExampleOutputs.dir()}), plus the sibling BrewShot harnesses ({@code
+     * BrewShotEffectsPageTest}, {@code BrewShotFxGifTest}) whose {@code
+     * @BeforeAll}s also (re)write {@code build/examples/effects.html} et al.
+     * On GitHub CI this class flaked TWICE (blocking lands) with an
+     * {@code UncheckedIOException} → {@code NoSuchFileException} thrown at the
+     * fixture READ ({@code chrome.open(...file:// uri...)}), NOT at the
+     * {@code @BeforeAll} write — i.e. a concurrent task deleted/regenerated the
+     * shared {@code build/examples} between this class's write and its read.
+     * Local runs never reproduce it; it is environment-specific.
+     *
+     * <p>The fix is ISOLATION, not behavior: JUnit hands this class a private
+     * {@code @TempDir} nobody else knows about, so no concurrent clean /
+     * generate / parallel test can delete the fixtures mid-run. JUnit populates
+     * a static {@code @TempDir} field BEFORE {@code @BeforeAll} and removes the
+     * tree after the class, so the "built from CURRENT sources" property
+     * (reviewer F2) is preserved — the same builders write into the temp dir. */
+    @TempDir
+    static Path fixturesDir;
+
+    /** The browser fixtures, regenerated from CURRENT sources into the
+     * class-owned {@link #fixturesDir} by {@link #buildFixturesFromCurrentSources()}
+     * — the lifecycle pins exercise the live runtime, never a stale committed
+     * page (reviewer F2), and never the race-prone shared {@code build/examples}. */
     private static Path pagesDir() {
-        return Path.of("build", "examples").toAbsolutePath();
+        return fixturesDir;
     }
 
     /** Rebuild the example pages this class loads from the live runtime sources,
-     * into {@code build/examples}, BEFORE any capture runs (reviewer F2). */
+     * into the isolated {@link #fixturesDir}, BEFORE any capture runs (reviewer F2). */
     @BeforeAll
     static void buildFixturesFromCurrentSources() throws IOException {
         Files.createDirectories(pagesDir());
