@@ -1851,7 +1851,9 @@ public final class LayoutEngine {
         MathStyle kindStyle = switch (mx.kind()) {
             case SMALL, SUBSTACK -> MathStyle.SCRIPT;
             case ALIGN, GATHER, MULTLINE -> MathStyle.DISPLAY;
-            default -> MathStyle.TEXT;
+            // Explicit residual (drift-guard): a new MatrixKind must fail to compile here,
+            // not silently fall to a default, so its style is a deliberate decision.
+            case ARRAY, CASES, CD, MATRIX -> MathStyle.TEXT;
         };
         // Derive the cell style from the SURROUNDING style, never re-seed it absolute:
         // a matrix nested in a script (e.g. x^{\begin{pmatrix}…\end{pmatrix}}) must shrink
@@ -1891,7 +1893,7 @@ public final class LayoutEngine {
         double interRowGap = switch (mx.kind()) {
             case SMALL, SUBSTACK -> 0.15 * em;
             case ALIGN, GATHER, MULTLINE -> 0.5 * em;   // matrix gap + \jot breathing room
-            default -> 0.3 * em;
+            case ARRAY, CASES, CD, MATRIX -> 0.3 * em;  // explicit residual (drift-guard)
         };
         double[] baseline = new double[rows];
         for (int r = 1; r < rows; r++) {
@@ -1910,21 +1912,25 @@ public final class LayoutEngine {
         }
 
         // 3. Horizontal spacing template (clean-room TeXbook \halign — see above).
-        double edgeGap;
-        double colGap;
-        switch (mx.kind()) {
-            case ARRAY -> { edgeGap = 0.5 * em; colGap = 1.0 * em; }     // \arraycolsep = 5pt
-            case CASES -> { edgeGap = 0.18 * em; colGap = 1.0 * em; }    // \quad between columns
-            case SMALL -> { edgeGap = 0.1 * em; colGap = 0.3 * em; }
+        // A switch EXPRESSION (not a statement switch): exhaustiveness gives both the
+        // definite-assignment guarantee AND the drift-guard — a new MatrixKind fails to
+        // compile here rather than silently taking a default. {edgeGap, colGap}.
+        double[] gaps = switch (mx.kind()) {
+            case ARRAY -> new double[] {0.5 * em, 1.0 * em};      // \arraycolsep = 5pt
+            case CASES -> new double[] {0.18 * em, 1.0 * em};     // \quad between columns
+            case SMALL -> new double[] {0.1 * em, 0.3 * em};
             // A substack is a bare single column used as a limit; no edge padding.
-            case SUBSTACK -> { edgeGap = 0.0; colGap = 0.0; }
-            case MATRIX -> { edgeGap = 0.18 * em; colGap = 0.5 * em; }
+            case SUBSTACK -> new double[] {0.0, 0.0};
+            // MATRIX and CD share these; CD returns early before this method so never
+            // reaches here, but the switch must still cover it (retired `default` was dead).
+            case MATRIX, CD -> new double[] {0.18 * em, 0.5 * em};
             // Aligned-equation environments flush to the outer margin (no edge gap);
             // ALIGN's inter-column gaps are set per-boundary below, GATHER has a
             // single centred column so its (unused) colGap stays 0.
-            case ALIGN, GATHER, MULTLINE -> { edgeGap = 0.0; colGap = 0.0; }
-            default -> { edgeGap = 0.18 * em; colGap = 0.5 * em; }
-        }
+            case ALIGN, GATHER, MULTLINE -> new double[] {0.0, 0.0};
+        };
+        double edgeGap = gaps[0];
+        double colGap = gaps[1];
         double[] boundaryGap = new double[cols + 1];
         boundaryGap[0] = edgeGap;
         for (int i = 1; i < cols; i++) {
