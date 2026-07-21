@@ -4,6 +4,41 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased
+
+### `unfold` fx effect — a bounded `\sum` blooms into its terms (opt-in, flag-gated)
+
+- **`unfold` — click a `\sum` open into its explicit terms.** `\lx[fx.click=unfold]{\sum_{i=1}^{4} f(i)}`
+  swaps to `f(1)+f(2)+f(3)+f(4)` on click (the outgoing form is hidden immediately, then the
+  incoming one fades in — a swap with a fade-in, not a simultaneous cross-fade), and collapses
+  back on the next click. This is
+  the **first** effect that needs LatteX to *compute* new material (every prior effect only
+  re-presents glyphs already in the emitted SVG) — the page-side runtime cannot lay out LaTeX,
+  so the expanded form is **pre-rendered by LatteX** into a hidden sibling `<svg>` inside the
+  same `.lx-math` span.
+- **Doubly gated — opt-out by default; LatteX stays a pure typesetter unless you ask.** The
+  numeric-expansion pass (`SumExpansion`) runs **iff** the host enabled the new
+  `RenderOptions.interactiveExpansion` flag (**default `false`**) **and** the equation carries
+  an `fx.*=unfold` directive. With the flag off — the default — the pass never runs, an
+  `unfold` directive degrades **inert** (the sum typesets normally, no payload, no marker), and
+  a plain page pays zero cost and gains zero new DOM surface. Enable it per host via
+  `LatteX.renderStyledHtml(latex, RenderOptions.defaults().withInteractiveExpansion(true))`.
+- **Honest, bounded scope (fail-inert everywhere else).** `\sum` only, **literal-integer**
+  bounds, a single letter index, a **bare** trailing summand (a top-level trailing `+`/`-`/`=`
+  degrades inert rather than folding `+C` into every term), at most **12 terms**. Substitution
+  is by atom **code point on the parsed tree**, so the `i` inside `\sin`/`\lim` is never touched
+  (a naive regex over the source would corrupt `\sin`). Symbolic/`\infty` bounds, `\prod`/`\int`,
+  index expressions, and staggered term-by-term sprout are deferred.
+- **Contained payload.** The pre-rendered svg rides the same layout+emit path (so it is
+  independently within the minimal `svg/g/path/rect` alphabet) and is hidden in a wrapper span
+  (`.lx-fx-expanded`), never via an svg attribute the emitter contract rejects. One small
+  renderer-derived marker `data-lx-fx-expand="<term-count>"` pairs the interaction with the
+  payload (added to the container allow-list). A new containment test audits the payload svg with
+  the SAME S8 auditor and asserts exactly two `<svg>` and no new element type.
+- **Element-anchored runtime.** The payload is a sibling *inside* the span, so it rides
+  scroll/reflow for free — no `position:fixed` overlay, hence (unlike `cancel`) no
+  `scrollKillable` teardown. The toggle is idempotent; reduced motion snaps instantly.
+
 ## 0.11.0 · 2026-07-21 — the corpus frontier closes (100%: `\aa` + `\bordermatrix`) + the `cancel` fx effect
 
 ### `cancel` fx effect — the third semantic effect

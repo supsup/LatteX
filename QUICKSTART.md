@@ -120,7 +120,7 @@ The key set:
 | `style.scale` | `sm` (0.8), `md` (1.0), `lg` (1.4), or a bounded number like `1.4` |
 | `style.color` | `currentColor`, or a `#rgb` / `#rrggbb` hex literal |
 | `style.mathstyle` | `display` \| `text` \| `script` \| `scriptscript` |
-| `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `constellation` \| `thread` \| `precedence` \| `cancel` \| `none` — see `examples/effects.html` live |
+| `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `constellation` \| `thread` \| `precedence` \| `cancel` \| `unfold` \| `none` — see `examples/effects.html` live (`unfold` is opt-in/flag-gated and not shown there — see its own preview and the callout below) |
 | `fx.duration` | a `<n>ms` value, e.g. `250ms` |
 | `intent` / `concept` | a lowercase identifier (`^[a-z][a-z0-9_]*$`), e.g. `function` |
 | `a11y.label` | free-text accessibility label (HTML-escaped) |
@@ -131,6 +131,14 @@ refinement). Values are bare tokens or `"quoted strings"`; whitespace outside qu
 is insignificant. This is the quickstart view — the full option grammar and rationale
 live in the **`lattex-render-styling-options`** design plan. See
 `examples/lx-demo.html` for the macro end-to-end.
+
+> **`unfold` is doubly gated.** It is the one effect that needs LatteX to *compute*
+> (pre-render a bounded `\sum` into its explicit terms), so it stays off unless BOTH
+> the host opts in — `RenderOptions.defaults().withInteractiveExpansion(true)`, passed
+> to `LatteX.renderStyledHtml(latex, opts)` (default **off**) — AND the equation carries
+> the `fx.*=unfold` directive. With the flag off, an `unfold` directive typesets the sum
+> normally and simply never arms. Scope: `\sum` with literal-integer bounds, a single
+> letter index, a bare summand, up to 12 terms; anything else degrades inert.
 
 ## 3.5 User macros — `\newcommand` and notation packs
 

@@ -5,8 +5,10 @@ import com.brewshot.MiniJson;
 import com.lattex.api.CancelPreviewPageTest;
 import com.lattex.api.EffectsPageTest;
 import com.lattex.api.ThreadPreviewPageTest;
+import com.lattex.api.UnfoldPreviewPageTest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -83,6 +85,8 @@ class BrewShotFxLifecycleTest {
             CancelPreviewPageTest.buildCancelPreviewHtml(false), StandardCharsets.UTF_8);
         Files.writeString(pagesDir().resolve("cancel-preview-reduced.html"),
             CancelPreviewPageTest.buildCancelPreviewHtml(true), StandardCharsets.UTF_8);
+        Files.writeString(pagesDir().resolve("unfold-preview.html"),
+            UnfoldPreviewPageTest.buildUnfoldPreviewHtml(), StandardCharsets.UTF_8);
     }
 
     /** Reference-image sink (build-local, git-ignored) for the eyeball captures. */
@@ -283,6 +287,105 @@ class BrewShotFxLifecycleTest {
                 "reduced motion keeps the static strike overlay as the end-state");
             org.junit.jupiter.api.Assertions.assertEquals(java.util.List.of(), chrome.errors(),
                 "fx.cancel reduced path threw on the preview page");
+        }
+    }
+
+    @Test
+    void unfoldExpandsAndCollapsesOnClick() throws Exception {
+        BrowserGate.browserPin();
+        Path page = pagesDir().resolve("unfold-preview.html"); // built from current sources in @BeforeAll
+
+        try (BrewShot chrome = BrewShot.launch(900, 700)) {
+            chrome.open(page.toUri().toString());
+            chrome.settle(200);
+
+            // Both gates open in the fixture, so the payload is pre-rendered: two <svg>s —
+            // the collapsed sum as a direct child, the expanded terms nested inside the
+            // `.lx-fx-expanded` sibling — and ONLY the collapsed one is visible pre-click
+            // (the payload wrapper still carries the `hidden` attribute the JS hasn't
+            // touched yet; `.lx-fx-expanded` is also `display:none` in the bundled CSS).
+            Object initial = chrome.eval("""
+                (function () {
+                  var collapsed = document.querySelector('.lx-math > svg');
+                  var expanded = document.querySelector('.lx-math > .lx-fx-expanded');
+                  return {
+                    svgCount: document.querySelectorAll('.lx-math svg').length,
+                    collapsedHidden: !!(collapsed && collapsed.hidden),
+                    expandedHidden: !!(expanded && expanded.hidden),
+                    collapsedDisplay: collapsed ? getComputedStyle(collapsed).display : 'missing',
+                    expandedDisplay: expanded ? getComputedStyle(expanded).display : 'missing'
+                  };
+                })()
+                """);
+            assertEquals(2.0, MiniJson.get(initial, "svgCount"),
+                "the fixture pre-renders the collapsed sum plus the expanded payload: two svgs total");
+            assertEquals(false, MiniJson.get(initial, "collapsedHidden"),
+                "the collapsed sum must be visible before any click");
+            assertEquals(true, MiniJson.get(initial, "expandedHidden"),
+                "the expanded payload must carry `hidden` before any click (held by the renderer)");
+            assertNotEquals("none", MiniJson.get(initial, "collapsedDisplay"),
+                "the collapsed sum must actually render (not display:none)");
+            assertEquals("none", MiniJson.get(initial, "expandedDisplay"),
+                "the expanded payload is display:none in the bundled CSS until the runtime reveals it");
+
+            // Click the container the runtime wires (data-lx-fx-click="unfold" on .lx-math)
+            // and let the fade-in swap (220ms) finish.
+            chrome.eval("document.querySelector('[data-lx-fx-click=\"unfold\"]').click(); true");
+            chrome.settle(600);
+
+            Object expandedState = chrome.eval("""
+                (function () {
+                  var collapsed = document.querySelector('.lx-math > svg');
+                  var expanded = document.querySelector('.lx-math > .lx-fx-expanded');
+                  return {
+                    collapsedHidden: !!(collapsed && collapsed.hidden),
+                    expandedHidden: !!(expanded && expanded.hidden),
+                    collapsedDisplay: collapsed ? collapsed.style.display : 'missing',
+                    expandedDisplay: expanded ? expanded.style.display : 'missing',
+                    expandedOpacity: expanded ? expanded.style.opacity : 'missing'
+                  };
+                })()
+                """);
+            assertEquals(true, MiniJson.get(expandedState, "collapsedHidden"),
+                "a click must hide the outgoing collapsed sum");
+            assertEquals(false, MiniJson.get(expandedState, "expandedHidden"),
+                "a click must reveal the expanded payload (clear its hidden attribute)");
+            assertEquals("none", MiniJson.get(expandedState, "collapsedDisplay"),
+                "the runtime sets the outgoing element's inline display to none");
+            assertEquals("inline-block", MiniJson.get(expandedState, "expandedDisplay"),
+                "the runtime sets the incoming element's inline display to inline-block");
+            assertEquals("1", MiniJson.get(expandedState, "expandedOpacity"),
+                "the fade-in must settle the expanded payload at full opacity");
+
+            chrome.screenshot(refsDir().resolve("unfold-preview.png"));
+
+            // Click again: the toggle must collapse back to the original sum.
+            chrome.eval("document.querySelector('[data-lx-fx-click=\"unfold\"]').click(); true");
+            chrome.settle(600);
+
+            Object collapsedAgain = chrome.eval("""
+                (function () {
+                  var collapsed = document.querySelector('.lx-math > svg');
+                  var expanded = document.querySelector('.lx-math > .lx-fx-expanded');
+                  return {
+                    collapsedHidden: !!(collapsed && collapsed.hidden),
+                    expandedHidden: !!(expanded && expanded.hidden),
+                    collapsedDisplay: collapsed ? collapsed.style.display : 'missing',
+                    expandedDisplay: expanded ? expanded.style.display : 'missing'
+                  };
+                })()
+                """);
+            assertEquals(false, MiniJson.get(collapsedAgain, "collapsedHidden"),
+                "the second click must reveal the collapsed sum again");
+            assertEquals(true, MiniJson.get(collapsedAgain, "expandedHidden"),
+                "the second click must hide the expanded payload again");
+            assertEquals("inline-block", MiniJson.get(collapsedAgain, "collapsedDisplay"),
+                "the runtime restores the collapsed element's inline display on the way back");
+            assertEquals("none", MiniJson.get(collapsedAgain, "expandedDisplay"),
+                "the runtime hides the expanded element's inline display on the way back");
+
+            org.junit.jupiter.api.Assertions.assertEquals(java.util.List.of(), chrome.errors(),
+                "fx.unfold threw on the preview page");
         }
     }
 }
