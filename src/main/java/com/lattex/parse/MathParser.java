@@ -1903,7 +1903,9 @@ public final class MathParser {
         return switch (sym.mathClass()) {
             case REL -> Category.RELATION;
             case BIN -> Category.BINARY_OPERATOR;
-            default -> Category.ORDINARY; // ORD, INNER, OPEN, CLOSE, PUNCT
+            // Explicit residual (drift-guard): a new MathClass must fail to compile here.
+            // (OP falls here too — a bare big-operator glyph spaces as ORDINARY.)
+            case ORD, OP, INNER, OPEN, CLOSE, PUNCT -> Category.ORDINARY;
         };
     }
 

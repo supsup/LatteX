@@ -1086,7 +1086,9 @@ public final class LatteX {
             case ALIGN -> "aligned equations";
             case GATHER -> "gathered equations";
             case MULTLINE -> "multi-line equation";
-            default -> "matrix";
+            // Explicit residual (drift-guard): a new MatrixKind must fail to compile here
+            // rather than silently describe itself as a plain "matrix".
+            case MATRIX, SMALL, SUBSTACK, CD -> "matrix";
         };
         StringBuilder sb = new StringBuilder(kind)
             .append(" of ").append(rows).append(" rows and ").append(cols).append(" columns");
