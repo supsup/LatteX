@@ -89,6 +89,17 @@ class ContainerDriftTest {
         assertValue(thread, "data-lx-glyphmap", "[0-9a-f]+:[0-9]+(,[0-9]+)*(;[0-9a-f]+:[0-9]+(,[0-9]+)*)*");
         String prec = openTagOf(LatteX.renderStyledHtml("\\lx[fx.enter=precedence]{\\left(a+b\\right)c}"));
         assertValue(prec, "data-lx-groupmap", "[0-9]+:[0-9]+(,[0-9]+)*(;[0-9]+:[0-9]+(,[0-9]+)*)*");
+        // cancel is the SECOND consumer of the glyphmap sidecar (the zero-surface proof):
+        // it reuses data-lx-glyphmap — same allow-listed attribute, same value grammar — and
+        // stamps NO new attribute name (the allow-list above is unchanged for it).
+        String cancel = openTagOf(LatteX.renderStyledHtml("\\lx[fx.enter=cancel]{\\frac{x}{x}}"));
+        assertValue(cancel, "data-lx-fx-enter", "[a-z]+");
+        assertValue(cancel, "data-lx-glyphmap", "[0-9a-f]+:[0-9]+(,[0-9]+)*(;[0-9a-f]+:[0-9]+(,[0-9]+)*)*");
+        for (String name : attrNames(cancel)) {
+            assertTrue(isAllowed(name),
+                "fx.enter=cancel stamped a non-allow-listed attribute '" + name + "' — cancel must"
+                    + " add ZERO new container surface (reuse data-lx-glyphmap)\n  tag: " + cancel);
+        }
     }
 
     @Test
@@ -118,6 +129,7 @@ class ContainerDriftTest {
             "\\frac{a}{b}",                                            // bare, no data attrs
             "\\lx[fx.enter=glow]{x}",
             "\\lx[fx.hover=thread]{x + x}",                            // glyphmap sidecar
+            "\\lx[fx.enter=cancel]{\\frac{x}{x}}",                     // glyphmap sidecar (2nd consumer)
             "\\lx[fx.click=shatter]{x}",
             "\\lx[fx.enter=precedence]{\\left(a+b\\right)\\times c}",  // groupmap sidecar
             "\\lx[fx.enter=glow, fx.duration=800ms, fx.glow-color=currentColor]{x}",

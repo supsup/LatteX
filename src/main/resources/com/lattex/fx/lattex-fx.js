@@ -2079,6 +2079,156 @@
     });
   }
 
+  // CANCEL: the third SEMANTIC effect — matching factors strike out and puff away to a
+  // grayed ghost. Reuses the SAME data-lx-glyphmap sidecar thread reads (zero new
+  // attribute): a source code point that occurs EXACTLY TWICE is a cancelling pair. The
+  // routine draws a diagonal strike across each cancelled glyph on a body-level overlay
+  // (position:fixed, pointer-events:none, tagged data-lx-fx-overlay=cancel) echoing the
+  // author \cancel filled-polygon look — NOT inside the inner <svg>, so the containment
+  // contract holds — then puffs the glyphs: opacity fades toward a faint grayed ghost
+  // (~0.18) with a placement-composed scale bump (setPathDelta/pivotScaleDelta, NEVER
+  // style.transform, which would clobber each glyph's placement transform attribute), so
+  // "cancelled" stays legible rather than leaving a broken-looking bare bar. EXACTLY-TWICE
+  // v1: the glyphmap doesn't encode numerator-vs-denominator, so this fires on any code
+  // point occurring twice (x+x as well as \frac{x}{x}); a 3+-occurrence group, or unequal
+  // multiplicity, is INERT (the whole-expression fail-honest posture). No/invalid map →
+  // inert. Restores on replay so LatteXFx.play + re-triggers are idempotent.
+  function cancel(el) {
+    var svg = el.querySelector('svg');
+    if (!svg) { return; }
+    var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
+    var groups = parseGlyphmap(el, paths.length);
+    if (!groups) { return; } // no/invalid glyphmap: semantic effects stay inert
+
+    // The cancelled set: every path whose code-point group has EXACTLY two members. A
+    // 3+-member group (x+x+x) or an unequal-multiplicity glyph (x^2/x, where x appears
+    // three times) never lands in an exactly-2 group, so it degrades to inert honestly.
+    var struck = [], seen = {};
+    for (var i = 0; i < paths.length; i++) {
+      var g = groups[i];
+      if (g && g.length === 2 && !seen[i]) { struck.push(i); seen[i] = 1; }
+    }
+    if (!struck.length) { return; } // nothing pairs exactly twice: inert
+
+    // Idempotent replay: tear down any prior run (overlay + path styles) before a fresh
+    // one, so LatteXFx.play and re-triggers don't stack overlays or double-gray.
+    if (el.__lxCancelRestore) { el.__lxCancelRestore(); }
+
+    var color = resolveColor(el);
+    var GHOST = '0.18';                         // faint grayed "cancelled" end-state
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var vw = window.innerWidth, vh = window.innerHeight;
+
+    // A fixed, pointer-events-none body <svg> overlay for the strikes. width/height in px
+    // with no viewBox ⇒ 1 user unit = 1 CSS px, and position:fixed at (0,0) means a path's
+    // getBoundingClientRect() viewport coords ARE the overlay's coordinate space. Tagged so
+    // the lifecycle tests can find + teardown it; never added to the inner math <svg>.
+    var overlay = document.createElementNS(svgNS, 'svg');
+    overlay.setAttribute('data-lx-fx-overlay', 'cancel');
+    overlay.setAttribute('width', vw);
+    overlay.setAttribute('height', vh);
+    overlay.setAttribute('fill', 'none');
+    overlay.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;'
+      + 'pointer-events:none;z-index:2147483646;overflow:visible;';
+    document.body.appendChild(overlay);
+
+    // One diagonal strike per cancelled glyph, from bottom-left to top-right of its screen
+    // rect (the \cancel direction), round-capped and sized to the glyph so it reads as a
+    // struck-through factor. strokeDasharray/offset primes a draw-on (cleared in reduced).
+    var lines = [];
+    struck.forEach(function (idx) {
+      var r = paths[idx].getBoundingClientRect();
+      if (!r.width || !r.height) { return; } // hidden/zero-box glyph: no strike, still puffs
+      var pad = Math.max(2, r.height * 0.12);
+      var x1 = r.left - pad, y1 = r.bottom + pad, x2 = r.right + pad, y2 = r.top - pad;
+      var line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', x1.toFixed(2)); line.setAttribute('y1', y1.toFixed(2));
+      line.setAttribute('x2', x2.toFixed(2)); line.setAttribute('y2', y2.toFixed(2));
+      line.setAttribute('stroke', color);
+      line.setAttribute('stroke-width', Math.max(2, r.height * 0.13).toFixed(2));
+      line.setAttribute('stroke-linecap', 'round');
+      var len = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+      line.style.strokeDasharray = len;
+      line.style.strokeDashoffset = len;
+      overlay.appendChild(line);
+      lines.push(line);
+    });
+
+    var timers = [];
+    function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+
+    // ONE shared exit for every way the show ends — a fresh replay, a scroll,
+    // and (on the animated path) normal completion — routed through
+    // scrollKillable exactly like lightning's bolts. The strikes live on a
+    // position:fixed body <svg> drawn from the glyphs' TRIGGER-TIME rects: scroll
+    // the page and they'd float over unrelated content, and the reduced static
+    // overlay (which has no timer) would hang there forever (Charles's smoke
+    // sweep, 2026-07-06). So a scroll fires die(), sharing the teardown with the
+    // normal end. `scrollAbort` picks the glyph end-state at that exit: on a
+    // scroll or a replay it stays true → a TOTAL restore (overlay gone, pending
+    // puff timers cleared, glyph opacity/transform back to pristine) so a replay
+    // re-triggers cleanly, matching lightning's total-abort; normal completion
+    // sets it false to KEEP the grayed "cancelled" ghost — this effect's
+    // deliverable — while still going through die() to clear the (spent) timers,
+    // drop the overlay, and release the scroll listener.
+    var scrollAbort = true;
+    function teardown() {
+      for (var t = 0; t < timers.length; t++) { clearTimeout(timers[t]); }
+      timers = [];
+      overlay.remove(); // idempotent — safe whether or not the puff already removed it
+      struck.forEach(function (idx) {
+        var p = paths[idx];
+        p.style.transition = '';
+        clearPathDelta(p);
+        if (scrollAbort) { p.style.opacity = ''; } // scroll/replay: un-gray to pristine
+      });                                          // normal end: leave the grayed ghost
+      el.__lxCancelRestore = null;
+    }
+    var die = scrollKillable(teardown);
+    el.__lxCancelRestore = die;
+
+    // Reduced motion: no draw-on, no puff frames — snap to the static end-state (strike
+    // fully drawn + glyphs grayed), the precedence lightUpTo(0) posture. die() (armed
+    // above) is the ONLY teardown on this path — there are no timers, so a scroll is what
+    // removes the otherwise-permanent fixed overlay (and restores the glyphs to pristine).
+    if (reduced) {
+      lines.forEach(function (l) { l.style.strokeDashoffset = '0'; });
+      struck.forEach(function (idx) { paths[idx].style.opacity = GHOST; });
+      return;
+    }
+
+    var DRAW = 200, HOLD = 240, PUFF_UP = 150, PUFF_SET = 260, FADE = 300;
+    // 1) Draw the strikes on.
+    requestAnimationFrame(function () {
+      lines.forEach(function (l) {
+        l.style.transition = 'stroke-dashoffset ' + DRAW + 'ms ease';
+        l.style.strokeDashoffset = '0';
+      });
+    });
+    // 2) After the strike lands + a held beat: PUFF — a quick scale bump...
+    later(function () {
+      struck.forEach(function (idx) {
+        var p = paths[idx];
+        p.style.transition = 'transform ' + PUFF_UP + 'ms ease';
+        setPathDelta(p, pivotScaleDelta(p, 1.24)); // composes with placement, not over it
+      });
+      // 3) ...then settle back to placement scale while fading to the grayed ghost, and
+      //    fade the strike out so only the ghost remains.
+      later(function () {
+        struck.forEach(function (idx) {
+          var p = paths[idx];
+          p.style.transition = 'transform ' + PUFF_SET + 'ms ease, opacity ' + PUFF_SET + 'ms ease';
+          setPathDelta(p, pivotScaleDelta(p, 1)); // identity scale = back to placement
+          p.style.opacity = GHOST;
+        });
+        overlay.style.transition = 'opacity ' + FADE + 'ms ease';
+        overlay.style.opacity = '0';
+        // Normal end: the SAME shared exit as a scroll-abort, but keep the ghost.
+        later(function () { scrollAbort = false; die(); }, FADE + 40);
+      }, PUFF_UP);
+    }, DRAW + HOLD);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
@@ -2106,6 +2256,7 @@
     if (name === 'constellation') { constellation(el); return; }
     if (name === 'thread') { thread(el); return; } // arming effect: binds per-glyph hover
     if (name === 'precedence') { precedence(el); return; } // arming: binds the hover cascade
+    if (name === 'cancel') { cancel(el); return; } // semantic: strike + puff the exactly-twice pair
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -2194,6 +2345,7 @@
       pivotScaleDelta: pivotScaleDelta,
       parseGlyphmap: parseGlyphmap,
       scrollKillable: scrollKillable,
+      cancel: cancel,
       play: play,
       init: init
     });

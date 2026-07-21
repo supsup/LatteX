@@ -218,6 +218,28 @@ public enum Effect {
      * under-refined) — operator-precedence ranking within a level is a later cut.
      */
     PRECEDENCE,
+    /**
+     * CANCEL: the third <em>semantic</em> effect — matching factors strike out and puff
+     * away to a grayed ghost. The pedagogical sequel to {@code thread}/{@code precedence}:
+     * thread answers "same token," precedence answers "what happens first," cancel answers
+     * "these annihilate." Page-side JS routine reusing the {@code data-lx-glyphmap}
+     * container sidecar (the SAME sidecar {@code thread} reads — zero new attribute): a
+     * source code point appearing <strong>exactly twice</strong> is a cancelling pair; the
+     * routine draws a diagonal strike across both on a {@code position:fixed},
+     * {@code pointer-events:none} body overlay (echoing the author {@code \cancel}
+     * filled-polygon look) and puffs the glyphs — an opacity fade + a placement-composed
+     * scale bump (never {@code style.transform}, which would clobber each glyph's placement
+     * transform attribute) — settling to a faint grayed ghost ({@code opacity ≈ 0.18}), so
+     * "cancelled" stays legible instead of leaving a broken-looking bare bar; it adds no
+     * element to the inner {@code <svg>}. EXACTLY-TWICE v1: the glyphmap does not encode
+     * numerator-vs-denominator position, so this fires on any code point occurring twice
+     * (e.g. {@code x + x} as well as {@code \frac{x}{x}}) — a strong proxy for cancellation,
+     * documented honestly. A code point occurring 3+ times, or with unequal multiplicity
+     * ({@code x^2/x}), is INERT (the whole-expression fail-honest posture {@code precedence}
+     * takes); without a glyphmap it is inert. Restores on replay so {@code LatteXFx.play}
+     * and re-triggers are idempotent. Slice 1 is {@code fx.enter} only.
+     */
+    CANCEL,
     /** Explicitly no effect. */
     NONE;
 
@@ -261,6 +283,7 @@ public enum Effect {
             case "constellation" -> CONSTELLATION;
             case "thread" -> THREAD;
             case "precedence" -> PRECEDENCE;
+            case "cancel" -> CANCEL;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
@@ -268,7 +291,7 @@ public enum Effect {
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
                     + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
                     + "|shatter|glitch|sparkler|quantum|typeset|constellation|thread"
-                    + "|precedence|none)");
+                    + "|precedence|cancel|none)");
         };
     }
 

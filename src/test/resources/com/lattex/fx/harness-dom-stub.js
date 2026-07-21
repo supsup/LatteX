@@ -183,6 +183,11 @@
       getAttribute: function (n) { return this.__attrs.hasOwnProperty(n) ? this.__attrs[n] : null; },
       setAttribute: function (n, v) { this.__attrs[n] = String(v); },
       getBBox: function () { return { x: 0, y: 0, width: 100, height: 50 }; },
+      // A non-degenerate screen rect so cancel's strike geometry (getBoundingClientRect
+      // per struck glyph) has a real box to strike across in the harness.
+      getBoundingClientRect: function () { return { left: 10, top: 10, right: 110, bottom: 60, width: 100, height: 50 }; },
+      appendChild: function () {},
+      remove: function () {},
       addEventListener: function (type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
       removeEventListener: function () {},
       __fire: function (type, evt) {
