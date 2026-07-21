@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **181 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **179**, `NEEDS-PARSER-NODE` **2**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **181 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **181**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -124,7 +124,7 @@ following once the node exists.
 | `\tilde{a}` | tilde accent (over base) | `PARSES-NOW` |
 | `\vec{a}` | vector arrow accent (over base) | `PARSES-NOW` |
 | `\mathring{a}` | ring accent (over base) | `PARSES-NOW` |
-| `\aa` | the letter a-with-ring (å) — needs symbol | `NEEDS-PARSER-NODE` |
+| `\aa` | the letter a-with-ring (å) — single precomposed symbol U+00E5 (not \\mathring{a}) | `PARSES-NOW` |
 | `\widehat{AAA}` | wide (stretchy) hat sized to the base | `PARSES-NOW` |
 | `\widetilde{AAA}` | wide (stretchy) tilde sized to the base | `PARSES-NOW` |
 | `\overline{a}` | overline (rule over base) | `PARSES-NOW` |
@@ -157,7 +157,7 @@ following once the node exists.
 | `\begin{Vmatrix}a&b\\c&d\end{Vmatrix}` | double-bar (norm) matrix | `PARSES-NOW` |
 | `\begin{smallmatrix}a&b\\c&d\end{smallmatrix}` | inline small matrix (script style) | `PARSES-NOW` |
 | `A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}` | full matrix with \\cdots \\vdots \\ddots | `PARSES-NOW` |
-| `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs \\bordermatrix node | `NEEDS-PARSER-NODE` |
+| `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — \\bordermatrix node (labels outside a paren-fenced body) | `PARSES-NOW` |
 | `\begin{array}{c\|c}1&2\\\hline 3&4\end{array}` | array with vertical and horizontal rules — array node + column spec + \\hline | `PARSES-NOW` |
 | `\vdots` | vertical dots symbol | `PARSES-NOW` |
 | `\ddots` | diagonal dots symbol | `PARSES-NOW` |
@@ -342,9 +342,4 @@ following once the node exists.
 
 Every row that does **not** yet parse into a tree — i.e. everything outside `PARSES-NOW` — grouped by tier, generated straight from `corpus.tsv` so it can never list an already-shipped feature as still-needed.
 
-### `NEEDS-PARSER-NODE` — needs a new `MathNode` / parser feature (named in the row) (2)
-
-| LaTeX | Description |
-| --- | --- |
-| `\aa` | the letter a-with-ring (å) — needs symbol |
-| `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — needs \\bordermatrix node |
+_Nothing outstanding — every corpus row parses today._
