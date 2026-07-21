@@ -31,7 +31,15 @@ class ContainerDriftTest {
         "aria-label",
         "data-lx-fx-enter", "data-lx-fx-hover", "data-lx-fx-click",
         "data-lx-fx-duration", "data-lx-fx-glow-color",
-        "data-lx-glyphmap", "data-lx-groupmap");
+        "data-lx-glyphmap", "data-lx-groupmap",
+        // The graph-* metadata (LxOptionsParser stamps `graph.*` options as hyphenated
+        // `data-lx-graph-<key>` for the host-side plotter). These are HYPHENATED, so they
+        // fall outside the identifier-only DATA_ATTR lane below and must be listed here as
+        // code-owned exact members — exactly as the fx-* attrs are. A producer census
+        // (`data.put("…-…")` across src/main) confirms these three are the ONLY hyphenated
+        // stamped keys; a new hyphenated stamp without a matching entry here is caught by
+        // graphMetadataStampsRideTheAllowList below.
+        "data-lx-graph-expr", "data-lx-graph-domain", "data-lx-graph-open");
 
     /// The open data-attr lane: `data.<key>` / `intent` / `concept` stamp
     /// `data-lx-<identifier>` (keys are parse-time-validated identifiers, no hyphens).
@@ -39,8 +47,10 @@ class ContainerDriftTest {
     /// data, so the guard cannot (and should not) distinguish a code-stamped identifier
     /// attr from a legitimate `data.<key>`. What the guard DOES catch: any non-`data-lx`
     /// attribute (e.g. `onclick`, `style`) and any HYPHENATED `data-lx-*` outside the
-    /// known `fx-*`/`glyphmap`/`groupmap` set (e.g. a new `data-lx-fx-<name>`) — both
-    /// mutation-verified — plus value injection on every lane.
+    /// code-owned exact set (`fx-*`/`glyphmap`/`groupmap`/`graph-*`) — both mutation-verified
+    /// — plus value injection on every lane. Code-stamped hyphenated attrs (the graph-*
+    /// metadata) live in {@link #ALLOWED_EXACT}, never here: this lane stays identifier-only
+    /// so it can never be widened into an arbitrary-hyphenated-name hole.
     private static final Pattern DATA_ATTR = Pattern.compile("data-lx-[a-z][a-z0-9_]*");
 
     private static final Pattern OPEN_TAG = Pattern.compile("^<span\\b[^>]*>");
@@ -122,6 +132,36 @@ class ContainerDriftTest {
         }
     }
 
+    /// The graph-* metadata contract, made NON-VACUOUS (follow-up 493b3af8): a `graph.*`
+    /// option stamps the hyphenated `data-lx-graph-{expr,domain,open}` attributes, which
+    /// the identifier-only {@link #DATA_ATTR} lane does NOT admit — so without their exact
+    /// allow-list entries this input would (correctly) drift-fail. This test EXERCISES that
+    /// path so the entries are load-bearing: it asserts the graph attrs are actually stamped
+    /// (the contract is real, not a dead allow-list entry) AND every one is admitted. Before
+    /// this test the whole graph.* stamping surface was allow-list-unverified — a latent
+    /// producer/guard contradiction.
+    @Test
+    void graphMetadataStampsRideTheAllowList() {
+        String tag = openTagOf(LatteX.renderStyledHtml("\\lx[graph.domain=-2..2, graph.open=single]{x^2}"));
+        List<String> names = attrNames(tag);
+        // The contract is real: graph.* genuinely stamps these hyphenated attrs.
+        for (String expected : List.of("data-lx-graph-expr", "data-lx-graph-domain", "data-lx-graph-open")) {
+            assertTrue(names.contains(expected),
+                "graph.* must stamp " + expected + " (contract non-vacuity) — tag: " + tag);
+            // And each is admitted ONLY by an exact allow-list entry, NOT the identifier lane.
+            assertTrue(ALLOWED_EXACT.contains(expected),
+                expected + " must be a code-owned ALLOWED_EXACT member (hyphenated, outside DATA_ATTR)");
+            assertTrue(!DATA_ATTR.matcher(expected).matches(),
+                expected + " is hyphenated and must NOT be admitted by the identifier-only DATA_ATTR lane"
+                    + " — the lane stays identifier-only; hyphenated code attrs go in ALLOWED_EXACT");
+        }
+        // Whole-tag guard still holds (no drift, values escaped).
+        for (String name : names) {
+            assertTrue(isAllowed(name), "graph metadata drift: '" + name + "' — tag: " + tag);
+        }
+        assertNoInjection(tag, "graph metadata");
+    }
+
     // ---- battery -----------------------------------------------------------------------
 
     private static List<String> positiveBattery() {
@@ -136,6 +176,8 @@ class ContainerDriftTest {
             "\\lx[intent=ratio]{\\frac{a}{b}}",
             "\\lx[concept=normalized_score]{x}",
             "\\lx[data.foo=bar, data.baz=qux]{x}",
+            "\\lx[graph.domain=-3..3]{x^2-3}",                        // graph-* hyphenated metadata
+            "\\lx[graph.open=multi]{\\frac{1}{x}}",                   // graph-open + graph-expr
             "\\lx[a11y.label=\"the normalized score\"]{x}",
             "\\lx[fx.enter=glow, intent=ratio, concept=score, data.k=v, a11y.label=\"lbl\"]{\\frac{a}{b}}");
     }
