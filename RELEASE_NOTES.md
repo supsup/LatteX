@@ -4,7 +4,7 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased
+## 0.11.0 · 2026-07-21 — the corpus frontier closes (100%: `\aa` + `\bordermatrix`) + the `cancel` fx effect
 
 ### `cancel` fx effect — the third semantic effect
 
@@ -36,7 +36,7 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
-## Unreleased — corpus frontier close-out
+### Corpus frontier close-out — `\aa` + `\bordermatrix` (100% `PARSES-NOW`)
 
 The last two `NEEDS-PARSER-NODE` rows are gone — the tiered LaTeX-math corpus
 ([`examples/corpus.md`](examples/corpus.md), driven from `corpus.tsv`) is now

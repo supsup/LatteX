@@ -14,7 +14,9 @@ group = "com.lattex"
 // drift guard + type-safe emitter fill — the post-0.8.0 mainline set — plus the
 // hermetic test suite / generateExamples split, the full-corpus render sweep, and
 // the CI clean-tree gate (plan 32148cc8). See RELEASE_NOTES.md.
-version = "0.10.0"
+// 0.11.0: corpus frontier close-out (\aa + \bordermatrix → 100% PARSES-NOW) + the
+// cancel fx effect (the third semantic effect) — the post-0.10.0 landed set.
+version = "0.11.0"
 
 java {
     toolchain {
