@@ -4,6 +4,38 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## Unreleased
+
+### `cancel` fx effect — the third semantic effect
+
+- **`cancel` — matching factors strike out and puff away.** The pedagogical sequel to
+  `thread` ("same token") and `precedence` ("what happens first"): `cancel` answers "these
+  annihilate." A source code point that appears **exactly twice** is treated as a
+  cancelling pair — the two glyphs get a diagonal strike (echoing the author `\cancel`
+  filled-polygon look) and then puff away, an opacity fade plus a placement-composed scale
+  bump, settling to a faint grayed ghost (`opacity ≈ 0.18`) so "cancelled" stays legible
+  instead of leaving a broken-looking bare bar. Slice 1 is `fx.enter=cancel` (deterministic,
+  capture-friendly); e.g. `\lx[fx.enter=cancel]{\frac{x}{x}}`.
+- **Zero new container surface.** `cancel` reuses the SAME `data-lx-glyphmap` sidecar
+  `thread` reads — no new `fx.*` key, no new `data-lx-*` attribute. The stamping gate
+  (`usesGlyphmap`) now emits the glyphmap for a `thread` **or** `cancel` effect; the
+  container allow-list is unchanged, and `ContainerDriftTest` proves cancel adds nothing.
+- **The strike rides a body overlay, never the inner `<svg>`.** Each strike is a diagonal
+  line on a `position:fixed`, `pointer-events:none` body `<svg>` (tagged
+  `data-lx-fx-overlay="cancel"`, resolveColor-coloured), positioned from each glyph's
+  `getBoundingClientRect`; the glyph puff composes its scale with the placement transform
+  via `setPathDelta`/`pivotScaleDelta` (never raw `style.transform`, which would clobber the
+  placement). The containment contract holds — the inner `<svg>` gains no new element. The
+  overlay tears down after the puff, leaving only the grayed ghost; replay is idempotent.
+- **Fail-honest v1.** The glyphmap does not encode numerator-vs-denominator position, so
+  exactly-twice fires on `x + x` as well as `\frac{x}{x}` — a strong proxy for cancellation,
+  documented honestly. A code point occurring 3+ times, or with unequal multiplicity
+  (`x^2/x`), is **inert** (the whole-expression fail-honest posture `precedence` takes).
+  Reduced motion snaps to the static struck-and-grayed end-state with no puff frames.
+  True fraction-bar-aware pairing (needs a position-tagged sidecar) is a deferred follow-up.
+
+---
+
 ## 0.10.0 · 2026-07-20 — user macros (L8) + bundled physics pack, the cancel family, `\underparen`
 
 ### `\underparen`

@@ -238,4 +238,79 @@ class FxRuntimeLifecycleTest {
         assertTrue(valueOrEmpty(neon.getMember("style").getMember("filter")).contains("drop-shadow"),
             "neonsign's reduced path still applies the steady glow (visible, just static)");
     }
+
+    // ---- cancel: the exactly-twice strike-and-puff (semantic effect #3) -----------
+
+    private static final String PAIR = "'data-lx-glyphmap': '78:0,1'"; // x (0x78) occurs twice
+
+    /** Reduced motion: snap to the static grayed end-state — struck glyphs at the ghost
+     *  opacity, a static strike overlay, and NO animation timers/frames. */
+    @Test
+    void cancelReducedMotionSnapsToTheStaticGrayedEndState() throws IOException {
+        boot(true);
+        Value el = js("globalThis.__c = __lxMakeEl({" + PAIR + "}, 2); __c");
+
+        fx.getMember("play").execute(el, "cancel", "400ms");
+
+        assertEquals("0.18", js("__c.__paths[0].style.opacity").asString(),
+            "reduced motion must snap the first x to the grayed ghost");
+        assertEquals("0.18", js("__c.__paths[1].style.opacity").asString(),
+            "reduced motion must snap the second x to the grayed ghost");
+        assertEquals(1, intOf("__lxBodyChildren()"),
+            "the static strike overlay is present in the reduced end-state");
+        assertEquals(0, intOf("__lxActiveTimeouts()"),
+            "reduced motion must schedule NO puff/settle timers");
+        assertEquals(0, intOf("__lxActiveIntervals()"), "reduced motion arms no loops");
+    }
+
+    /** Full run: a code point occurring exactly twice strikes (body overlay) then puffs
+     *  BOTH glyphs to the grayed ghost, and the overlay tears down leaving only the ghost. */
+    @Test
+    void cancelStrikesTheExactlyTwicePairAndPuffsToTheGhost() throws IOException {
+        boot(false);
+        Value el = js("globalThis.__c = __lxMakeEl({" + PAIR + "}, 2); __c");
+
+        fx.getMember("play").execute(el, "cancel", "400ms");
+        assertEquals(1, intOf("__lxBodyChildren()"),
+            "the strike overlay arms on a body-level element (never the inner <svg>)");
+
+        js("__lxRunTimeouts(6)"); // drive strike-hold → puff-up → settle → overlay-fade
+        assertEquals("0.18", js("__c.__paths[0].style.opacity").asString(),
+            "the first x settles to the grayed ghost");
+        assertEquals("0.18", js("__c.__paths[1].style.opacity").asString(),
+            "the second x settles to the grayed ghost");
+        assertEquals(0, intOf("__lxBodyChildren()"),
+            "the strike overlay is removed after the puff, leaving only the ghost glyphs");
+        assertEquals(0, intOf("__lxActiveTimeouts()"), "no puff/settle timers leak");
+    }
+
+    /** 3+ occurrences of a code point never form an exactly-twice pair → inert (no overlay,
+     *  glyphs untouched), the whole-expression fail-honest posture. */
+    @Test
+    void cancelIsInertOnThreePlusOccurrences() throws IOException {
+        boot(false);
+        // x appears three times: one 3-member group, never an exactly-2 pair.
+        Value el = js("globalThis.__c = __lxMakeEl({'data-lx-glyphmap': '78:0,1,2'}, 3); __c");
+
+        fx.getMember("play").execute(el, "cancel", "400ms");
+
+        assertEquals(0, intOf("__lxBodyChildren()"), "a 3-member group draws no strike (inert)");
+        assertEquals("", valueOrEmpty(js("__c.__paths[0].style.opacity")),
+            "an inert cancel leaves the glyphs untouched");
+        assertEquals(0, intOf("__lxActiveTimeouts()"), "inert cancel schedules nothing");
+    }
+
+    /** Replay is idempotent: a second play tears the first run down before rebuilding,
+     *  so overlays never stack (LatteXFx.play / re-trigger safety). */
+    @Test
+    void cancelReplayIsIdempotentAndDoesNotStackOverlays() throws IOException {
+        boot(false);
+        Value el = js("globalThis.__c = __lxMakeEl({" + PAIR + "}, 2); __c");
+
+        fx.getMember("play").execute(el, "cancel", "400ms");
+        fx.getMember("play").execute(el, "cancel", "400ms");
+
+        assertEquals(1, intOf("__lxBodyChildren()"),
+            "a replay must restore the prior run first — exactly one strike overlay, never two");
+    }
 }

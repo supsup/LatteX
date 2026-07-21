@@ -378,14 +378,26 @@ public final class LatteX {
             Layout layout = LayoutEngine.layout(body, ctx);
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
 
-            // The `thread` effect reads data-lx-glyphmap to light up every occurrence of a
-            // hovered token. Stamp the sidecar only when a thread effect is present — it is
-            // inert (and wasted bytes) otherwise. Value is [0-9a-f:,;] only, so container-safe.
-            String glyphmap = fx.effects().containsValue(Effect.THREAD)
+            // The `thread` and `cancel` effects both read data-lx-glyphmap (thread lights
+            // every occurrence of a hovered token; cancel strikes+puffs a code point that
+            // occurs exactly twice). Stamp the sidecar only when one of them is present — it
+            // is inert (and wasted bytes) otherwise. Value is [0-9a-f:,;] only, container-safe.
+            String glyphmap = usesGlyphmap(fx)
                 ? SvgEmitter.glyphmap(layout, font) : "";
             String groupmap = precedenceGroupmap(fx, layout, font);
             return openTag(fx, sem, glyphmap, groupmap) + svg + "</span>";
         });
+    }
+
+    /**
+     * Whether {@code fx} needs the {@code data-lx-glyphmap} token-identity sidecar: the
+     * {@code thread} effect (hover-to-thread) and the {@code cancel} effect (exactly-twice
+     * strike-and-puff) both read it. One producer for the stamping gate so the two semantic
+     * effects can never drift on whether the sidecar rides the container.
+     */
+    private static boolean usesGlyphmap(EffectSpec fx) {
+        return fx.effects().containsValue(Effect.THREAD)
+            || fx.effects().containsValue(Effect.CANCEL);
     }
 
     /**
