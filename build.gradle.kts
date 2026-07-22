@@ -16,7 +16,11 @@ group = "com.lattex"
 // the CI clean-tree gate (plan 32148cc8). See RELEASE_NOTES.md.
 // 0.11.0: corpus frontier close-out (\aa + \bordermatrix → 100% PARSES-NOW) + the
 // cancel fx effect (the third semantic effect) — the post-0.10.0 landed set.
-version = "0.11.0"
+// 0.11.1: PATCH from the 0.11.0 cut lineage (963121f) — tryRenderMath adopts the shared
+// usesGlyphmap gate so cancel's sidecar reaches split-wrapper consumers (Stafficy /docs).
+// Seam fix ONLY: deliberately excludes every post-0.11.0 main feature (unfold stays
+// unreleased AND unshipped); cut the jar from THIS branch tip, never from merged main.
+version = "0.11.1"
 
 java {
     toolchain {

@@ -4,6 +4,30 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ---
 
+## 0.11.1 · 2026-07-22 — patch: `cancel`'s glyphmap now rides `tryRenderMath`
+
+A **patch release cut from the 0.11.0 lineage** (base `963121f`): the seam fix and
+nothing else. No post-0.11.0 main feature is included — in particular `unfold`
+remains **unreleased and unshipped**; it arrives with its own future release.
+
+### `tryRenderMath` adopts the shared glyphmap stamping gate
+
+- **Bug (shipped in 0.11.0):** `LatteX.tryRenderMath` — the render-coupled seam for
+  split-wrapper consumers (Stafficy /docs) — stamped `data-lx-glyphmap` behind a literal
+  `THREAD` check that predated `cancel`, instead of the shared `usesGlyphmap` gate
+  (`thread` **or** `cancel`) that `renderStyledHtml` uses. Result: through the seam, a
+  `cancel` effect arrived with its hook but **without** its glyph data — visually inert
+  downstream. Found by Stafficy's re-vendor end-to-end test; `renderStyledHtml` consumers
+  were never affected.
+- **Fix:** one line — the seam now calls `usesGlyphmap`, so the two public shapes share
+  one stamping gate and cannot drift again. Regression pinned in `RenderedMathSeamTest`
+  with a `renderStyledHtml` parity assertion, revert-proven by the **precise** historical
+  mutation (tryRenderMath-only THREAD literal → the missing-sidecar assertion reds).
+- **Doc-comment freshen** (found in Marlow's first mentored review): the `openTag`
+  sidecar comment and the seam javadoc no longer describe the glyphmap as thread-only.
+
+---
+
 ## 0.11.0 · 2026-07-21 — the corpus frontier closes (100%: `\aa` + `\bordermatrix`) + the `cancel` fx effect
 
 ### `cancel` fx effect — the third semantic effect
