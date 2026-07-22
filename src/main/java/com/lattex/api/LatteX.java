@@ -514,7 +514,9 @@ public final class LatteX {
         // The fx half rides the SAME stamping source as fxContainerAttrs — one
         // producer, so the two public shapes cannot drift.
         sb.append(fxAttrs(fx));
-        // Token-identity sidecar for the `thread` effect (renderer-derived, [0-9a-f:,;]).
+        // Token-identity sidecar for the glyphmap-reading effects — `thread` and `cancel`
+        // (renderer-derived, [0-9a-f:,;]). (Stale thread-only wording caught by Marlow's
+        // first mentored review, 2026-07-22.)
         if (!glyphmap.isEmpty()) {
             sb.append(" data-lx-glyphmap=\"").append(glyphmap).append('"');
         }
@@ -594,7 +596,8 @@ public final class LatteX {
      * Render a LaTeX math expression AND its container attributes from one parse+layout —
      * the sanctioned producer path for a consumer that builds its own wrapper element
      * (seam sign-off: lattex room seq 163→165). The {@code data-lx-glyphmap} token-identity
-     * sidecar (present only when a {@code thread} effect is authored) indexes the returned
+     * sidecar (present when a glyphmap-reading effect — {@code thread} or {@code cancel},
+     * the shared {@code usesGlyphmap} gate — is authored) indexes the returned
      * SVG's {@code <path>}s in emit order; because both halves come from the same
      * {@link Layout}, the indices cannot desync — the drift a separate attrs call would risk.
      *
@@ -616,7 +619,11 @@ public final class LatteX {
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
-            String glyphmap = fx.effects().containsValue(Effect.THREAD)
+            // The SHARED stamping gate (usesGlyphmap: thread OR cancel) — this line predated
+            // cancel with a literal THREAD check, so 0.11.0 never stamped cancel's sidecar
+            // through this seam (hook without glyph data = visually inert in a split-wrapper
+            // consumer like Stafficy /docs, which is exactly the consumer this seam exists for).
+            String glyphmap = usesGlyphmap(fx)
                 ? SvgEmitter.glyphmap(layout, font) : "";
             String groupmap = precedenceGroupmap(fx, layout, font);
             return java.util.Optional.of(new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap)));

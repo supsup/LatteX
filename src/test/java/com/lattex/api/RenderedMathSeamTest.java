@@ -58,6 +58,32 @@ class RenderedMathSeamTest {
     }
 
     @Test
+    void cancelEffectCarriesAGrammarValidGlyphmapMatchingRenderStyledHtml() {
+        // 0.11.1 regression: tryRenderMath's stamp predated cancel with a literal THREAD
+        // check instead of the shared usesGlyphmap gate, so 0.11.0 stamped the cancel hook
+        // WITHOUT its sidecar through this seam — visually inert for the split-wrapper
+        // consumer (Stafficy /docs) the seam exists for. The renderStyledHtml parity pin
+        // below is what makes the drift undeniable: same input, one path stamped, one
+        // didn't. x occurs exactly twice, so the cancelling pair has a real glyphmap group.
+        String latex = "\\lx[fx.enter=cancel]{\\frac{x}{x}}";
+
+        Optional<LatteX.RenderedMath> rm = LatteX.tryRenderMath(latex);
+
+        assertTrue(rm.isPresent());
+        Map<String, String> attrs = rm.get().containerAttrs();
+        assertEquals("cancel", attrs.get("data-lx-fx-enter"));
+        String glyphmap = attrs.get("data-lx-glyphmap");
+        assertTrue(glyphmap != null && !glyphmap.isEmpty(), "cancel effect -> sidecar present");
+        assertTrue(glyphmap.matches("^[0-9a-f]+:[0-9]+(,[0-9]+)*(;[0-9a-f]+:[0-9]+(,[0-9]+)*)*$"),
+            "sidecar matches the contract grammar: " + glyphmap);
+        // PARITY PIN with renderStyledHtml — the two public shapes share one stamping gate.
+        String styled = LatteX.renderStyledHtml(latex);
+        assertTrue(styled.contains("data-lx-glyphmap=\"" + glyphmap + "\""),
+            "record sidecar matches the renderStyledHtml stamp: " + glyphmap);
+        assertEquals(LatteX.render(latex), rm.get().svg());
+    }
+
+    @Test
     void anyFailureYieldsEmptyNeverAHalfPair() {
         assertTrue(LatteX.tryRenderMath("\\frac{a}{").isEmpty(), "parse error -> empty");
         assertTrue(LatteX.tryRenderMath("\\notacommand{x}").isEmpty(), "unknown command -> empty");

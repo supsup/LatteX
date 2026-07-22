@@ -16,6 +16,11 @@ group = "com.lattex"
 // the CI clean-tree gate (plan 32148cc8). See RELEASE_NOTES.md.
 // 0.11.0: corpus frontier close-out (\aa + \bordermatrix → 100% PARSES-NOW) + the
 // cancel fx effect (the third semantic effect) — the post-0.10.0 landed set.
+// 0.11.1 exists as a BRANCH CUT, not a main state: confluence/lattex-0111-seam-patch
+// @ aa0f3ae (= the 0.11.0 cut + the tryRenderMath usesGlyphmap seam fix; jar sha-256
+// 98946032b0644d…, see RELEASE_NOTES). Main DELIBERATELY stays 0.11.0: it carries
+// merged-but-unreleased work (unfold), so labeling it 0.11.1 would recreate the
+// mislabeled-lineage collision (review lattex/341+352). Main's next cut is ≥0.12.0.
 version = "0.11.0"
 
 java {

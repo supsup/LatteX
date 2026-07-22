@@ -39,6 +39,32 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   scroll/reflow for free — no `position:fixed` overlay, hence (unlike `cancel`) no
   `scrollKillable` teardown. The toggle is idempotent; reduced motion snaps instantly.
 
+## 0.11.1 · 2026-07-22 — patch: `cancel`'s glyphmap now rides `tryRenderMath`
+
+A **patch release cut from the 0.11.0 lineage**, not from main: branch
+`confluence/lattex-0111-seam-patch`, source `aa0f3ae809a31caff2bd6f76a81c6fa3f3a594af`
+(= `963121f` + the seam fix only), artifact
+`lattex-0.11.1.jar` sha-256 `98946032b0644de268efda44b2b54233320830f197b52150d9302c483477fe38`
+(reproduced identically by two independent builds). The 0.11.1 artifact contains **no
+post-0.11.0 feature** — its `Effect` enum has no `UNFOLD`; `unfold` remains unreleased.
+Main's own version stays 0.11.0 until its next cut (which will be ≥0.12.0 and include
+unfold): a main build must never label itself 0.11.1. Enforcement follow-up: the
+artifact-lineage guard plan (manifest sha stamp + lineage-compare re-vendor checks).
+
+### `tryRenderMath` adopts the shared glyphmap stamping gate
+
+- **Bug (shipped in 0.11.0):** `LatteX.tryRenderMath` — the render-coupled seam for
+  split-wrapper consumers (Stafficy /docs) — stamped `data-lx-glyphmap` behind a literal
+  `THREAD` check that predated `cancel`, instead of the shared `usesGlyphmap` gate
+  (`thread` **or** `cancel`) that `renderStyledHtml` uses. Through the seam, a `cancel`
+  effect arrived with its hook but **without** its glyph data — visually inert downstream.
+- **Fix:** one line — the seam calls `usesGlyphmap`; regression pinned in
+  `RenderedMathSeamTest` with a `renderStyledHtml` parity assertion, revert-proven by the
+  precise historical mutation. Doc-comment freshens (openTag + seam javadoc) credit
+  Marlow's first mentored review.
+
+---
+
 ## 0.11.0 · 2026-07-21 — the corpus frontier closes (100%: `\aa` + `\bordermatrix`) + the `cancel` fx effect
 
 ### `cancel` fx effect — the third semantic effect
