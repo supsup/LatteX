@@ -246,6 +246,12 @@ final class Symbols {
 
     static final Map<String, MathVariant.Style> FONT_VARIANTS = Map.ofEntries(
         Map.entry("mathbb", MathVariant.Style.BLACKBOARD),
+        // \mathds (dsfont package; wild-corpus GAP tier) is a plain alias for
+        // \mathbb — dsfont ships its own double-struck glyphs, but the SEMANTICS
+        // (and, here, the bundled STIX glyphs) are identical, so \mathds{1} ->
+        // 𝟙 exactly like \mathbb{1}. The old "Unknown command" already suggested
+        // \mathbb as the nearest match; this just makes that suggestion correct.
+        Map.entry("mathds", MathVariant.Style.BLACKBOARD),
         Map.entry("mathcal", MathVariant.Style.SCRIPT),
         Map.entry("mathscr", MathVariant.Style.SCRIPT),
         Map.entry("mathfrak", MathVariant.Style.FRAKTUR),

@@ -171,6 +171,20 @@ class WildCorpusGapsTier1Test {
     }
 
     // ------------------------------------------------------------------
+    // 6. \mathds -> alias to \mathbb — the existing "did you mean \mathbb?"
+    // suggestion already hints at it; \mathds{1} must render like \mathbb{1} (𝟙).
+    // ------------------------------------------------------------------
+
+    @Test
+    void mathdsAliasesToMathbb() {
+        assertRendersGlyphs("\\mathds{1}");
+        assertRendersGlyphs("\\mathds{R}^n");
+        Atom dsOne = (Atom) MathParser.parse("\\mathds{1}");
+        Atom bbOne = (Atom) MathParser.parse("\\mathbb{1}");
+        assertEquals(bbOne.codePoint(), dsOne.codePoint());
+    }
+
+    // ------------------------------------------------------------------
     // Negative control: an unrelated unknown command OUTSIDE the six classes
     // must still fail loud with the same MathSyntaxException shape after every
     // addition in this file — additive changes must never widen what parses.
