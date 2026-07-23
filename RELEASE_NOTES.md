@@ -39,6 +39,37 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   scroll/reflow for free — no `position:fixed` overlay, hence (unlike `cancel`) no
   `scrollKillable` teardown. The toggle is idempotent; reduced motion snaps instantly.
 
+### Wild-corpus gaps tier 1 — six real arxiv/LaTeXML failure classes close
+
+**Wild render coverage +13 rows (497 OK).** Six parser-coverage gaps pulled straight from
+real-world harvested LaTeX (LaTeXML's normal-form output, legacy TeX2.09 font switches, and
+the ISO-80000 upright-Greek convention), plus a strictness fix on `split`'s argument shape.
+
+- **`\#`** — cardinality notation (`\#E(\mathbb{F}_p)`-style group orders): a plain new
+  ordinary-symbol entry, the same single-character-control-sequence lexer path `\{`/`\|` use.
+- **`subarray`** — `\begin{subarray}{c}…\end{subarray}` / `{l}`, routed to the SAME
+  single-column-stack machinery `\substack` builds (LaTeXML expands `\substack` into
+  `subarray`, so this shape is common in harvested corpora: `\sum_{\begin{subarray}{c} i \ge 0 \\ j \le n \end{subarray}}`).
+- **`\mathopen` / `\mathclose` / `\mathord` / `\mathbin` / `\mathrel` / `\mathpunct`** — TeX's
+  atom-class-override primitives, which LaTeXML emits to pin down inter-atom spacing
+  explicitly (including a bare `\mathopen{}` spontaneous zero-width marker).
+- **Upright Greek (`upgreek`)** — `\upalpha` `\uptau` `\upbeta` … the standard 24-letter +
+  6-variant set. STIX Two Math's base Greek block is drawn slanted; the only genuinely
+  upright Greek it ships is the Mathematical Bold Greek run `\boldsymbol`/`\bm` already use,
+  so upright Greek here renders bold-upright — a font-forced compromise, not a font addition.
+- **Legacy font switches — `{\rm …}` / `{\bf …}` / `{\it …}` / `{\cal …}` + `\textnormal`** —
+  TeX2.09 group-scoped DECLARATIONS (not argument-taking commands), mapped to
+  `\mathrm`/`\mathbf`/`\mathit`/`\mathcal` semantics via the same state-switch machinery
+  `\displaystyle`/`\color` already use; `\textnormal` is a plain new `\text` alias.
+- **`\mathds` → `\mathbb` alias** — the dsfont package's double-struck indicator-function
+  notation (`\mathds{1}`), identical to `\mathbb{1}` (𝟙) against the bundled glyphs.
+- **`split` no longer accepts a `[pos]` argument.** Only amsmath's *inner*, embeddable
+  environments (`aligned`/`alignedat`) take a `[t]`/`[b]`/`[c]` vertical-position argument;
+  `split` is always top-level and has none in real amsmath. `\begin{split}[t]…` now fails
+  loud instead of silently absorbing `[t]` as glyph content in the first cell; `aligned`
+  gained the real (read-and-discard — LatteX has no multi-line vertical placement to apply
+  it to) optional argument it was missing too.
+
 ## 0.11.0 · 2026-07-21 — the corpus frontier closes (100%: `\aa` + `\bordermatrix`) + the `cancel` fx effect
 
 ### `cancel` fx effect — the third semantic effect

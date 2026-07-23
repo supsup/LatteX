@@ -23,9 +23,15 @@ filled `<path>`s (never `<text>`, `<use>`, `<defs>`, `<script>`, or external
 a standard sanitizer allow-list. The math font (**STIX Two Math**, OFL) is bundled,
 so there are no web fonts to load either. Apache-2.0.
 
-**What it can render:** measured, not claimed — 484 of 484 real-world formulas
+**What it can render:** measured, not claimed — 497 of 497 real-world formulas
 (100%) from the wild corpus render clean, regression-locked by a coverage
-ratchet that only moves up. Browse the tour: **[examples/showcase.html]
+ratchet that only moves up — including six wild-corpus gap classes closed in
+the "wild-corpus gaps tier 1" pass: `\#` cardinality notation, the `subarray`
+environment, the `\mathopen`/`\mathclose`/`\mathord`/`\mathbin`/`\mathrel`/
+`\mathpunct` atom-class wrappers, upright Greek (`\upalpha` etc., the
+`upgreek` convention), the legacy `{\rm …}`/`{\bf …}`/`{\it …}`/`{\cal …}`
+font switches plus `\textnormal`, and `\mathds` as a `\mathbb` alias. Browse
+the tour: **[examples/showcase.html]
 (examples/showcase.html)** (highlights incl. matrices, cases, align, bra-ket,
 and the mod/logic/dots families); struck-through terms via the cancel family
 — `\cancel{x}` (up `/`), `\bcancel{x}` (down `\`), `\xcancel{x}` (an `X`), and

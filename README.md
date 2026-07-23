@@ -27,7 +27,7 @@ trip degrades to a typed `OUTPUT_CAP_EXCEEDED` diagnostic, never an escaped erro
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
-ratchet: 484/484 real-world formulas, 100%, and only allowed to go up). For the
+ratchet: 497/497 real-world formulas, 100%, and only allowed to go up). For the
 fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
 27 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
 captured previews (every effect as its own looping GIF). For the parallel MathML
