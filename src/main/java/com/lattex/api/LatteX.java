@@ -226,7 +226,10 @@ public final class LatteX {
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 DISPLAY_FONT_SIZE * fStyle.scale(), fStyle.mathStyle(), false);
             Layout layout = LayoutEngine.layout(fBody, ctx);
-            return SvgEmitter.emit(layout, font, describe(fBody), fStyle.color());
+            // fluid is a HOST flag (like interactiveExpansion): it reads from the
+            // caller's opts even when a \lx wrapper overrides the styling, and it is
+            // NOT part of the \lx sub-language — an author can never turn it on.
+            return SvgEmitter.emit(layout, font, describe(fBody), fStyle.color(), opts.fluid());
         });
     }
 
@@ -438,7 +441,9 @@ public final class LatteX {
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
-            String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
+            // fluid rides the HOST opts (never the \lx wrapper) and lands on the <svg>
+            // element only — the container's attribute surface is untouched.
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
 
             // The `thread` and `cancel` effects both read data-lx-glyphmap (thread lights
             // every occurrence of a hovered token; cancel strikes+puffs a code point that
@@ -472,7 +477,11 @@ public final class LatteX {
                         // so it is independently within the emitter's minimal SVG alphabet. It is
                         // hidden in a wrapper <span> (never an svg attribute S8 would reject), so
                         // the pre-rendered svg stays pristine.
-                        String esvg = SvgEmitter.emit(elayout, font, describe(expandedBody), style.color());
+                        // The expanded payload is display math in the same container:
+                        // it follows the host's fluid flag so the click-swap keeps the
+                        // same responsive sizing as the collapsed form.
+                        String esvg = SvgEmitter.emit(elayout, font, describe(expandedBody),
+                            style.color(), opts.fluid());
                         payload = "<span class=\"lx-fx-expanded\" hidden>" + esvg + "</span>";
                         expandMarker = Integer.toString(expanded.get().termCount());
                     }

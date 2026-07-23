@@ -51,6 +51,27 @@ public final class SvgEmitter {
      *             or attribute — so the minimal-alphabet contract is preserved.
      */
     public static String emit(Layout layout, SfntFont font, String ariaLabel, Color fill) {
+        return emit(layout, font, ariaLabel, fill, false);
+    }
+
+    /**
+     * Emits the SVG document for a laid-out formula, optionally with <em>fluid</em>
+     * (scale-to-fit) sizing on the outer {@code <svg>}.
+     *
+     * <p><strong>Fluid sizing is presentation-only.</strong> With {@code fluid=false}
+     * this is byte-for-byte the historical output. With {@code fluid=true} the ONE
+     * change is a single sizing {@code style} rule on the outer {@code <svg>} —
+     * {@code width:100%;max-width:<natural>px;height:auto} — so the equation
+     * downscales in a container narrower than its natural width and never upscales
+     * past it (the {@code max-width} is the natural width; {@code height:auto} keeps
+     * the aspect ratio via the UNCHANGED viewBox). The viewBox, the {@code width}/
+     * {@code height} attributes (the fixed-size fallback), and every inner element
+     * are identical to the fixed-size render — no layout or geometry is touched. The
+     * value is renderer-derived ({@code [0-9.:%;a-z-]} from a fixed template + a
+     * numeric width) — no author string can reach it.
+     */
+    public static String emit(Layout layout, SfntFont font, String ariaLabel, Color fill,
+                              boolean fluid) {
         double vbX = layout.minX() - MARGIN;
         double vbY = layout.minY() - MARGIN;
         double vbW = layout.width() + 2 * MARGIN;
@@ -62,8 +83,14 @@ public final class SvgEmitter {
             .append(num(vbX)).append(' ').append(num(vbY)).append(' ')
             .append(num(vbW)).append(' ').append(num(vbH)).append("\"")
             .append(" width=\"").append(num(vbW)).append("\"")
-            .append(" height=\"").append(num(vbH)).append("\"")
-            .append(" role=\"img\"")
+            .append(" height=\"").append(num(vbH)).append("\"");
+        if (fluid) {
+            // The one fluid addition: a single sizing rule. Shrink-to-fit, capped at
+            // the natural width, aspect ratio preserved by the (unchanged) viewBox.
+            svg.append(" style=\"width:100%;max-width:").append(num(vbW))
+                .append("px;height:auto\"");
+        }
+        svg.append(" role=\"img\"")
             .append(" aria-label=\"").append(escape(ariaLabel)).append("\">\n");
 
         emitInner(svg, layout, font, fill, 0.0, 0.0);

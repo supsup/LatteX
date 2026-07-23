@@ -91,6 +91,20 @@ String svg = LatteX.render("\\frac{a+b}{c}", opts);
 `withColor` / `withMathStyle`. See `examples/x-squared.html`, `gallery.html`, and
 `styled.html` for rendered output.
 
+**Fluid (scale-to-fit) display math.** A display equation has a fixed natural width,
+so a wide formula can overflow a narrow container. Opt in with
+`RenderOptions.defaults().withFluid(true)` and the display `<svg>` carries **one**
+sizing rule — `width:100%;max-width:<natural>px;height:auto` — so it shrinks to fit
+a narrower container and never upscales past its natural size (the unchanged viewBox
+keeps the aspect ratio). Presentation-only: the geometry, viewBox, and every glyph
+are byte-identical to the fixed-size render, and this is scale-to-fit, **not**
+line-breaking. Inline math (`renderInline` / `renderInlineResult`) and
+`renderFragment` never go fluid — baseline seating depends on fixed sizing. Default
+**off**: without the flag, output is byte-identical to previous releases. (Honest
+scope note: Stafficy `/docs` does **not** consume fluid yet — its sanitizer strips
+the style attribute, so `/docs` output is unchanged until a separate, deliberate
+two-sided carve-out lands. Fluid works today in any standalone embedding.)
+
 > **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
 > `\mathrm`). The argument is *literal text*: plain characters (spaces preserved),
 > `\$` for a literal dollar, invisible grouping braces, and `$…$` to re-enter math
