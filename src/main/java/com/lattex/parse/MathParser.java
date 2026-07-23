@@ -1227,6 +1227,12 @@ public final class MathParser {
      * script style with a tightened baseline, used to stack several conditions under
      * a big-operator limit ({@code \sum_{\substack{i<j \\ i \ne k}}}). Rows are
      * {@code \\}-separated; each row is an ordinary math list.
+     *
+     * <p>The row-reading/grid-building machinery is shared with amsmath's
+     * {@code subarray} environment ({@code \begin{subarray}{c}...\end{subarray}} —
+     * see {@link EnvironmentParser}), which LaTeXML expands {@code \substack} into,
+     * plus the {@code {c}}/{@code {l}} colspec that {@code subarray} carries and
+     * {@code \substack} does not (always centred).
      */
     private MathNode parseSubstack() {
         if (peek().kind() != Kind.LBRACE) {
@@ -1234,16 +1240,31 @@ public final class MathParser {
                 "\\substack expects a '{...}' argument but found " + describe(peek()));
         }
         next(); // consume '{'
+        List<List<MathNode>> rows = readSingleColumnStackRows(
+            t -> t.kind() == Kind.RBRACE, "Unbalanced brace in \\substack argument");
+        next(); // consume '}'
+        return buildSingleColumnStack(rows, ColumnAlign.CENTER);
+    }
+
+    /**
+     * Reads {@code row \\ row \\ ...} rows for a single-column stack, stopping AT
+     * (not consuming) the first token {@code isTerminator} accepts — the caller
+     * consumes the terminator itself, since {@code \substack} sees a {@code '}'}
+     * and {@code \begin{subarray}} sees a {@code \end}. A trailing row (content
+     * after the last {@code \\}, or the sole row) is always kept, matching
+     * {@code \halign}; a bare trailing {@code \\} adds no phantom row.
+     */
+    List<List<MathNode>> readSingleColumnStackRows(
+            java.util.function.Predicate<Token> isTerminator, String unbalancedMessage) {
         List<List<MathNode>> rows = new ArrayList<>();
         List<MathNode> row = new ArrayList<>();
         while (true) {
             Token t = peek();
-            if (t.kind() == Kind.RBRACE) {
-                next(); // consume '}'
+            if (isTerminator.test(t)) {
                 break;
             }
             if (t.kind() == Kind.EOF) {
-                throw new MathSyntaxException("Unbalanced brace in \\substack argument");
+                throw new MathSyntaxException(unbalancedMessage);
             }
             if (isCommand(t, "\\") || isCommand(t, "cr")) {
                 next();
@@ -1253,12 +1274,20 @@ public final class MathParser {
             }
             row.add(parseComponent());
         }
-        // A trailing row (content after the last \\, or the sole row) — a bare
-        // trailing \\ adds no phantom row, matching LaTeX's \halign.
         if (!row.isEmpty() || rows.isEmpty()) {
             rows.add(List.of(wrap(row)));
         }
-        List<ColumnAlign> aligns = List.of(ColumnAlign.CENTER);
+        return rows;
+    }
+
+    /**
+     * Builds a {@link MatrixKind#SUBSTACK} grid from pre-split rows and the
+     * column's alignment — {@link ColumnAlign#CENTER} for {@code \substack},
+     * or {@code subarray}'s {@code {c}}/{@code {l}} colspec (see
+     * {@link EnvironmentParser}).
+     */
+    static MathNode buildSingleColumnStack(List<List<MathNode>> rows, ColumnAlign align) {
+        List<ColumnAlign> aligns = List.of(align);
         List<Integer> vlines = List.of(0, 0);
         List<RowRule> rowRules = new ArrayList<>(rows.size() + 1);
         for (int i = 0; i <= rows.size(); i++) {

@@ -483,3 +483,4 @@ OK	structured-envs	D	\begin{array}{c|cc} & B & B^c \\ \hline A & 0.2 & 0.3 \\ A^
 OK	structured-envs	D	\begin{align*} \log(xy) &= \log x + \log y \\ \log(x/y) &= \log x - \log y \\ \log x^n &= n \log x \end{align*}
 OK	structured-envs	D	\begin{align} a_{n+1} &= a_n + d && \text{(arithmetic)} \\ g_{n+1} &= g_n \cdot r && \text{(geometric)} \end{align}
 OK	algebra-discrete	I	\#E(\mathbb{F}_p)
+OK	structured-envs	D	\sum_{\begin{subarray}{c} i \ge 0 \\ j \le n \end{subarray}} a_{ij}

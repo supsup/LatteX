@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.lattex.api.LatteX;
 import com.lattex.parse.MathNode.Atom;
+import com.lattex.parse.MathNode.ColumnAlign;
 import com.lattex.parse.MathNode.MathClass;
+import com.lattex.parse.MathNode.Matrix;
+import com.lattex.parse.MathNode.MatrixKind;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -40,6 +43,31 @@ class WildCorpusGapsTier1Test {
         Atom hash = (Atom) MathParser.parse("\\#");
         assertEquals('#', hash.codePoint());
         assertEquals(MathClass.ORD, hash.mathClass());
+    }
+
+    // ------------------------------------------------------------------
+    // 2. subarray — routed to \substack's single-column-stack machinery.
+    // LaTeXML expands \substack into \begin{subarray}{c}...\end{subarray}, so
+    // this shape is common in harvested corpora (a limit stack under \sum).
+    // ------------------------------------------------------------------
+
+    @Test
+    void subarrayUnderSumRendersLikeSubstack() {
+        assertRendersGlyphs(
+            "\\sum_{\\begin{subarray}{c} i \\ge 0 \\\\ j \\le n \\end{subarray}} a_{ij}");
+        Matrix m = (Matrix) MathParser.parse(
+            "\\begin{subarray}{c} i \\ge 0 \\\\ j \\le n \\end{subarray}");
+        assertEquals(MatrixKind.SUBSTACK, m.kind());
+        assertEquals(1, m.columnAligns().size());
+        assertEquals(ColumnAlign.CENTER, m.columnAligns().get(0));
+        assertEquals(2, m.rows().size());
+    }
+
+    @Test
+    void subarrayLColspecLeftAligns() {
+        Matrix m = (Matrix) MathParser.parse(
+            "\\begin{subarray}{l} k \\in S \\\\ k \\neq 0 \\end{subarray}");
+        assertEquals(ColumnAlign.LEFT, m.columnAligns().get(0));
     }
 
     // ------------------------------------------------------------------

@@ -51,6 +51,16 @@ final class EnvironmentParser {
             // eqnarray special-case does inside the spec path.
             return parseCd(parser);
         }
+        if (env.equals("subarray")) {
+            // subarray (wild-corpus GAP tier): amsmath's single-column stack WITH a
+            // {c}/{l} colspec — LaTeXML expands \substack into \begin{subarray}{c}
+            // ...\end{subarray}, so this shape is common in harvested corpora. It
+            // branches out before the ENVIRONMENTS lookup (like CD above) because its
+            // body is a single un-columned \\-separated stack, not the general &/\\
+            // grid the loop below reads — the same shape \substack's brace argument
+            // already gets (see MathParser#readSingleColumnStackRows).
+            return parseSubarray(parser);
+        }
         EnvSpec spec = ENVIRONMENTS.get(env);
         if (spec == null) {
             String suggestion = FuzzyMatch.nearest(env, ENVIRONMENTS.keySet())
@@ -145,6 +155,67 @@ final class EnvironmentParser {
         }
 
         return buildMatrix(env, spec, specAligns, specVlines, rawRows, hlines);
+    }
+
+    // ------------------------------------------------------------------
+    // subarray — \begin{subarray}{c|l} … \end{subarray}
+    // ------------------------------------------------------------------
+
+    /**
+     * Parses {@code \begin{subarray}{c}row \\ row\end{subarray}} into the SAME
+     * {@link MatrixKind#SUBSTACK} grid {@code \substack} builds, just with the
+     * colspec's alignment instead of {@code \substack}'s hardcoded centring. The
+     * current token is just past {@code \begin{subarray}}.
+     */
+    private static MathNode parseSubarray(MathParser parser) {
+        ColumnAlign align = readSubarrayColSpec(parser);
+        List<List<MathNode>> rows = parser.readSingleColumnStackRows(
+            t -> parser.isCommand(t, "end"),
+            "Unterminated \\begin{subarray}: missing \\end{subarray}");
+        parser.next(); // consume 'end'
+        String endEnv = readBraceName(parser, "\\end");
+        if (!endEnv.equals("subarray")) {
+            throw new MathSyntaxException(
+                "\\begin{subarray} closed by \\end{" + endEnv + "}");
+        }
+        return MathParser.buildSingleColumnStack(rows, align);
+    }
+
+    /**
+     * Reads {@code subarray}'s mandatory {@code {c}} or {@code {l}} column spec —
+     * unlike {@code array}'s multi-column {@code {lcr|}} ({@link #readColumnSpec}),
+     * amsmath's {@code subarray} takes exactly ONE column and only {@code c}/{@code l}
+     * (no {@code r}, no {@code |} rules — it is always a bare stack). Fails loud on
+     * a missing brace, an unsupported letter, or extra characters.
+     */
+    private static ColumnAlign readSubarrayColSpec(MathParser parser) {
+        if (parser.peek().kind() != Kind.LBRACE) {
+            throw new MathSyntaxException(
+                "\\begin{subarray} requires a {c} or {l} column spec but found "
+                    + MathParser.describe(parser.peek()));
+        }
+        parser.next(); // consume '{'
+        if (parser.peek().kind() != Kind.CHAR) {
+            throw new MathSyntaxException(
+                "\\begin{subarray} column spec must be 'c' or 'l', but found "
+                    + MathParser.describe(parser.peek()));
+        }
+        int cp = parser.peek().codePoint();
+        ColumnAlign align = switch (cp) {
+            case 'c' -> ColumnAlign.CENTER;
+            case 'l' -> ColumnAlign.LEFT;
+            default -> throw new MathSyntaxException(
+                "unsupported subarray column type '" + new String(Character.toChars(cp))
+                    + "' (only c and l are supported)");
+        };
+        parser.next(); // consume the column letter
+        if (parser.peek().kind() != Kind.RBRACE) {
+            throw new MathSyntaxException(
+                "\\begin{subarray} column spec must be a single character, but found "
+                    + MathParser.describe(parser.peek()));
+        }
+        parser.next(); // consume '}'
+        return align;
     }
 
     // ------------------------------------------------------------------
