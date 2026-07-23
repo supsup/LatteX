@@ -6,6 +6,24 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Silent-flatten fixes — commands in `\text{…}` fail loud; `aligned`/`split` position argument parsed
+
+- **An unknown command inside `\text{…}` now fails loud instead of silently flattening.**
+  0.11.0 served `\text{blah \frac{a}{b}}` as the literal characters "blah \fracab"
+  (braces dropped, no error) — a real-world `\text{…\eqref{elliptic}}` reached readers
+  as "\eqrefelliptic". The supported-in-text set is now explicit: plain text runs
+  (spaces preserved), the `\$` literal-dollar escape, invisible grouping braces, and
+  nested math via `$…$`. Any other command token in a text run raises
+  `Unknown command in \text: \frac — commands are not expanded in text; wrap math in $...$`
+  (an `UNSUPPORTED_CONSTRUCT` outcome, same voice as the math-mode unknown-command error).
+- **`aligned`/`split` parse the optional `[t]`/`[b]`/`[c]` position argument.** 0.11.0
+  rendered `\begin{aligned}[t] a&=b \end{aligned}` with the bracket as visible math
+  content (aria-label "row 1: [ t ] a, = b") — inconsistent with `array`, whose `[t]`
+  fails loud. The argument is now read and **ignored** for display (it anchors the box
+  against a surrounding text baseline, which standalone SVG output does not have);
+  anything else in the bracket fails loud, matching `array`'s argument discipline.
+  An `aligned` without the argument renders byte-identically to 0.11.0.
+
 ### `unfold` fx effect — a bounded `\sum` blooms into its terms (opt-in, flag-gated)
 
 - **`unfold` — click a `\sum` open into its explicit terms.** `\lx[fx.click=unfold]{\sum_{i=1}^{4} f(i)}`

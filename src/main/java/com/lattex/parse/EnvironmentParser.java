@@ -80,6 +80,15 @@ final class EnvironmentParser {
             // the ARRAY column-spec read above); LatteX's ALIGN path then derives the
             // alternating right/left columns from the & structure exactly like align.
             discardBraceArg(parser, "\\begin{" + env + "}");
+        } else if (takesPositionArg(env)) {
+            // aligned/split take LaTeX's OPTIONAL [t]/[b]/[c] vertical-position argument.
+            // Read and IGNORE it: LatteX renders the environment standalone (no
+            // surrounding text baseline to align the box against), so the position has
+            // no effect on output — but it must be PARSED, not served as row content
+            // (0.11.0 silently rendered "[ t ] a" as math — plan 08eed9a5). Anything
+            // other than t/b/c in the bracket fails loud, matching array's argument
+            // discipline.
+            readAndIgnorePositionArg(parser, env);
         }
 
         // Read the body: cells (& separated) into rows (\\ separated), tracking
@@ -434,6 +443,46 @@ final class EnvironmentParser {
     /** True for {@code eqnarray}/{@code eqnarray*} — the fixed right/center/left 3-column grid. */
     private static boolean isEqnarray(String env) {
         return env.equals("eqnarray") || env.equals("eqnarray*");
+    }
+
+    /**
+     * True for the environments that take amsmath's optional {@code [t]}/{@code [b]}/
+     * {@code [c]} vertical-position argument: the inner {@code aligned}/{@code split}
+     * forms. The display forms ({@code align}/{@code gather}/…) take no such argument
+     * in LaTeX and get none here.
+     */
+    private static boolean takesPositionArg(String env) {
+        return env.equals("aligned") || env.equals("split");
+    }
+
+    /**
+     * Reads and IGNORES an optional {@code [t]}/{@code [b]}/{@code [c]} position
+     * argument (see {@link #takesPositionArg}); a no-op when no {@code [} follows
+     * the {@code \begin{env}}. The position selects which row's baseline anchors
+     * the box in surrounding TEXT — LatteX renders the environment standalone, so
+     * there is no surrounding baseline and the argument has no visual effect.
+     * Any other bracket content fails loud (array's argument discipline: parse or
+     * reject, never leak into the body).
+     */
+    private static void readAndIgnorePositionArg(MathParser parser, String env) {
+        Token t = parser.peek();
+        if (t.kind() != Kind.CHAR || t.codePoint() != '[') {
+            return; // the argument is optional — no '[' means no argument
+        }
+        parser.next(); // consume '['
+        Token pos = parser.peek();
+        if (pos.kind() != Kind.CHAR
+                || (pos.codePoint() != 't' && pos.codePoint() != 'b' && pos.codePoint() != 'c')) {
+            throw new MathSyntaxException("\\begin{" + env + "} position must be [t], [b] or [c],"
+                + " but found " + MathParser.describe(pos));
+        }
+        parser.next(); // consume the position letter
+        Token close = parser.peek();
+        if (close.kind() != Kind.CHAR || close.codePoint() != ']') {
+            throw new MathSyntaxException("\\begin{" + env + "} position must be [t], [b] or [c],"
+                + " but found " + MathParser.describe(close));
+        }
+        parser.next(); // consume ']'
     }
 
     /** True for {@code alignat}/{@code alignat*} — align with a mandatory {@code {n}} argument. */
