@@ -1631,7 +1631,7 @@ public final class MathParser {
         String raw = t.text(); // verbatim, braces included (lexTextArgument keeps them)
         TextStyle style = TEXT_COMMANDS.get(t.name());
         if (indexOfUnescapedDollar(raw, 0) < 0) {
-            return new TextRun(literalText(raw), style); // fast path: one literal run
+            return new TextRun(literalText(raw, t), style); // fast path: one literal run
         }
         List<MathNode> items = new ArrayList<>();
         int i = 0;
@@ -1639,11 +1639,11 @@ public final class MathParser {
         while (i < n) {
             int open = indexOfUnescapedDollar(raw, i);
             if (open < 0) {
-                items.add(new TextRun(literalText(raw.substring(i)), style));
+                items.add(new TextRun(literalText(raw.substring(i), t), style));
                 break;
             }
             if (open > i) {
-                items.add(new TextRun(literalText(raw.substring(i, open)), style));
+                items.add(new TextRun(literalText(raw.substring(i, open), t), style));
             }
             int close = indexOfUnescapedDollar(raw, open + 1);
             if (close < 0) {
@@ -1675,8 +1675,19 @@ public final class MathParser {
      * lexer-level stripping, relocated here so math spans keep theirs), and
      * {@code \$} → {@code $} — with {@code $} toggling math, the escape is the
      * only way to write a literal dollar in text (matches LaTeX).
+     *
+     * <p>The supported-in-text set is EXPLICIT: plain characters (spaces
+     * significant), the {@code \$} escape, invisible grouping braces, and — at
+     * the caller's level — nested math via {@code $…$}. A command token
+     * ({@code \} + letters) in a literal segment fails LOUD here: the parser
+     * expands NO commands inside a text run, and the old behavior silently
+     * flattened them to literal characters with the braces dropped
+     * ({@code \text{blah \frac{a}{b}}} served "blah \fracab";
+     * {@code \text{…\eqref{elliptic}}} served "\eqrefelliptic" — plan 08eed9a5).
+     * The {@code $…$} toggle is the one supported way to put a command inside
+     * {@code \text}.
      */
-    private static String literalText(String s) {
+    private static String literalText(String s, Token t) {
         if (s.indexOf('{') < 0 && s.indexOf('}') < 0 && s.indexOf('\\') < 0) {
             return s;
         }
@@ -1686,6 +1697,15 @@ public final class MathParser {
             if (c == '\\' && i + 1 < s.length() && s.charAt(i + 1) == '$') {
                 sb.append('$');
                 i++;
+            } else if (c == '\\' && i + 1 < s.length() && isAsciiLetter(s.charAt(i + 1))) {
+                int j = i + 1;
+                while (j < s.length() && isAsciiLetter(s.charAt(j))) {
+                    j++;
+                }
+                throw MathSyntaxException.unsupported(
+                    "Unknown command in \\" + t.name() + ": \\" + s.substring(i + 1, j)
+                        + " — commands are not expanded in text; wrap math in $...$",
+                    t.offset());
             } else if (c != '{' && c != '}') {
                 sb.append(c);
             }

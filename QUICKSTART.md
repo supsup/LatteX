@@ -91,6 +91,19 @@ String svg = LatteX.render("\\frac{a+b}{c}", opts);
 `withColor` / `withMathStyle`. See `examples/x-squared.html`, `gallery.html`, and
 `styled.html` for rendered output.
 
+> **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
+> `\mathrm`). The argument is *literal text*: plain characters (spaces preserved),
+> `\$` for a literal dollar, invisible grouping braces, and `$…$` to re-enter math
+> mode (`\text{if $x>0$ then}`). Commands are **not** expanded inside text —
+> `\text{see \eqref{eq1}}` fails loud (`Unknown command in \text: \eqref`) rather
+> than silently serving the flattened characters; wrap math in `$…$` instead.
+>
+> **`aligned`/`split` position argument.** The optional `[t]`/`[b]`/`[c]` after
+> `\begin{aligned}`/`\begin{split}` is parsed and **ignored**: it selects which
+> row's baseline anchors the box in surrounding text, and LatteX renders the
+> environment standalone, so it has no visual effect. Anything else in the bracket
+> fails loud, matching `array`'s column-spec discipline.
+
 ## 3. The `\lx[...]{...}` syntax (author-facing)
 
 For content authors — markdown, CMS fields, docs — LatteX defines one
