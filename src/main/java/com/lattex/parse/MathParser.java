@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import static com.lattex.parse.Symbols.ACCENTS;
+import static com.lattex.parse.Symbols.ATOM_CLASS_WRAPPERS;
 import static com.lattex.parse.Symbols.BIG_OPERATORS;
 import static com.lattex.parse.Symbols.FONT_VARIANTS;
 import static com.lattex.parse.Symbols.NAMED_OPS;
@@ -1147,6 +1148,14 @@ public final class MathParser {
                     MathNode arg = parseFontArg(name);
                     return MathVariant.apply(variant, arg);
                 }
+                // Atom-class wrapper (\mathopen \mathclose \mathord \mathbin \mathrel
+                // \mathpunct)? Same "\mathX{arg}" shape as a font variant, but the
+                // argument is spaced-class-overridden rather than glyph-remapped.
+                MathClass atomClassOverride = ATOM_CLASS_WRAPPERS.get(name);
+                if (atomClassOverride != null) {
+                    MathNode arg = parseFontArg(name);
+                    return new MathNode.ClassOverride(arg, atomClassOverride);
+                }
                 // Predefined named operator (\sin \cos \lim \max \operatorname*…)?
                 OpSpec op = NAMED_OPS.get(name);
                 if (op != null) {
@@ -1897,6 +1906,11 @@ public final class MathParser {
         "textcolor", "color", "left", "right", "not", "bmod", "pmod",
         "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle",
         "limits", "nolimits", "begin", "end",
+        // ATOM_CLASS_WRAPPERS is a Symbols.java data table (like FONT_VARIANTS), but
+        // — unlike FONT_VARIANTS — supportedCommands() doesn't loop it into the
+        // public catalog (no natural Category fits a spacing-class override), so it
+        // needs a manual entry here to keep showing up in "did you mean?" suggestions.
+        "mathopen", "mathclose", "mathord", "mathbin", "mathrel", "mathpunct",
         "xrightarrow", "xleftarrow", "xleftrightarrow", "xRightarrow", "xLeftarrow",
         "xLeftrightarrow", "xmapsto", "xhookrightarrow", "xhookleftarrow",
         "xrightleftharpoons", "xlongequal");

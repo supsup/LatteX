@@ -356,6 +356,28 @@ public sealed interface MathNode {
     }
 
     /**
+     * A forced-class wrapper — {@code \mathopen \mathclose \mathord \mathbin
+     * \mathrel \mathpunct} (wild-corpus GAP tier): TeX's noad-class-override
+     * primitives (TeXbook Ch.17, "class of a noad"). {@code body} lays out
+     * exactly as itself — this wrapper is layout-transparent, like {@link
+     * Colored} — but the ENCLOSING row spaces it as {@link #forcedClass}
+     * rather than {@code body}'s own implied class. LaTeXML emits {@code
+     * \mathopen{}} (an empty body) spontaneously as a zero-width open-class
+     * marker; {@code \mathbin{\cdot}} forces binary-operator spacing on an
+     * otherwise-ordinary symbol.
+     *
+     * @param body        the wrapped sub-formula (non-null; may be an empty
+     *                    {@link MathList} for {@code \mathopen{}})
+     * @param forcedClass the atom class the enclosing row spaces this as
+     */
+    record ClassOverride(MathNode body, MathClass forcedClass) implements MathNode {
+        public ClassOverride {
+            Objects.requireNonNull(body, "body");
+            Objects.requireNonNull(forcedClass, "forcedClass");
+        }
+    }
+
+    /**
      * A framed sub-formula — amsmath's {@code \boxed{…}} (and {@code \fbox{…}}
      * treated as its math-mode analogue): the {@code body} laid out normally with a
      * rectangular rule frame drawn around it at a fixed padding. The frame is four

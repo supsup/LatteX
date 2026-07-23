@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.lattex.api.LatteX;
 import com.lattex.parse.MathNode.Atom;
+import com.lattex.parse.MathNode.ClassOverride;
 import com.lattex.parse.MathNode.ColumnAlign;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.Matrix;
@@ -68,6 +69,31 @@ class WildCorpusGapsTier1Test {
         Matrix m = (Matrix) MathParser.parse(
             "\\begin{subarray}{l} k \\in S \\\\ k \\neq 0 \\end{subarray}");
         assertEquals(ColumnAlign.LEFT, m.columnAligns().get(0));
+    }
+
+    // ------------------------------------------------------------------
+    // 3. \mathopen \mathclose \mathord \mathbin \mathrel \mathpunct — atom-class
+    // wrappers LaTeXML emits to pin down TeX's inter-atom spacing explicitly.
+    // ------------------------------------------------------------------
+
+    @Test
+    void atomClassWrappersOverrideSpacing() {
+        // A realistic LaTeXML-emitted shape: an operator name whose scripts are
+        // explicitly bracketed as \mathopen/\mathclose (a common normal-form after
+        // macro expansion), plus a symbol re-classed as a binary operator.
+        assertRendersGlyphs(
+            "f\\mathopen{(}x\\mathclose{)} \\mathbin{\\cdot} y \\mathrel{\\sim} z, \\mathpunct{;}");
+        ClassOverride ord = (ClassOverride) MathParser.parse("\\mathord{x}");
+        assertEquals(MathClass.ORD, ord.forcedClass());
+        ClassOverride bin = (ClassOverride) MathParser.parse("\\mathbin{x}");
+        assertEquals(MathClass.BIN, bin.forcedClass());
+    }
+
+    @Test
+    void mathopenWithEmptyContentIsAZeroWidthOpenMarker() {
+        // LaTeXML emits \mathopen{} spontaneously (no content) as a bare class
+        // marker — must not throw "expects an argument".
+        assertRendersGlyphs("\\mathopen{} x + y");
     }
 
     // ------------------------------------------------------------------

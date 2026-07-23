@@ -226,6 +226,24 @@ final class Symbols {
      * bundled STIX script alphabet; {@code \boldsymbol}/{@code \bm} additionally
      * bold Greek (which {@code \mathbf} leaves upright, matching LaTeX).
      */
+    /**
+     * Atom-class wrapper commands (wild-corpus GAP tier): {@code \mathopen
+     * \mathclose \mathord \mathbin \mathrel \mathpunct} — TeX's noad-class-override
+     * primitives (TeXbook Ch.17). {@code \mathX{content}} lays {@code content} out
+     * unchanged but SPACES it as {@code X}'s class in the enclosing row; see {@link
+     * MathNode.ClassOverride}. LaTeXML emits {@code \mathopen{}} (empty content)
+     * spontaneously as a zero-width open-class marker — the empty-group case just
+     * works, since an empty brace group already parses to an empty {@link
+     * MathNode.MathList}.
+     */
+    static final Map<String, MathClass> ATOM_CLASS_WRAPPERS = Map.of(
+        "mathopen", MathClass.OPEN,
+        "mathclose", MathClass.CLOSE,
+        "mathord", MathClass.ORD,
+        "mathbin", MathClass.BIN,
+        "mathrel", MathClass.REL,
+        "mathpunct", MathClass.PUNCT);
+
     static final Map<String, MathVariant.Style> FONT_VARIANTS = Map.ofEntries(
         Map.entry("mathbb", MathVariant.Style.BLACKBOARD),
         Map.entry("mathcal", MathVariant.Style.SCRIPT),

@@ -706,6 +706,7 @@ public final class LatteX {
                 : "the " + describe(index) + "th root of " + describe(radicand);
             case Spacing _ -> "";
             case MathNode.Colored c -> describe(c.body()); // color is presentation; speak the content
+            case MathNode.ClassOverride co -> describe(co.body()); // spacing class is presentation
             case MathNode.Boxed bx -> "boxed " + describe(bx.body());
             case MathNode.Cancel c -> switch (c.kind()) {
                 case CANCELTO -> describe(c.body()) + " cancels to " + describe(c.to());
@@ -827,6 +828,10 @@ public final class LatteX {
             case MathNode.Colored c ->
                 "<mstyle mathcolor=\"" + xmlEscape(c.color().svgValue()) + "\">"
                     + toMathML(c.body()) + "</mstyle>";
+            // The forced class only steers TeX-style inter-atom spacing (S4 layout);
+            // MathML's own operator-dictionary spacing doesn't take that hint, so the
+            // wrapper is transparent here, like the \displaystyle-family StyleSwitch.
+            case MathNode.ClassOverride co -> toMathML(co.body());
             case MathNode.Boxed bx ->
                 "<menclose notation=\"box\">" + toMathML(bx.body()) + "</menclose>";
             case MathNode.Cancel c -> switch (c.kind()) {

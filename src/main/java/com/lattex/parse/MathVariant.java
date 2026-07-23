@@ -254,6 +254,8 @@ public final class MathVariant {
             case Phantom p -> new Phantom(
                 apply(style, p.content()), p.keepWidth(), p.keepVertical());
             case MathNode.Colored c -> new MathNode.Colored(apply(style, c.body()), c.color());
+            case MathNode.ClassOverride co ->
+                new MathNode.ClassOverride(apply(style, co.body()), co.forcedClass());
             case MathNode.Boxed bx -> new MathNode.Boxed(apply(style, bx.body()));
             case MathNode.Cancel c -> new MathNode.Cancel(c.kind(), apply(style, c.body()),
                 c.to() == null ? null : apply(style, c.to()));
