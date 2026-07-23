@@ -449,15 +449,21 @@
     // (the leak the review flagged HIGH: no clearInterval, listeners + overlay
     // outlived the element forever). die() ends it on scroll and restores
     // everything; the interval + resize listener + overlay all release.
+    // ALSO reachable off-scroll (plan 62fafe76): scrollKillable only observes real
+    // SCROLLING, so in a no-scroll SPA that removes the equation the interval would
+    // leak forever — the idle tick below self-checks el.isConnected, and an
+    // explicit LatteXFx.destroy(el) can end it deterministically, via __lxHoloDie.
     var idle = 0;
     var die = scrollKillable(function () {
       if (idle) { clearInterval(idle); idle = 0; }
       window.removeEventListener('resize', place);
       scan.remove();
       el._lxHolo = false;
+      el.__lxHoloDie = null;
       el.style.color = col0; el.style.filter = fil0; el.style.transform = tf0;
       el.style.transition = trans0; el.style.opacity = op0;
     });
+    el.__lxHoloDie = die;
     if (reduced) { return; }
     scan.style.animation = 'lx-holo-scan 1.1s linear infinite';
     el.style.transition = 'transform 1400ms ease-in-out, opacity 90ms linear';
@@ -468,6 +474,7 @@
       var dir = 1;
       idle = setInterval(function () {
         if (die.dead()) { clearInterval(idle); idle = 0; return; }
+        if (el.isConnected === false) { die(); return; } // detached: end perpetual work
         place();
         dir = -dir;
         el.style.transform = 'perspective(440px) rotateY(' + (dir * 6) + 'deg)';
@@ -527,15 +534,22 @@
     broken.style.transition = 'opacity 60ms linear';
     // The "one glyph flickers forever" idle loop is scroll-killable so it
     // releases its timer + clears the guard on scroll-away (the loop no longer
-    // outlives the element unconditionally).
+    // outlives the element unconditionally). ALSO off-scroll (plan 62fafe76):
+    // scrollKillable only observes real SCROLLING, so a no-scroll SPA that removes
+    // the equation would leak this perpetual timeout chain forever — flicker()
+    // self-checks el.isConnected each tick, and LatteXFx.destroy(el) can end it
+    // deterministically via __lxNeonDie.
     var timer = 0;
     var die = scrollKillable(function () {
       if (timer) { clearTimeout(timer); timer = 0; }
       broken.style.opacity = ''; broken.style.transition = '';
       el.__lxNeon = false;
+      el.__lxNeonDie = null;
     });
+    el.__lxNeonDie = die;
     function flicker() {
       if (die.dead()) { return; }
+      if (el.isConnected === false) { die(); return; } // detached: stop rescheduling
       var dropout = Math.random() < 0.35;
       broken.style.opacity = dropout
         ? (Math.random() < 0.5 ? '0.15' : '0.6') : '1';
@@ -1787,6 +1801,95 @@
     });
   }
 
+  // ---- constellation bounds (plan 62fafe76, LTX-10) ------------------------
+  // A GLOBAL star ceiling and a SPATIAL GRID keep the star map cheap regardless
+  // of how many glyph <path>s the equation has. Without them a dense equation
+  // sampled 3-14 stars/path (unbounded total) and then scanned EVERY star
+  // against EVERY other to find neighbours — O(S^2) setup that grows with the
+  // square of the glyph count.
+  var STAR_BUDGET = 240;      // total stars, whatever the path count
+  var LINK_DIST = 42;         // a constellation line joins stars closer than this
+  var LINK_D2 = LINK_DIST * LINK_DIST;
+  function starCmp(a, b) { return a[0] - b[0]; }
+
+  // Sample stars along the glyph outlines under a global budget. Within budget the
+  // per-path count is the SAME formula as before, so a normal equation's star map
+  // is byte-for-byte unchanged; over budget every path's count scales down
+  // proportionally (a faithful, evenly-distributed downsample — never a
+  // left-biased truncation), and a final even stride is the hard ceiling for the
+  // pathological path-count case where even one-star-per-path would overflow.
+  function buildStars(paths) {
+    var specs = [], totalDesired = 0;
+    for (var pi = 0; pi < paths.length; pi++) {
+      var p = paths[pi], len, m;
+      try { len = p.getTotalLength(); m = p.getScreenCTM(); } catch (e) { continue; }
+      if (!len || !m) { continue; }
+      var n = Math.max(3, Math.min(14, Math.round(len / 26)));
+      specs.push({ p: p, len: len, m: m, n: n });
+      totalDesired += n;
+    }
+    var ratio = totalDesired > STAR_BUDGET ? STAR_BUDGET / totalDesired : 1;
+    var stars = [];
+    for (var si = 0; si < specs.length; si++) {
+      var sp = specs[si];
+      var n2 = ratio < 1 ? Math.max(1, Math.floor(sp.n * ratio)) : sp.n;
+      for (var i = 0; i < n2; i++) {
+        var pt;
+        try { pt = sp.p.getPointAtLength((i / n2) * sp.len); } catch (e) { continue; }
+        stars.push({ x: sp.m.a * pt.x + sp.m.c * pt.y + sp.m.e,
+                     y: sp.m.b * pt.x + sp.m.d * pt.y + sp.m.f,
+                     tw: Math.random() * 6.283,
+                     ignite: Math.random() * 700 });
+      }
+    }
+    if (stars.length > STAR_BUDGET) {   // hard ceiling: even stride across the map
+      var kept = [], step = stars.length / STAR_BUDGET;
+      for (var k = 0; k < STAR_BUDGET; k++) { kept.push(stars[Math.floor(k * step)]); }
+      stars = kept;
+    }
+    return stars;
+  }
+
+  // Join each star to its 2 nearest neighbours via a LINK_DIST-sized spatial grid:
+  // a star's neighbours within LINK_DIST are guaranteed to fall in its own or an
+  // adjacent cell, so scanning the 3x3 cell block finds every candidate that could
+  // become a link — near-linear in star count, and the resulting link SET is
+  // identical to the old all-pairs scan (every kept link is < LINK_DIST, and all
+  // sub-LINK_DIST candidates live in the block, so the 2-nearest ranking agrees).
+  function linkStars(stars) {
+    var grid = {}, i;
+    function cell(x, y) { return Math.floor(x / LINK_DIST) + ',' + Math.floor(y / LINK_DIST); }
+    for (i = 0; i < stars.length; i++) {
+      var ck = cell(stars[i].x, stars[i].y);
+      (grid[ck] = grid[ck] || []).push(i);
+    }
+    var links = [], seen = {};
+    for (i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      var gx = Math.floor(s.x / LINK_DIST), gy = Math.floor(s.y / LINK_DIST);
+      var best = [];
+      for (var ox = -1; ox <= 1; ox++) {
+        for (var oy = -1; oy <= 1; oy++) {
+          var bucket = grid[(gx + ox) + ',' + (gy + oy)];
+          if (!bucket) { continue; }
+          for (var bi = 0; bi < bucket.length; bi++) {
+            var j = bucket[bi];
+            if (j === i) { continue; }
+            var dx = stars[j].x - s.x, dy = stars[j].y - s.y;
+            var d2 = dx * dx + dy * dy;
+            if (best.length < 2) { best.push([d2, j]); best.sort(starCmp); }
+            else if (d2 < best[1][0]) { best[1] = [d2, j]; best.sort(starCmp); }
+          }
+        }
+      }
+      for (var b = 0; b < best.length; b++) {
+        var key = Math.min(i, best[b][1]) + ':' + Math.max(i, best[b][1]);
+        if (!seen[key] && best[b][0] < LINK_D2) { seen[key] = 1; links.push([i, best[b][1]]); }
+      }
+    }
+    return links;
+  }
+
   // CONSTELLATION: the equation first appears as a night-sky star map — points
   // ignite along the glyph outlines, faint lines join near neighbours, the map
   // twinkles, then the stars fuse into the crisp equation. Star positions are
@@ -1800,43 +1903,16 @@
     var paths = Array.prototype.slice.call(svg.querySelectorAll('path'));
     if (!paths.length || reduced) { return; }
     el.__lxConst = true;
-    var stars = [];
-    paths.forEach(function (p) {
-      var len, m;
-      try { len = p.getTotalLength(); m = p.getScreenCTM(); } catch (e) { return; }
-      if (!len || !m) { return; }
-      var n = Math.max(3, Math.min(14, Math.round(len / 26)));
-      for (var i = 0; i < n; i++) {
-        var pt;
-        try { pt = p.getPointAtLength((i / n) * len); } catch (e) { continue; }
-        stars.push({ x: m.a * pt.x + m.c * pt.y + m.e,
-                     y: m.b * pt.x + m.d * pt.y + m.f,
-                     tw: Math.random() * 6.283,
-                     ignite: Math.random() * 700 });
-      }
-    });
+    var stars = buildStars(paths);   // global star budget (plan 62fafe76)
     // If star-sampling produced nothing — the container was display:none or
     // detached at load, so getScreenCTM/getTotalLength returned null/0 — the CSS
     // pre-hide (opacity:0) would otherwise leave the equation PERMANENTLY
     // invisible (review MEDIUM). Reveal it plainly and bail: no stars, but the
     // math is visible, which is the correct degrade.
     if (!stars.length) { el.style.opacity = '1'; el.__lxConst = false; return; }
-    // Join each star to its 2 nearest neighbours (the constellation lines).
-    var links = [], seen = {};
-    stars.forEach(function (s, i) {
-      var best = [];
-      for (var j = 0; j < stars.length; j++) {
-        if (j === i) { continue; }
-        var dx = stars[j].x - s.x, dy = stars[j].y - s.y;
-        var d2 = dx * dx + dy * dy;
-        if (best.length < 2) { best.push([d2, j]); best.sort(function (a, b) { return a[0] - b[0]; }); }
-        else if (d2 < best[1][0]) { best[1] = [d2, j]; best.sort(function (a, b) { return a[0] - b[0]; }); }
-      }
-      best.forEach(function (b) {
-        var key = Math.min(i, b[1]) + ':' + Math.max(i, b[1]);
-        if (!seen[key] && b[0] < 42 * 42) { seen[key] = 1; links.push([i, b[1]]); }
-      });
-    });
+    // Join each star to its 2 nearest neighbours (the constellation lines) via a
+    // spatial grid — near-linear in star count, not the old O(S^2) all-pairs scan.
+    var links = linkStars(stars);
 
     var op0 = [], trans0 = [];
     paths.forEach(function (p, i) {
@@ -1857,6 +1933,25 @@
     document.body.appendChild(canvas);
     var ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
+
+    // ONE reusable star sprite (plan 62fafe76): the old code allocated a fresh
+    // radial gradient for EVERY visible star on EVERY frame — allocation-heavy at
+    // ~60fps. Bake the white-core → blue-edge → transparent falloff once into an
+    // offscreen canvas, then blit it per star with ctx.globalAlpha for the
+    // twinkle/fade (globalAlpha multiplies the sprite's baked per-pixel alpha, so
+    // the on-screen look — alpha, alpha*0.55 at the mid stop — is unchanged).
+    var STAR_R = 2.6;
+    var sprite = document.createElement('canvas');
+    var SS = Math.max(8, Math.round(STAR_R * 2 * dpr * 2));
+    sprite.width = SS; sprite.height = SS;
+    var spx = sprite.getContext('2d');
+    var sc = SS / 2;
+    var sg = spx.createRadialGradient(sc, sc, 0, sc, sc, sc);
+    sg.addColorStop(0, 'rgba(255,255,255,1)');
+    sg.addColorStop(0.5, 'rgba(190,215,255,0.55)');
+    sg.addColorStop(1, 'rgba(150,190,255,0)');
+    spx.fillStyle = sg;
+    spx.fillRect(0, 0, SS, SS);
 
     var IGNITE = 700, HOLD = 1500, FUSE = 700, END = IGNITE + HOLD + FUSE;
     var raf = 0, timers = [], t0 = performance.now(), fusing = false;
@@ -1895,13 +1990,10 @@
         var tw = 0.55 + 0.45 * Math.sin(e / 340 + s.tw);
         var alpha = born * tw * fade;
         if (alpha <= 0.01) { continue; }
-        var g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 2.6);
-        g.addColorStop(0, 'rgba(255,255,255,' + alpha.toFixed(3) + ')');
-        g.addColorStop(0.5, 'rgba(190,215,255,' + (alpha * 0.55).toFixed(3) + ')');
-        g.addColorStop(1, 'rgba(150,190,255,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(s.x, s.y, 2.6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = alpha;                     // twinkle/fade via the blit
+        ctx.drawImage(sprite, s.x - STAR_R, s.y - STAR_R, STAR_R * 2, STAR_R * 2);
       }
+      ctx.globalAlpha = 1;                           // restore for the next frame's lines
       if (e > IGNITE + HOLD && !fusing) {
         fusing = true; // the stars fuse: equation cross-fades in as the map dims
         paths.forEach(function (p) {
@@ -1951,6 +2043,23 @@
     if (!groups) { return; } // no/invalid glyphmap: semantic effects stay inert
     el.__lxThread = true;
 
+    // INDEXED group membership (plan 62fafe76): the old hover called
+    // group.indexOf(i) for every path on every mouseenter — a large repeated-token
+    // group made each hover approach O(P^2). parseGlyphmap already hands every
+    // member of a token group the SAME array reference, so map each path to an
+    // integer group id ONCE (Map keyed by that shared reference → O(1) build), and
+    // hover is then an O(1) integer compare per path. Same glyphs light as before:
+    // members of a run share a reference → share an id, exactly the indexOf set.
+    var groupId = new Array(paths.length);
+    var idByArr = new Map();
+    for (var gi = 0; gi < paths.length; gi++) {
+      var grp = groups[gi];
+      if (!grp) { groupId[gi] = -1; continue; }
+      var id = idByArr.get(grp);
+      if (id === undefined) { id = idByArr.size; idByArr.set(grp, id); }
+      groupId[gi] = id;
+    }
+
     // NEVER set style.transform on these paths: each carries its PLACEMENT as an
     // SVG transform attribute (translate + font-unit downscale), and the CSS
     // transform property overrides the attribute wholesale — the glyph loses its
@@ -1966,9 +2075,9 @@
         paths[i].style.transition = '';
       }
     }
-    function light(group) {
+    function light(gid) {
       for (var i = 0; i < paths.length; i++) {
-        var mate = group.indexOf(i) >= 0;
+        var mate = groupId[i] === gid;    // O(1) indexed membership, was indexOf
         var p = paths[i];
         p.style.transition = 'opacity 140ms ease';
         p.style.opacity = mate ? '1' : '0.22';
@@ -1977,10 +2086,9 @@
       }
     }
     paths.forEach(function (p, i) {
-      var group = groups[i];
-      if (!group) { return; } // structural/unmapped glyph: recedes with the rest
+      if (groupId[i] < 0) { return; } // structural/unmapped glyph: recedes with the rest
       p.style.cursor = 'default';
-      p.addEventListener('mouseenter', function () { light(group); });
+      p.addEventListener('mouseenter', function () { light(groupId[i]); });
     });
     svg.addEventListener('mouseleave', restore);
   }
@@ -2508,6 +2616,19 @@
       if (el.__lxPrecedencePlay) { el.__lxPrecedencePlay(); }
       return true;
     };
+    // EXPLICIT teardown (plan 62fafe76): the perpetual-work effects (hologram's
+    // idle interval, neonsign's flicker chain) are torn down on scroll and when
+    // they notice el.isConnected === false, but an embedding SPA that removes an
+    // equation in a no-scroll view should be able to end them AT ONCE rather than
+    // wait for the next self-check tick. destroy(el) runs whatever teardowns the
+    // element owns; each die() is idempotent, so a redundant call is a safe no-op.
+    window.LatteXFx.destroy = function (el) {
+      if (!el) { return false; }
+      var did = false;
+      if (el.__lxHoloDie) { el.__lxHoloDie(); did = true; }
+      if (el.__lxNeonDie) { el.__lxNeonDie(); did = true; }
+      return did;
+    };
   }
 
   // TEST SEAM (fx-runtime JS harness, plan e09b28be): hand the internals to a
@@ -2523,6 +2644,9 @@
       userCentre: userCentre,
       pivotScaleDelta: pivotScaleDelta,
       parseGlyphmap: parseGlyphmap,
+      buildStars: buildStars,
+      linkStars: linkStars,
+      STAR_BUDGET: STAR_BUDGET,
       scrollKillable: scrollKillable,
       cancel: cancel,
       unfold: unfold,
