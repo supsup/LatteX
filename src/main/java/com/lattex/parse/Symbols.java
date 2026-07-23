@@ -708,6 +708,11 @@ final class Symbols {
         "text", TextStyle.ROMAN,
         "textrm", TextStyle.ROMAN,
         "mathrm", TextStyle.ROMAN,
+        // \textnormal (wild-corpus GAP tier) -> \text semantics: LaTeX defines it
+        // as the "document's normal text font" inside math, which — absent any
+        // bold/italic document-class override this renderer models — is the same
+        // upright roman \text/\textrm already produce.
+        "textnormal", TextStyle.ROMAN,
         "textbf", TextStyle.BOLD,
         "textit", TextStyle.ITALIC,
         "texttt", TextStyle.MONO);

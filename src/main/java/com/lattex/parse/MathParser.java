@@ -568,6 +568,21 @@ public final class MathParser {
         };
     }
 
+    /**
+     * Consumes components up to the next style-switch/group boundary and wraps
+     * them — the shared "rest of group" reader behind the legacy TeX2.09 font
+     * switches ({@code \rm \bf \it \cal}, wild-corpus GAP tier), which are
+     * DECLARATIONS like {@code \displaystyle} ({@link #parseStyleSwitch}) and
+     * {@code \color} ({@link #parseColorSwitch}), not argument-taking commands.
+     */
+    private MathNode parseRestOfGroup() {
+        List<MathNode> rest = new ArrayList<>();
+        while (!isStyleSwitchBoundary(peek())) {
+            rest.add(parseComponent());
+        }
+        return wrap(rest);
+    }
+
     /** One component: a nucleus, plus any scripts (or big-operator limits). */
     MathNode parseComponent() {
         MathNode nucleus = parseNucleus();
@@ -926,6 +941,26 @@ public final class MathParser {
             }
             case "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle" -> {
                 return parseStyleSwitch(name);
+            }
+            case "rm" -> {
+                // Legacy TeX2.09 font switch (wild-corpus GAP tier): a DECLARATION,
+                // not an argument-taking command — {\rm ...} restyles everything to
+                // the end of the enclosing group, exactly like \displaystyle above,
+                // not \mathrm{...}. \rm's mapped semantics is upright roman, which is
+                // already the unstyled glyph selection for math atoms in this
+                // renderer (no MathVariant.Style remap needed — see FontVariantTest:
+                // a bare 'x' and \mathrm{x} render the SAME glyph); the scoping is
+                // the real work, so this is a pass-through of the consumed group.
+                return parseRestOfGroup();
+            }
+            case "bf" -> {
+                return MathVariant.apply(MathVariant.Style.BOLD, parseRestOfGroup());
+            }
+            case "it" -> {
+                return MathVariant.apply(MathVariant.Style.ITALIC, parseRestOfGroup());
+            }
+            case "cal" -> {
+                return MathVariant.apply(MathVariant.Style.SCRIPT, parseRestOfGroup());
             }
             case "textcolor" -> {
                 // \textcolor{color}{body}: paint body a fixed color. The name/hex is
@@ -1911,6 +1946,7 @@ public final class MathParser {
         // public catalog (no natural Category fits a spacing-class override), so it
         // needs a manual entry here to keep showing up in "did you mean?" suggestions.
         "mathopen", "mathclose", "mathord", "mathbin", "mathrel", "mathpunct",
+        "rm", "bf", "it", "cal",
         "xrightarrow", "xleftarrow", "xleftrightarrow", "xRightarrow", "xLeftarrow",
         "xLeftrightarrow", "xmapsto", "xhookrightarrow", "xhookleftarrow",
         "xrightleftharpoons", "xlongequal");

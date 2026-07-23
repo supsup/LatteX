@@ -10,6 +10,7 @@ import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.ClassOverride;
 import com.lattex.parse.MathNode.ColumnAlign;
 import com.lattex.parse.MathNode.MathClass;
+import com.lattex.parse.MathNode.MathList;
 import com.lattex.parse.MathNode.Matrix;
 import com.lattex.parse.MathNode.MatrixKind;
 import org.junit.jupiter.api.Test;
@@ -122,6 +123,51 @@ class WildCorpusGapsTier1Test {
     @Test
     void uprightGreekVariantSymbolsRender() {
         assertRendersGlyphs("\\upvarepsilon \\upvartheta \\upvarpi \\upvarrho \\upvarsigma \\upvarphi");
+    }
+
+    // ------------------------------------------------------------------
+    // 5. Legacy font switches {\rm ...} {\bf ...} {\it ...} {\cal ...} — TeX2.09
+    // declarations (state-switch-until-group-end, NOT argument-taking), mapped
+    // to \mathrm/\mathbf/\mathit/\mathcal semantics; plus \textnormal -> \text.
+    // ------------------------------------------------------------------
+
+    @Test
+    void legacyFontSwitchesRender() {
+        // The exact combined shape named in the plan body.
+        assertRendersGlyphs("{\\cal L}(\\upalpha)");
+        assertRendersGlyphs("{\\bf F} = m{\\bf a}");
+        assertRendersGlyphs("{\\it O}(n \\log n)");
+        assertRendersGlyphs("{\\rm d}x");
+        assertRendersGlyphs("\\textnormal{for all } x");
+    }
+
+    @Test
+    void legacyFontSwitchesMatchTheirMathXEquivalent() {
+        // {\bf x} must produce the SAME glyph \mathbf{x} does (mapped semantics).
+        MathList bfGroup = (MathList) MathParser.parse("x + {\\bf y} + z");
+        Atom bfY = (Atom) bfGroup.items().get(2);
+        Atom mathbfY = (Atom) MathParser.parse("\\mathbf{y}");
+        assertEquals(mathbfY.codePoint(), bfY.codePoint());
+
+        MathList calGroup = (MathList) MathParser.parse("x + {\\cal L} + z");
+        Atom calL = (Atom) calGroup.items().get(2);
+        Atom mathcalL = (Atom) MathParser.parse("\\mathcal{L}");
+        assertEquals(mathcalL.codePoint(), calL.codePoint());
+
+        MathList itGroup = (MathList) MathParser.parse("x + {\\it y} + z");
+        Atom itY = (Atom) itGroup.items().get(2);
+        Atom mathitY = (Atom) MathParser.parse("\\mathit{y}");
+        assertEquals(mathitY.codePoint(), itY.codePoint());
+    }
+
+    @Test
+    void legacyFontSwitchScopeEndsAtTheClosingBrace() {
+        // \bf inside a group must NOT leak past the closing brace: the 'y'
+        // outside {\bf x} keeps its own (unstyled/roman) glyph, matching plain 'y'.
+        MathList scoped = (MathList) MathParser.parse("{\\bf x} y");
+        Atom yOutside = (Atom) scoped.items().get(1);
+        Atom yPlain = (Atom) MathParser.parse("y");
+        assertEquals(yPlain.codePoint(), yOutside.codePoint());
     }
 
     // ------------------------------------------------------------------
