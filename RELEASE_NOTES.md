@@ -6,6 +6,22 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### `RenderOptions.fluid` — scale-to-fit display math (opt-in)
+
+- **Display math that never overflows its container.** Opt in with
+  `RenderOptions.defaults().withFluid(true)` and the outer display `<svg>` gains **one**
+  sizing rule — `style="width:100%;max-width:<natural>px;height:auto"` — so the equation
+  downscales in a container narrower than its natural width and never upscales past it
+  (the unchanged viewBox keeps the aspect ratio). Presentation-only: zero layout changes,
+  and stripping that one attribute restores the fixed-size output byte-for-byte. This is
+  scale-to-fit (what shrink-to-fit sizing gives you), **not** line-breaking.
+- **Default off = byte-identical.** Without the flag, every entry point's output is
+  byte-identical to 0.11.0. Inline math (`renderInline` / `renderInlineResult`) and
+  `renderFragment` are structurally flagless and stay fixed-size — baseline seating
+  depends on it. The sizing rides the `<svg>` element only; the `.lx-math` container's
+  attribute surface is untouched, and `fluid` is a HOST flag, not an `\lx` key — an
+  author can never enable it from formula source.
+
 ### `unfold` fx effect — a bounded `\sum` blooms into its terms (opt-in, flag-gated)
 
 - **`unfold` — click a `\sum` open into its explicit terms.** `\lx[fx.click=unfold]{\sum_{i=1}^{4} f(i)}`
