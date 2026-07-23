@@ -79,8 +79,13 @@ public final class MathParser {
     // guards and crashes the render thread. Both caps instead throw
     // MathSyntaxException (a caught RuntimeException) with a clear message.
 
-    /** Maximum accepted source length, in {@code char}s. */
-    static final int MAX_SOURCE_LENGTH = 100_000;
+    /**
+     * Maximum accepted source length, in {@code char}s. {@code public} (LTX-09,
+     * plan ac28238e) so the CLI's streaming stdin/batch reader can enforce the
+     * identical cap DURING the read — single-sourced, so the transport-level
+     * read limit can never drift from the parser's own limit.
+     */
+    public static final int MAX_SOURCE_LENGTH = 100_000;
 
     /** Maximum recursive nesting depth (groups, arguments, scripts, fences). */
     static final int MAX_DEPTH = 512;
