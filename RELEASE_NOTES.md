@@ -6,6 +6,26 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### `test` no longer launches Chrome — real-browser pins moved to `browserTest`
+
+- **`./gradlew test` is now a fast, zero-Chrome core suite.** Marlow audit LTX-13:
+  `tasks.test` had no tag exclusion, so every real-browser BrewShot pin (effects
+  page, fx lifecycle, GIF liveness — 8 `BrewShot.launch` call sites) launched host
+  Chrome on a plain `./gradlew test` whenever Chrome was installed, popping the
+  operator's Chrome error/permission dialogs on machines it wasn't expected to
+  touch. One of the three affected classes (`BrewShotFxLifecycleTest`, 5 of the
+  8 sites) was entirely untagged, so a bare `excludeTags("capture")` alone would
+  have left it running; it now carries `@Tag("capture")` like its siblings.
+- **New `browserTest` task carries the browser assertions**, tag-selected
+  (`includeTags("capture")`). `check`/`build` depend on **both** `test` and
+  `browserTest`, so CI coverage is unchanged — only a bare local `./gradlew
+  test` stops launching a browser. `LATTEX_REQUIRE_BROWSER=1` (read by
+  `BrowserGate`, set by CI) keeps its existing fail-closed meaning, now against
+  `browserTest`: a missing browser fails the task instead of assumption-skipping.
+- **Untouched:** `generateExamples` and the tracked `examples/` regeneration
+  flow; the `examples`-tagged page generators, which do not launch Chrome and
+  stay in core `test`.
+
 ### Silent-flatten fixes — commands in `\text{…}` fail loud; `aligned`/`split` position argument parsed
 
 - **An unknown command inside `\text{…}` now fails loud instead of silently flattening.**

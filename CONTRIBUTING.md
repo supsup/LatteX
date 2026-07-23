@@ -46,11 +46,24 @@ This subset is a contract with downstream HTML sanitizers (LatteX SVG must pass 
 ## Build & test
 
 ```bash
-./gradlew build      # compile + test
-./gradlew test       # tests only
+./gradlew build       # compile + test + browserTest
+./gradlew test        # fast core suite only — no browser, safe to run anywhere
+./gradlew browserTest # real-browser BrewShot pins only — launches host Chrome
 ```
 
 Java 25 toolchain, provisioned by Gradle. Keep the build dependency-light and the tests deterministic (env-scrubbed — no ambient state).
+
+`test` and `browserTest` are a hard split (plan 8b7596e0): every real-browser
+BrewShot pin (effects page, fx lifecycle, GIF liveness) carries `@Tag("capture")`
+and lives only in `browserTest`, which launches headless Chrome when it is
+discoverable and assumption-skips locally when it is not. `test` excludes that
+tag entirely, so a plain local `./gradlew test` never touches Chrome — it will
+not pop the "Chrome couldn't be launched" dialog GUI runs used to trigger.
+`check` and `build` still depend on **both** tasks, so CI coverage is
+unchanged. CI sets `LATTEX_REQUIRE_BROWSER=1` (read by `BrowserGate`), which
+makes a missing browser FAIL `browserTest` instead of silently skipping —
+that fail-closed contract is unchanged by the split, just relocated onto the
+task that actually launches Chrome.
 
 ### The fx-runtime JS harness
 

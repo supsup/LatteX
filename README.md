@@ -184,6 +184,11 @@ Two implementation choices are what make the top image clean:
 ```
 
 Requires a Java 25 toolchain (Gradle provisions it via the toolchain spec).
+`build` runs the fast core suite plus the real-browser BrewShot pins (launched
+headlessly when Chrome is discoverable, assumption-skipped locally when it is
+not); run `./gradlew test` alone for the core suite only — no Chrome launch.
+See [CONTRIBUTING.md](CONTRIBUTING.md#build--test) for the full test-gate
+contract.
 
 ## License
 
