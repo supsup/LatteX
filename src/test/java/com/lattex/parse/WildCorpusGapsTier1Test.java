@@ -185,6 +185,44 @@ class WildCorpusGapsTier1Test {
     }
 
     // ------------------------------------------------------------------
+    // 7. split does NOT accept a [pos] position argument; aligned does (mid-
+    // flight scope addition, Fixpoint review ruling lattex/391: only amsmath's
+    // INNER environments — meant to be embedded inside a larger expression —
+    // take a vertical-position argument; split is always top-level and has no
+    // [pos] option in real amsmath).
+    // ------------------------------------------------------------------
+
+    @Test
+    void alignedAcceptsAPositionArgument() {
+        // Positive sibling: aligned[t]/[b]/[c] must still work.
+        assertRendersGlyphs("\\begin{aligned}[t] x &= y \\\\ z &= w \\end{aligned}");
+        assertRendersGlyphs("\\begin{aligned}[b] x &= y \\end{aligned}");
+        assertRendersGlyphs("\\begin{aligned}[c] x &= y \\end{aligned}");
+        // And with no position argument at all (still optional).
+        assertRendersGlyphs("\\begin{aligned} x &= y \\end{aligned}");
+
+        // Semantic check, not just "renders something": [t] must be CONSUMED as
+        // a real argument, not silently absorbed as glyph content in the first
+        // cell (which would also "render" — that's the trap this fixture guards
+        // against). The IDENTICAL canonical tree for aligned WITH and WITHOUT
+        // [t] proves the position argument left no residue in the parsed cells.
+        MathNode withPos = MathParser.parse("\\begin{aligned}[t] x &= y \\end{aligned}");
+        MathNode withoutPos = MathParser.parse("\\begin{aligned} x &= y \\end{aligned}");
+        assertEquals(MathParserTest.pp(withoutPos), MathParserTest.pp(withPos));
+    }
+
+    @Test
+    void splitRejectsAPositionArgumentLoudly() {
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\begin{split}[t] x &= y \\\\ z &= w \\end{split}"));
+        assertTrue(e.getMessage().contains("split"), e.getMessage());
+        assertTrue(e.getMessage().contains("pos") || e.getMessage().contains("position"),
+            e.getMessage());
+        // split with NO position argument is unaffected.
+        assertRendersGlyphs("\\begin{split} x &= y \\\\ z &= w \\end{split}");
+    }
+
+    // ------------------------------------------------------------------
     // Negative control: an unrelated unknown command OUTSIDE the six classes
     // must still fail loud with the same MathSyntaxException shape after every
     // addition in this file — additive changes must never widen what parses.

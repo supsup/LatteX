@@ -494,3 +494,4 @@ OK	wiki-textbook	I	{\it O}(n \log n)
 OK	wiki-textbook	I	{\rm d}x
 OK	wiki-textbook	I	\textnormal{for all } x
 OK	algebra-discrete	I	\mathds{1}_{[0,1]}(x)
+OK	structured-envs	D	\begin{aligned}[t] x &= y \\ z &= w \end{aligned}

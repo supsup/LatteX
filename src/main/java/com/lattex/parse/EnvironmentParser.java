@@ -71,6 +71,22 @@ final class EnvironmentParser {
                 MathSyntaxException.NO_OFFSET);
         }
 
+        // Optional [t]/[b]/[c] vertical-position argument (amsmath): only the
+        // INNER environments — meant to be embedded inside a larger expression,
+        // where the position says which line the whole block's baseline sits on
+        // — take it. aligned does; the top-level, always-standalone environments
+        // (align, gather, alignat, split, ...) do NOT, and split REJECTS one
+        // loud rather than silently absorbing '[t]' as glyph content (Fixpoint
+        // review ruling lattex/391 — a mid-flight scope addition to this plan).
+        // LatteX has no vertical-position placement to apply (a single top-level
+        // render), so an accepted argument is read and discarded, exactly like
+        // alignat's {n} count just below.
+        if (env.equals("aligned")) {
+            discardOptionalPositionArg(parser, env);
+        } else if (env.equals("split")) {
+            rejectPositionArgIfPresent(parser, env);
+        }
+
         // array carries a user column spec {ccc|c}; other envs are uniform.
         List<ColumnAlign> specAligns = null;
         List<Integer> specVlines = null;
@@ -531,6 +547,55 @@ final class EnvironmentParser {
             parser.next();
         }
         parser.next(); // consume '}'
+    }
+
+    /**
+     * Reads and DISCARDS an OPTIONAL {@code [t]}/{@code [b]}/{@code [c]} vertical-
+     * position argument (amsmath's inner-environment convention — {@code aligned},
+     * wild-corpus GAP tier). Absent is fine (the argument is optional); present but
+     * not exactly one of {@code t}/{@code b}/{@code c} fails loud. LatteX has no
+     * multi-line vertical placement to apply it to (a single top-level render), so
+     * — like alignat's {@code {n}} count above — a valid argument is simply
+     * discarded.
+     */
+    private static void discardOptionalPositionArg(MathParser parser, String env) {
+        if (parser.peek().kind() != Kind.CHAR || parser.peek().codePoint() != '[') {
+            return; // no position argument given — it's optional
+        }
+        parser.next(); // consume '['
+        int cp = parser.peek().kind() == Kind.CHAR ? parser.peek().codePoint() : -1;
+        if (cp != 't' && cp != 'b' && cp != 'c') {
+            throw new MathSyntaxException(
+                "\\begin{" + env + "}[pos] position must be t, b, or c, but found "
+                    + MathParser.describe(parser.peek()));
+        }
+        parser.next(); // consume the position letter
+        if (parser.peek().kind() != Kind.CHAR || parser.peek().codePoint() != ']') {
+            throw new MathSyntaxException(
+                "\\begin{" + env + "}[pos] must be a single t/b/c letter, but found "
+                    + MathParser.describe(parser.peek()));
+        }
+        parser.next(); // consume ']'
+    }
+
+    /**
+     * Rejects a leading {@code [...]} loud rather than letting the general body
+     * loop below silently absorb it as glyph content (wild-corpus GAP tier,
+     * Fixpoint review ruling lattex/391): real amsmath gives {@code split} no
+     * {@code [pos]} option at all — only the inner, embeddable environments
+     * ({@code aligned}/{@code alignedat}) take one, since {@code split} is
+     * always used top-level inside a numbered equation environment. A bracket
+     * NOT immediately after {@code \begin{split}} (i.e. inside the body) is
+     * ordinary content and untouched.
+     */
+    private static void rejectPositionArgIfPresent(MathParser parser, String env) {
+        if (parser.peek().kind() == Kind.CHAR && parser.peek().codePoint() == '[') {
+            throw new MathSyntaxException(
+                "\\begin{" + env + "} does not accept a [pos] position argument — "
+                    + "only \\aligned/\\alignedat do (amsmath); " + env
+                    + " is always used inside a numbered equation environment",
+                parser.currentOffset());
+        }
     }
 
     /** Silently consumes an optional {@code \\*} and/or {@code \\[len]} row-break modifier. */
