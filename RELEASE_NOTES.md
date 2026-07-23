@@ -6,6 +6,32 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Output-boundary legality + public-boundary validation
+
+- **One shared code-point legality policy at every output boundary.** SVG aria text,
+  MathML, `aria-label`/`a11y.label`, and `data-lx-*` values now all run through a single
+  policy *before* their format-specific escaping (which then happens exactly once):
+  illegal C0 control characters other than legal XML whitespace (`\t`/`\n`/`\r`) are
+  **stripped** (matching what the SVG path already did), and an **unpaired UTF-16
+  surrogate fails loud** as malformed input. Previously the three surfaces disagreed —
+  `toMathML("x\u0000y")` emitted a raw NUL (not well-formed XML) while the SVG path
+  stripped it, and a quoted `a11y.label` could land a NUL in the styled-HTML output.
+  Legal whitespace and well-formed astral pairs are untouched, and **clean input renders
+  byte-identically** (the SVG goldens are unchanged).
+- **Semantic text is stored raw and escaped once at the boundary.** The `a11y.label` and
+  the plottable `data-lx-graph-expr` body used to be HTML-escaped at parse time (stored
+  pre-escaped); they are now stored raw and escaped only where they are stamped onto the
+  container, so there is no double-escape hazard and one legality policy governs them.
+- **`renderFragment(latex, fontSizePx)` validates its size.** A non-finite (`NaN`/`Infinity`),
+  zero, or negative `fontSizePx` — which used to flow straight into the metrics and output —
+  now throws `IllegalArgumentException`. The accepted upper bound, `LatteX.MAX_FRAGMENT_FONT_SIZE`
+  (`= RenderOptions.MAX_SCALE × 40 = 800`), is consistent with the render scale ceiling.
+- **The public result records enforce the invariants their javadoc promises.** `RenderedMath`
+  (order-preserving immutable attribute map, non-null SVG), `MathFragment` (non-null markup/
+  glyphmap/MathML, finite non-negative metrics), `InlineSvgResult` (non-null SVG, finite
+  non-negative baseline metrics), and `RenderResult` (non-null diagnostics) now reject invalid
+  construction instead of silently holding a value that breaks their contract.
+
 ### `RenderOptions.fluid` — scale-to-fit display math (opt-in)
 
 - **Display math that never overflows its container.** Opt in with

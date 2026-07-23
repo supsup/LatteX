@@ -17,4 +17,21 @@ package com.lattex.api;
  * @param depthEm  ink depth below the baseline, in em (&ge; 0)
  * @param heightEm ink height above the baseline, in em (&ge; 0)
  */
-public record InlineSvgResult(String svg, double depthEm, double heightEm) {}
+public record InlineSvgResult(String svg, double depthEm, double heightEm) {
+    /**
+     * Enforces the javadoc's promised invariants (plan cfd12523): {@code svg} is
+     * non-null and both baseline metrics are finite and never negative.
+     */
+    public InlineSvgResult {
+        java.util.Objects.requireNonNull(svg, "svg");
+        requireFiniteNonnegative(depthEm, "depthEm");
+        requireFiniteNonnegative(heightEm, "heightEm");
+    }
+
+    private static void requireFiniteNonnegative(double v, String name) {
+        if (!Double.isFinite(v) || v < 0.0) {
+            throw new IllegalArgumentException(
+                name + " must be a finite non-negative value; got: " + v);
+        }
+    }
+}

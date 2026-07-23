@@ -344,23 +344,26 @@ public final class SvgEmitter {
         return s.substring(0, end);
     }
 
+    /**
+     * XML-escapes the aria-label text. The shared
+     * {@link com.lattex.parse.OutputLegality} policy runs FIRST (plan cfd12523),
+     * so this boundary shares the SINGLE code-point legality policy with the MathML
+     * and styled-HTML surfaces: illegal C0 controls (e.g. a NUL — the class
+     * Sirentide's fuzzer caught) are stripped and an unpaired surrogate fails loud;
+     * legal whitespace (tab/newline) is preserved. The four-metachar escaping then
+     * happens exactly once, here.
+     */
     private static String escape(String s) {
-        StringBuilder out = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
+        String clean = com.lattex.parse.OutputLegality.sanitize(s);
+        StringBuilder out = new StringBuilder(clean.length());
+        for (int i = 0; i < clean.length(); i++) {
+            char c = clean.charAt(i);
             switch (c) {
                 case '&' -> out.append("&amp;");
                 case '<' -> out.append("&lt;");
                 case '>' -> out.append("&gt;");
                 case '"' -> out.append("&quot;");
-                // L10 (plan lattex-hostile-input-hardening): XML 1.0 forbids C0/C1
-                // control characters entirely, and an unescaped one from author input
-                // (e.g. a NUL) would leak straight into the aria-label — the exact
-                // control-char class Sirentide's fuzzer caught. Drop them so the output
-                // can NEVER carry a control char (tab/newline stay — legal in XML).
-                default -> {
-                    if (c >= 0x20 || c == '\t' || c == '\n' || c == '\r') { out.append(c); }
-                }
+                default -> out.append(c);
             }
         }
         return out.toString();
