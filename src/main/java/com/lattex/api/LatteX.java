@@ -57,6 +57,14 @@ public final class LatteX {
     /** Default display font size, in user units (px at 1:1). */
     public static final double DISPLAY_FONT_SIZE = 40.0;
 
+    /**
+     * Upper bound for {@link #renderFragment(String, double)}'s {@code fontSizePx}
+     * (plan cfd12523). Derived from {@link RenderOptions#MAX_SCALE} applied to
+     * {@link #DISPLAY_FONT_SIZE}, so a raw fragment size and a scaled render agree on
+     * the largest single formula: {@code 20 × 40 = 800} user units.
+     */
+    public static final double MAX_FRAGMENT_FONT_SIZE = RenderOptions.MAX_SCALE * DISPLAY_FONT_SIZE;
+
     // The bundled font is immutable and ~1.5 MB; parse it once, lazily.
     private static final class FontHolder {
         static final SfntFont FONT = SfntFont.loadBundled();
@@ -299,12 +307,23 @@ public final class LatteX {
      * their order, so no index adjustment is applied. See {@link MathFragment#glyphmap()}.
      *
      * @param latex      the LaTeX math source (without surrounding {@code $} delimiters)
-     * @param fontSizePx the base font size in user units (px at 1:1)
+     * @param fontSizePx the base font size in user units (px at 1:1); must be finite,
+     *                   strictly positive, and at most {@link #MAX_FRAGMENT_FONT_SIZE}
+     *                   (plan cfd12523). A non-finite (NaN/Infinity) or non-positive
+     *                   size would carry through into the metrics and output as garbage,
+     *                   so it is rejected loud.
      * @return the laid-out {@link MathFragment}
+     * @throws IllegalArgumentException if {@code fontSizePx} is not a finite value in
+     *         {@code (0, MAX_FRAGMENT_FONT_SIZE]}
      * @throws com.lattex.parse.MathSyntaxException if {@code latex} does not parse —
      *         same error behavior as {@link #render(String)}; the consumer catches it
      */
     public static MathFragment renderFragment(String latex, double fontSizePx) {
+        if (!Double.isFinite(fontSizePx) || fontSizePx <= 0.0 || fontSizePx > MAX_FRAGMENT_FONT_SIZE) {
+            throw new IllegalArgumentException(
+                "fontSizePx must be a finite value in (0, " + MAX_FRAGMENT_FONT_SIZE
+                    + "]; got: " + fontSizePx);
+        }
         MathNode node = MathParser.parse(latex);
         // A top-level \lx wrapper is transparent here: render the body; the wrapper's
         // container metadata rides the consumer's own wrapper, not the fragment.
@@ -512,8 +531,10 @@ public final class LatteX {
      * Builds the opening {@code <span class="lx-math" data-lx-…>} tag. Every stamped
      * value was validated + reduced at parse time (intent/concept/data.* are
      * {@code [a-z][a-z0-9_]*} identifiers, effects are a closed enum vocabulary,
-     * duration matches {@code \d{1,5}ms}, the a11y label is HTML-escaped), so no raw
-     * author string reaches the attribute unescaped.
+     * duration matches {@code \d{1,5}ms}); the free-text a11y label and the plottable
+     * {@code data-lx-graph-expr} are stored RAW and made legal+safe HERE via
+     * {@link #htmlAttrEscape} (the shared output-boundary legality policy + HTML-attr
+     * escaping, applied exactly once), so no raw author string reaches the attribute.
      */
     private static String openTag(EffectSpec fx, Semantics sem, String glyphmap, String groupmap,
                                   String expandMarker) {
@@ -541,11 +562,16 @@ public final class LatteX {
         // data.* attributes (keys already identifier-validated) — iterated in sorted
         // key order so the generated HTML is deterministic regardless of the source
         // map's iteration order (a HashMap/Map.of view is randomized per JVM run).
+        // Values are stored RAW (plan cfd12523): the shared output-boundary legality
+        // policy + HTML-attr escaping are applied HERE, exactly once. Identifier
+        // values are unchanged by escaping; the free-text graph-expr is made legal+safe.
         for (Map.Entry<String, String> e : new java.util.TreeMap<>(sem.data()).entrySet()) {
-            sb.append(" data-lx-").append(e.getKey()).append("=\"").append(e.getValue()).append('"');
+            sb.append(" data-lx-").append(e.getKey()).append("=\"")
+              .append(htmlAttrEscape(e.getValue())).append('"');
         }
-        // a11y label (already HTML-escaped by the parser).
-        sem.a11yLabelValue().ifPresent(v -> sb.append(" aria-label=\"").append(v).append('"'));
+        // a11y label — stored RAW; legality policy + HTML-attr escaping applied here.
+        sem.a11yLabelValue().ifPresent(v -> sb.append(" aria-label=\"")
+            .append(htmlAttrEscape(v)).append('"'));
         return sb.append('>').toString();
     }
 
@@ -597,7 +623,23 @@ public final class LatteX {
      * @param svg            the SVG document, byte-identical to {@link #render(String)}
      * @param containerAttrs immutable attribute map (empty for a plain, effect-free expression)
      */
-    public record RenderedMath(String svg, Map<String, String> containerAttrs) {}
+    public record RenderedMath(String svg, Map<String, String> containerAttrs) {
+        /**
+         * Enforces the javadoc's promised invariants (plan cfd12523): {@code svg} is
+         * non-null and {@code containerAttrs} is a defensively-copied immutable map, so a
+         * caller cannot observe {@code null} or mutate the pair's attributes after the fact.
+         */
+        public RenderedMath {
+            java.util.Objects.requireNonNull(svg, "svg");
+            // Order-PRESERVING defensive copy: the historical stamp order (enter/hover/
+            // click, duration, glow, glyphmap) is load-bearing — the deprecated string
+            // seam is byte-identical to this map joined in iteration order. Map.copyOf
+            // would be immutable but randomize iteration, breaking that equivalence, so
+            // copy through a LinkedHashMap and wrap unmodifiable.
+            containerAttrs = java.util.Collections.unmodifiableMap(
+                new java.util.LinkedHashMap<>(java.util.Objects.requireNonNull(containerAttrs, "containerAttrs")));
+        }
+    }
 
     /**
      * Render a LaTeX math expression AND its container attributes from one parse+layout —
@@ -1069,8 +1111,15 @@ public final class LatteX {
         return Math.round(sp.muWidth() / 18.0 * 1000.0) / 1000.0;
     }
 
-    /** XML-escapes text content / attribute values for MathML output. */
-    private static String xmlEscape(String s) {
+    /**
+     * XML-escapes text content / attribute values for MathML output. The shared
+     * {@link com.lattex.parse.OutputLegality} policy runs FIRST (plan cfd12523):
+     * illegal C0 controls are stripped and an unpaired surrogate fails loud, so the
+     * serialized MathML is legal XML 1.0 — a raw NUL can no longer leak (LTX-06).
+     * The four-metachar escaping then happens exactly once, here.
+     */
+    private static String xmlEscape(String raw) {
+        String s = com.lattex.parse.OutputLegality.sanitize(raw);
         StringBuilder sb = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             char ch = s.charAt(i);
@@ -1079,6 +1128,31 @@ public final class LatteX {
                 case '<' -> sb.append("&lt;");
                 case '>' -> sb.append("&gt;");
                 case '"' -> sb.append("&quot;");
+                default -> sb.append(ch);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * HTML-attribute-escapes a container attribute value (aria-label / data-lx-*).
+     * The shared {@link com.lattex.parse.OutputLegality} policy runs FIRST (plan
+     * cfd12523): illegal C0 controls are stripped and an unpaired surrogate fails
+     * loud, so a semantic value stored RAW is made legal+safe at this single
+     * boundary. Escapes the same metachar set the parser used to pre-escape
+     * ({@code & < > " '}), so clean values stamp byte-identically to before.
+     */
+    private static String htmlAttrEscape(String raw) {
+        String s = com.lattex.parse.OutputLegality.sanitize(raw);
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            switch (ch) {
+                case '&' -> sb.append("&amp;");
+                case '<' -> sb.append("&lt;");
+                case '>' -> sb.append("&gt;");
+                case '"' -> sb.append("&quot;");
+                case '\'' -> sb.append("&#39;");
                 default -> sb.append(ch);
             }
         }

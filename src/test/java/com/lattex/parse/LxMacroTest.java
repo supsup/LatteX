@@ -151,9 +151,13 @@ class LxMacroTest {
     void parsesQuotedA11yLabelWithSpacesAndEscapes() {
         StyledMath sm = lx("\\lx[a11y.label=\"the sum of i from 1 to n\"]{ \\sum_{i=1}^{n} i }");
         assertEquals("the sum of i from 1 to n", sm.sem().a11yLabel());
-        // HTML-escaping happens at parse.
+        // Plan cfd12523: the label is stored RAW; HTML-escaping is applied ONCE at the
+        // container boundary (renderStyledHtml), not at parse.
         StyledMath esc = lx("\\lx[a11y.label=\"a < b & c\"]{ x }");
-        assertEquals("a &lt; b &amp; c", esc.sem().a11yLabel());
+        assertEquals("a < b & c", esc.sem().a11yLabel(), "stored raw (unescaped)");
+        assertTrue(com.lattex.api.LatteX.renderStyledHtml("\\lx[a11y.label=\"a < b & c\"]{ x }")
+                .contains("aria-label=\"a &lt; b &amp; c\""),
+            "escaped at the container boundary");
     }
 
     @Test
@@ -184,9 +188,13 @@ class LxMacroTest {
 
     @Test
     void graphExprIsHtmlEscaped() {
-        // A body with '<' (a relation) is HTML-escaped for the attribute value.
+        // Plan cfd12523: the plottable body is stored RAW in the Semantics data map;
+        // HTML-escaping is applied ONCE at the container boundary (renderStyledHtml).
         StyledMath sm = lx("\\lx[graph.domain=-2..2]{a < b}");
-        assertEquals("a &lt; b", sm.sem().data().get("graph-expr"));
+        assertEquals("a < b", sm.sem().data().get("graph-expr"), "stored raw (unescaped)");
+        assertTrue(com.lattex.api.LatteX.renderStyledHtml("\\lx[graph.domain=-2..2]{a < b}")
+                .contains("data-lx-graph-expr=\"a &lt; b\""),
+            "escaped at the container boundary");
     }
 
     @Test
