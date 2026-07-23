@@ -368,7 +368,16 @@ public final class SvgEmitter {
 
     /** Locale-independent compact number: integers plain, else up to 4 dp. */
     private static String num(double v) {
-        if (v == Math.rint(v) && !Double.isInfinite(v)) {
+        if (!Double.isFinite(v)) {
+            // A NaN/Infinity coordinate is a layout bug, not valid SVG: emitting the
+            // literal "NaN"/"Infinity" would poison the document (an invalid attribute
+            // value that also dodges the numeric alphabet). Refuse through the SAME typed
+            // channel so it fails closed — a RENDER_BUG, not a cap (5427c41 N2, lattex/216).
+            // Finite values are unaffected, so compliant output is byte-identical.
+            throw new com.lattex.parse.MathSyntaxException(
+                "non-finite coordinate in layout (" + v + ")");
+        }
+        if (v == Math.rint(v)) {
             return Long.toString((long) v);
         }
         String s = String.format(Locale.ROOT, "%.4f", v);
