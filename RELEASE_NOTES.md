@@ -6,6 +6,29 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### fx runtime — bounded effects + detached-element lifecycle
+
+- **`constellation` is bounded.** The star map now honours a global star budget
+  (total stars are capped however many glyph `<path>`s the equation has — the old
+  sampler was per-path only, 3–14 stars each, with no ceiling), and joins stars via a
+  spatial grid instead of an O(S²) all-pairs nearest-neighbour scan. The per-frame
+  radial gradient — previously re-allocated for **every** visible star on **every**
+  animation frame — is baked once into a reusable sprite and blitted with `globalAlpha`.
+  Within budget the star map is unchanged; over budget it downsamples evenly across the
+  whole equation.
+- **`thread` hover is O(1) per glyph.** Hovering a token used to call
+  `group.indexOf()` for every path on every `mouseenter` (a large repeated-token group
+  approached O(P²) per hover); each path now carries an integer group id, so lighting a
+  token's occurrences is a constant-time membership check. The glyphs that light are
+  exactly the same.
+- **Perpetual effects tear down when their element leaves the DOM.** `hologram` (an idle
+  interval + resize listener + body overlay) and `neonsign` (a self-rescheduling flicker
+  chain) were cleaned up only on real page scrolling — so removing an equation from a
+  no-scroll SPA view leaked the interval/timeout and listeners forever. They now stop
+  their perpetual work as soon as the host element is disconnected (`el.isConnected`),
+  and a new **`window.LatteXFx.destroy(el)`** ends a live show immediately and
+  idempotently. No new `data-lx-*` attributes; the visible effects are unchanged.
+
 ### Output-boundary legality + public-boundary validation
 
 - **One shared code-point legality policy at every output boundary.** SVG aria text,

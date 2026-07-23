@@ -114,6 +114,72 @@ class FxRuntimeLifecycleTest {
         return v == null || v.isNull() ? "" : v.asString();
     }
 
+    // ---- hologram: detached-element teardown (plan 62fafe76, LTX-10) ------------
+
+    @Test
+    void hologramDetachedElementTeardownReleasesTheIdleInterval() throws IOException {
+        boot(false);
+        Value el = js("globalThis.__el = __lxMakeEl({}, 1); __el");
+
+        fx.getMember("play").execute(el, "hologram", "400ms");
+        js("__lxRunTimeouts(20)"); // drive the ignition stutter until the idle interval arms
+        assertEquals(1, intOf("__lxActiveIntervals()"), "the idle interval is armed while connected");
+        assertEquals(1, intOf("__lxBodyChildren()"), "the scanline overlay is present while connected");
+
+        // The leak class this fix closes: NO scroll ever fires (a no-scroll SPA that
+        // removes the equation from the DOM). scrollKillable alone never tears down.
+        js("__el.isConnected = false;");
+        js("__lxRunIntervals(2)"); // the next idle tick must notice the detach and end the show
+
+        assertEquals(0, intOf("__lxActiveIntervals()"),
+            "a detached element must clearInterval the idle loop (was leaked forever)");
+        assertEquals(0, intOf("__lxBodyChildren()"),
+            "detached teardown removes the scanline overlay");
+        assertEquals(0, intOf("__lxScrollListeners()"),
+            "detached teardown releases the scroll-kill listener too");
+        assertFalse(el.getMember("_lxHolo").asBoolean(),
+            "the re-entry guard clears on detached teardown so a fresh show can arm later");
+    }
+
+    @Test
+    void latteXFxDestroyExplicitlyTearsDownAHologramShow() throws IOException {
+        boot(false);
+        Value el = js("globalThis.__el = __lxMakeEl({}, 1); __el");
+
+        fx.getMember("play").execute(el, "hologram", "400ms");
+        js("__lxRunTimeouts(20)");
+        assertEquals(1, intOf("__lxActiveIntervals()"), "the idle interval is armed");
+
+        // The explicit destroy path: end the show AT ONCE, not on the next tick.
+        assertTrue(js("window.LatteXFx.destroy(__el)").asBoolean(),
+            "destroy reports it tore a live show down");
+        assertEquals(0, intOf("__lxActiveIntervals()"), "explicit destroy clears the idle interval");
+        assertEquals(0, intOf("__lxBodyChildren()"), "explicit destroy removes the overlay");
+        assertFalse(js("window.LatteXFx.destroy(__el)").asBoolean(),
+            "a second destroy is an idempotent no-op (nothing left to tear down)");
+    }
+
+    // ---- neonsign: detached-element teardown (plan 62fafe76, LTX-10) -------------
+
+    @Test
+    void neonsignDetachedElementTeardownStopsTheFlickerChain() throws IOException {
+        boot(false);
+        Value el = js("globalThis.__el = __lxMakeEl({}, 3); __el");
+
+        fx.getMember("play").execute(el, "neonsign", "400ms");
+        js("__lxRunTimeouts(3)"); // arm the self-rescheduling flicker loop
+        assertTrue(intOf("__lxActiveTimeouts()") >= 1, "the flicker loop reschedules while connected");
+
+        // No scroll — just detach the element, the SPA-removal leak case.
+        js("__el.isConnected = false;");
+        js("__lxRunTimeouts(3)"); // the next flicker tick must notice the detach and stop
+
+        assertEquals(0, intOf("__lxActiveTimeouts()"),
+            "a detached element must clear the flicker timer and schedule no further work");
+        assertFalse(el.getMember("__lxNeon").asBoolean(),
+            "the guard clears on detached teardown so a fresh show can arm later");
+    }
+
     // ---- neonsign: single loop + scroll teardown (review HIGH) ------------------
 
     @Test
