@@ -97,6 +97,26 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   anything else in the bracket fails loud, matching `array`'s argument discipline.
   An `aligned` without the argument renders byte-identically to 0.11.0.
 
+### Text-mode control-symbol escapes — the residual from the `\text{…}` fail-loud fix
+
+- **`\%`, `\#`, `\_`, `\&`, `\{`, `\}` now decode inside `\text{…}` instead of
+  keeping a stray backslash.** The fail-loud fix above only caught commands (a
+  backslash followed by an ASCII letter) and `\$`; a non-letter escape like `\%`
+  fell through neither loud nor decoded — `\text{50\%}` served the literal
+  characters "50\%" and `\text{tag\#1}` served "tag\#1" (Marlow audit LTX-12).
+  That silent-wrong output is closed the same way the letter-command case was:
+  the supported-in-text set is now fully explicit — `\$` `\%` `\#` `\_` `\&`
+  `\{` `\}` decode to their literal character, `\,` (thin space) decodes to a
+  plain space (text runs have no sub-em spacing unit — real corpus formulas
+  like `\mathrm{m\,s^{-1}}` rely on it for unit spacing), and every other
+  backslash sequence fails loud with the same `Unknown command in \text: …`
+  shape, including `\\` (a line break in real LaTeX; LatteX text runs are
+  single-line and have no line-break primitive, so it is rejected rather than
+  silently becoming a space or vanishing) and a trailing lone `\`. One decode
+  table now backs the MathML `<mtext>`, the accessible description, and the
+  SVG `aria-label` — all three read the same decoded string from one shared
+  traversal, so they can never disagree.
+
 ### `unfold` fx effect — a bounded `\sum` blooms into its terms (opt-in, flag-gated)
 
 - **`unfold` — click a `\sum` open into its explicit terms.** `\lx[fx.click=unfold]{\sum_{i=1}^{4} f(i)}`
