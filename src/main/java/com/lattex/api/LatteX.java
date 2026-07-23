@@ -1245,7 +1245,17 @@ public final class LatteX {
      * @return the {@code lattex-fx.js} runtime source
      */
     public static String fxRuntimeJs() {
-        return bundledResource("/com/lattex/fx/lattex-fx.js");
+        return FxRuntimeHolder.JS;
+    }
+
+    /**
+     * The fx runtime JS is an immutable bundled resource; read {@code readAllBytes} once,
+     * lazily, mirroring {@link FontHolder} — not on every accessor call (plan 725c1488 /
+     * LTX-03). The class-init lazy holder is thread-safe and the String is immutable, so
+     * the returned value is byte-identical to the per-call read.
+     */
+    private static final class FxRuntimeHolder {
+        static final String JS = bundledResource("/com/lattex/fx/lattex-fx.js");
     }
 
     /**
@@ -1255,7 +1265,12 @@ public final class LatteX {
      * @return the {@code lattex-fx.css} source
      */
     public static String fxStylesCss() {
-        return bundledResource("/com/lattex/fx/lattex-fx.css");
+        return FxStylesHolder.CSS;
+    }
+
+    /** The fx styles CSS — same immutable-resource lazy-holder pattern as {@link FxRuntimeHolder}. */
+    private static final class FxStylesHolder {
+        static final String CSS = bundledResource("/com/lattex/fx/lattex-fx.css");
     }
 
     private static String bundledResource(String path) {

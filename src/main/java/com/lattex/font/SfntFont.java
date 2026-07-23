@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntFunction;
 
 /**
  * A minimal, clean-room reader for the sfnt (TrueType/{@code glyf}) font
@@ -39,6 +41,25 @@ public final class SfntFont {
     // Selected Unicode cmap subtable.
     private final int cmapSubtableOffset;
     private final int cmapFormat;
+
+    // -- immutable hot-path memoization (plan 725c1488, Marlow audit LTX-03) -----
+    //
+    // The font is built-before-publication and IMMUTABLE (all parsing done in the
+    // constructor; `data`/`loca`/`tableOffset` never mutate after). Its per-glyph
+    // queries are pure functions of the glyph id, so memoizing them is observably
+    // transparent. Both caches are bounded by the font's glyph count (a key is a
+    // valid glyph id), so an unbounded map keyed by glyph id cannot grow past
+    // numGlyphs — this is NOT a render-result cache (input cardinality there is
+    // unbounded); only the immutable per-glyph artifacts are cached.
+    //
+    // CONCURRENCY: a shared SfntFont may be queried from multiple render threads.
+    // Both caches are ConcurrentHashMap + computeIfAbsent, so a concurrent
+    // first-access populates each key exactly once and publishes the (immutable)
+    // value safely. The cached values are immutable — GlyphOutline is a record over
+    // a List.copyOf, and a path-data String is immutable — so a reader can never
+    // observe a partially-constructed entry.
+    private final Map<Integer, GlyphOutline> outlineCache = new ConcurrentHashMap<>();
+    private final Map<Integer, String> glyphPathDataCache = new ConcurrentHashMap<>();
 
     private SfntFont(byte[] data) {
         this.data = data;
@@ -359,7 +380,37 @@ public final class SfntFont {
         if (glyphId < 0 || glyphId >= numGlyphs) {
             throw new IndexOutOfBoundsException("glyphId " + glyphId);
         }
-        return outline(glyphId, 0);
+        // Memoized: the outline is a pure function of the (immutable) glyf data, and the
+        // layout pass reads it (atom metrics + the top-level bounds pass) while SVG
+        // emission decodes it again — plus glyphmap/groupmap each re-walk emission — so an
+        // uncached read reparsed the same glyf run many times per render (audit LTX-03,
+        // ~116x). computeIfAbsent's mapping function calls the PRIVATE outline(glyphId, 0),
+        // whose composite recursion also uses the private path — so it never re-enters
+        // computeIfAbsent on this map (no recursive-update hazard).
+        return outlineCache.computeIfAbsent(glyphId, g -> outline(g, 0));
+    }
+
+    /**
+     * A memoized per-glyph derived string (the SVG emitter's {@code <path d>} data),
+     * keyed by glyph id — a bounded IMMUTABLE cache (cardinality ≤ {@link #numGlyphs}).
+     * The value is computed by {@code producer} on the first access to a glyph and reused
+     * thereafter, so the three emission consumers within one render (SVG, glyphmap,
+     * groupmap) and repeat renders share ONE path string per glyph without regenerating it
+     * (audit LTX-03, ~271x for path data).
+     *
+     * <p>Layering: the SVG-to-{@code d} conversion stays in the {@code svg} package (this
+     * font reader knows nothing of SVG); the font only owns the memo slot and its glyph-id
+     * cardinality bound. The producer must be a PURE function of the glyph id (as the
+     * {@code svg} package's {@code GlyphPath.toPathData} is), so the cached value is
+     * observably transparent.
+     * Thread-safe via {@link ConcurrentHashMap#computeIfAbsent}; the value (a String) is
+     * immutable and safely published.
+     */
+    public String glyphPathData(int glyphId, IntFunction<String> producer) {
+        if (glyphId < 0 || glyphId >= numGlyphs) {
+            throw new IndexOutOfBoundsException("glyphId " + glyphId);
+        }
+        return glyphPathDataCache.computeIfAbsent(glyphId, producer::apply);
     }
 
     /** Maximum composite-component nesting depth (guards against cyclic glyphs). */
@@ -761,13 +812,24 @@ public final class SfntFont {
     }
 
     private int cmap12(int c) {
+        // Format-12 sequential-map groups are required by the spec to be sorted by
+        // startCharCode ascending and non-overlapping, so a binary search on the group
+        // whose [startChar, endChar] contains c is exactly equivalent to the old linear
+        // scan — same glyph id for every code point, hit or miss (audit LTX-03).
         int t = cmapSubtableOffset;
         int numGroups = (int) u32(t + 12);
-        for (int i = 0; i < numGroups; i++) {
-            int grp = t + 16 + i * 12;
+        int lo = 0;
+        int hi = numGroups - 1;
+        while (lo <= hi) {
+            int mid = (lo + hi) >>> 1;
+            int grp = t + 16 + mid * 12;
             long startChar = u32(grp);
             long endChar = u32(grp + 4);
-            if (c >= startChar && c <= endChar) {
+            if (c < startChar) {
+                hi = mid - 1;
+            } else if (c > endChar) {
+                lo = mid + 1;
+            } else {
                 long startGlyph = u32(grp + 8);
                 return (int) (startGlyph + (c - startChar));
             }
@@ -775,25 +837,50 @@ public final class SfntFont {
         return 0;
     }
 
-    /** OpenType Coverage table lookup (formats 1 and 2); -1 if not covered. */
+    /**
+     * OpenType Coverage table lookup (formats 1 and 2); -1 if not covered. Both formats
+     * store their records SORTED by glyph id — format 1 a sorted glyph array, format 2
+     * sorted non-overlapping ranges (OpenType spec) — so a binary search returns exactly
+     * the same coverage index as the old linear scan for every glyph, present or absent
+     * (audit LTX-03). Equivalence is guarded corpus-wide: italic correction, top-accent,
+     * math kerning and variant selection all route through here, so a lookup change would
+     * shift glyph positions and flip the byte-identity ratchet.
+     */
     private int coverageIndex(int coverage, int glyphId) {
         int format = u16(coverage);
         if (format == 1) {
+            // Sorted glyph array: binary search for glyphId; the index IS the coverage index.
             int count = u16(coverage + 2);
-            for (int i = 0; i < count; i++) {
-                if (u16(coverage + 4 + i * 2) == glyphId) {
-                    return i;
+            int lo = 0;
+            int hi = count - 1;
+            while (lo <= hi) {
+                int mid = (lo + hi) >>> 1;
+                int g = u16(coverage + 4 + mid * 2);
+                if (glyphId < g) {
+                    hi = mid - 1;
+                } else if (glyphId > g) {
+                    lo = mid + 1;
+                } else {
+                    return mid;
                 }
             }
         } else if (format == 2) {
+            // Sorted RangeRecord[] {start, end, startCoverageIndex}: binary search for the
+            // range containing glyphId.
             int rangeCount = u16(coverage + 2);
-            for (int i = 0; i < rangeCount; i++) {
-                int base = coverage + 4 + i * 6;
+            int lo = 0;
+            int hi = rangeCount - 1;
+            while (lo <= hi) {
+                int mid = (lo + hi) >>> 1;
+                int base = coverage + 4 + mid * 6;
                 int start = u16(base);
                 int end = u16(base + 2);
-                int startCoverageIndex = u16(base + 4);
-                if (glyphId >= start && glyphId <= end) {
-                    return startCoverageIndex + (glyphId - start);
+                if (glyphId < start) {
+                    hi = mid - 1;
+                } else if (glyphId > end) {
+                    lo = mid + 1;
+                } else {
+                    return u16(base + 4) + (glyphId - start);
                 }
             }
         }
