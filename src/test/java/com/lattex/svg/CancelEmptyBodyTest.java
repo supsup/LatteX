@@ -47,9 +47,11 @@ class CancelEmptyBodyTest {
                     failures.add(mode + " [" + latex + "] threw: " + e);
                     continue;
                 }
-                // (1) No non-finite token may reach the emitted SVG at all — num() writes
-                // NaN/Infinity verbatim, so a substring scan catches a non-finite viewBox,
-                // width/height, <g transform>, <rect> metric, or <path d> coordinate.
+                // (1) No non-finite token may reach the emitted SVG at all. num() now
+                // REFUSES a non-finite coordinate through the typed channel (plan b2ae72fe /
+                // 5427c41 N2), so a non-finite would throw and be caught above (a failure);
+                // this substring scan stays as a second, independent gate against a
+                // non-finite viewBox, width/height, <g transform>, <rect> metric, or <path d>.
                 if (svg.contains("NaN") || svg.contains("Infinity")) {
                     failures.add(mode + " [" + latex + "] emitted a non-finite token: " + svg);
                 }

@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.lattex.api.Color;
 import com.lattex.api.LatteX;
 import com.lattex.api.Outcome;
+import com.lattex.api.RenderOptions;
 import com.lattex.api.RenderResult;
 import com.lattex.font.SfntFont;
 import com.lattex.layout.Layout;
@@ -203,6 +204,75 @@ class OutputCapPostconditionTest {
         SvgEmitter.CappedBuilder ok = new SvgEmitter.CappedBuilder();
         ok.append("ab").append('c');
         assertEquals("abc", ok.checked(), "a below-cap build is returned verbatim");
+    }
+
+    /**
+     * The FLUID (now-default) render path must be capped IDENTICALLY to the fixed-size
+     * path. fluid rides the host opts and lands on the LIVE default render — the exact
+     * surface a naive freshen onto the fluid land would have left bypassing the cap (the
+     * regression this test pins; reviewer lattex/424). A fluid=true render of the
+     * boxed-storm must trip the same OUTPUT_CAP_EXCEEDED, not return an over-cap svg.
+     */
+    @Test
+    void theFluidDefaultPathIsCappedToo() {
+        RenderOptions fluid = RenderOptions.defaults().withFluid(true);
+        RenderResult r = LatteX.renderWithDiagnostics(BOXED_STORM);
+        // (diagnostics has no opts overload; assert the throwing fluid path directly and
+        // that renderStyledHtml — the html surface that threads opts.fluid() — refuses too.)
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> LatteX.render(BOXED_STORM, fluid));
+        assertTrue(e.isCapExceeded(),
+            "the fluid render() path must classify the trip as a resource cap: " + e.getMessage());
+        // The fluid emitter overload, called directly with an over-cap layout, caps as well.
+        List<Rule> rules = new ArrayList<>(60_000);
+        for (int i = 0; i < 60_000; i++) {
+            rules.add(new Rule(i, i, 10, 2));
+        }
+        Layout layout = new Layout(List.of(), rules, 0, 0, 100, 100);
+        MathSyntaxException e2 = assertThrows(MathSyntaxException.class,
+            () -> SvgEmitter.emit(layout, FONT, "x", Color.BLACK, true));
+        assertTrue(e2.isCapExceeded(), "the 5-arg fluid emit must cap: " + e2.getMessage());
+        // Sanity: a compliant fluid render still succeeds (the cap does not break fluid).
+        assertFalse(r.diagnostics().outcome() == Outcome.OK && r.svg().length() > SvgEmitter.MAX_OUTPUT_CHARS,
+            "a breach must never return an over-cap OK");
+        String okFluid = LatteX.render("x^2 + y^2 = z^2", fluid);
+        assertTrue(okFluid.contains("style=\"width:100%"), "a compliant fluid render still carries the sizing rule");
+    }
+
+    /**
+     * Direct discriminator for the non-finite guard (reviewer lattex/424 [MEDIUM]): a
+     * non-finite coordinate reaching num() must THROW through the typed channel — a
+     * RENDER_BUG, NOT a cap. A Layout with a NaN / +Infinity minX drives num() on the
+     * viewBox coordinate. Deleting the {@code if(!isFinite)} throw reds this (the emit
+     * would instead succeed with a literal "NaN"/"Infinity" viewBox).
+     */
+    @Test
+    void aNonFiniteCoordinateRefusesThroughTheTypedChannelNotACap() {
+        Layout nan = new Layout(List.of(), List.of(), Double.NaN, 0, 100, 100);
+        MathSyntaxException eNan = assertThrows(MathSyntaxException.class,
+            () -> SvgEmitter.emit(nan, FONT, "x", Color.BLACK));
+        assertFalse(eNan.isCapExceeded(), "a non-finite coord is a RENDER_BUG, not a cap: " + eNan.getMessage());
+        assertTrue(eNan.getMessage().contains("non-finite"), eNan.getMessage());
+
+        Layout inf = new Layout(List.of(), List.of(), Double.POSITIVE_INFINITY, 0, 100, 100);
+        MathSyntaxException eInf = assertThrows(MathSyntaxException.class,
+            () -> SvgEmitter.emit(inf, FONT, "x", Color.BLACK));
+        assertFalse(eInf.isCapExceeded(), "a non-finite coord is a RENDER_BUG, not a cap: " + eInf.getMessage());
+        assertTrue(eInf.getMessage().contains("non-finite"), eInf.getMessage());
+    }
+
+    /**
+     * A compliant fluid render is byte-identical to the pre-change golden captured from
+     * CURRENT main (97f9a965) — fluid changed the default shape, so the golden carries the
+     * style rule; the cap change must leave it untouched.
+     */
+    @Test
+    void aCompliantFluidRenderIsByteIdenticalToTheCurrentMainGolden() throws Exception {
+        String mid = "\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6} \\quad "
+            + "\\int_0^1 x^2\\,dx = \\frac{1}{3} \\quad \\sqrt{a^2+b^2}";
+        String svg = LatteX.render(mid, RenderOptions.defaults().withFluid(true));
+        assertEquals(resource("golden-mid-fluid.svg"), svg,
+            "a compliant fluid render must be byte-identical to the current-main golden");
     }
 
     // ---------------------------------------------------------------------
