@@ -310,6 +310,53 @@ final class Symbols {
         m.put("varkappa", new Sym(0x03F0, MathClass.ORD));   // ϰ
         m.put("digamma", new Sym(0x03DD, MathClass.ORD));    // ϝ
 
+        // -- Upright Greek (upgreek package; wild-corpus GAP tier) ------------
+        // STIX Two Math's base Greek block (used by \alpha etc. above) is drawn
+        // SLANTED — the bundled font's own math-italic design (verified: base
+        // \tau and Mathematical-Italic \tau are both visibly slanted, while
+        // Mathematical BOLD Greek is upright). The ONLY genuinely upright Greek
+        // this font ships is that Mathematical Bold Greek run (Unicode
+        // Mathematical Alphanumeric Symbols, U+1D6A8+) — the SAME run
+        // \boldsymbol/\bm already select via MathVariant.Style.BOLDSYMBOL's
+        // Greek offset (see MathVariant#GREEK_VARIANT_OFFSET / #mapGreek).
+        // Reusing it here is a font-forced compromise: real upgreek is
+        // regular-weight upright, but STIX Two Math has no non-bold upright
+        // Greek, so \\upalpha etc. render bold-upright rather than fail loud on
+        // an otherwise-common wild-corpus class (ISO 80000-2 upright units/
+        // constants, e.g. \\upmu for micro-). The standard upgreek letter set:
+        // the 24 lowercase letters + the 6 \var* symbol forms (uppercase Greek
+        // is already upright by default, so upgreek defines no \Up* commands).
+        m.put("upalpha", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B1), MathClass.ORD));
+        m.put("upbeta", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B2), MathClass.ORD));
+        m.put("upgamma", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B3), MathClass.ORD));
+        m.put("updelta", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B4), MathClass.ORD));
+        m.put("upepsilon", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03F5), MathClass.ORD));
+        m.put("upzeta", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B6), MathClass.ORD));
+        m.put("upeta", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B7), MathClass.ORD));
+        m.put("uptheta", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B8), MathClass.ORD));
+        m.put("upiota", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B9), MathClass.ORD));
+        m.put("upkappa", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03BA), MathClass.ORD));
+        m.put("uplambda", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03BB), MathClass.ORD));
+        m.put("upmu", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03BC), MathClass.ORD));
+        m.put("upnu", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03BD), MathClass.ORD));
+        m.put("upxi", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03BE), MathClass.ORD));
+        m.put("upomicron", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03BF), MathClass.ORD));
+        m.put("uppi", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C0), MathClass.ORD));
+        m.put("uprho", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C1), MathClass.ORD));
+        m.put("upsigma", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C3), MathClass.ORD));
+        m.put("uptau", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C4), MathClass.ORD));
+        m.put("upupsilon", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C5), MathClass.ORD));
+        m.put("upphi", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03D5), MathClass.ORD));
+        m.put("upchi", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C7), MathClass.ORD));
+        m.put("uppsi", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C8), MathClass.ORD));
+        m.put("upomega", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C9), MathClass.ORD));
+        m.put("upvarepsilon", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03B5), MathClass.ORD));
+        m.put("upvartheta", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03D1), MathClass.ORD));
+        m.put("upvarpi", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03D6), MathClass.ORD));
+        m.put("upvarrho", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03F1), MathClass.ORD));
+        m.put("upvarsigma", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C2), MathClass.ORD));
+        m.put("upvarphi", new Sym(MathVariant.map(MathVariant.Style.BOLDSYMBOL, 0x03C6), MathClass.ORD));
+
         // -- Binary operators (MathClass.BIN) --------------------------------
         m.put("pm", new Sym(0x00B1, MathClass.BIN));       // ±
         m.put("mp", new Sym(0x2213, MathClass.BIN));       // ∓

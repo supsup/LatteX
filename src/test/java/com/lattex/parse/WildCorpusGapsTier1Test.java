@@ -1,6 +1,7 @@
 package com.lattex.parse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -94,6 +95,33 @@ class WildCorpusGapsTier1Test {
         // LaTeXML emits \mathopen{} spontaneously (no content) as a bare class
         // marker — must not throw "expects an argument".
         assertRendersGlyphs("\\mathopen{} x + y");
+    }
+
+    // ------------------------------------------------------------------
+    // 4. Upright Greek (upgreek package): \\upalpha \\uptau \\upbeta etc. — the
+    // ISO-80000 upright-Greek convention common in physics/chemistry corpora.
+    // ------------------------------------------------------------------
+
+    @Test
+    void uprightGreekRenders() {
+        // \\upalpha alongside \mathcal (the legacy {\cal ...} form lands in the
+        // NEXT chunk; the wild-corpus fixture for the combined shape is added
+        // there once both are available).
+        assertRendersGlyphs("\\mathcal{L}(\\upalpha)");
+        assertRendersGlyphs("\\uptau_{\\uprho} = \\upbeta \\cdot \\upmu");
+        Atom upalpha = (Atom) MathParser.parse("\\upalpha");
+        assertEquals(MathClass.ORD, upalpha.mathClass());
+        // Upright Greek must be a DIFFERENT glyph than the default (slanted)
+        // \alpha — STIX Two Math's base Greek block is drawn italic; the only
+        // genuinely upright Greek it ships is the Mathematical Bold Greek run
+        // already used by \boldsymbol/\bm (MathVariant.Style.BOLDSYMBOL).
+        Atom alpha = (Atom) MathParser.parse("\\alpha");
+        assertNotEquals(alpha.codePoint(), upalpha.codePoint());
+    }
+
+    @Test
+    void uprightGreekVariantSymbolsRender() {
+        assertRendersGlyphs("\\upvarepsilon \\upvartheta \\upvarpi \\upvarrho \\upvarsigma \\upvarphi");
     }
 
     // ------------------------------------------------------------------
