@@ -107,10 +107,16 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 
 > **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
 > `\mathrm`). The argument is *literal text*: plain characters (spaces preserved),
-> `\$` for a literal dollar, invisible grouping braces, and `$…$` to re-enter math
-> mode (`\text{if $x>0$ then}`). Commands are **not** expanded inside text —
-> `\text{see \eqref{eq1}}` fails loud (`Unknown command in \text: \eqref`) rather
-> than silently serving the flattened characters; wrap math in `$…$` instead.
+> invisible grouping braces, `$…$` to re-enter math mode (`\text{if $x>0$ then}`),
+> and an EXPLICIT set of control-symbol escapes that decode to their literal
+> character — `\$` `\%` `\#` `\_` `\&` `\{` `\}` — plus `\,` (thin space), which
+> decodes to a plain space (text runs have no sub-em spacing unit). Every other
+> backslash sequence fails loud: a command (`\text{see \eqref{eq1}}` fails with
+> `Unknown command in \text: \eqref`), an unmapped control symbol (`\^`, `\~`),
+> `\\` (a line break in real LaTeX — text runs are single-line, so it has no
+> target and is rejected rather than silently dropped), or a trailing lone `\`.
+> Nothing is ever silently flattened *or* left with a stray backslash; wrap math
+> in `$…$` instead.
 >
 > **`aligned`/`split` position argument.** The optional `[t]`/`[b]`/`[c]` after
 > `\begin{aligned}`/`\begin{split}` is parsed and **ignored**: it selects which

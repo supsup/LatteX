@@ -1671,19 +1671,60 @@ public final class MathParser {
     }
 
     /**
+     * The text-mode control-symbol decode table (plan d2f3447c, Marlow audit LTX-12,
+     * follow-up to the text-flatten fix of plan 08eed9a5). A single-char escape
+     * {@code \X} where {@code X} is one of these keys decodes to the mapped literal
+     * character — the LaTeX control-symbol convention for characters that are
+     * otherwise "reserved" or ambiguous in a literal run: {@code \%} and {@code \#}
+     * (comment/parameter markers in real LaTeX, plain text here), {@code \_} and
+     * {@code \&} (subscript/tab markers there, plain text here), {@code \{} and
+     * {@code \}} (the way to get a literal brace when bare braces are invisible
+     * grouping), and {@code \$} (the pre-existing escape — {@code $} toggles math,
+     * so this is the only way to write a literal dollar). {@code \,} (the
+     * thin-space spacing command) is also decoded, to a plain space: math mode
+     * gives {@code \,} its own sub-em {@link MathNode.Spacing} node (see
+     * {@code Symbols.SPACES}), but {@link com.lattex.parse.MathNode.TextRun} is a
+     * flat string with no sub-em spacing primitive to target, so the nearest
+     * faithful decode is an ordinary word-space — real-world unit expressions
+     * lean on it (e.g. {@code \mathrm{m\,s^{-1}}}, {@code \mathrm{J\,K^{-1}}} in
+     * the wild corpus) and a hard rejection there would be a regression, not a fix.
+     *
+     * <p>{@code \\} is deliberately NOT in this table. In standard LaTeX text mode
+     * {@code \\} is a line break; LatteX's {@link com.lattex.parse.MathNode.TextRun}
+     * has no line-break primitive (a text run lays out as one line), so there is no
+     * faithful decode target — silently emitting a space or swallowing it outright
+     * would be an unstated, surprising content change. It falls through to the
+     * generic reject-loud path below like any other unsupported escape.
+     */
+    private static final Map<Character, Character> TEXT_CONTROL_SYMBOLS = Map.of(
+        '$', '$',
+        '%', '%',
+        '#', '#',
+        '{', '{',
+        '}', '}',
+        '_', '_',
+        '&', '&',
+        ',', ' ');
+
+    /**
      * A LITERAL text segment: grouping braces become invisible (exactly the old
-     * lexer-level stripping, relocated here so math spans keep theirs), and
-     * {@code \$} → {@code $} — with {@code $} toggling math, the escape is the
-     * only way to write a literal dollar in text (matches LaTeX).
+     * lexer-level stripping, relocated here so math spans keep theirs), and a
+     * backslash escape resolves one of two ways — never a third, silent one.
      *
      * <p>The supported-in-text set is EXPLICIT: plain characters (spaces
-     * significant), the {@code \$} escape, invisible grouping braces, and — at
-     * the caller's level — nested math via {@code $…$}. A command token
-     * ({@code \} + letters) in a literal segment fails LOUD here: the parser
-     * expands NO commands inside a text run, and the old behavior silently
-     * flattened them to literal characters with the braces dropped
-     * ({@code \text{blah \frac{a}{b}}} served "blah \fracab";
-     * {@code \text{…\eqref{elliptic}}} served "\eqrefelliptic" — plan 08eed9a5).
+     * significant), invisible grouping braces, the {@link #TEXT_CONTROL_SYMBOLS}
+     * escapes (decode to their literal character), and — at the caller's level —
+     * nested math via {@code $…$}. Everything else backslash-led fails LOUD:
+     * a command token ({@code \} + letters, e.g. {@code \frac}), an unmapped
+     * control symbol (e.g. {@code \\}, {@code \^}), or a dangling trailing
+     * backslash. The parser expands NO commands inside a text run, and the old
+     * behavior silently flattened multi-letter commands to literal characters
+     * with the braces dropped ({@code \text{blah \frac{a}{b}}} served
+     * "blah \fracab"; {@code \text{…\eqref{elliptic}}} served "\eqrefelliptic" —
+     * plan 08eed9a5) while unmapped single-char escapes like {@code \%}/{@code \#}
+     * kept their literal backslash instead of decoding OR rejecting
+     * ({@code \text{50\%}} served "50\%" — plan d2f3447c, LTX-12). Neither shape
+     * is acceptable: a supported escape decodes, everything else fails loud.
      * The {@code $…$} toggle is the one supported way to put a command inside
      * {@code \text}.
      */
@@ -1694,16 +1735,25 @@ public final class MathParser {
         StringBuilder sb = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
-            if (c == '\\' && i + 1 < s.length() && s.charAt(i + 1) == '$') {
-                sb.append('$');
-                i++;
-            } else if (c == '\\' && i + 1 < s.length() && isAsciiLetter(s.charAt(i + 1))) {
+            if (c == '\\' && i + 1 >= s.length()) {
+                throw MathSyntaxException.unsupported(
+                    "Unknown command in \\" + t.name() + ": trailing '\\' with nothing to escape",
+                    t.offset());
+            } else if (c == '\\' && isAsciiLetter(s.charAt(i + 1))) {
                 int j = i + 1;
                 while (j < s.length() && isAsciiLetter(s.charAt(j))) {
                     j++;
                 }
                 throw MathSyntaxException.unsupported(
                     "Unknown command in \\" + t.name() + ": \\" + s.substring(i + 1, j)
+                        + " — commands are not expanded in text; wrap math in $...$",
+                    t.offset());
+            } else if (c == '\\' && TEXT_CONTROL_SYMBOLS.containsKey(s.charAt(i + 1))) {
+                sb.append(TEXT_CONTROL_SYMBOLS.get(s.charAt(i + 1)));
+                i++;
+            } else if (c == '\\') {
+                throw MathSyntaxException.unsupported(
+                    "Unknown command in \\" + t.name() + ": \\" + s.charAt(i + 1)
                         + " — commands are not expanded in text; wrap math in $...$",
                     t.offset());
             } else if (c != '{' && c != '}') {
