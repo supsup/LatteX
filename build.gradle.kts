@@ -57,6 +57,20 @@ dependencies {
 // dir. Verify: run `test`, then `git status --porcelain` must be empty.
 tasks.test {
     useJUnitPlatform()
+    // Inputs for ModularBoundaryTest (plan 0c4f6015, Marlow audit LTX-08): the compiled
+    // com.lattex module (an exploded module dir, put on the --module-path of a real modular
+    // consumer) and the main source tree (recompiled with -Xlint:exports to assert the
+    // exported API leaks no non-exported type). Declared as task inputs so the checks are
+    // hermetic and re-run when either changes.
+    dependsOn(tasks.compileJava)
+    val mainClassesDir = tasks.compileJava.flatMap { it.destinationDirectory }
+    val mainSrcDir = layout.projectDirectory.dir("src/main/java")
+    inputs.dir(mainClassesDir).withPropertyName("lattexMainClasses")
+    inputs.dir(mainSrcDir).withPropertyName("lattexMainSrc")
+    doFirst {
+        systemProperty("lattex.mainClasses", mainClassesDir.get().asFile.absolutePath)
+        systemProperty("lattex.mainSrc", mainSrcDir.asFile.absolutePath)
+    }
 }
 
 // Regenerates the tracked examples/ artifacts on demand: the HTML pages ("examples"
