@@ -100,7 +100,10 @@ keeps the aspect ratio). Presentation-only: the geometry, viewBox, and every gly
 are byte-identical to the fixed-size render, and this is scale-to-fit, **not**
 line-breaking. Inline math (`renderInline` / `renderInlineResult`) and
 `renderFragment` never go fluid — baseline seating depends on fixed sizing. Default
-**off**: without the flag, output is byte-identical to previous releases.
+**off**: without the flag, output is byte-identical to previous releases. (Honest
+scope note: Stafficy `/docs` does **not** consume fluid yet — its sanitizer strips
+the style attribute, so `/docs` output is unchanged until a separate, deliberate
+two-sided carve-out lands. Fluid works today in any standalone embedding.)
 
 ## 3. The `\lx[...]{...}` syntax (author-facing)
 

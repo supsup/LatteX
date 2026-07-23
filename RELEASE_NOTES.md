@@ -21,6 +21,11 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   depends on it. The sizing rides the `<svg>` element only; the `.lx-math` container's
   attribute surface is untouched, and `fluid` is a HOST flag, not an `\lx` key — an
   author can never enable it from formula source.
+- **Stafficy `/docs` does not consume fluid yet — deliberately.** Its sanitizer strips
+  the `style` attribute (no `style` entry in the svg allow-list), so a fluid render is
+  provably byte-identical to fixed there; the `/docs` carve-out is a separate two-sided
+  change (sanitizer grammar + explicit opt-in) tracked as its own plan. Standalone
+  consumers (any plain browser/embedding host) get fluid today.
 
 ### `unfold` fx effect — a bounded `\sum` blooms into its terms (opt-in, flag-gated)
 
