@@ -376,10 +376,25 @@ for src, rec in zip(["x^2", "\\frac{a}{b}", "\\sum_{i=1}^{n} i"], records):
     print(src, "→", "rendered" if ok else svg)
 ```
 
-A single bad expression doesn't sink the batch — its slot becomes a marked
-`lattex: error: …` record and the rest still render (the exit code is `1` if any
-failed, so CI still catches it). If an expression contains a literal newline (a
-rare multi-line block), separate inputs with NUL instead and add `-0`.
+A single bad (malformed) expression doesn't sink the batch — its slot becomes a
+marked `lattex: error: …` record and the rest still render (the exit code is `1`
+if any failed, so CI still catches it). If an expression contains a literal
+newline (a rare multi-line block), separate inputs with NUL instead and add `-0`.
+
+**Streaming, and the one exception to "keep going."** Both stdin (single
+expression) and `--batch` read incrementally — a record's bytes are decoded and
+capped as they arrive, never buffered in full before anything is produced — so
+an oversized or adversarial stream can't exhaust memory before the CLI ever gets
+a chance to reject it. Each record is capped at 100,000 characters (the same
+limit the parser itself enforces on any LaTeX source). There's deliberately **no
+cap on how many records a batch may contain** or on the batch's total size —
+only each record individually is bounded, and nothing is accumulated across
+records, so record *count* doesn't threaten memory the way an unbounded single
+read used to. The one place this narrows the "isolate a bad record, keep going"
+promise: an **oversized** record (not a malformed one — too *big*, not invalid
+LaTeX) aborts the rest of the batch instead of being skipped, because skipping
+it would mean reading past the cap that was just enforced. Every record produced
+before it has already been written out.
 
 This is the efficient backend for a docs pipeline rendering a page's many spans —
 and it's what makes a fair **jar-vs-binary** timing comparison possible: without
