@@ -6,6 +6,33 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Exported JPMS API boundary repaired (Marlow audit LTX-08)
+
+- **The public exception is now catchable from a modular consumer.** The module exports
+  only `com.lattex.api`, but every render method throws
+  `com.lattex.parse.MathSyntaxException` — a type in a **non-exported** package, which a
+  modular consumer (one with its own `module-info` that `requires com.lattex`) could not
+  name (`package com.lattex.parse is not visible`). A new **exported** supertype
+  `com.lattex.api.LatteXException` closes the hole: `MathSyntaxException` now extends it,
+  so a modular consumer catches `com.lattex.api.LatteXException` and gets every failure
+  the render methods raise. **Fully back-compatible** — a supertype, not a move:
+  `MathSyntaxException` is the same concrete type in the same package (classpath callers
+  catching it by name are untouched), and `LatteXException` still extends
+  `IllegalArgumentException` (callers catching the broader type are untouched).
+- **`RenderOptions` no longer leaks a non-exported type.** Its math-style knob was typed
+  as the internal `com.lattex.layout.MathStyle`, a non-exported type surfaced across the
+  public record component, accessor, constructors, `withMathStyle`, and `parseMathStyle`
+  (six `-Xlint:exports` warnings). It now uses the **exported** enum
+  `com.lattex.api.MathStyle` (same four constants: `DISPLAY`/`TEXT`/`SCRIPT`/`SCRIPT_SCRIPT`),
+  mapped internally to the layout algorithm's style. `-Xlint:exports` is now clean.
+- **Four style selectors, no enum required.** `RenderOptions` keeps `inline()` / `display()`
+  and adds `script()` / `scriptScript()`, so a caller can reach any of the four styles
+  without naming the enum at all — while `withMathStyle(MathStyle)` still works.
+- **A modular-consumer compilation fixture guards the boundary.** The build now compiles a
+  real `requires com.lattex` consumer against only the exported surface and asserts
+  `-Xlint:exports` stays clean, so a future change that re-narrows the boundary fails the
+  build.
+
 ### Output-boundary legality + public-boundary validation
 
 - **One shared code-point legality policy at every output boundary.** SVG aria text,

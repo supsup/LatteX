@@ -51,8 +51,8 @@ That SVG is complete and standalone — write it to a `.svg` file, or paste it i
 into a page.
 
 **With styling.** `render(String, RenderOptions)` takes a typed, validated
-options object — the two knobs reachable from the public `com.lattex.api`
-package are `scale` and `color`:
+options object. All three knobs — `scale`, `color`, and `mathStyle` — are
+reachable using only exported `com.lattex.api` types:
 
 ```java
 import com.lattex.api.LatteX;
@@ -75,8 +75,9 @@ String svg = LatteX.render("\\frac{a+b}{c}", opts);
 > String same   = LatteX.render("\\frac{a}{b}", RenderOptions.defaults().inline());
 > ```
 >
-> `RenderOptions.defaults().inline()` / `.display()` are api-only selectors, so you
-> never have to name the (non-exported) style type.
+> `RenderOptions.defaults().inline()` / `.display()` / `.script()` / `.scriptScript()`
+> are convenience selectors covering all four styles, so a caller usually never has to
+> name the style enum at all.
 
 - **`scale`** — output size multiplier (default `1.0`), folded into the effective
   font size so the whole geometry scales as crisp vector output, not a CSS zoom.
@@ -84,12 +85,15 @@ String svg = LatteX.render("\\frac{a+b}{c}", opts);
 - **`color`** — a validated `Color`: `Color.CURRENT` (emits `currentColor`, so the
   math inherits surrounding text color and survives dark mode — the default) or
   `Color.parse("#rrggbb")` / `Color.parse("#rgb")`.
-- **`mathStyle`** — the top-level TeX `MathStyle`: `DISPLAY` (default), `TEXT`,
-  `SCRIPT`, or `SCRIPT_SCRIPT`.
+- **`mathStyle`** — the top-level TeX style, the **exported** enum
+  `com.lattex.api.MathStyle`: `DISPLAY` (default), `TEXT`, `SCRIPT`, or
+  `SCRIPT_SCRIPT`. (This enum lives in the exported API package precisely so a modular
+  consumer can name it; the internal TeX-algorithm style type stays module-private.)
 
 `RenderOptions` is an immutable `record`; derive variants with `withScale` /
-`withColor` / `withMathStyle`. See `examples/x-squared.html`, `gallery.html`, and
-`styled.html` for rendered output.
+`withColor` / `withMathStyle` (or the `inline()` / `display()` / `script()` /
+`scriptScript()` selectors, which name no enum). See `examples/x-squared.html`,
+`gallery.html`, and `styled.html` for rendered output.
 
 **Fluid (scale-to-fit) display math.** A display equation has a fixed natural width,
 so a wide formula can overflow a narrow container. Opt in with
@@ -256,7 +260,12 @@ under you (a LatteX update is an explicit version bump).
 
 **Error handling — one typed channel, never an `Error`.** Every public render entry
 (`render`, `renderInline`, `renderFragment`, `renderStyledHtml`) throws exactly one
-exception type: `com.lattex.parse.MathSyntaxException`. A genuine syntax error carries
+exception type: `com.lattex.parse.MathSyntaxException`, which extends the **exported**
+supertype `com.lattex.api.LatteXException`. Catch whichever suits your build: a plain
+classpath app can catch either; a **modular consumer** (its own `module-info` that
+`requires com.lattex`) must catch `com.lattex.api.LatteXException`, since
+`com.lattex.parse` is not an exported package. Both catch every failure the render
+methods raise. A genuine syntax error carries
 the source offset and a caret-pointing `caretString()` for author-facing messages; an
 unexpected internal failure in layout/emit is *contained* into the same channel (message
 prefixed `internal render failure`, original failure preserved as the cause) — so a
@@ -274,10 +283,16 @@ as `OUTPUT_CAP_EXCEEDED`, never an escaped error.
 ```java
 try {
     String svg = com.lattex.api.LatteX.render(userInput);
-} catch (com.lattex.parse.MathSyntaxException e) {
-    log.warn("math failed:\n{}", e.caretString()); // fall back to verbatim source
+} catch (com.lattex.api.LatteXException e) {   // exported supertype — works from any module
+    log.warn("math failed: {}", e.getMessage()); // fall back to verbatim source
 }
 ```
+
+> `LatteXException` is the exported handle; `caretString()` (the caret-pointing,
+> author-facing form) lives on the concrete `com.lattex.parse.MathSyntaxException`. A
+> classpath app can `catch (com.lattex.parse.MathSyntaxException e)` directly and call
+> `e.caretString()`; a modular consumer catches `LatteXException` and can narrow with an
+> `instanceof` check when it needs the caret.
 
 **Inline math on the text baseline.** `renderInline` gives you the SVG; for prose
 embedding use `renderInlineResult` — the same SVG plus baseline metrics, so the
