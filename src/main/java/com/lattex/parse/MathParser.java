@@ -17,7 +17,6 @@ import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.api.Color;
 import com.lattex.api.RenderOptions;
-import com.lattex.layout.MathStyle;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.StyledMath;
 import com.lattex.parse.MathNode.SupSub;

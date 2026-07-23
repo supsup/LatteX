@@ -1,6 +1,5 @@
 package com.lattex.api;
 
-import com.lattex.layout.MathStyle;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -149,8 +148,8 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
     /**
      * A copy in <em>inline</em> (text) math style — smaller fractions and scripts, big-operator
      * limits set to the side rather than stacked. This is the right style for math embedded in a
-     * line of running prose ({@code $…$}). An api-only selector so a caller need not name the
-     * (non-exported) style type.
+     * line of running prose ({@code $…$}). A convenience selector equivalent to
+     * {@code withMathStyle(MathStyle.TEXT)}, so a caller need not name the style enum at all.
      */
     public RenderOptions inline() {
         return withMathStyle(MathStyle.TEXT);
@@ -159,9 +158,30 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
     /**
      * A copy in <em>display</em> math style (the default) — full-size fractions and stacked
      * big-operator limits, for a standalone displayed equation ({@code $$…$$} / {@code \[…\]}).
+     * Convenience selector equivalent to {@code withMathStyle(MathStyle.DISPLAY)}.
      */
     public RenderOptions display() {
         return withMathStyle(MathStyle.DISPLAY);
+    }
+
+    /**
+     * A copy in <em>script</em> math style — the size used for first-level superscripts and
+     * subscripts and for the numerator/denominator of a text-style fraction. Convenience selector
+     * equivalent to {@code withMathStyle(MathStyle.SCRIPT)}, completing the four-style set
+     * ({@link #display()}, {@link #inline()}, {@code script}, {@link #scriptScript()}) so a
+     * consumer never has to name the style enum to reach any style.
+     */
+    public RenderOptions script() {
+        return withMathStyle(MathStyle.SCRIPT);
+    }
+
+    /**
+     * A copy in <em>script-script</em> math style — the smallest size, used for second-level
+     * scripts and deeper. Convenience selector equivalent to
+     * {@code withMathStyle(MathStyle.SCRIPT_SCRIPT)}.
+     */
+    public RenderOptions scriptScript() {
+        return withMathStyle(MathStyle.SCRIPT_SCRIPT);
     }
 
     // ---- string parsers (the typed boundary for the markdown/CLI layer) ----

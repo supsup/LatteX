@@ -119,7 +119,7 @@ public final class LatteX {
             stage = "layout";
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle().toLayout(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
             stage = "emit";
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
@@ -224,7 +224,7 @@ public final class LatteX {
         return containRender(() -> {
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * fStyle.scale(), fStyle.mathStyle(), false);
+                DISPLAY_FONT_SIZE * fStyle.scale(), fStyle.mathStyle().toLayout(), false);
             Layout layout = LayoutEngine.layout(fBody, ctx);
             // fluid is a HOST flag (like interactiveExpansion): it reads from the
             // caller's opts even when a \lx wrapper overrides the styling, and it is
@@ -267,7 +267,7 @@ public final class LatteX {
             SfntFont font = FontHolder.FONT;
             double fontSize = DISPLAY_FONT_SIZE * fStyle.scale();
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                fontSize, fStyle.mathStyle(), false);
+                fontSize, fStyle.mathStyle().toLayout(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
             String svg = SvgEmitter.emit(layout, font, describe(body), fStyle.color());
             double depthEm = Math.max(0.0, layout.maxY()) / fontSize;
@@ -439,7 +439,7 @@ public final class LatteX {
         return containRender(() -> {
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle().toLayout(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
             // fluid rides the HOST opts (never the \lx wrapper) and lands on the <svg>
             // element only — the container's attribute surface is untouched.
@@ -471,7 +471,7 @@ public final class LatteX {
                     if (expanded.isPresent()) {
                         MathNode expandedBody = expanded.get().expanded();
                         LayoutContext ectx = new LayoutContext(font, font.mathConstants(),
-                            DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+                            DISPLAY_FONT_SIZE * style.scale(), style.mathStyle().toLayout(), false);
                         Layout elayout = LayoutEngine.layout(expandedBody, ectx);
                         // The payload rides the SAME LayoutEngine.layout + SvgEmitter.emit path,
                         // so it is independently within the emitter's minimal SVG alphabet. It is
@@ -664,7 +664,7 @@ public final class LatteX {
             MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle().toLayout(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
             String glyphmap = fx.effects().containsValue(Effect.THREAD)
