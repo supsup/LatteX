@@ -11,10 +11,13 @@ package com.lattex.parse;
  * the full {@link #source()} input, so {@link #caretString()} can point a {@code ^}
  * at the offending column — an author-facing error instead of a positionless message.
  *
- * <p>Extends {@link IllegalArgumentException} so existing callers that catch the
- * broader type keep working.
+ * <p>Extends {@link com.lattex.api.LatteXException} — the exported supertype a modular
+ * consumer catches (LTX-08, plan 0c4f6015) — which in turn extends
+ * {@link IllegalArgumentException}, so existing callers that catch either the exported
+ * supertype or the broader {@code IllegalArgumentException} keep working, and callers that
+ * catch this concrete (non-exported) type by name are entirely unaffected.
  */
-public final class MathSyntaxException extends IllegalArgumentException {
+public final class MathSyntaxException extends com.lattex.api.LatteXException {
 
     private static final long serialVersionUID = 2L;
 
