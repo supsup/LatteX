@@ -57,6 +57,30 @@ public record MathFragment(String innerSvg, double widthPx, double heightPx, dou
                            String glyphmap, String mathml) {
 
     /**
+     * Enforces exactly the invariants this record's javadoc already promises (plan
+     * cfd12523): {@code innerSvg}, {@code glyphmap} (empty when nothing is threadable —
+     * never null), and {@code mathml} (never null — empty on fail-soft) are non-null;
+     * every metric is a finite, non-negative magnitude (widthPx is the tight ink width,
+     * heightPx/depthPx the above/below-baseline extents — none can legitimately be
+     * negative or non-finite).
+     */
+    public MathFragment {
+        java.util.Objects.requireNonNull(innerSvg, "innerSvg");
+        java.util.Objects.requireNonNull(glyphmap, "glyphmap");
+        java.util.Objects.requireNonNull(mathml, "mathml");
+        requireFiniteNonnegative(widthPx, "widthPx");
+        requireFiniteNonnegative(heightPx, "heightPx");
+        requireFiniteNonnegative(depthPx, "depthPx");
+    }
+
+    private static void requireFiniteNonnegative(double v, String name) {
+        if (!Double.isFinite(v) || v < 0.0) {
+            throw new IllegalArgumentException(
+                name + " must be a finite non-negative magnitude; got: " + v);
+        }
+    }
+
+    /**
      * Pre-mathml arity (plan lattex-mathfragment-mathml): delegates with an empty
      * {@code mathml} so every existing call-site — including consumers that construct
      * fragments field-by-field (the Sirentide math-bridge pattern) — compiles and
