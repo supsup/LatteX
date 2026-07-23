@@ -1,0 +1,9 @@
+x^2
+\frac{a}{b}
+\sqrt{2}
+\alpha + \beta
+\left(\frac{1}{2}\right)
+\sum_{i=1}^{n} i^2
+\int_0^1 f(x)\,dx
+\bogus{command}
+z

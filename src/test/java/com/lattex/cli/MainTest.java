@@ -119,6 +119,22 @@ final class MainTest {
     }
 
     @Test
+    void rendersExpressionFromStdinWhenNoArgv() {
+        // Exercises the streaming (LTX-09, plan ac28238e) NO_DELIMITER stdin path.
+        Result r = invokeStdin("\\sqrt{2}");
+        assertEquals(0, r.code(), () -> "stderr: " + r.err());
+        assertTrue(r.out().startsWith("<svg"));
+        assertTrue(r.out().contains("</svg>"));
+    }
+
+    @Test
+    void stdinExpressionIsStrippedOfSurroundingWhitespace() {
+        Result r = invokeStdin("  \n  x^2  \n\n");
+        assertEquals(0, r.code(), () -> "stderr: " + r.err());
+        assertTrue(r.out().startsWith("<svg"));
+    }
+
+    @Test
     void writesToOutputFile(@TempDir Path dir) throws Exception {
         Path svg = dir.resolve("out.svg");
         Result r = invoke("-o", svg.toString(), "x^2");
