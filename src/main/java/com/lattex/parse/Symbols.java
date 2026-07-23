@@ -605,6 +605,11 @@ final class Symbols {
         // -- Punctuation -----------------------------------------------------
         m.put("colon", new Sym(0x003A, MathClass.PUNCT)); // : (punctuation spacing)
 
+        // \# — cardinality notation (wild-corpus GAP tier): #E(F_p)-style group
+        // orders. A single-character control sequence, like \{ / \| below; ASCII
+        // '#' (U+0023) is an ordinary symbol, not a delimiter or operator.
+        m.put("#", new Sym('#', MathClass.ORD));
+
         // -- Delimiters usable as ordinary symbols (outside \left..\right) ---
         m.put("{", new Sym('{', MathClass.OPEN));
         m.put("}", new Sym('}', MathClass.CLOSE));
