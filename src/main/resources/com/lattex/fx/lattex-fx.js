@@ -2276,10 +2276,141 @@
     raf(function () { show.style.opacity = '1'; });
   }
 
+  // CASCADE: an ENTER effect for a STACKED, multi-row block (aligned / cases /
+  // matrix / an array of equations) — the rows REVEAL one at a time, top to
+  // bottom, a beat between them, so a derivation reads as reasoning unfolding line
+  // by line. OPACITY-ONLY: it never sets style.transform on the placed paths (the
+  // CSS transform property clobbers each glyph's placement transform ATTRIBUTE —
+  // the blob bug Charles smoke-caught twice), so the reveal is a per-band opacity
+  // ramp and nothing moves.
+  //
+  // Rows are found by PURE DOM GEOMETRY on the ALREADY-RENDERED inner <svg>: cluster
+  // the glyph <path>s by their baseline-y (the placement transform's ty) into
+  // horizontal bands. It reads NO container attribute, NO renderer sidecar, NO
+  // glyphmap — the geometry already in the SVG is the entire input (runtime-only v1;
+  // a renderer-emitted rowmap is the planned fallback for the ambiguous cases below).
+  //
+  // FAIL-HONEST — the design-critical boundary. Baseline-y ALONE cannot always tell
+  // "two rows" from "one tall line": at LatteX's metrics a superscript raises a glyph
+  // ~0.36em and a compact matrix/cases row step is ~0.4-0.5em (the SAME magnitude),
+  // while a bare \frac stacks numerator/denominator ~1.3em apart — as far as a real
+  // display row. So cascade animates ONLY when the band structure is UNAMBIGUOUS:
+  //   (1) >= 2 admitted glyphs, (2) a dominant vertical step at ROW scale (rejects a
+  //   flat line and script-only spread), (3) every inter-band gap itself a ROW-scale
+  //   step >= ROW_MIN_EM of the median glyph em (the em is derived from the placement
+  //   y-scale, |sy|*~1000 units-per-em — this is what rejects ~0.36em script offsets),
+  //   (4) the between-band gaps cleanly BIMODAL above the within-band spread, and
+  //   (5) every band populated (>= MIN_BAND glyphs — rejects a lone script or a
+  //   single-glyph \frac). Anything short of ALL of these -> INERT: the content is
+  //   shown immediately, fully visible, no animation, no error. Reduced motion -> the
+  //   same instant snap. Element-anchored opacity only (no fixed/body overlay), so it
+  //   rides scroll for free — no scrollKillable, like unfold.
+  function cascade(el) {
+    var svg = el.querySelector('svg');
+    // Reveal the container FIRST on every path below: a future CSS enter-hide keys on
+    // data-lx-fx-enter=cascade, and every exit must leave the math visible (never the
+    // CSS-only-invisibility hole where a hidden container is never uncovered).
+    el.style.opacity = '1';
+    if (!svg) { return; } // no inner svg: nothing to stack -> inert (container shown)
+    var all = Array.prototype.slice.call(svg.querySelectorAll('path'));
+
+    // Admit only glyph paths that carry a parseable placement (i.e. a baseline).
+    var items = [];
+    for (var i = 0; i < all.length; i++) {
+      var pl = placement(all[i]);
+      if (!pl) { continue; } // no placement -> no baseline -> not bandable
+      items.push({ p: all[i], y: pl.ty, s: Math.abs(pl.sy) });
+    }
+    if (items.length < 2) { return; } // < 2 glyphs -> inert
+
+    // em ~ the font size in USER units: the placement y-scale maps font design units
+    // (~1000 per em) to user units, so |sy|*1000 ~ one em. Median over the glyphs is
+    // robust to a few smaller script glyphs pulling the scale down.
+    var scales = items.map(function (it) { return it.s; })
+      .sort(function (a, b) { return a - b; });
+    var em = scales[scales.length >> 1] * 1000;
+    var ROW_MIN = 0.55 * em; // a genuine baseline-to-baseline row step (> ~0.36em scripts)
+    var SPLIT_FRAC = 0.6;    // a band-break gap is >= this fraction of the dominant gap
+    var SEP_RATIO = 2.5;     // between-band gaps must clear the within-band spread this much
+    var MIN_BAND = 2;        // reject single-glyph bands (a lone script / \frac numerator)
+
+    // Sort baselines; the consecutive gaps carry the band structure.
+    var ys = items.map(function (it) { return it.y; })
+      .sort(function (a, b) { return a - b; });
+    var maxGap = 0, d;
+    for (var g = 0; g < ys.length - 1; g++) {
+      d = ys[g + 1] - ys[g];
+      if (d > maxGap) { maxGap = d; }
+    }
+    if (maxGap < ROW_MIN) { return; } // no ROW-scale step (flat line / scripts only) -> inert
+
+    // Split into bands wherever a gap is >= the break threshold; track the within-
+    // vs between-band gap regimes for the bimodality gate.
+    var T = maxGap * SPLIT_FRAC;
+    var intraMax = 0, interMin = Infinity;
+    for (var k = 0; k < ys.length - 1; k++) {
+      d = ys[k + 1] - ys[k];
+      if (d >= T) { if (d < interMin) { interMin = d; } }
+      else if (d > intraMax) { intraMax = d; }
+    }
+    if (interMin < ROW_MIN) { return; }                          // every break a real row step
+    if (intraMax > 0 && interMin < SEP_RATIO * intraMax) { return; } // cleanly bimodal, not graded
+
+    // Assign a band index to each distinct baseline, then group the glyphs.
+    var bandOf = {}, band = 0;
+    bandOf[ys[0]] = 0;
+    for (var s2 = 1; s2 < ys.length; s2++) {
+      if (ys[s2] - ys[s2 - 1] >= T) { band++; }
+      bandOf[ys[s2]] = band;
+    }
+    var bandCount = band + 1;
+    if (bandCount < 2) { return; } // needs >= 2 rows to cascade
+    var bands = [];
+    for (var b2 = 0; b2 < bandCount; b2++) { bands.push([]); }
+    for (var m = 0; m < items.length; m++) { bands[bandOf[items[m].y]].push(items[m].p); }
+    for (var c = 0; c < bands.length; c++) {
+      if (bands[c].length < MIN_BAND) { return; } // a sparse band -> ambiguous -> inert
+    }
+
+    // ---- the reveal: opacity-only, band by band, top (smallest y) to bottom ----
+    if (reduced) { return; } // container already revealed; glyphs stay fully visible
+
+    if (el.__lxCascade) { return; } // re-entry guard: a replay while running is a no-op
+    el.__lxCascade = true;
+    var flat = [];
+    for (var bi = 0; bi < bands.length; bi++) {
+      for (var pj = 0; pj < bands[bi].length; pj++) {
+        bands[bi][pj].style.opacity = '0';        // hide, then ramp in per band
+        flat.push({ p: bands[bi][pj], band: bi });
+      }
+    }
+    var BEAT = 180, RAMP = 240, lastBand = bands.length - 1;
+    // Timeline off performance.now() (a monotone clock) rather than the rAF timestamp
+    // so the stagger reads as one continuous ramp; opacity ONLY, no transform.
+    var t0 = performance.now();
+    function frame() {
+      var e = performance.now() - t0;
+      for (var f = 0; f < flat.length; f++) {
+        var local = e - flat[f].band * BEAT;
+        var o = local <= 0 ? 0 : (local >= RAMP ? 1 : local / RAMP);
+        flat[f].p.style.opacity = String(o);
+      }
+      if (e >= lastBand * BEAT + RAMP) {
+        for (var q = 0; q < flat.length; q++) { flat[q].p.style.opacity = ''; } // settle pristine
+        el.__lxCascade = false;
+        return;
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
   // Play a trigger's effect. lightning/storm/handscribe (+ hologram/neonsign/
   // crystallize/blueprint/wobble/gravwell) → their JS routines;
   // everything else is a one-shot CSS keyframe (reset first so it can replay
-  // on re-trigger).
+  // on re-trigger). (cascade is NOT dispatched here: it is a runtime-only v1 with no
+  // Effect enum token yet, so it stays off the parity-guarded name === '...' chain
+  // and is driven via the __lxTestHook seam until the authoring wiring lands.)
   function play(el, name, dur) {
     if (name === 'lightning') { lightning(el); return; }
     if (name === 'storm') { storm(el); return; }
@@ -2395,6 +2526,7 @@
       scrollKillable: scrollKillable,
       cancel: cancel,
       unfold: unfold,
+      cascade: cascade,
       play: play,
       init: init
     });
