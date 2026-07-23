@@ -39,10 +39,19 @@ import java.util.regex.Pattern;
  *                  {@code fx.*=unfold} directive degrades INERT (the sum typesets
  *                  normally; no payload is stamped). {@code true} arms the pass, which
  *                  still fires ONLY on an equation that opted in via the directive.
+ * @param fluid     the HOST opt-in for scale-to-fit display math. Default {@code false}:
+ *                  output is byte-identical to before the flag existed. {@code true}
+ *                  adds ONE sizing {@code style} rule to the outer display {@code <svg>}
+ *                  ({@code width:100%;max-width:<natural>px;height:auto}) so the
+ *                  equation downscales in a narrow container but never upscales past
+ *                  its natural width (the preserved viewBox keeps the aspect ratio).
+ *                  Geometry/layout are untouched; inline results
+ *                  ({@link LatteX#renderInlineResult}) and fragments
+ *                  ({@link LatteX#renderFragment}) stay fixed-size regardless.
  */
 public record RenderOptions(double scale, Color color, MathStyle mathStyle,
                             java.util.Map<String, String> macros,
-                            boolean interactiveExpansion) {
+                            boolean interactiveExpansion, boolean fluid) {
 
     /** Lower clamp for {@link #scale()} — below this glyphs collapse to nothing. */
     public static final double MIN_SCALE = 0.1;
@@ -63,35 +72,41 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
         macros = java.util.Map.copyOf(macros); // defensive + null-key/value refusing
     }
 
-    /** Three-arg compatibility constructor: no preset macros, expansion off. */
+    /** Three-arg compatibility constructor: no preset macros, expansion off, fixed-size. */
     public RenderOptions(double scale, Color color, MathStyle mathStyle) {
-        this(scale, color, mathStyle, java.util.Map.of(), false);
+        this(scale, color, mathStyle, java.util.Map.of(), false, false);
     }
 
-    /** Four-arg compatibility constructor: preset macros, interactive expansion off. */
+    /** Four-arg compatibility constructor: preset macros, interactive expansion off, fixed-size. */
     public RenderOptions(double scale, Color color, MathStyle mathStyle,
                          java.util.Map<String, String> macros) {
-        this(scale, color, mathStyle, macros, false);
+        this(scale, color, mathStyle, macros, false, false);
     }
 
-    /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style, expansion off. */
+    /** Five-arg compatibility constructor: pre-{@code fluid} shape, fixed-size sizing. */
+    public RenderOptions(double scale, Color color, MathStyle mathStyle,
+                         java.util.Map<String, String> macros, boolean interactiveExpansion) {
+        this(scale, color, mathStyle, macros, interactiveExpansion, false);
+    }
+
+    /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style, expansion off, fixed-size. */
     public static RenderOptions defaults() {
-        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of(), false);
+        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of(), false, false);
     }
 
     /** A copy with a different scale (must be in {@code [MIN_SCALE, MAX_SCALE]}). */
     public RenderOptions withScale(double newScale) {
-        return new RenderOptions(newScale, color, mathStyle, macros, interactiveExpansion);
+        return new RenderOptions(newScale, color, mathStyle, macros, interactiveExpansion, fluid);
     }
 
     /** A copy with a different color. */
     public RenderOptions withColor(Color newColor) {
-        return new RenderOptions(scale, newColor, mathStyle, macros, interactiveExpansion);
+        return new RenderOptions(scale, newColor, mathStyle, macros, interactiveExpansion, fluid);
     }
 
     /** A copy with a different math style. */
     public RenderOptions withMathStyle(MathStyle newStyle) {
-        return new RenderOptions(scale, color, newStyle, macros, interactiveExpansion);
+        return new RenderOptions(scale, color, newStyle, macros, interactiveExpansion, fluid);
     }
 
     /**
@@ -100,7 +115,7 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      * additive-only rule as inline definitions).
      */
     public RenderOptions withMacros(java.util.Map<String, String> newMacros) {
-        return new RenderOptions(scale, color, mathStyle, newMacros, interactiveExpansion);
+        return new RenderOptions(scale, color, mathStyle, newMacros, interactiveExpansion, fluid);
     }
 
     /**
@@ -111,7 +126,24 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      * ONLY on an equation that authored the directive. A plain page pays zero cost.
      */
     public RenderOptions withInteractiveExpansion(boolean enabled) {
-        return new RenderOptions(scale, color, mathStyle, macros, enabled);
+        return new RenderOptions(scale, color, mathStyle, macros, enabled, fluid);
+    }
+
+    /**
+     * A copy with scale-to-fit display math enabled or disabled (default disabled).
+     * The HOST opt-in for responsive sizing: with it {@code true},
+     * {@link LatteX#render(String, RenderOptions)} and
+     * {@link LatteX#renderStyledHtml(String, RenderOptions)} stamp ONE sizing
+     * {@code style} rule ({@code width:100%;max-width:<natural>px;height:auto}) on the
+     * outer display {@code <svg>} so the equation shrinks to fit a narrow container and
+     * never upscales past its natural width. The viewBox — and every glyph inside — is
+     * byte-identical to the fixed-size render; this is presentation-only sizing, not a
+     * re-layout. Inline math ({@link LatteX#renderInlineResult}) and embeddable
+     * fragments ({@link LatteX#renderFragment}) never go fluid — their baselines stay
+     * fixed-size regardless of this flag.
+     */
+    public RenderOptions withFluid(boolean enabled) {
+        return new RenderOptions(scale, color, mathStyle, macros, interactiveExpansion, enabled);
     }
 
     /**
