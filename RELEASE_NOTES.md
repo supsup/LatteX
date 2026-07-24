@@ -6,6 +6,23 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Font/emission hot paths are memoized — output byte-identical (Marlow audit LTX-03)
+
+- **Immutable font hot paths are now cached, so a render stops re-decoding the same
+  glyph.** Per-glyph outlines (`SfntFont.outline`) and per-glyph SVG `<path d>` strings
+  (`SfntFont.glyphPathData`) are memoized on the shared immutable font, keyed by glyph id
+  with cardinality bounded by the font's glyph count. The three emission consumers within a
+  render (SVG, `glyphmap`, `groupmap`) and repeat renders now share one decoded outline and
+  one path string per glyph instead of reparsing the same `glyf` run many times each pass
+  (~116× for outlines, ~271× for path data). The cmap format-12 lookup also moved from a
+  linear group scan to a binary search.
+- **Zero observable change.** Every renderable surface is byte-for-byte identical to the
+  pre-caching tree — pinned by a whole-corpus SHA-256 ratchet over `render`/`renderInline`/
+  fragment/`glyphmap`/`groupmap` for the full `PARSES-NOW` corpus, plus a cmap-sweep golden
+  and cache-hit-equals-miss/no-collapse gates. The caches remain streaming-safe (the output
+  cap still refuses a runaway during growth) and are raced from cold under a barrier to prove
+  a single-producer, non-corrupt first access.
+
 ### Output size cap is now a hard postcondition (Marlow audit LTX-01)
 
 - **The documented 2,000,000-character SVG output ceiling is enforced as a true
