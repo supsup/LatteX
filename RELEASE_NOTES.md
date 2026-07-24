@@ -6,6 +6,28 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### One typed command authority (Marlow/Confluence audit)
+
+- **Parser dispatch, command enumeration/examples, did-you-mean candidates, and
+  user-macro reservation now share one typed descriptor registry.** Each accepted
+  control sequence owns its normalized name, grammar kind, handler identity,
+  index metadata, output role, and macro policy there. The generated command
+  index now covers structural and contextual commands such as `\boxed`,
+  `\cancel`, `\bra`, `\prescript`, and `\bordermatrix`, not only table-backed
+  symbols; the previously hidden delimiter-only `\vert` is indexed and reserved
+  too.
+- **Unknown commands have a typed reason.** `MathSyntaxException` distinguishes an
+  unknown command from an unknown environment internally, without parsing its
+  message or widening the exported module API, and nested text/math context
+  preserves that reason. The established base failure text and source offsets stay
+  intact; suggestion hints intentionally cover the complete registry now.
+- **Built-in macro reservation is stricter by design.** Names the old
+  hand-maintained deny list missed — including `\vert`, `\middle`, and `\cr` —
+  can no longer be shadowed by user macros. Previously valid expressions that do
+  not shadow a built-in retain their parse/render behavior and rendered bytes;
+  inputs that relied on those shadowing loopholes now fail with the established
+  additive-only “built-in command” error.
+
 ### CLI stdout failures now fail honestly
 
 - **One-shot and batch output no longer report success after `PrintStream` swallows
