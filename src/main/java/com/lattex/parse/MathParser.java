@@ -219,11 +219,20 @@ public final class MathParser {
      * applied later, in {@link #textWithNestedMath}, never to a math span.
      *
      * <p>Only GENUINELY UNESCAPED braces move the depth counter that finds the
-     * closing {@code '}'}. A backslash-escaped brace ({@code \{} or {@code \}})
-     * is a literal brace character (decoded later in {@link #literalText}), so it
-     * is copied verbatim and leaves depth untouched — counting it here wrongly
-     * balanced an escaped-brace argument only by cancelling two errors (Marlow
-     * exact-tip review of f4c0df90; plan d2f3447c).
+     * closing {@code '}'}. A backslash starts a CONTROL SYMBOL: the backslash and
+     * the single token it escapes are consumed as ONE atomic unit — exactly as the
+     * top-level lexer treats an escape ({@link #lex} {@code case '\\'}) — copied
+     * verbatim and never re-read. So {@code \{}/{@code \}} stay literal braces
+     * (decoded later in {@link #literalText}) and leave depth untouched, while a
+     * brace that merely FOLLOWS a control symbol — the {@code '{'} in {@code \\{}
+     * (an even backslash run: {@code \\} is one control symbol, e.g. a
+     * {@code \substack} row separator inside a nested {@code $…$} span) — is judged
+     * structural on its own. The earlier fix special-cased only {@code \{}/{@code \}}
+     * and did not consume {@code \\} atomically, so it re-read the second backslash
+     * of {@code \\{} as an escape of the following brace and DROPPED that brace's
+     * structural role — regressing {@code \text{$\substack{a\\{b}}$}} and
+     * {@code \text{$\substack{a\\}$}} (Marlow exact-tip review of 400002b; the
+     * original escaped-brace fix was Marlow's review of f4c0df90; plan d2f3447c).
      */
     private static int lexTextArgument(String s, String command, int i, List<Token> out, int start) {
         int n = s.length();
@@ -239,17 +248,20 @@ public final class MathParser {
         int depth = 1;
         while (i < n) {
             char c = s.charAt(i);
-            if (c == '\\' && i + 1 < n
-                    && (s.charAt(i + 1) == '{' || s.charAt(i + 1) == '}')) {
-                // A backslash-escaped brace (\{ or \}) is a LITERAL brace, not a
-                // structural grouping brace — it must NOT move the depth used to
-                // find the closing '}'. Copy BOTH chars verbatim; literalText
-                // later decodes the escape to a literal brace character. Without
-                // this, \{ wrongly incremented depth and \} wrongly decremented
-                // it (Marlow exact-tip review of f4c0df90): a lone \{ threw
-                // "Unbalanced brace" and a lone \} closed the argument early,
-                // leaving a dangling backslash — the two errors only cancelled in
-                // the balanced \{...\} case.
+            if (c == '\\' && i + 1 < n) {
+                // A backslash starts a CONTROL SYMBOL: consume the backslash AND
+                // the single token it escapes as ONE atomic unit, mirroring the
+                // top-level lexer (lex() case '\\', which reads '\' + the escaped
+                // char for a non-letter control sequence). Copy BOTH chars verbatim
+                // and advance past both so the escaped token is NEVER re-read as a
+                // fresh escape. Consequences: \{ / \} stay LITERAL braces (decoded
+                // later in literalText) and do NOT move depth; and \\ is consumed
+                // whole, so a brace right AFTER it (the '{' in \\{) is judged
+                // structural on its own — fixing the regression where the second
+                // backslash of \\{ was mistaken for an escape of the following
+                // brace, dropping that brace's structural role. A backslash with no
+                // following char (i+1 == n) falls through to the default arm, keeps
+                // the existing "Unbalanced brace" dangling-backslash error path.
                 sb.append(c);
                 sb.append(s.charAt(i + 1));
                 i += 2;

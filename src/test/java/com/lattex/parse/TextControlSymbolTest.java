@@ -182,6 +182,80 @@ class TextControlSymbolTest {
 
     // ---- MIXED fixture: a decoded positive beside a rejected negative -----
 
+    // ---- REGRESSION gate: an EVEN backslash run before a brace, inside a nested
+    // $…$ math span (Marlow exact-tip review 469 of 400002b; plan d2f3447c) -------
+    // The escaped-brace fix (400002b) special-cased ONLY a '\' immediately followed
+    // by '{'/'}' and did not consume a control symbol atomically. So in \\{ it copied
+    // the first '\' normally, then mistook the SECOND '\' + '{' for an escaped literal
+    // brace — dropping that '{'s structural role. But \\ is ONE control symbol (a
+    // \substack row separator; $…$ re-enters math mode where \\ is valid) and the
+    // brace AFTER it must stay structural. lexTextArgument now consumes '\' + its
+    // escaped token as one unit (mirroring the top-level lexer), so these parse again.
+    //
+    // Both repros are asserted against main's behaviour (exit 0, the structure below)
+    // AND against their DIRECT nested-math equivalent — the same math parsed straight,
+    // without the \text{$…$} re-parse — which cannot regress via lexTextArgument and
+    // pins that the text-embedded span yields an identical tree on every surface.
+
+    @Test
+    void evenBackslashRunBeforeBraceInNestedMathParsesTwoRowSubstack_parseTree() {
+        // \text{$\substack{a\\{b}}$}: main -> two-row substack {a}{b}; tip pre-fix
+        // threw "Unpaired '$' in \text argument". The whole \text is a single math
+        // span, so it collapses to just the substack node — identical to the direct
+        // \substack{a\\{b}}.
+        String embedded = MathParserTest.pp(MathParser.parse("\\text{$\\substack{a\\\\{b}}$}"));
+        String direct = MathParserTest.pp(MathParser.parse("\\substack{a\\\\{b}}"));
+        assertEquals("Mat[SUBSTACK](A(a,ORD)\\\\A(b,ORD))", embedded);
+        assertEquals(direct, embedded, "text-embedded span must match the direct math");
+    }
+
+    @Test
+    void trailingEvenBackslashRunInNestedMathParsesSubstack_parseTree() {
+        // \text{$\substack{a\\}$}: main -> substack with a leading row 'a' and a
+        // trailing row separator (a single 'a' row in the tree); tip pre-fix threw
+        // "Unbalanced brace in \text argument".
+        String embedded = MathParserTest.pp(MathParser.parse("\\text{$\\substack{a\\\\}$}"));
+        String direct = MathParserTest.pp(MathParser.parse("\\substack{a\\\\}"));
+        assertEquals("Mat[SUBSTACK](A(a,ORD))", embedded);
+        assertEquals(direct, embedded, "text-embedded span must match the direct math");
+    }
+
+    @Test
+    void evenBackslashRunBeforeBraceInNestedMathParsesTwoRowSubstack_mathML() {
+        String embedded = LatteX.toMathML("\\text{$\\substack{a\\\\{b}}$}");
+        assertEquals(LatteX.toMathML("\\substack{a\\\\{b}}"), embedded);
+        assertEquals("<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
+                + "<mtable><mtr><mtd><mi>a</mi></mtd></mtr>"
+                + "<mtr><mtd><mi>b</mi></mtd></mtr></mtable></math>",
+            embedded);
+    }
+
+    @Test
+    void trailingEvenBackslashRunInNestedMathParsesSubstack_mathML() {
+        String embedded = LatteX.toMathML("\\text{$\\substack{a\\\\}$}");
+        assertEquals(LatteX.toMathML("\\substack{a\\\\}"), embedded);
+        assertEquals("<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
+                + "<mtable><mtr><mtd><mi>a</mi></mtd></mtr></mtable></math>",
+            embedded);
+    }
+
+    @Test
+    void evenBackslashRunBeforeBraceInNestedMathRendersSameAsDirectMath_svgAria() {
+        // SVG/ARIA surface: rendering no longer throws (exit 0) and the accessible
+        // description of the text-embedded span equals that of the direct math —
+        // the structural match the audit calls for on the render surface.
+        String embedded = LatteX.render("\\text{$\\substack{a\\\\{b}}$}");
+        assertTrue(embedded.contains("<svg"), "renders an SVG (no exception)");
+        assertEquals(ariaOf(LatteX.render("\\substack{a\\\\{b}}")), ariaOf(embedded));
+    }
+
+    @Test
+    void trailingEvenBackslashRunInNestedMathRendersSameAsDirectMath_svgAria() {
+        String embedded = LatteX.render("\\text{$\\substack{a\\\\}$}");
+        assertTrue(embedded.contains("<svg"), "renders an SVG (no exception)");
+        assertEquals(ariaOf(LatteX.render("\\substack{a\\\\}")), ariaOf(embedded));
+    }
+
     @Test
     void aDecodedSymbolBesideAnUnsupportedOneInTheSameArgumentStillFailsLoud() {
         MathSyntaxException e = assertThrows(MathSyntaxException.class,
