@@ -6,6 +6,32 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Output size cap is now a hard postcondition (Marlow audit LTX-01)
+
+- **The documented 2,000,000-character SVG output ceiling is enforced as a true
+  postcondition, not a loop-top check.** The `<svg>` wrapper, streamed glyphs, rules,
+  and the `glyphmap`/`groupmap` sidecars all append through one capped sink, with a
+  final assertion before any artifact is returned. Previously the cap was checked only
+  at the top of the glyph loop, so a rule-dominated formula (thousands of empty
+  `\boxed{}`) could return a ~2.6M-character SVG with an `OK` diagnostic. Such input now
+  fails loud with `OUTPUT_CAP_EXCEEDED` and yields no partial or oversized artifact.
+- **Glyphs are streamed, not pre-materialized.** Outlines are decoded and appended one
+  at a time, so oversized input is refused *during* growth rather than after buffering
+  the whole path graph. Rendered output is byte-identical for all compliant input.
+- **Non-finite coordinates are refused through the typed channel** — a `NaN`/`Infinity`
+  coordinate raises rather than emitting a literal `"NaN"`/`"Infinity"` into the SVG.
+
+### Stretchy-glyph assembly is linear and work-bounded (Marlow audit LTX-02)
+
+- **Extensible stretchy glyphs (wide arrows, over/under-braces and accents) compute
+  their extender repeat count in closed form and build the assembly once**, replacing an
+  O(R²) rebuild-and-rescan loop that grew quadratically with the required width. Rendered
+  output is byte-identical for every well-formed input.
+- **Generated assembly pieces are charged to the layout work budget**, so a shallow AST
+  can no longer create effectively unbounded layout work. A pathological case where the
+  extender advance did not exceed the overlap (hostile font-part data) previously looped
+  forever; it now fails loud with `OUTPUT_CAP_EXCEEDED`.
+
 ### CLI: streaming stdin/`--batch` instead of buffering the whole input (Marlow audit LTX-09)
 
 - **stdin and `--batch` records are read incrementally, with a per-record cap
@@ -15,14 +41,19 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   `--batch` record) could exhaust process memory before that cap was ever
   reached. A new `DelimitedRecordReader` decodes UTF-8 incrementally and throws
   the moment a record's decoded length exceeds `MathParser.MAX_SOURCE_LENGTH`
-  (now `public`, single-sourced so the two can never drift) — no record is ever
-  buffered past a small, bounded overshoot of that cap, however large the
-  surrounding stream is.
+  (now `public`, single-sourced so the two can never drift). The cap is checked
+  on each record's RAW length, before any caller-side `strip()` (fail-closed on
+  whitespace-padded transport). The memory bound is CONSTANT, not zero
+  read-ahead: accumulated record CONTENT stops at the cap, and the decoder's own
+  read-ahead is bounded to one decode buffer past it — never the whole stream,
+  however large the surrounding input is.
 - **`--batch` output is now progressive.** Records are rendered and flushed to
   stdout one at a time as they're read, instead of splitting the entire input
   into an array before producing the first result. Order and per-record error
   shape (`lattex: error: …`, isolated to that record) are unchanged; a
-  well-formed batch's output is byte-identical to before.
+  well-formed batch's output is byte-identical to before. A dead downstream
+  consumer (broken pipe) now ends the batch loud via `PrintStream.checkError()`
+  instead of spinning an unbounded stdin read into a closed pipe.
 - **Aggregate policy: no cap on record count or total batch size — only a
   per-record cap.** Nothing is accumulated across records (peak memory is one
   record + its rendered output, not the input size), so an unbounded number of
