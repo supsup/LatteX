@@ -251,8 +251,10 @@ public final class SvgEmitter {
 
     /**
      * A visitor over the INKED glyphs of a layout, in emit order. {@code pathData} is the
-     * glyph's outline {@code <path d>} string — computed lazily one glyph at a time and
-     * retained NOWHERE by the traversal.
+     * glyph's outline {@code <path d>} string — handed to the visitor one glyph at a time
+     * and accumulated NOWHERE by the traversal (no per-render list of every path). The
+     * string itself is memoized for the font's lifetime on the font's bounded per-glyph
+     * {@code glyphPathData} cache (plan 725c1488 / LTX-03), so repeat visits reuse it.
      */
     @FunctionalInterface
     interface InkedGlyphVisitor {
