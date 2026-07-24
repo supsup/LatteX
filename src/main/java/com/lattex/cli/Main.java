@@ -78,8 +78,9 @@ public final class Main {
                                   is never buffered whole. A malformed expression
                                   yields a 'lattex: error: …' record and does not
                                   abort the batch; each record is also capped at
-                                  100,000 characters (read incrementally, never
-                                  buffered past the cap), and an OVERSIZED record
+                                  100,000 characters (read incrementally, with
+                                  read-ahead bounded to a small overshoot past the
+                                  cap — never the whole stream), and an OVERSIZED record
                                   DOES abort the rest of the batch (its own error
                                   record is still emitted; everything already
                                   produced before it already reached stdout).
@@ -150,6 +151,15 @@ public final class Main {
      * Runs the CLI with explicit input + output streams (testable). Never calls
      * {@link System#exit}. In {@code --batch} mode, reads many expressions from
      * {@code in} and writes one NUL-delimited SVG (or error) record per input.
+     *
+     * <p><strong>Stream ownership.</strong> When {@code in} is consumed (stdin mode or
+     * {@code --batch}), this method takes ownership of it and CLOSES it before returning
+     * (the streaming {@link DelimitedRecordReader} is managed with try-with-resources,
+     * and closing the reader closes the underlying stream). This differs from the
+     * pre-streaming implementation, which read {@code in} via {@code readAllBytes()}
+     * without closing it. Callers that must keep {@code in} open after {@code run}
+     * returns should pass a close-shielded wrapper. {@code out} and {@code err} are NOT
+     * closed. In production {@code in} is {@link System#in}, for which closing is benign.
      *
      * @param args the raw command-line arguments
      * @param in   the input stream read when no positional expression is given / in batch mode
@@ -282,6 +292,10 @@ public final class Main {
             try (DelimitedRecordReader reader =
                      new DelimitedRecordReader(in, DelimitedRecordReader.NO_DELIMITER,
                          MathParser.MAX_SOURCE_LENGTH)) {
+                // The reader caps the RAW decoded length; the strip() below runs only
+                // AFTER it returns. So a whitespace-padded record that crosses the cap
+                // is rejected before we ever trim it — the cap is fail-closed on raw
+                // length, not on the post-strip content (see DelimitedRecordReader).
                 latex = reader.next().strip();
             } catch (DelimitedRecordReader.TooLongException e) {
                 err.println("lattex: error: " + e.getMessage());
@@ -415,6 +429,15 @@ public final class Main {
                 out.write(0); // NUL record terminator (SVGs never contain NUL)
                 out.flush(); // progressive: this record reaches the consumer before the next is read
                 anyEmitted = true;
+                if (out.checkError()) {
+                    // The downstream consumer went away (e.g. a broken pipe): PrintStream
+                    // swallows the write IOException and only raises this flag, so without
+                    // the check we'd keep reading an unbounded stdin and rendering into a
+                    // dead pipe. Stop loud instead of silently spinning.
+                    err.println("lattex: error: failed writing batch output to stdout"
+                        + " (downstream consumer closed the pipe?)");
+                    return 1;
+                }
             }
         } catch (IOException e) {
             err.println("lattex: error: failed to read stdin: " + e.getMessage());

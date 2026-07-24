@@ -134,6 +134,73 @@ final class StreamingBatchTest {
     }
 
     // ------------------------------------------------------------------
+    // (1c) The per-record cap is enforced on RAW length, BEFORE the caller's
+    //      strip() — fail-closed on whitespace-padded transport (LTX-09).
+    // ------------------------------------------------------------------
+
+    /**
+     * Pins the raw-before-strip cap policy at BOTH boundaries with surrounding
+     * whitespace around one short, identical expression:
+     *
+     * <ul>
+     *   <li>(a) a record of exactly {@code MAX_SOURCE_LENGTH} (100,000) RAW units whose
+     *       non-whitespace payload is a short expression → SUCCEEDS (the reader accepts
+     *       {@code maxChars}; {@code Main} then strips to the short expression and renders).</li>
+     *   <li>(b) the SAME short expression padded to {@code MAX_SOURCE_LENGTH + 1} (100,001)
+     *       RAW units → FAILS with the streaming-cap error BEFORE any trim. Both fixtures
+     *       {@code strip()} to the byte-identical expression, so the ONLY thing that can
+     *       distinguish them is the RAW length: (b) failing while (a) succeeds proves the
+     *       cap is checked on the raw record, not on the post-strip content — the
+     *       fail-closed policy that closes the whitespace-padding transport gap.</li>
+     * </ul>
+     */
+    @Test
+    void perRecordCapIsCheckedOnRawLengthBeforeStrip() {
+        int cap = com.lattex.parse.MathParser.MAX_SOURCE_LENGTH; // 100,000
+        String payload = "x^2";
+        String atCap = whitespacePad(payload, cap);        // exactly 100,000 raw units
+        String overCap = whitespacePad(payload, cap + 1);  // exactly 100,001 raw units
+        assertEquals(cap, atCap.length());
+        assertEquals(cap + 1, overCap.length());
+        assertEquals(payload, atCap.strip(), "both fixtures must strip to the same short expression");
+        assertEquals(payload, overCap.strip(), "both fixtures must strip to the same short expression");
+
+        // (a) raw length == cap → accepted, stripped, rendered.
+        ByteArrayOutputStream outA = new ByteArrayOutputStream();
+        ByteArrayOutputStream errA = new ByteArrayOutputStream();
+        int codeA = Main.run(new String[0],
+            new ByteArrayInputStream(atCap.getBytes(StandardCharsets.UTF_8)),
+            new PrintStream(outA, true, StandardCharsets.UTF_8),
+            new PrintStream(errA, true, StandardCharsets.UTF_8));
+        assertEquals(0, codeA, () -> "a 100,000-raw-unit record that strips to a short expression must "
+            + "succeed; stderr: " + errA.toString(StandardCharsets.UTF_8));
+        assertTrue(outA.toString(StandardCharsets.UTF_8).startsWith("<svg"),
+            "the stripped short expression renders to an SVG");
+
+        // (b) raw length == cap + 1 → rejected BEFORE the strip that would have shrunk it to 3 chars.
+        ByteArrayOutputStream outB = new ByteArrayOutputStream();
+        ByteArrayOutputStream errB = new ByteArrayOutputStream();
+        int codeB = Main.run(new String[0],
+            new ByteArrayInputStream(overCap.getBytes(StandardCharsets.UTF_8)),
+            new PrintStream(outB, true, StandardCharsets.UTF_8),
+            new PrintStream(errB, true, StandardCharsets.UTF_8));
+        assertEquals(1, codeB, "a 100,001-raw-unit record fails even though it would strip to a short expression");
+        String errText = errB.toString(StandardCharsets.UTF_8);
+        assertTrue(errText.contains("exceeds the " + cap + "-char limit"),
+            () -> "expected the streaming-cap error (cap hit on raw length, before strip), got: " + errText);
+        assertTrue(outB.toString(StandardCharsets.UTF_8).isEmpty(),
+            "an over-cap record produces no SVG output");
+    }
+
+    /** Builds a string of EXACTLY {@code total} chars: {@code payload} centered in ASCII spaces. */
+    private static String whitespacePad(String payload, int total) {
+        int pad = total - payload.length();
+        int left = pad / 2;
+        int right = pad - left;
+        return " ".repeat(left) + payload + " ".repeat(right);
+    }
+
+    // ------------------------------------------------------------------
     // (2) Progressive production: each record is emitted before the whole
     //     input is consumed.
     // ------------------------------------------------------------------
@@ -278,7 +345,7 @@ final class StreamingBatchTest {
         "a\n\nb",               // empty record in the middle (consecutive delimiters)
         "\n",                  // delimiter alone -> two empty records
         "a\n\n",                // trailing delimiter pair -> two trailing empties
-        "\\alpha\n\\beta\n\\gamma", // representative multi-byte-safe content, no trailing delim
+        "\\alpha\n\\beta\n\\gamma", // representative ASCII control-word content, no trailing delim
     };
 
     @Test
@@ -300,6 +367,43 @@ final class StreamingBatchTest {
             List<String> actual = readAllRecords(fixture.getBytes(StandardCharsets.UTF_8), DelimitedRecordReader.NUL);
             assertEquals(expected, actual, () -> "NUL split mismatch for fixture: " + escape(fixture));
         }
+    }
+
+    @Test
+    void splitStaysCorrectAcrossGenuineMultibyteContent() throws Exception {
+        // The class javadoc's byte-vs-char delimiter-safety claim (0x0A / 0x00 never occur
+        // inside a UTF-8 multi-byte sequence) deserves a GENUINELY multi-byte fixture — the
+        // NEWLINE_FIXTURES above are ASCII control words. Exercise real 2-, 3-, and 4-byte
+        // UTF-8 code points around the delimiters: é (U+00E9, 2 bytes), ∑ (U+2211, 3 bytes),
+        // and 𝔸 (U+1D538, a surrogate pair / 4 UTF-8 bytes). None of their bytes is 0x0A/0x00.
+        String bmp2 = "é";           // é
+        String bmp3 = "∑";           // ∑
+        String astral = "𝔸";   // 𝔸 (astral, surrogate pair)
+        String fixture = bmp2 + "\n" + bmp3 + astral + "\n" + astral + bmp2;
+        assertEquals(List.of(fixture.split("\n", -1)),
+            readAllRecords(fixture.getBytes(StandardCharsets.UTF_8), DelimitedRecordReader.NEWLINE),
+            "genuine BMP+astral content must split identically to String.split under newline");
+        String nulFixture = fixture.replace('\n', '\0');
+        assertEquals(List.of(nulFixture.split("\0", -1)),
+            readAllRecords(nulFixture.getBytes(StandardCharsets.UTF_8), DelimitedRecordReader.NUL),
+            "genuine BMP+astral content must split identically to String.split under NUL");
+    }
+
+    @Test
+    void malformedUtf8DecodesToReplacementWithoutBreakingRecordBoundaries() throws Exception {
+        // A lone lead byte (0xC3, expecting a continuation) immediately followed by a
+        // newline: the newline (0x0A) is not a valid continuation, so the decoder replaces
+        // the malformed byte with U+FFFD and STILL sees the newline as a record boundary —
+        // the malformed byte neither swallows the delimiter nor triggers an unbounded read.
+        // Asserted differentially against the same bytes decoded in bulk (both REPLACE).
+        byte[] bytes = new byte[] {(byte) 0xC3, '\n', 'a', 'b'};
+        String bulk = new String(bytes, StandardCharsets.UTF_8);
+        List<String> expected = List.of(bulk.split("\n", -1));
+        List<String> actual = readAllRecords(bytes, DelimitedRecordReader.NEWLINE);
+        assertEquals(expected, actual,
+            "malformed leading byte must decode to U+FFFD and keep the newline record boundary");
+        assertEquals(2, actual.size(), "the newline must still split into exactly two records");
+        assertEquals("ab", actual.get(1), "content after the malformed byte + delimiter is intact");
     }
 
     private static List<String> readAllRecords(byte[] bytes, int delimiter) throws IOException {

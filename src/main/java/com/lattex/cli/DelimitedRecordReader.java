@@ -19,10 +19,40 @@ import java.nio.charset.StandardCharsets;
  * guard: a multi-gigabyte stream never puts any single record over the cap on its
  * own, so the aggregate {@code readAllBytes()} call exhausts process memory before
  * the parser ever runs. This reader closes that gap by capping accumulated
- * characters as they are decoded, and throwing the moment the cap is crossed --
- * never buffering a record past {@code maxChars + 1} chars, and (bounded by the
- * internal chunk size) never pulling more than a small constant multiple of that
- * many bytes from the underlying stream.
+ * characters as they are decoded, and throwing the moment the cap is crossed.
+ *
+ * <p><strong>The resource bound (precise -- it is CONSTANT, not zero-read-ahead).</strong>
+ * Two distinct quantities are bounded, and conflating them is a truthfulness trap:
+ * <ul>
+ *   <li><em>Accumulated record CONTENT</em> -- the {@link StringBuilder} {@link #next()}
+ *       builds -- never grows past {@code maxChars + 1} UTF-16 units: the append that
+ *       reaches {@code maxChars + 1} is the one that throws, so the retained content is
+ *       exactly {@code maxChars + 1} chars at worst.</li>
+ *   <li><em>Decoder read-ahead</em> -- the bytes the {@link InputStreamReader} has
+ *       already pulled from the underlying stream to decode those chars -- is BOUNDED
+ *       but NOT zero, and can exceed {@code maxChars} bytes. A single {@code read}
+ *       fills up to {@link #CHUNK_CHARS} chars, and the reader's own internal decode
+ *       buffer reads a bounded amount further ahead to produce them. So at the instant
+ *       of the throw the process may hold on the order of {@code maxChars} + one chunk
+ *       + one decoder buffer worth of bytes (measured: ~106,496 bytes were pulled to
+ *       decode char 100,001 at a 100,000-char cap). That total is a small constant
+ *       past the cap, independent of how large the surrounding stream is -- never
+ *       O(stream). The bound is safely CONSTANT; the specific bytes pulled are not zero.</li>
+ * </ul>
+ * Once the cap is crossed and {@link TooLongException} is thrown, NO ADDITIONAL read is
+ * issued to the underlying stream. The earlier "no further bytes were buffered" phrasing
+ * is deliberately not used: bytes were read ahead (bounded); the true guarantee is that
+ * the read-ahead is a bounded constant past the cap and that reading stops on the throw.
+ *
+ * <p><strong>The cap is on RAW decoded length, before any caller-side trimming.</strong>
+ * A record's length is checked against {@code maxChars} as it is decoded, with the
+ * delimiter stripped but no other transformation applied. Callers that {@code strip()}
+ * (or otherwise shrink) a record AFTER {@link #next()} returns get fail-closed behavior:
+ * a record whose RAW length crosses the cap is rejected here BEFORE the caller ever sees
+ * it, even if it would have trimmed down to a short expression. This closes the
+ * whitespace-padding transport gap -- {@code maxChars} whitespace-padded units cannot be
+ * used to smuggle past the read-time cap on the theory that a later {@code strip()} makes
+ * the content short. See {@code Main.run}, which strips only after this reader returns.
  *
  * <p><strong>Split semantics.</strong> Mirrors {@code String.split(delimiter, -1)}
  * exactly: every delimiter occurrence ends a record (including back-to-back
@@ -95,11 +125,15 @@ final class DelimitedRecordReader implements AutoCloseable {
      * has already been returned.
      *
      * @throws TooLongException if the current record's decoded length exceeds
-     *                          {@code maxChars} before a delimiter or EOF is reached;
-     *                          no further bytes are read from the underlying stream
-     *                          once this is thrown, and the caller should treat the
-     *                          rest of the stream as unrecoverable (its record
-     *                          boundaries cannot be located without an unbounded read).
+     *                          {@code maxChars} before a delimiter or EOF is reached.
+     *                          No ADDITIONAL read is issued to the underlying stream
+     *                          once this is thrown; the bounded read-ahead already
+     *                          pulled to decode the offending char (a small constant
+     *                          past the cap, not zero -- see the class javadoc) stays
+     *                          in the decoder's buffer and is discarded on {@link #close()}.
+     *                          The caller should treat the rest of the stream as
+     *                          unrecoverable: its record boundaries cannot be located
+     *                          without an unbounded read.
      * @throws IOException      on an underlying I/O failure
      */
     String next() throws IOException {
@@ -132,8 +166,9 @@ final class DelimitedRecordReader implements AutoCloseable {
             if (sb.length() > maxChars) {
                 throw new TooLongException(
                     "record exceeds the " + maxChars + "-char limit -- stopped reading"
-                        + " this record early (streaming cap, LTX-09); no further bytes"
-                        + " of it were buffered");
+                        + " this record (streaming cap, LTX-09); no further reads are"
+                        + " issued, and read-ahead was bounded to one decode buffer past"
+                        + " the cap, not the rest of the stream");
             }
         }
     }
