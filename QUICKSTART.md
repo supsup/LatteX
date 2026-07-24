@@ -310,9 +310,11 @@ svg = subprocess.run(["lattex", r"\frac{a}{b}"],
 ```
 
 Flags: `-o/--output <file>`, `-h/--help`, `-V/--version`, and `--` to end option
-parsing. Exit status is `0` on success, `1` on a render/IO error (with the parser's
-message on stderr for invalid LaTeX), `2` on a usage error. The CLI is a thin wrapper
-over the JVM `LatteX.render` — same core, byte-identical SVG.
+parsing. Exit status is `0` on success, `1` on a render/IO error (including a failed
+stdout write or flush, such as a closed downstream pipe), `2` on a usage error.
+Invalid LaTeX and output-delivery failures are explained on stderr; a stdout failure
+may leave incomplete output and never reports success. The CLI is a thin wrapper over
+the JVM `LatteX.render` — same core, byte-identical SVG.
 
 **Build it** (GraalVM CE for JDK 25 must be on `PATH` — e.g. `sdk use java 25-graalce`):
 

@@ -6,6 +6,20 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### CLI stdout failures now fail honestly
+
+- **One-shot and batch output no longer report success after `PrintStream` swallows
+  a write or flush failure.** Every stdout completion point now checks the stream's
+  sticky error state; a closed consumer or broken pipe exits `1` and emits one
+  bounded stderr diagnostic. Exception text is not echoed.
+- **Batch failure preserves an explicit prefix contract.** Each NUL-terminated record
+  is flushed and checked before the next is emitted. On the first stdout failure,
+  stderr reports how many complete records were confirmed; the current record may be
+  incomplete and later records are not emitted. Malformed expressions retain their
+  existing isolation behavior: their in-place error records do not abort siblings.
+- **Healthy output is byte-identical, and existing success/render/usage exit meanings
+  are unchanged.** The new nonzero path applies only when stdout cannot be delivered.
+
 ### Output size cap is now a hard postcondition (Marlow audit LTX-01)
 
 - **The documented 2,000,000-character SVG output ceiling is enforced as a true
