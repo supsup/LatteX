@@ -29,6 +29,32 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   and a new **`window.LatteXFx.destroy(el)`** ends a live show immediately and
   idempotently. No new `data-lx-*` attributes; the visible effects are unchanged.
 
+### Output size cap is now a hard postcondition (Marlow audit LTX-01)
+
+- **The documented 2,000,000-character SVG output ceiling is enforced as a true
+  postcondition, not a loop-top check.** The `<svg>` wrapper, streamed glyphs, rules,
+  and the `glyphmap`/`groupmap` sidecars all append through one capped sink, with a
+  final assertion before any artifact is returned. Previously the cap was checked only
+  at the top of the glyph loop, so a rule-dominated formula (thousands of empty
+  `\boxed{}`) could return a ~2.6M-character SVG with an `OK` diagnostic. Such input now
+  fails loud with `OUTPUT_CAP_EXCEEDED` and yields no partial or oversized artifact.
+- **Glyphs are streamed, not pre-materialized.** Outlines are decoded and appended one
+  at a time, so oversized input is refused *during* growth rather than after buffering
+  the whole path graph. Rendered output is byte-identical for all compliant input.
+- **Non-finite coordinates are refused through the typed channel** — a `NaN`/`Infinity`
+  coordinate raises rather than emitting a literal `"NaN"`/`"Infinity"` into the SVG.
+
+### Stretchy-glyph assembly is linear and work-bounded (Marlow audit LTX-02)
+
+- **Extensible stretchy glyphs (wide arrows, over/under-braces and accents) compute
+  their extender repeat count in closed form and build the assembly once**, replacing an
+  O(R²) rebuild-and-rescan loop that grew quadratically with the required width. Rendered
+  output is byte-identical for every well-formed input.
+- **Generated assembly pieces are charged to the layout work budget**, so a shallow AST
+  can no longer create effectively unbounded layout work. A pathological case where the
+  extender advance did not exceed the overlap (hostile font-part data) previously looped
+  forever; it now fails loud with `OUTPUT_CAP_EXCEEDED`.
+
 ### Output-boundary legality + public-boundary validation
 
 - **One shared code-point legality policy at every output boundary.** SVG aria text,
