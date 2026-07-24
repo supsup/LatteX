@@ -167,8 +167,9 @@ final class DelimitedRecordReader implements AutoCloseable {
                 throw new TooLongException(
                     "record exceeds the " + maxChars + "-char limit -- stopped reading"
                         + " this record (streaming cap, LTX-09); no further reads are"
-                        + " issued, and read-ahead was bounded to one decode buffer past"
-                        + " the cap, not the rest of the stream");
+                        + " issued once the cap trips, and read-ahead is bounded to one"
+                        + " decode buffer past the cap (a short remaining suffix may fit"
+                        + " entirely within it), never an unbounded read of the stream");
             }
         }
     }

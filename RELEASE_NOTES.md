@@ -44,9 +44,10 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   (now `public`, single-sourced so the two can never drift). The cap is checked
   on each record's RAW length, before any caller-side `strip()` (fail-closed on
   whitespace-padded transport). The memory bound is CONSTANT, not zero
-  read-ahead: accumulated record CONTENT stops at the cap, and the decoder's own
-  read-ahead is bounded to one decode buffer past it — never the whole stream,
-  however large the surrounding input is.
+  read-ahead: accumulated record CONTENT stops at cap+1 units (the char that
+  trips the check), and the decoder's own read-ahead is bounded to one decode
+  buffer past it — a short remaining suffix may fall entirely within that buffer,
+  but it is never an unbounded read of the whole stream, however large the input.
 - **`--batch` output is now progressive.** Records are rendered and flushed to
   stdout one at a time as they're read, instead of splitting the entire input
   into an array before producing the first result. Order and per-record error

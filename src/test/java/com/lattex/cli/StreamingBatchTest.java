@@ -33,13 +33,15 @@ import org.junit.jupiter.api.Test;
 final class StreamingBatchTest {
 
     // ------------------------------------------------------------------
-    // (1) Oversized record fails loud WITHOUT buffering past the cap.
+    // (1) Oversized record fails loud with a CONSTANT read-ahead bound
+    //     (content stops at cap+1; read-ahead is one decode buffer, not the stream).
     // ------------------------------------------------------------------
 
     /**
      * An infinite supply of {@code 'a'} bytes that hard-fails if more than
      * {@code bound} bytes are ever requested — proof that a reader consuming it
-     * "stopped early" rather than trying to buffer the (would-be unbounded) stream.
+     * keeps read-ahead CONSTANT-BOUNDED (one decode buffer past the cap) rather
+     * than buffering the (would-be unbounded) stream.
      */
     private static final class BoundedInfiniteInputStream extends InputStream {
         private final long bound;
@@ -73,7 +75,7 @@ final class StreamingBatchTest {
     }
 
     @Test
-    void oversizedSingleStdinExpressionFailsLoudWithoutBufferingPastTheCap() {
+    void oversizedSingleStdinExpressionFailsLoudWithConstantReadAheadBound() {
         // 5x MathParser.MAX_SOURCE_LENGTH of slack: generous vs. any reasonable chunking
         // overshoot, but nowhere near "buffer the whole (infinite) stream" — old
         // readAllBytes() code would read forever and eventually trip this bound.
@@ -93,7 +95,7 @@ final class StreamingBatchTest {
     }
 
     @Test
-    void oversizedBatchRecordFailsLoudWithoutBufferingPastTheCapAndAbortsTheRestOfTheBatch() {
+    void oversizedBatchRecordFailsLoudWithConstantBoundAndAbortsTheRestOfTheBatch() {
         // First a valid record, THEN an unbounded one — proves the valid record was
         // already streamed out before the reader ever got stuck on the bad one.
         InputStream prefix = new ByteArrayInputStream("x^2\n".getBytes(StandardCharsets.UTF_8));

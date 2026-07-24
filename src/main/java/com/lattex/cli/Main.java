@@ -66,8 +66,10 @@ public final class Main {
         arguments, or — when none are given — read from standard input.
         The SVG document is written to standard output, or to a file with -o.
         Stdin is read and capped incrementally (never buffered whole before a
-        check): an expression over 100,000 characters fails loud without the
-        rest of the stream being read.
+        check): an expression over 100,000 characters fails loud. No new read is
+        issued once the cap trips; the decoder's bounded read-ahead may already
+        hold the remaining bytes when the stream is short, but it is never an
+        unbounded read of the whole stream.
 
         OPTIONS:
             -o, --output <FILE>   Write the SVG to FILE instead of stdout.
