@@ -126,10 +126,58 @@ class TextControlSymbolTest {
 
     @Test
     void aTrailingDanglingBackslashFailsLoud() {
-        // Pre-fix this silently kept a lone trailing backslash character.
+        // A backslash immediately before the terminal brace, \text{oops\}, is an
+        // ESCAPED literal brace (\}) — so the argument is unterminated and fails
+        // loud as an unbalanced brace. (Before the lexTextArgument brace-escape
+        // fix this same input mis-closed early on the escaped brace and served a
+        // lone trailing backslash into literalText, which then reported the
+        // "trailing '\' with nothing to escape" error — Marlow noted that old
+        // test passed only via the very brace-counting bug under repair, so the
+        // genuine dangling-brace shape is asserted here instead.)
         MathSyntaxException e = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("\\text{oops\\}"));
-        assertTrue(e.getMessage().contains("Unknown command in \\text"), e.getMessage());
+        assertTrue(e.getMessage().contains("Unbalanced brace in \\text"), e.getMessage());
+    }
+
+    // ---- INDEPENDENT escaped-brace gates (Marlow exact-tip review of f4c0df90) --
+    // Each of these fails on the pre-fix lexTextArgument (which counted \{ and \}
+    // toward structural brace depth) and passes after it. They are NOT the
+    // balanced \{...\} case, whose two counting errors cancelled and hid the bug.
+
+    @Test
+    void aStandaloneEscapedLeftBraceIsALiteralBraceOnEverySurface() {
+        // Pre-fix: \{ wrongly incremented depth, so the argument looked
+        // unterminated -> "Unbalanced brace in \text argument".
+        assertEquals("Txt[ROMAN]({)", MathParserTest.pp(MathParser.parse("\\text{\\{}")));
+        assertTrue(LatteX.toMathML("\\text{\\{}").contains("<mtext>{</mtext>"));
+        assertEquals("{", ariaOf(LatteX.render("\\text{\\{}")));
+    }
+
+    @Test
+    void aStandaloneEscapedRightBraceIsALiteralBraceOnEverySurface() {
+        // Pre-fix: \} wrongly decremented depth to 0 and closed the argument
+        // early, leaving a lone trailing backslash -> trailing-backslash error.
+        assertEquals("Txt[ROMAN](})", MathParserTest.pp(MathParser.parse("\\text{\\}}")));
+        assertTrue(LatteX.toMathML("\\text{\\}}").contains("<mtext>}</mtext>"));
+        assertEquals("}", ariaOf(LatteX.render("\\text{\\}}")));
+    }
+
+    @Test
+    void anEscapedRightBraceEmbeddedInOrdinaryTextIsALiteralBraceOnEverySurface() {
+        // Pre-fix: \} closed the argument at 'a\', dropping "b}" and reporting a
+        // trailing-backslash error.
+        assertEquals("Txt[ROMAN](a}b)", MathParserTest.pp(MathParser.parse("\\text{a\\}b}")));
+        assertTrue(LatteX.toMathML("\\text{a\\}b}").contains("<mtext>a}b</mtext>"));
+        assertEquals("a}b", ariaOf(LatteX.render("\\text{a\\}b}")));
+    }
+
+    @Test
+    void anEscapedLeftBraceEmbeddedInOrdinaryTextIsALiteralBraceOnEverySurface() {
+        // Pre-fix: \{ incremented depth, so the closing brace only returned to
+        // depth 1 and the argument looked unterminated -> "Unbalanced brace".
+        assertEquals("Txt[ROMAN](a{b)", MathParserTest.pp(MathParser.parse("\\text{a\\{b}")));
+        assertTrue(LatteX.toMathML("\\text{a\\{b}").contains("<mtext>a{b</mtext>"));
+        assertEquals("a{b", ariaOf(LatteX.render("\\text{a\\{b}")));
     }
 
     // ---- MIXED fixture: a decoded positive beside a rejected negative -----

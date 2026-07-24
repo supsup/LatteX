@@ -217,6 +217,13 @@ public final class MathParser {
      * silently corrupted {@code \text{$\frac{12}{34}$}} into {@code \frac1234} —
      * Conf review lattex/210 F1). Brace-invisibility for the LITERAL text runs is
      * applied later, in {@link #textWithNestedMath}, never to a math span.
+     *
+     * <p>Only GENUINELY UNESCAPED braces move the depth counter that finds the
+     * closing {@code '}'}. A backslash-escaped brace ({@code \{} or {@code \}})
+     * is a literal brace character (decoded later in {@link #literalText}), so it
+     * is copied verbatim and leaves depth untouched — counting it here wrongly
+     * balanced an escaped-brace argument only by cancelling two errors (Marlow
+     * exact-tip review of f4c0df90; plan d2f3447c).
      */
     private static int lexTextArgument(String s, String command, int i, List<Token> out, int start) {
         int n = s.length();
@@ -232,7 +239,21 @@ public final class MathParser {
         int depth = 1;
         while (i < n) {
             char c = s.charAt(i);
-            if (c == '{') {
+            if (c == '\\' && i + 1 < n
+                    && (s.charAt(i + 1) == '{' || s.charAt(i + 1) == '}')) {
+                // A backslash-escaped brace (\{ or \}) is a LITERAL brace, not a
+                // structural grouping brace — it must NOT move the depth used to
+                // find the closing '}'. Copy BOTH chars verbatim; literalText
+                // later decodes the escape to a literal brace character. Without
+                // this, \{ wrongly incremented depth and \} wrongly decremented
+                // it (Marlow exact-tip review of f4c0df90): a lone \{ threw
+                // "Unbalanced brace" and a lone \} closed the argument early,
+                // leaving a dangling backslash — the two errors only cancelled in
+                // the balanced \{...\} case.
+                sb.append(c);
+                sb.append(s.charAt(i + 1));
+                i += 2;
+            } else if (c == '{') {
                 depth++;
                 sb.append(c); // interior brace: KEEP (verbatim content)
                 i++;
