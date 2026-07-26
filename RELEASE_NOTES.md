@@ -67,6 +67,28 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   browser pins, and CI keeps those pins mandatory with
   `LATTEX_REQUIRE_BROWSER=1`.
 
+### The BrewShot gallery now covers the executable effect surface
+
+- **All 29 production effects now have a declared visual specimen.** The gallery
+  contains 28 motion GIFs plus the deliberately static `thread` interaction
+  reference; its prose now distinguishes the 28 ordinary-runtime effects from
+  the host-flagged `unfold` effect instead of claiming every interaction is the
+  same autoplay GIF.
+- **The four real gaps are captured through their production paths.** BrewShot's
+  compositor stream keeps `inkdrop`'s body overlays in frame, trusted moving
+  pointer input drives `refraction`, `cancel` records its deterministic semantic
+  strike/ghost, and `unfold` is rendered with interactive expansion enabled and
+  filmed through both trusted click directions.
+- **Coverage drift now fails headlessly.** A manifest is checked against every
+  non-`NONE` `Effect`, every declared asset must exist, representation and file
+  type must agree, and `examples/GALLERY.md` must link the matching directive and
+  artifact. Adding an enum value without documenting and photographing it can no
+  longer leave a false "complete gallery" claim behind.
+- **Supported regeneration also refreshes the executable example pages.** The
+  effects and thread previews now carry the current `cancel`/`unfold` runtime,
+  while the generated symbol index covers all 551 typed-registry commands,
+  including `\aa` and `\underparen`.
+
 ### CLI stdout failures now fail honestly
 
 - **One-shot and batch output no longer report success after `PrintStream` swallows

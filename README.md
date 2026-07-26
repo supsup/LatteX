@@ -28,9 +28,10 @@ trip degrades to a typed `OUTPUT_CAP_EXCEEDED` diagnostic, never an escaped erro
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
 ratchet: 484/484 real-world formulas, 100%, and only allowed to go up). For the
-fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
-27 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
-captured previews (every effect as its own looping GIF). For the parallel MathML
+fx layer in motion, see the **[effects showcase](examples/effects.html)** for the
+general runtime grid and **[the fx gallery](examples/GALLERY.md)** for all 29
+production effects: 28 motion GIFs plus the deliberately static semantic `thread`
+reference. For the parallel MathML
 output, **[examples/mathml.html](examples/mathml.html)** shows each formula's SVG
 render beside its `toMathML()` serialization — same parse, two products.
 
@@ -52,7 +53,7 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 ## Status
 
-Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (484/484) as of **0.7.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **27-effect** `fx` layer (newest always-on: `precedence`, the order-of-operations cascade) — plus the flag-gated `unfold` click-to-expand `\sum` bloom (opt-in, its own preview, not in the always-on showcase) — are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (484/484) as of **0.7.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **28-effect always-on** `fx` layer (including the semantic `thread`, `precedence`, and `cancel` effects) — plus the flag-gated `unfold` click-to-expand `\sum` bloom, for **29 production effects total** — are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
 ## Docker: one-shot CLI or watched folders
 
@@ -180,9 +181,9 @@ controlled tests/custom images; the documented container contract remains
 
 ## The fx layer is OPTIONAL
 
-The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, shatter, sparkler, precedence, and 21 more — 27 always-on effects total, plus the flag-gated `unfold` described below) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations.
+The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, shatter, sparkler, precedence, and 22 more — 28 always-on effects total, plus the flag-gated `unfold` described below) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations.
 
-**LatteX is a pure typesetter by default** — it lays out the math you give it and computes nothing from it. The one exception is fully opt-in and doubly gated: the `unfold` effect (a bounded `\sum` blooming into its explicit terms) needs LatteX to pre-render the expanded form, so a small `RenderOptions.interactiveExpansion` flag (**default off**) must be enabled by the host **and** the equation must carry an `fx.*=unfold` directive. With the flag off — the default — the pass never runs, an `unfold` directive degrades inert, and a plain page pays zero cost. Because it is opt-in, `unfold` is not part of the always-on `examples/effects.html` showcase (still 27 effects); it gets its own preview instead. See `SumExpansion`.
+**LatteX is a pure typesetter by default** — it lays out the math you give it and computes nothing from it. The one exception is fully opt-in and doubly gated: the `unfold` effect (a bounded `\sum` blooming into its explicit terms) needs LatteX to pre-render the expanded form, so a small `RenderOptions.interactiveExpansion` flag (**default off**) must be enabled by the host **and** the equation must carry an `fx.*=unfold` directive. With the flag off — the default — the pass never runs, an `unfold` directive degrades inert, and a plain page pays zero cost. Because it is opt-in, `unfold` is not part of the general `examples/effects.html` grid; it gets its own flag-enabled preview instead. See `SumExpansion`.
 
 On the JVM, read the assets straight off the API:
 
@@ -198,7 +199,7 @@ unzip -p lattex-0.11.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
 unzip -p lattex-0.11.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
 ```
 
-Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the whole catalogue live in `examples/effects.html` — or see it without building anything: **[the fx gallery](examples/GALLERY.md)** has real-browser screenshots and GIFs of the effects in motion, captured by [BrewShot](https://github.com/supsup/BrewShot) on every `./gradlew generateExamples` run.
+Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the general runtime grid in `examples/effects.html`; the dedicated semantic and flag-gated examples join it in **[the fx gallery](examples/GALLERY.md)**, whose BrewShot visuals are regenerated by `./gradlew generateExamples` and whose enum-to-artifact coverage is build-failing.
 
 ## PNG export — `bin/lattex-shot`
 
