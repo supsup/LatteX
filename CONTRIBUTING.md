@@ -52,6 +52,14 @@ This subset is a contract with downstream HTML sanitizers (LatteX SVG must pass 
 
 Java 25 toolchain, provisioned by Gradle. Keep the build dependency-light and the tests deterministic (env-scrubbed — no ambient state).
 
+> **Local browser warning:** the normal `./gradlew test` suite includes BrewShot's
+> real-browser pins. When Chrome is installed, those tests launch a local headless
+> Chrome process; BrewShot 0.9 starts it with `--no-startup-window`. Without Chrome,
+> a local run assumption-skips the browser pins. CI sets
+> `LATTEX_REQUIRE_BROWSER=1`, so an unavailable browser fails there instead of
+> silently weakening the gate. Use an isolated Java container without Chrome when
+> you intentionally want the local no-browser lane.
+
 ### The fx-runtime JS harness
 
 `lattex-fx.js` (the optional effects runtime) is pinned **behaviorally**, not by string-grep: `FxRuntimeJsHarnessTest` executes the real script inside a GraalJS context (test-scope dependency; no Node/jsdom toolchain) against a minimal stub DOM (`src/test/resources/com/lattex/fx/harness-dom-stub.js`). Internals reach the tests through the guarded `window.__lxTestHook` seam at the tail of the script — a no-op in browsers.
