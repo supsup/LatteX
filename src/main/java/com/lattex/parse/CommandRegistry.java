@@ -235,6 +235,16 @@ final class CommandRegistry {
         return FuzzyMatch.nearest(name, SUGGESTION_NAMES);
     }
 
+    /**
+     * Finds the nearest different registry name for a command that is known but
+     * invalid in the current parser context. Excluding the exact name prevents a
+     * misleading self-suggestion without discarding a useful alternative.
+     */
+    static Optional<String> nearestAlternative(String name) {
+        return FuzzyMatch.nearest(name,
+            SUGGESTION_NAMES.stream().filter(candidate -> !candidate.equals(name)).toList());
+    }
+
     private static List<Descriptor> buildDescriptors() {
         Map<String, Descriptor> out = new LinkedHashMap<>();
 

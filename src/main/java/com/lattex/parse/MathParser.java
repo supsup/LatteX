@@ -1932,10 +1932,19 @@ public final class MathParser {
             .orElse("");
     }
 
+    /** Suggests another command when {@code name} is known but invalid here. */
+    private static String commandAlternative(String name) {
+        return CommandRegistry.nearestAlternative(name)
+            .map(hit -> " — did you mean \\" + hit + "?")
+            .orElse("");
+    }
+
     private static MathSyntaxException unknownCommand(String name, int offset) {
-        // A registry-known contextual command used in the wrong place keeps the
-        // established bare "Unknown command" text; never suggest the same name.
-        String suggestion = CommandRegistry.get(name) == null ? commandSuggestion(name) : "";
+        // A registry-known contextual command used in the wrong place must not
+        // suggest itself, but can retain a useful established alternative.
+        String suggestion = CommandRegistry.get(name) == null
+            ? commandSuggestion(name)
+            : commandAlternative(name);
         return MathSyntaxException.unknownCommand(
             "Unknown command: \\" + name + suggestion, offset);
     }

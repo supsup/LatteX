@@ -252,8 +252,10 @@ class CommandRegistryTest {
 
         MathSyntaxException misplacedDelimiter = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("\\vert"));
-        assertEquals("Unknown command: \\vert", misplacedDelimiter.getMessage(),
-            "a known contextual command must not suggest itself");
+        assertEquals(0, misplacedDelimiter.offset());
+        assertEquals("Unknown command: \\vert — did you mean \\Vert?",
+            misplacedDelimiter.getMessage(),
+            "a known contextual command must exclude itself without losing the base alternative");
         assertTrue(misplacedDelimiter.isUnknownCommand());
 
         MathSyntaxException nested = assertThrows(MathSyntaxException.class,
@@ -280,5 +282,7 @@ class CommandRegistryTest {
         String suggestion = CommandRegistry.nearestSuggestion("boxe").orElseThrow();
         assertEquals("boxed", suggestion);
         assertTrue(authorityNames.contains(suggestion));
+        assertEquals("Vert", CommandRegistry.nearestAlternative("vert").orElseThrow(),
+            "contextual commands must retain the nearest different registry suggestion");
     }
 }
