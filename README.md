@@ -54,6 +54,113 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (484/484) as of **0.7.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **27-effect** `fx` layer (newest always-on: `precedence`, the order-of-operations cascade) — plus the flag-gated `unfold` click-to-expand `\sum` bloom (opt-in, its own preview, not in the always-on showcase) — are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
+## Docker: one-shot CLI or watched folders
+
+The repository ships one Java 25 image with two explicit modes. `cli` preserves
+the existing jar's argv/stdin/stdout contract; `watch` keeps running and turns
+eligible files dropped into a mounted input folder into self-contained SVGs.
+The image builds from source with the checked-in Gradle wrapper, has no BrewShot
+or browser runtime dependency, and runs as the dedicated non-root UID/GID
+`10001:10001` unless you deliberately map it to your own non-root host IDs.
+
+Build it from the repository root:
+
+```bash
+docker build -t lattex:local .
+mkdir -p Input Output
+```
+
+`Input/` and `Output/` are operator data, not repository artifacts. They are
+excluded from the Docker build context; keep them out of commits (or place the
+same two folders at any absolute host path and change only the left side of the
+mounts below).
+
+### Existing CLI flow
+
+The ordinary CLI works unchanged. The explicit `cli` spelling and the legacy
+no-mode spelling are equivalent:
+
+```bash
+docker run --rm lattex:local cli '\frac{a}{b}' > equation.svg
+printf '%s\n' '\sqrt{2}' | docker run --rm -i lattex:local cli > root.svg
+
+# Compatibility form — still the same shipped CLI:
+docker run --rm lattex:local '\frac{a}{b}' > equation.svg
+```
+
+`--help`, `--version`, `--batch`, `--inline`, `--scale`, `--macro`, `--color`,
+and `-o/--output` pass through to the jar unchanged. For a mounted source file,
+the container-only `cli --input FILE` adapter feeds that file to the same CLI's
+stdin. The input mount can therefore be read-only while output stays writable:
+
+```bash
+printf '%s\n' '\int_0^1 x^2\,dx' > 'Input/integral.tex'
+
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/Input:/lattex/input:ro" \
+  -v "$PWD/Output:/lattex/output" \
+  lattex:local cli --input '/lattex/input/integral.tex' \
+  -o '/lattex/output/integral.svg'
+```
+
+### Long-running watch flow
+
+Watch mode must mount `Input` read-write because claiming and completion are
+represented by atomic source-file moves. Mapping your non-root host IDs is a
+convenient way to make bind-mount ownership honest; omitting `--user` uses the
+image's non-root `10001:10001` identity instead.
+
+```bash
+docker run -d --name lattex-watch \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/Input:/lattex/input" \
+  -v "$PWD/Output:/lattex/output" \
+  lattex:local watch
+
+docker logs -f lattex-watch
+```
+
+Only visible, regular, direct-child `*.tex` files in `/lattex/input` are jobs.
+The worker creates and owns these state folders inside that mount:
+
+```text
+/lattex/input/
+├── processing/   claimed or restart-recoverable jobs
+├── finished/     original sources that rendered successfully
+└── failed/       original sources that failed
+/lattex/output/   completed SVGs or bounded error diagnostics
+```
+
+For `Input/pythagoras.tex`, success atomically publishes
+`Output/pythagoras.svg` and preserves the original source name as
+`Input/finished/pythagoras.tex`. A render/read failure publishes no success SVG,
+writes a bounded non-secret `Output/pythagoras.tex.error.txt`, and moves the
+source to `Input/failed/pythagoras.tex`.
+
+Producers should never write a live `.tex` name incrementally. Write a hidden
+or otherwise ineligible sibling first, then atomically rename it into the input
+root when complete:
+
+```bash
+printf '%s\n' '\begin{aligned}' 'a &= b + c \\' 'd &= e' '\end{aligned}' \
+  > 'Input/.derivation.tex.tmp'
+mv 'Input/.derivation.tex.tmp' 'Input/derivation.tex'
+```
+
+Claims are atomic UUID-prefixed moves into `processing/`; two containers sharing
+the same mounts cannot both claim one root source. Valid claims left in
+`processing/` are recovered after restart. State subdirectories, hidden files,
+symlinks, and non-`.tex` files are never scanned. Existing output or archive
+bytes are never overwritten; a distinct name collision is failed explicitly,
+and a same-name source-archive collision with different bytes is retained under
+that state's `collisions/<job-id>/` directory.
+
+The polling interval defaults to 500 ms and can be set from 10–60000 ms with
+`LATTEX_WATCH_POLL_MS`. `LATTEX_INPUT_DIR` and `LATTEX_OUTPUT_DIR` exist for
+controlled tests/custom images; the documented container contract remains
+`/lattex/input` and `/lattex/output`.
+
 ## The fx layer is OPTIONAL
 
 The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, shatter, sparkler, precedence, and 21 more — 27 always-on effects total, plus the flag-gated `unfold` described below) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations.
