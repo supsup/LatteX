@@ -107,24 +107,29 @@ class MacroExpansionTest {
     void definingABuiltinIsRefused() {
         for (String probe : new String[] {
             "\\newcommand{\\frac}{x}",       // structural switch case
+            "\\newcommand{\\boxed}{x}",      // structural descriptor
+            "\\newcommand{\\bordermatrix}{x}", // contextual structural descriptor
             "\\newcommand{\\alpha}{x}",      // Symbols table
+            "\\newcommand{\\textbf}{x}",     // lexer-special text-family descriptor
 
             "\\def\\sum{x}",                 // big operator, via \def
+            "\\def\\text{x}",                // text family, via \def
         }) {
             MathSyntaxException e = assertThrows(MathSyntaxException.class,
                 () -> MathParser.parse(probe), probe);
             assertTrue(e.getMessage().contains("built-in"), probe + " -> " + e.getMessage());
         }
-        // Text-family names (\textbf …) are LEXER-reserved: the lexer eats a {…}
-        // argument for them, so a definition cannot even NAME one — it fails at
-        // lex with its own message, which is additive-only enforced one level
-        // deeper than the deny check.
-        MathSyntaxException textFamily = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("\\newcommand{\\textbf}{x}"));
-        assertTrue(textFamily.getMessage().contains("text argument"), textFamily.getMessage());
         MathSyntaxException preset = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("x", Map.of("frac", "y")));
         assertTrue(preset.getMessage().contains("built-in"), preset.getMessage());
+    }
+
+    @Test
+    void malformedTextCommandKeepsItsEstablishedArgumentError() {
+        MathSyntaxException failure = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\textbf x"));
+        assertEquals("\\textbf expects a '{...}' text argument", failure.getMessage());
+        assertEquals(0, failure.offset());
     }
 
     @Test
@@ -152,13 +157,15 @@ class MacroExpansionTest {
         assertTrue(e.getMessage().contains("Unknown command"), e.getMessage());
     }
 
-    /// lattex 253 F1: the deny check must come from ONE parser authority. These six were all
-    /// shadowable under the hand-maintained list (each is parser-known but was absent from it);
-    /// the probe-based check must refuse every one — and still admit a genuinely free name in
-    /// the same fixture, so the probe cannot pass by denying everything.
+    /// lattex 253 F1: the deny check must come from ONE parser authority. These names were all
+    /// shadowable under the old hand-maintained list; the descriptor lookup must refuse every
+    /// one — and still admit a genuinely free name in the same fixture, so it cannot pass by
+    /// denying everything.
     @org.junit.jupiter.api.Test
-    void theSixEscapeesAreDeniedAndFreshNamesStillAdmit() {
-        for (String name : new String[] {"fbox", "mkern", "kern", "mskip", "hdashline", "nolimits"}) {
+    void oldReservationEscapeesAreDeniedAndFreshNamesStillAdmit() {
+        for (String name : new String[] {
+                "fbox", "mkern", "kern", "mskip", "hdashline", "nolimits",
+                "vert", "middle", "cr"}) {
             MathSyntaxException e = assertThrows(MathSyntaxException.class,
                 () -> MathParser.parse("x", Map.of(name, "y")),
                 "parser-known name must be denied: " + name);

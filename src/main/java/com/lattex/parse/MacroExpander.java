@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Token-level user-macro expansion (L8, plan 68f2eb85): {@code \newcommand} /
@@ -18,12 +17,13 @@ import java.util.Set;
  * from the token stream, invocations are replaced by their substituted bodies,
  * and the parser then sees only tokens it already understands. The pass is
  * <em>additive-only by construction</em>: a macro may not use the name of any
- * built-in command — decided by asking the PARSER itself (the probe in
- * {@code denyBuiltin}, one authority, no hand list to drift) — so expansion can never
- * change the meaning of input that parsed before macros existed — the no-macro
- * path returns the token list untouched, byte-identical. {@code \renewcommand}
- * redefines <em>user</em> macros only. This is deliberately narrower than TeX
- * (which allows shadowing anything); documented as the L8 subset.
+ * built-in command, as decided directly by {@link CommandRegistry}. Expansion
+ * therefore cannot replace a registered built-in, and no exception-message
+ * protocol is involved. (The registry intentionally closes shadowing loopholes
+ * left by the former probe/list implementation.) The no-macro path returns the
+ * token list untouched, byte-identical. {@code \renewcommand} redefines
+ * <em>user</em> macros only. This is deliberately narrower than TeX (which
+ * allows shadowing anything); documented as the L8 subset.
  *
  * <p>Scoping subset: definitions are global to the input (no brace scoping) and
  * may appear anywhere at the top level of the stream, but not inside another
@@ -55,13 +55,6 @@ final class MacroExpander {
      */
     static final int MAX_MACRO_OUTPUT_TOKENS = 100_000;
 
-    /**
-     * The definition keywords themselves — consumed by this expander, unknown to
-     * the parser, so the parser-authority probe below cannot vouch for them.
-     * The ONLY hand-maintained deny entries; everything else asks the parser.
-     */
-    private static final Set<String> DEFINITION_KEYWORDS = Set.of("newcommand", "renewcommand", "def");
-
     private record MacroDef(String name, int numArgs, List<Token> body, boolean inlineSource) {}
 
     private final Map<String, MacroDef> defs = new HashMap<>();
@@ -92,8 +85,8 @@ final class MacroExpander {
     private static boolean containsDefinition(List<Token> tokens) {
         for (Token t : tokens) {
             if (t.kind() == Kind.COMMAND
-                    && ("newcommand".equals(t.name()) || "renewcommand".equals(t.name())
-                        || "def".equals(t.name()))) {
+                    && CommandRegistry.hasGrammar(
+                        t.name(), CommandRegistry.GrammarKind.DEFINITION)) {
                 return true;
             }
         }
@@ -199,8 +192,8 @@ final class MacroExpander {
         }
         for (Token t : body) {
             if (t.kind() == Kind.COMMAND
-                    && ("newcommand".equals(t.name()) || "renewcommand".equals(t.name())
-                        || "def".equals(t.name()))) {
+                    && CommandRegistry.hasGrammar(
+                        t.name(), CommandRegistry.GrammarKind.DEFINITION)) {
                 throw new MathSyntaxException(
                     "macro \\" + name + " body may not contain definitions", kw.offset());
             }
@@ -229,33 +222,13 @@ final class MacroExpander {
     }
 
     /**
-     * The additive-only deny check, derived from ONE parser authority (review
-     * lattex 253 F1 — the hand-maintained structural list omitted live commands;
-     * fbox/mkern/kern/mskip/hdashline/nolimits were all shadowable). A name is
-     * built-in iff the PARSER ITSELF does not reject it as an unknown command:
-     * the probe parses {@code \name} with no macros and inspects the failure.
-     * Success, or ANY failure other than "Unknown command: \name" (missing
-     * argument, wrong context, …), means the parser knows the name — deny.
-     * Only a verbatim unknown-command rejection proves the name is free. The
-     * three definition keywords are the sole hand-maintained entries (this
-     * expander consumes them; the parser cannot vouch either way).
+     * The additive-only deny check, read directly from the command authority.
+     * The lexer deliberately leaves a text-family control word as a COMMAND when
+     * it has no following text argument, so definition targets such as
+     * {@code \newcommand{\textbf}{...}} reach this same typed policy too.
      */
     private void denyBuiltin(String name, int offset) {
-        boolean builtin;
-        if (DEFINITION_KEYWORDS.contains(name)) {
-            builtin = true;
-        } else {
-            try {
-                MathParser.parseMath("\\" + name, 0, Map.of());
-                builtin = true; // parses clean -> the parser owns this name
-            } catch (MathSyntaxException e) {
-                String msg = String.valueOf(e.getMessage());
-                builtin = !msg.startsWith("Unknown command: \\" + name);
-            } catch (RuntimeException anythingElse) {
-                builtin = true; // fail closed: an odd probe failure never frees a name
-            }
-        }
-        if (builtin) {
+        if (!CommandRegistry.userMacroMayClaim(name)) {
             throw new MathSyntaxException(
                 "cannot define \\" + name + ": it is a built-in command (user macros are "
                     + "additive-only in this subset)", offset);
@@ -278,7 +251,7 @@ final class MacroExpander {
             Token t = run.get(i);
             if (t.kind() == Kind.COMMAND) {
                 String name = t.name();
-                if ("newcommand".equals(name) || "renewcommand".equals(name) || "def".equals(name)) {
+                if (CommandRegistry.hasGrammar(name, CommandRegistry.GrammarKind.DEFINITION)) {
                     if (!allowDefinitions) {
                         throw new MathSyntaxException(
                             "macro bodies may not contain definitions", t.offset());

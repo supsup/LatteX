@@ -15,9 +15,9 @@ import java.util.Map;
  * font-variant / text-command tables, and the supported grid environments. These
  * are pure data carriers moved out of {@link MathParser} verbatim (clean-room:
  * code points from the Unicode standard, atom classes and operator/limit
- * behaviour from Knuth's TeXbook). {@code MathParser} reads them via {@code
- * import static}; the command enumeration ({@link MathParser#supportedCommands()})
- * iterates them, so it can never drift from what the parser accepts.
+ * behaviour from Knuth's TeXbook). {@link CommandRegistry} incorporates every
+ * command-keyed table entry into the typed command authority; {@code MathParser}
+ * only reads a table after that descriptor selects the corresponding handler.
  */
 final class Symbols {
 
