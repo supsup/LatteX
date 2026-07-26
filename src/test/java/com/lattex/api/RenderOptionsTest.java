@@ -36,6 +36,45 @@ class RenderOptionsTest {
             RenderOptions.defaults().macros());
     }
 
+    @Test
+    void sixArgConstructorRemainsSourceCompatibleAndDefaultsRenderedErrorsOff() {
+        RenderOptions oldShape = new RenderOptions(
+            1.25, Color.BLACK, MathStyle.TEXT,
+            java.util.Map.of("half", "\\frac{1}{2}"), true, true);
+        assertEquals(1.25, oldShape.scale());
+        assertTrue(oldShape.interactiveExpansion());
+        assertTrue(oldShape.fluid());
+        assertFalse(oldShape.renderErrors());
+        assertFalse(RenderOptions.defaults().renderErrors());
+    }
+
+    @Test
+    void everyCopyMethodPreservesTheRenderedErrorGate() {
+        RenderOptions armed = new RenderOptions(
+            1.25, Color.BLACK, MathStyle.SCRIPT,
+            java.util.Map.of("half", "\\frac{1}{2}"), true, true, true);
+        for (RenderOptions copy : java.util.List.of(
+                armed.withScale(1.5),
+                armed.withColor(Color.CURRENT),
+                armed.withMathStyle(MathStyle.TEXT),
+                armed.withMacros(java.util.Map.of("third", "\\frac{1}{3}")),
+                armed.withInteractiveExpansion(false),
+                armed.withFluid(false),
+                armed.inline(),
+                armed.display())) {
+            assertTrue(copy.renderErrors(), "copy method must preserve the host gate");
+        }
+        assertFalse(armed.withRenderedErrors(false).renderErrors());
+        assertTrue(RenderOptions.defaults().withRenderedErrors(true).renderErrors());
+    }
+
+    @Test
+    void throwingRenderIgnoresTheRenderedErrorGate() {
+        RenderOptions base = RenderOptions.defaults().withColor(Color.parse("#123456"));
+        assertEquals(LatteX.render("x^2", base),
+            LatteX.render("x^2", base.withRenderedErrors(true)));
+    }
+
     @org.junit.jupiter.api.Test
     void withMacrosDefensivelyCopies() {
         java.util.Map<String, String> src = new java.util.HashMap<>();

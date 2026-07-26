@@ -35,6 +35,13 @@ reference. For the parallel MathML
 output, **[examples/mathml.html](examples/mathml.html)** shows each formula's SVG
 render beside its `toMathML()` serialization — same parse, two products.
 
+For a host that wants an author-visible failure without inventing its own UI,
+**[examples/rendered-error.html](examples/rendered-error.html)** shows the opt-in,
+bounded error card. The committed image below is captured from the current Java
+renderer in a real Chromium session by BrewShot.
+
+![LatteX opt-in rendered diagnostic card, showing a typed outcome, bounded message, source-line excerpt, and reanchored caret as inert SVG paths](examples/rendered-error.png)
+
 ![A scroll through the LatteX showcase — the definition of the derivative, Euler's identity, the Basel problem, a Gaussian integral, the curl determinant, a piecewise cases block, an aligned derivation, and the 0.3.0 stack mechanism (underbrace + substack), every formula rendered to self-contained SVG](examples/showcase.gif)
 
 <sub>↑ a scroll through <code>examples/showcase.html</code>, captured with <a href="https://github.com/supsup/BrewShot">BrewShot</a> — every frame is real renderer output.</sub>
@@ -54,6 +61,31 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 ## Status
 
 Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (484/484) as of **0.7.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **28-effect always-on** `fx` layer (including the semantic `thread`, `precedence`, and `cancel` effects) — plus the flag-gated `unfold` click-to-expand `\sum` bloom, for **29 production effects total** — are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+
+## Opt-in rendered diagnostics
+
+The historical diagnostic API still returns an empty SVG on failure by default.
+A host can explicitly ask LatteX to render a small failure card instead:
+
+```java
+RenderOptions options = RenderOptions.defaults().withRenderedErrors(true);
+RenderResult result = LatteX.renderWithDiagnostics(
+    "\\frac{a + b}{\\sqrt{x^2 + 1}", options);
+
+// result.diagnostics() is still the original typed diagnostic.
+// result.svg() is a bounded inert card only when that diagnostic is non-OK.
+```
+
+Successful SVG bytes are identical to `LatteX.render(source, options)`. On a
+failure, the card contains only a stable outcome name, the bounded diagnostic
+message, and at most one bounded source-line excerpt with a reanchored caret.
+It never exposes `Diagnostics.detail()`, an exception type/cause, the full raw
+source, or `caretString()`. Text becomes direct font-path geometry through the
+same capped `svg/g/path/rect` emitter; it is never reparsed as LaTeX.
+
+This is a host-only switch: source authors cannot enable or disable it through
+`\lx[...]`. The original overload, throwing render methods, CLI, and Docker
+worker all retain their previous defaults and behavior.
 
 ## Docker: one-shot CLI or watched folders
 
