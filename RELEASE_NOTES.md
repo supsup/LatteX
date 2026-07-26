@@ -6,6 +6,30 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Opt-in rendered diagnostic cards
+
+- **Hosts may render a failed formula in place without changing the default.**
+  `LatteX.renderWithDiagnostics(String, RenderOptions)` is the new option-aware
+  overload, and `RenderOptions.defaults().withRenderedErrors(true)` enables a
+  compact failure card. The existing overload still delegates to defaults and
+  still returns `""` on failure; successful output is byte-identical to
+  `LatteX.render(source, options)`, including macros, source styling, scale,
+  color, math style, and the host's fluid flag.
+- **The card is bounded, inert, and fail-soft.** It draws direct `TextRun` and
+  rule geometry through the existing capped SVG emitter—never by reparsing a
+  diagnostic as LaTeX—and stays inside the established `svg/g/path/rect`
+  alphabet. It displays only a stable outcome token, a capped diagnostic
+  message, and one capped source-line excerpt with a reanchored caret. It never
+  displays diagnostic detail, exception cause/class, the complete raw source,
+  or the raw caret block. A malformed row is replaced or omitted; any secondary
+  parse/layout/emit failure returns the same diagnostics with an empty SVG.
+- **The gate belongs to the host.** `\lx[...]` cannot set or clear it, every
+  `RenderOptions` copy method preserves it, and an explicit six-argument
+  compatibility constructor keeps pre-feature source calls default-off. The
+  throwing APIs, CLI, Docker worker, and served integrations do not flip their
+  defaults. `examples/rendered-error.html` and its committed BrewShot Chromium
+  receipt (`examples/rendered-error.png`) document the opt-in path.
+
 ### One typed command authority (Marlow/Confluence audit)
 
 - **Parser dispatch, command enumeration/examples, did-you-mean candidates, and
