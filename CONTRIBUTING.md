@@ -52,15 +52,17 @@ This subset is a contract with downstream HTML sanitizers (LatteX SVG must pass 
 
 Java 25 toolchain, provisioned by Gradle. Keep the build dependency-light and the tests deterministic (env-scrubbed — no ambient state).
 
-The normal `test` and `build` suites include LatteX's real-browser BrewShot
-pins. When Chrome is discoverable they launch it headlessly to check the
-effects page, fx lifecycle, and GIF liveness. When Chrome is absent on a local
-machine, those pins assumption-skip, so a green local build may not include
-the browser checks. CI sets `LATTEX_REQUIRE_BROWSER=1`, which makes a missing
-browser fail closed; the variable does not opt into a separate browser suite.
-There is currently no supported Chrome-free command that represents the full
-verification gate. In particular, excluding the `capture` tag is incomplete
-because the real-browser lifecycle tests are intentionally untagged.
+> **Local browser warning:** the normal `./gradlew test` and `./gradlew build`
+> suites include LatteX's real-browser BrewShot pins. When Chrome is installed,
+> those tests launch it headlessly to check the effects page, fx lifecycle, and
+> GIF liveness; BrewShot 0.9 starts it with `--no-startup-window`. Without Chrome,
+> a local run assumption-skips the browser pins, so a green local build may omit
+> them. CI sets `LATTEX_REQUIRE_BROWSER=1`, which makes browser absence fail closed;
+> the variable does not opt into a separate browser suite. There is no supported
+> Chrome-free command that represents the full verification gate: excluding the
+> `capture` tag is incomplete because the lifecycle tests are intentionally
+> untagged. Use an isolated Java container without Chrome only when you deliberately
+> want the local no-browser lane.
 
 ### The fx-runtime JS harness
 

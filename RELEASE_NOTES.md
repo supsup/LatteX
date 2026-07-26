@@ -6,6 +6,132 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Docker distribution: preserved CLI plus an atomic input/output worker
+
+- **One Java 25 image now supports both the existing CLI and a long-running
+  folder worker.** The multi-stage build uses the checked-in Gradle wrapper,
+  installs immutable renderer/worker jars under `/opt/lattex`, copies no test or
+  BrewShot dependency into the runtime, and defaults to non-root UID/GID 10001.
+- **The old CLI contract is unchanged.** `cli` is an explicit container mode,
+  while no-mode argv/stdin remains a compatibility path; help, version, batch,
+  output-file, render-error, and stdout semantics still come from the shipped
+  `lattex` jar. Because `cli` and `watch` are reserved as the first container
+  argument, literal expressions with either spelling use `cli cli` or
+  `cli watch`. `cli --input FILE` is a thin mounted-file-to-stdin adapter.
+- **Watch mode uses durable folders rather than filename suffix mutation.** It
+  atomically claims visible direct-child `.tex` files from `/lattex/input` into
+  `input/processing`, atomically publishes complete SVGs under `/lattex/output`,
+  and preserves original source names under `input/finished` or `input/failed`.
+  UUID claim directories keep the original name in a separate path component,
+  so near-limit ASCII and multibyte filenames cannot terminate or restart-poison
+  the worker. Restart recovery, duplicate-worker races, spaces/multiline sources,
+  partial upload exclusion, bounded diagnostic fallback, and no-overwrite
+  collision handling are mechanically covered by the Docker smoke.
+- **Failures are fail-honest.** A failed job leaves no success-shaped SVG, emits
+  only a bounded non-secret error code, and retains the original source in the
+  failed folder. Input is mounted read-write only for watch mode; CLI input can
+  remain read-only.
+
+### BrewShot 0.9 test-harness refresh
+
+- **The vendored, test-only BrewShot harness moves from 0.8.0 to 0.9.0.** The
+  replacement was built twice from BrewShot main commit
+  `0e2289dbb42455b559d345393119f3836021f23c`; both clean builds produced SHA-256
+  `405ad143fb143e739cf7979510b435a73df5ad2ddd2e960529ff588cb298307d`.
+  LatteX's zero-runtime-dependency artifact is unchanged.
+- **Local browser behavior is now explicit for contributors.** The normal test
+  suite launches headless Chrome when it is available, BrewShot 0.9 supplies the
+  macOS-safe `--no-startup-window` default, local no-Chrome runs assumption-skip
+  browser pins, and CI keeps those pins mandatory with
+  `LATTEX_REQUIRE_BROWSER=1`.
+
+### CLI stdout failures now fail honestly
+
+- **One-shot and batch output no longer report success after `PrintStream` swallows
+  a write or flush failure.** Every stdout completion point now checks the stream's
+  sticky error state; a closed consumer or broken pipe exits `1` and emits one
+  bounded stderr diagnostic. Exception text is not echoed.
+- **Batch failure preserves an explicit prefix contract.** Each NUL-terminated record
+  is flushed and checked before the next is emitted. On the first stdout failure,
+  stderr reports how many complete records were confirmed; the current record may be
+  incomplete and later records are not emitted. Malformed expressions retain their
+  existing isolation behavior: their in-place error records do not abort siblings.
+- **Healthy output is byte-identical, and existing success/render/usage exit meanings
+  are unchanged.** The new nonzero path applies only when stdout cannot be delivered.
+
+### Output size cap is now a hard postcondition (Marlow audit LTX-01)
+
+- **The documented 2,000,000-character SVG output ceiling is enforced as a true
+  postcondition, not a loop-top check.** The `<svg>` wrapper, streamed glyphs, rules,
+  and the `glyphmap`/`groupmap` sidecars all append through one capped sink, with a
+  final assertion before any artifact is returned. Previously the cap was checked only
+  at the top of the glyph loop, so a rule-dominated formula (thousands of empty
+  `\boxed{}`) could return a ~2.6M-character SVG with an `OK` diagnostic. Such input now
+  fails loud with `OUTPUT_CAP_EXCEEDED` and yields no partial or oversized artifact.
+- **Glyphs are streamed, not pre-materialized.** Outlines are decoded and appended one
+  at a time, so oversized input is refused *during* growth rather than after buffering
+  the whole path graph. Rendered output is byte-identical for all compliant input.
+- **Non-finite coordinates are refused through the typed channel** — a `NaN`/`Infinity`
+  coordinate raises rather than emitting a literal `"NaN"`/`"Infinity"` into the SVG.
+
+### Stretchy-glyph assembly is linear and work-bounded (Marlow audit LTX-02)
+
+- **Extensible stretchy glyphs (wide arrows, over/under-braces and accents) compute
+  their extender repeat count in closed form and build the assembly once**, replacing an
+  O(R²) rebuild-and-rescan loop that grew quadratically with the required width. Rendered
+  output is byte-identical for every well-formed input.
+- **Generated assembly pieces are charged to the layout work budget**, so a shallow AST
+  can no longer create effectively unbounded layout work. A pathological case where the
+  extender advance did not exceed the overlap (hostile font-part data) previously looped
+  forever; it now fails loud with `OUTPUT_CAP_EXCEEDED`.
+
+### Output-boundary legality + public-boundary validation
+
+- **One shared code-point legality policy at every output boundary.** SVG aria text,
+  MathML, `aria-label`/`a11y.label`, and `data-lx-*` values now all run through a single
+  policy *before* their format-specific escaping (which then happens exactly once):
+  illegal C0 control characters other than legal XML whitespace (`\t`/`\n`/`\r`) are
+  **stripped** (matching what the SVG path already did), and an **unpaired UTF-16
+  surrogate fails loud** as malformed input. Previously the three surfaces disagreed —
+  `toMathML("x\u0000y")` emitted a raw NUL (not well-formed XML) while the SVG path
+  stripped it, and a quoted `a11y.label` could land a NUL in the styled-HTML output.
+  Legal whitespace and well-formed astral pairs are untouched, and **clean input renders
+  byte-identically** (the SVG goldens are unchanged).
+- **Semantic text is stored raw and escaped once at the boundary.** The `a11y.label` and
+  the plottable `data-lx-graph-expr` body used to be HTML-escaped at parse time (stored
+  pre-escaped); they are now stored raw and escaped only where they are stamped onto the
+  container, so there is no double-escape hazard and one legality policy governs them.
+- **`renderFragment(latex, fontSizePx)` validates its size.** A non-finite (`NaN`/`Infinity`),
+  zero, or negative `fontSizePx` — which used to flow straight into the metrics and output —
+  now throws `IllegalArgumentException`. The accepted upper bound, `LatteX.MAX_FRAGMENT_FONT_SIZE`
+  (`= RenderOptions.MAX_SCALE × 40 = 800`), is consistent with the render scale ceiling.
+- **The public result records enforce the invariants their javadoc promises.** `RenderedMath`
+  (order-preserving immutable attribute map, non-null SVG), `MathFragment` (non-null markup/
+  glyphmap/MathML, finite non-negative metrics), `InlineSvgResult` (non-null SVG, finite
+  non-negative baseline metrics), and `RenderResult` (non-null diagnostics) now reject invalid
+  construction instead of silently holding a value that breaks their contract.
+
+### `RenderOptions.fluid` — scale-to-fit display math (opt-in)
+
+- **Display math that never overflows its container.** Opt in with
+  `RenderOptions.defaults().withFluid(true)` and the outer display `<svg>` gains **one**
+  sizing rule — `style="width:100%;max-width:<natural>px;height:auto"` — so the equation
+  downscales in a container narrower than its natural width and never upscales past it
+  (the unchanged viewBox keeps the aspect ratio). Presentation-only: zero layout changes,
+  and stripping that one attribute restores the fixed-size output byte-for-byte. This is
+  scale-to-fit (what shrink-to-fit sizing gives you), **not** line-breaking.
+- **Default off = byte-identical.** Without the flag, every entry point's output is
+  byte-identical to 0.11.0. Inline math (`renderInline` / `renderInlineResult`) and
+  `renderFragment` are structurally flagless and stay fixed-size — baseline seating
+  depends on it. The sizing rides the `<svg>` element only; the `.lx-math` container's
+  attribute surface is untouched, and `fluid` is a HOST flag, not an `\lx` key — an
+  author can never enable it from formula source.
+- **Stafficy `/docs` does not consume fluid yet — deliberately.** Its sanitizer strips
+  the `style` attribute (no `style` entry in the svg allow-list), so a fluid render is
+  provably byte-identical to fixed there; the `/docs` carve-out is a separate two-sided
+  change (sanitizer grammar + explicit opt-in) tracked as its own plan. Standalone
+  consumers (any plain browser/embedding host) get fluid today.
+
 ### Silent-flatten fixes — commands in `\text{…}` fail loud; `aligned`/`split` position argument parsed
 
 - **An unknown command inside `\text{…}` now fails loud instead of silently flattening.**

@@ -36,6 +36,57 @@ public final class SvgEmitter {
     /// formula's SVG — a ceiling for runaway amplification, not a working limit.
     static final int MAX_OUTPUT_CHARS = 2_000_000;
 
+    /**
+     * The ONE capped-append sink (plan b2ae72fe, LTX-01 — Marlow audit; design from
+     * fixpoint/lattex-hostile-input-hardening 817f0b2+5427c41, Fixpoint). Every
+     * {@code append} tracks the running length and fails the render the MOMENT the cap
+     * is crossed — no matter where the content came from (the {@code <svg>} wrapper and
+     * escaped aria, a streamed glyph {@code <path>}, a rule, or a returned sidecar run).
+     * The output cap is therefore a real POSTCONDITION by construction, not a loop-top
+     * probe that a trailing wrapper, an after-the-loop rule, or the last append could
+     * slip past: no {@code checked()} artifact can exceed {@link #MAX_OUTPUT_CHARS}. The
+     * trip is the SAME typed resource-cap channel the layout-box budget uses
+     * ({@link com.lattex.parse.MathSyntaxException#capExceeded}, classified
+     * {@code OUTPUT_CAP_EXCEEDED}), never a new ad-hoc exception on the public surface.
+     *
+     * <p>Because the throw fires on the crossing append, only the current fragment (one
+     * streamed glyph path at most) is ever held past the cap — a runaway multi-megabyte
+     * document is never materialized in full.
+     */
+    static final class CappedBuilder {
+        private final StringBuilder sb = new StringBuilder();
+
+        CappedBuilder append(CharSequence s) {
+            sb.append(s);
+            checkCap();
+            return this;
+        }
+
+        CappedBuilder append(char c) {
+            sb.append(c);
+            checkCap();
+            return this;
+        }
+
+        int length() {
+            return sb.length();
+        }
+
+        /** FINAL postcondition: assert the cap once more, then hand back the artifact. */
+        String checked() {
+            checkCap();
+            return sb.toString();
+        }
+
+        private void checkCap() {
+            if (sb.length() > MAX_OUTPUT_CHARS) {
+                throw com.lattex.parse.MathSyntaxException.capExceeded(
+                    "SVG output exceeds the " + MAX_OUTPUT_CHARS
+                    + "-character cap; reduce the formula size");
+            }
+        }
+    }
+
     public static String emit(Layout layout, SfntFont font, String ariaLabel) {
         return emit(layout, font, ariaLabel, GLYPH_FILL);
     }
@@ -51,24 +102,55 @@ public final class SvgEmitter {
      *             or attribute — so the minimal-alphabet contract is preserved.
      */
     public static String emit(Layout layout, SfntFont font, String ariaLabel, Color fill) {
+        return emit(layout, font, ariaLabel, fill, false);
+    }
+
+    /**
+     * Emits the SVG document for a laid-out formula, optionally with <em>fluid</em>
+     * (scale-to-fit) sizing on the outer {@code <svg>}.
+     *
+     * <p><strong>Fluid sizing is presentation-only.</strong> With {@code fluid=false}
+     * this is byte-for-byte the historical output. With {@code fluid=true} the ONE
+     * change is a single sizing {@code style} rule on the outer {@code <svg>} —
+     * {@code width:100%;max-width:<natural>px;height:auto} — so the equation
+     * downscales in a container narrower than its natural width and never upscales
+     * past it (the {@code max-width} is the natural width; {@code height:auto} keeps
+     * the aspect ratio via the UNCHANGED viewBox). The viewBox, the {@code width}/
+     * {@code height} attributes (the fixed-size fallback), and every inner element
+     * are identical to the fixed-size render — no layout or geometry is touched. The
+     * value is renderer-derived ({@code [0-9.:%;a-z-]} from a fixed template + a
+     * numeric width) — no author string can reach it.
+     */
+    public static String emit(Layout layout, SfntFont font, String ariaLabel, Color fill,
+                              boolean fluid) {
         double vbX = layout.minX() - MARGIN;
         double vbY = layout.minY() - MARGIN;
         double vbW = layout.width() + 2 * MARGIN;
         double vbH = layout.height() + 2 * MARGIN;
 
-        StringBuilder svg = new StringBuilder();
+        CappedBuilder svg = new CappedBuilder();
         svg.append("<svg xmlns=\"").append(SVG_NS).append("\"")
             .append(" viewBox=\"")
             .append(num(vbX)).append(' ').append(num(vbY)).append(' ')
             .append(num(vbW)).append(' ').append(num(vbH)).append("\"")
             .append(" width=\"").append(num(vbW)).append("\"")
-            .append(" height=\"").append(num(vbH)).append("\"")
-            .append(" role=\"img\"")
+            .append(" height=\"").append(num(vbH)).append("\"");
+        if (fluid) {
+            // The one fluid addition: a single sizing rule. Shrink-to-fit, capped at
+            // the natural width, aspect ratio preserved by the (unchanged) viewBox.
+            svg.append(" style=\"width:100%;max-width:").append(num(vbW))
+                .append("px;height:auto\"");
+        }
+        svg.append(" role=\"img\"")
             .append(" aria-label=\"").append(escape(ariaLabel)).append("\">\n");
 
         emitInner(svg, layout, font, fill, 0.0, 0.0);
         svg.append("</svg>");
-        return svg.toString();
+        // FINAL postcondition before the artifact leaves: the whole document — wrapper +
+        // escaped aria + glyphs + rules + closing — is within the cap. Covers the surfaces
+        // a loop-top probe missed: an empty layout whose oversized aria never enters the
+        // glyph/rule loops, and the closing wrapper appended after them (LTX-01).
+        return svg.checked();
     }
 
     /**
@@ -97,10 +179,11 @@ public final class SvgEmitter {
      *             per-glyph {@code \color}/{@code \textcolor} override still wins.
      */
     public static String emitFragment(Layout layout, SfntFont font, Color fill) {
-        StringBuilder out = new StringBuilder();
+        CappedBuilder out = new CappedBuilder();
         // Re-base x so the left ink edge lands at x=0; the baseline is already y=0.
         emitInner(out, layout, font, fill, -layout.minX(), 0.0);
-        return out.toString();
+        // Same FINAL postcondition as emit(): a returned fragment is within the cap.
+        return out.checked();
     }
 
     /**
@@ -112,24 +195,18 @@ public final class SvgEmitter {
      * (default group fill + {@code \color}/{@code \textcolor} overrides) are emitted
      * unchanged.
      */
-    static void emitInner(StringBuilder out, Layout layout, SfntFont font, Color fill,
+    static void emitInner(CappedBuilder out, Layout layout, SfntFont font, Color fill,
                           double dx, double dy) {
         out.append("  <g fill=\"").append(fill.svgValue()).append("\">\n");
-        // ONE producer decides which glyphs emit a <path> and in what order
-        // (emittedGlyphs); glyphmap() keys off the SAME sequence, so a path index in
-        // the SVG and a path index in the data-lx-glyphmap sidecar can never diverge.
-        for (EmittedGlyph eg : emittedGlyphs(layout, font)) {
-            // L10 (plan lattex-hostile-input-hardening): incremental output cap —
-            // fail DURING buffer growth so the runaway SVG is never built in full
-            // (Sirentide's incremental-cap pattern). Checked per element, not
-            // post-emit; the trip is typed (OUTPUT_CAP_EXCEEDED via diagnostics).
-            if (out.length() > MAX_OUTPUT_CHARS) {
-                throw com.lattex.parse.MathSyntaxException.capExceeded(
-                    "SVG output exceeds the " + MAX_OUTPUT_CHARS
-                    + "-character cap; reduce the formula size");
-            }
-            PositionedGlyph g = eg.glyph();
-            out.append("    <path d=\"").append(eg.pathData()).append("\"");
+        // ONE shared STREAMING producer decides which glyphs emit a <path> and in what
+        // order (forEachInkedGlyph); glyphmap()/groupmap() key off the SAME traversal, so
+        // a path index in the SVG and in the data-lx-* sidecars can never diverge. Each
+        // glyph's outline is decoded one at a time and RETAINED NOWHERE (no prebuilt List
+        // of every path string), and the CappedBuilder fails the render on the crossing
+        // append — so a runaway refuses DURING growth without materializing the whole
+        // path-data graph (plan b2ae72fe / LTX-01).
+        forEachInkedGlyph(layout, font, (pathIndex, g, d) -> {
+            out.append("    <path d=\"").append(d).append("\"");
             if (g.color() != null) {
                 // \color/\textcolor override; svgValue() is an allow-listed fill literal.
                 out.append(" fill=\"").append(g.color().svgValue()).append("\"");
@@ -138,10 +215,11 @@ public final class SvgEmitter {
                 .append(num(g.originX() + dx)).append(' ').append(num(g.baselineY() + dy))
                 .append(") scale(").append(num(g.scale())).append(' ').append(num(-g.scale()))
                 .append(")\"/>\n");
-        }
+        });
         // Rules emit AFTER all glyph <path>s, so a polygon rule's <path> lands past the
         // glyph paths the data-lx-glyphmap indexes — the glyph path indices are unchanged
-        // and a strike/arrowhead is never a thread target.
+        // and a strike/arrowhead is never a thread target. Each append is capped, so the
+        // rule run (the \boxed-storm surface of LTX-01) can no longer append past the cap.
         for (Rule r : layout.rules()) {
             if (r.isPolygon()) {
                 // A filled convex polygon (cancel strike / arrowhead) — same fill
@@ -171,26 +249,37 @@ public final class SvgEmitter {
         out.append("  </g>\n");
     }
 
-    /** A glyph that produces a {@code <path>}, paired with its path data. */
-    private record EmittedGlyph(PositionedGlyph glyph, String pathData) {}
+    /**
+     * A visitor over the INKED glyphs of a layout, in emit order. {@code pathData} is the
+     * glyph's outline {@code <path d>} string — computed lazily one glyph at a time and
+     * retained NOWHERE by the traversal.
+     */
+    @FunctionalInterface
+    interface InkedGlyphVisitor {
+        void visit(int pathIndex, PositionedGlyph glyph, String pathData);
+    }
 
     /**
-     * THE single decision of which glyphs emit a {@code <path>} and in what order: it
-     * applies the one inkless skip ({@code d.isEmpty()}) to {@link Layout#glyphs()} and
-     * returns the survivors in emit order. Both {@link #emitInner} (which writes the
-     * paths) and {@link #glyphmap} (which keys token identity to path index) consume
-     * this, so their path indices are the SAME by construction — no mirrored predicate
-     * to drift out of sync.
+     * THE single decision of which glyphs emit a {@code <path>} and in what order, as a
+     * STREAM: it applies the one inkless skip ({@code d.isEmpty()}) to
+     * {@link Layout#glyphs()} and hands each survivor, in emit order with its emit index,
+     * to {@code visitor}. {@link #emitInner} (which caps + writes the paths),
+     * {@link #glyphmap}, and {@link #groupmap} (which key token/precedence identity to
+     * {@code pathIndex}) all consume THIS, so their path indices are the SAME by
+     * construction — no mirrored predicate to drift out of sync. Each glyph's path data
+     * is decoded one at a time and RETAINED NOWHERE (the old {@code emittedGlyphs} List
+     * held every path string at once), so a capped consumer can refuse a runaway DURING
+     * growth without the whole path-data graph ever existing (plan b2ae72fe / LTX-01).
      */
-    private static java.util.List<EmittedGlyph> emittedGlyphs(Layout layout, SfntFont font) {
-        java.util.List<EmittedGlyph> out = new java.util.ArrayList<>();
+    static void forEachInkedGlyph(Layout layout, SfntFont font, InkedGlyphVisitor visitor) {
+        int pathIndex = 0;
         for (PositionedGlyph g : layout.glyphs()) {
             String d = GlyphPath.toPathData(font.outline(g.glyphId()));
-            if (!d.isEmpty()) {
-                out.add(new EmittedGlyph(g, d));
+            if (d.isEmpty()) {
+                continue; // inkless — no <path>, no index; SHARED so every consumer agrees
             }
+            visitor.visit(pathIndex++, g, d);
         }
-        return out;
     }
 
     /**
@@ -200,7 +289,7 @@ public final class SvgEmitter {
      * source code point. The {@code thread} fx effect reads it to light up every
      * occurrence of a hovered token.
      *
-     * <p>Keys off the SAME {@link #emittedGlyphs} sequence that {@link #emitInner}
+     * <p>Keys off the SAME {@link #forEachInkedGlyph} traversal that {@link #emitInner}
      * writes, so an index here is a {@code <path>}'s position by construction — not a
      * mirrored skip predicate that could drift. Only code points with two or more
      * occurrences form a run — a unique glyph has nothing to thread and stays inert.
@@ -212,16 +301,18 @@ public final class SvgEmitter {
      */
     public static String glyphmap(Layout layout, SfntFont font) {
         java.util.Map<Integer, java.util.List<Integer>> byCodePoint = new java.util.LinkedHashMap<>();
-        // Key off the SAME emitted-glyph sequence emitInner writes — the index here is
-        // the <path>'s position in the SVG, by construction, not by a mirrored predicate.
-        java.util.List<EmittedGlyph> emitted = emittedGlyphs(layout, font);
-        for (int idx = 0; idx < emitted.size(); idx++) {
-            int cp = emitted.get(idx).glyph().sourceCodePoint();
+        // Key off the SAME shared streaming traversal emitInner writes — the index here is
+        // the <path>'s position in the SVG, by construction, not a mirrored predicate.
+        forEachInkedGlyph(layout, font, (idx, g, d) -> {
+            int cp = g.sourceCodePoint();
             if (cp != PositionedGlyph.NO_SOURCE) {
                 byCodePoint.computeIfAbsent(cp, k -> new java.util.ArrayList<>()).add(idx);
             }
-        }
-        StringBuilder sb = new StringBuilder();
+        });
+        // The returned sidecar is a capped artifact too (plan b2ae72fe): serialize through
+        // the same CappedBuilder + FINAL postcondition, so a runaway index run fails closed
+        // on the same typed channel the SVG does.
+        CappedBuilder sb = new CappedBuilder();
         for (java.util.Map.Entry<Integer, java.util.List<Integer>> e : byCodePoint.entrySet()) {
             if (e.getValue().size() < 2) {
                 continue; // a single occurrence isn't a thread group
@@ -234,16 +325,16 @@ public final class SvgEmitter {
                 if (i > 0) {
                     sb.append(',');
                 }
-                sb.append(e.getValue().get(i));
+                sb.append(Integer.toString(e.getValue().get(i)));
             }
         }
-        return sb.toString();
+        return sb.checked();
     }
 
     /**
      * Serializes the precedence-group {@code data-lx-groupmap} sidecar for a laid-out
      * formula: {@code <rank>:<idx>,<idx>;<rank>:...}, where each index addresses an
-     * emitted {@code <path>} in EMIT ORDER (the SAME {@link #emittedGlyphs} sequence
+     * emitted {@code <path>} in EMIT ORDER (the SAME {@link #forEachInkedGlyph} traversal
      * {@link #glyphmap} and {@link #emitInner} key off) and {@code rank} is the
      * evaluation order — {@code 0} = evaluated first. The {@code precedence} fx effect
      * reads it to light sub-expressions in binding order (deepest parens inward).
@@ -261,48 +352,59 @@ public final class SvgEmitter {
      * or single-group cascade is never emitted.
      */
     public static String groupmap(Layout layout, SfntFont font) {
-        java.util.List<EmittedGlyph> emitted = emittedGlyphs(layout, font);
-        int maxDepth = -1;
-        for (EmittedGlyph eg : emitted) {
-            int d = eg.glyph().fenceDepth();
-            if (d != PositionedGlyph.NO_RANK) {
-                maxDepth = Math.max(maxDepth, d);
+        // Collect (pathIndex, fenceDepth) for the INKED, ranked glyphs via the SAME shared
+        // streaming traversal — small ints only, never the path-data strings.
+        java.util.List<int[]> ranked = new java.util.ArrayList<>();
+        int[] maxDepthBox = { -1 };
+        forEachInkedGlyph(layout, font, (idx, g, d) -> {
+            int fd = g.fenceDepth();
+            if (fd != PositionedGlyph.NO_RANK) {
+                ranked.add(new int[] { idx, fd });
+                maxDepthBox[0] = Math.max(maxDepthBox[0], fd);
             }
-        }
+        });
+        int maxDepth = maxDepthBox[0];
         if (maxDepth < 1) {
             return ""; // no fence nesting variation → nothing to cascade → static degrade
         }
         // rank = maxDepth − depth, so the deepest fenced group is rank 0 (evaluated first).
         // TreeMap keeps ranks ascending in the serialized runs.
         java.util.Map<Integer, java.util.List<Integer>> byRank = new java.util.TreeMap<>();
-        for (int idx = 0; idx < emitted.size(); idx++) {
-            int d = emitted.get(idx).glyph().fenceDepth();
-            if (d != PositionedGlyph.NO_RANK) {
-                byRank.computeIfAbsent(maxDepth - d, k -> new java.util.ArrayList<>()).add(idx);
-            }
+        for (int[] r : ranked) {
+            byRank.computeIfAbsent(maxDepth - r[1], k -> new java.util.ArrayList<>()).add(r[0]);
         }
         if (byRank.size() < 2) {
             return ""; // only one rank present → no ordering to animate
         }
-        StringBuilder sb = new StringBuilder();
+        // Capped sidecar artifact (plan b2ae72fe): same CappedBuilder + FINAL postcondition.
+        CappedBuilder sb = new CappedBuilder();
         for (java.util.Map.Entry<Integer, java.util.List<Integer>> e : byRank.entrySet()) {
             if (sb.length() > 0) {
                 sb.append(';');
             }
-            sb.append(e.getKey()).append(':');
+            sb.append(Integer.toString(e.getKey())).append(':');
             for (int i = 0; i < e.getValue().size(); i++) {
                 if (i > 0) {
                     sb.append(',');
                 }
-                sb.append(e.getValue().get(i));
+                sb.append(Integer.toString(e.getValue().get(i)));
             }
         }
-        return sb.toString();
+        return sb.checked();
     }
 
     /** Locale-independent compact number: integers plain, else up to 4 dp. */
     private static String num(double v) {
-        if (v == Math.rint(v) && !Double.isInfinite(v)) {
+        if (!Double.isFinite(v)) {
+            // A NaN/Infinity coordinate is a layout bug, not valid SVG: emitting the
+            // literal "NaN"/"Infinity" would poison the document (an invalid attribute
+            // value that also dodges the numeric alphabet). Refuse through the SAME typed
+            // channel so it fails closed — a RENDER_BUG, not a cap (5427c41 N2, lattex/216).
+            // Finite values are unaffected, so compliant output is byte-identical.
+            throw new com.lattex.parse.MathSyntaxException(
+                "non-finite coordinate in layout (" + v + ")");
+        }
+        if (v == Math.rint(v)) {
             return Long.toString((long) v);
         }
         String s = String.format(Locale.ROOT, "%.4f", v);
@@ -317,23 +419,26 @@ public final class SvgEmitter {
         return s.substring(0, end);
     }
 
+    /**
+     * XML-escapes the aria-label text. The shared
+     * {@link com.lattex.parse.OutputLegality} policy runs FIRST (plan cfd12523),
+     * so this boundary shares the SINGLE code-point legality policy with the MathML
+     * and styled-HTML surfaces: illegal C0 controls (e.g. a NUL — the class
+     * Sirentide's fuzzer caught) are stripped and an unpaired surrogate fails loud;
+     * legal whitespace (tab/newline) is preserved. The four-metachar escaping then
+     * happens exactly once, here.
+     */
     private static String escape(String s) {
-        StringBuilder out = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
+        String clean = com.lattex.parse.OutputLegality.sanitize(s);
+        StringBuilder out = new StringBuilder(clean.length());
+        for (int i = 0; i < clean.length(); i++) {
+            char c = clean.charAt(i);
             switch (c) {
                 case '&' -> out.append("&amp;");
                 case '<' -> out.append("&lt;");
                 case '>' -> out.append("&gt;");
                 case '"' -> out.append("&quot;");
-                // L10 (plan lattex-hostile-input-hardening): XML 1.0 forbids C0/C1
-                // control characters entirely, and an unescaped one from author input
-                // (e.g. a NUL) would leak straight into the aria-label — the exact
-                // control-char class Sirentide's fuzzer caught. Drop them so the output
-                // can NEVER carry a control char (tab/newline stay — legal in XML).
-                default -> {
-                    if (c >= 0x20 || c == '\t' || c == '\n' || c == '\r') { out.append(c); }
-                }
+                default -> out.append(c);
             }
         }
         return out.toString();

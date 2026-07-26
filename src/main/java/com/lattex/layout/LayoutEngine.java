@@ -2422,12 +2422,8 @@ public final class LayoutEngine {
                                            com.lattex.font.GlyphAssembly assembly,
                                            int overlap, int minSizeDesign, List<AccentPiece> out) {
         var parts = assembly.parts();
-        boolean hasExtender = parts.stream().anyMatch(com.lattex.font.GlyphPart::isExtender);
-        int rep = 1;
-        List<com.lattex.font.GlyphPart> stack = expandAssembly(parts, rep);
-        while (hasExtender && assemblySpanDesign(stack, overlap) < minSizeDesign) {
-            stack = expandAssembly(parts, ++rep);
-        }
+        // Closed-form repeat count + one build, budget-charged (plan 5a594a59, LTX-02).
+        List<com.lattex.font.GlyphPart> stack = expandBudgetedAssembly(parts, overlap, minSizeDesign);
         int dx = 0;
         for (com.lattex.font.GlyphPart part : stack) {
             out.add(new AccentPiece(part.glyphId(), dx));
@@ -2532,14 +2528,9 @@ public final class LayoutEngine {
                                            com.lattex.font.GlyphAssembly assembly,
                                            int overlap, int minSizeDesign, double scale) {
         var parts = assembly.parts();
-        boolean hasExtender = parts.stream().anyMatch(com.lattex.font.GlyphPart::isExtender);
-
-        // Fewest extender repetitions to reach the target (or 1 if no extenders).
-        int rep = 1;
-        List<com.lattex.font.GlyphPart> stack = expandAssembly(parts, rep);
-        while (hasExtender && assemblySpanDesign(stack, overlap) < minSizeDesign) {
-            stack = expandAssembly(parts, ++rep);
-        }
+        // Closed-form repeat count + one build, budget-charged (plan 5a594a59, LTX-02):
+        // fewest extender repetitions to reach the target (or 1 if no extenders).
+        List<com.lattex.font.GlyphPart> stack = expandBudgetedAssembly(parts, overlap, minSizeDesign);
 
         // Place bottom→top tiling into pieces ordered top→bottom.
         int spanDesign = assemblySpanDesign(stack, overlap);
@@ -2556,8 +2547,105 @@ public final class LayoutEngine {
         return new StretchyGlyph(pieces, maxWidth, spanDesign * scale);
     }
 
+    /**
+     * DIVERGENT sentinel for {@link #assemblyRepetitions}: the extender step is
+     * non-positive (overlap &ge; extender advance), so no finite repeat count ever
+     * reaches the target and the old rep=1..fixpoint loop would never terminate.
+     */
+    static final long DIVERGENT = -1L;
+
+    /**
+     * Closed-form extender repeat count for a stretchy assembly — replaces the old
+     * {@code rep=1}..fixpoint {@code expand+rescan} loop (O(R²) for R repeats) with
+     * O(1) arithmetic (plan 5a594a59, Marlow audit LTX-02).
+     *
+     * <p>The stacked span is <em>linear</em> in the repeat count. Let {@code F} be
+     * the summed {@code fullAdvance} of the fixed parts, {@code E} the summed
+     * {@code fullAdvance} of the extenders, {@code nf}/{@code ne} their counts, and
+     * {@code v} the overlap. A stack of {@code nf + rep·ne} parts each overlapping its
+     * neighbour by {@code v} spans (see {@link #assemblySpanDesign}):
+     * <pre>
+     *   span(rep) = (F + rep·E) − v·(nf + rep·ne − 1)
+     *             = A + rep·B,   where  A = F − v·(nf−1),   B = E − v·ne.
+     * </pre>
+     * The loop selects the minimal {@code rep ≥ 1} with {@code span(rep) ≥ minSize}.
+     * This returns exactly that rep for every terminating input:
+     * <ul>
+     *   <li>no extenders ({@code ne == 0}): {@code rep = 1} — the loop body never runs;</li>
+     *   <li>{@code span(1) ≥ minSize}: {@code rep = 1} — the loop never iterates;</li>
+     *   <li>{@code B > 0}: {@code rep = ceil((minSize − A) / B)}; here
+     *       {@code minSize − A > B > 0}, so the result is {@code ≥ 2}, matching the loop;</li>
+     *   <li>{@code B ≤ 0} with {@code span(1) < minSize}: NON-POSITIVE step — no rep
+     *       ever reaches the target and the old loop <em>spins forever</em>. We return
+     *       {@link #DIVERGENT} so the caller reports the same budget-exceeded outcome
+     *       instead of hanging. This deliberately preserves the loop's (non-)result as
+     *       a safe cap rather than idealizing it to a finite value.</li>
+     * </ul>
+     * Arithmetic is done in {@code long} so the count itself cannot overflow; a
+     * too-large but finite rep is caught by the box budget at the call site, never clamped.
+     */
+    static long assemblyRepetitions(List<com.lattex.font.GlyphPart> parts,
+                                    int overlap, int minSizeDesign) {
+        long f = 0, e = 0;
+        int nf = 0, ne = 0;
+        for (com.lattex.font.GlyphPart p : parts) {
+            if (p.isExtender()) {
+                e += p.fullAdvance();
+                ne++;
+            } else {
+                f += p.fullAdvance();
+                nf++;
+            }
+        }
+        if (ne == 0) {
+            return 1; // no extenders: a single pass, exactly what the loop returns
+        }
+        long a = f - (long) overlap * (nf - 1);
+        long b = e - (long) overlap * ne;
+        if (a + b >= minSizeDesign) {
+            return 1; // span(1) already reaches the target — loop never iterates
+        }
+        if (b <= 0) {
+            return DIVERGENT; // non-positive step: target unreachable, loop diverges
+        }
+        long need = minSizeDesign - a; // > b > 0, since span(1) = a + b < minSize
+        return (need + b - 1) / b; // ceil(need / b)
+    }
+
+    /**
+     * Resolves the closed-form repeat count, charges every generated piece to the L10
+     * layout-box budget, then builds the expanded parts list ONCE (plan 5a594a59). A
+     * shallow AST that would emit a huge — or, in the {@link #DIVERGENT} non-positive-step
+     * case, unbounded — assembly trips the SAME {@code capExceeded}/{@code OUTPUT_CAP_EXCEEDED}
+     * outcome the per-box budget uses, BEFORE the giant list is ever allocated.
+     */
+    static List<com.lattex.font.GlyphPart> expandBudgetedAssembly(
+            List<com.lattex.font.GlyphPart> parts, int overlap, int minSizeDesign) {
+        long rep = assemblyRepetitions(parts, overlap, minSizeDesign);
+        int ne = 0, nf = 0;
+        for (com.lattex.font.GlyphPart p : parts) {
+            if (p.isExtender()) {
+                ne++;
+            } else {
+                nf++;
+            }
+        }
+        boolean divergent = rep == DIVERGENT;
+        int[] boxes = LAYOUT_BOXES.get();
+        long pieceCount = divergent ? Long.MAX_VALUE : (long) nf + rep * (long) ne;
+        long total = divergent ? Long.MAX_VALUE : (long) boxes[0] + pieceCount;
+        if (total > MAX_LAYOUT_BOXES) {
+            throw MathSyntaxException.capExceeded(
+                "layout box budget exceeded: stretchy-glyph assembly would emit "
+                + (divergent ? "an unbounded number of pieces" : pieceCount + " pieces")
+                + " (over the " + MAX_LAYOUT_BOXES + "-box budget)");
+        }
+        boxes[0] = (int) total;
+        return expandAssembly(parts, (int) rep); // rep ≤ budget after the charge; cast is safe
+    }
+
     /** The parts list with each extender repeated {@code rep} times (bottom→top). */
-    private static List<com.lattex.font.GlyphPart> expandAssembly(
+    static List<com.lattex.font.GlyphPart> expandAssembly(
             List<com.lattex.font.GlyphPart> parts, int rep) {
         List<com.lattex.font.GlyphPart> out = new ArrayList<>();
         for (com.lattex.font.GlyphPart p : parts) {
@@ -2570,7 +2658,7 @@ public final class LayoutEngine {
     }
 
     /** Total design-unit extent of a stacked assembly at the minimum overlap. */
-    private static int assemblySpanDesign(List<com.lattex.font.GlyphPart> stack, int overlap) {
+    static int assemblySpanDesign(List<com.lattex.font.GlyphPart> stack, int overlap) {
         int sum = 0;
         for (com.lattex.font.GlyphPart p : stack) {
             sum += p.fullAdvance();

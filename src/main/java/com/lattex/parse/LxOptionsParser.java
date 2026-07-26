@@ -264,7 +264,10 @@ final class LxOptionsParser {
                     if (!key.equals("a11y.label")) {
                         throw unknownKey(key);
                     }
-                    a11yLabel = htmlEscape(value);
+                    // Store the label RAW (plan cfd12523). The output-boundary legality
+                    // policy + HTML escaping are applied ONCE where it is stamped onto the
+                    // container (LatteX.openTag), so no pre-escaped text is carried here.
+                    a11yLabel = value;
                 }
                 case "data" -> {
                     if (dot < 0 || key.length() <= 5) {
@@ -318,7 +321,10 @@ final class LxOptionsParser {
                 throw new MathSyntaxException(
                     "invalid graph.open: \"" + graphOpen + "\" (expected single or multi)");
             }
-            data.put("graph-expr", htmlEscape(body.strip()));
+            // Stored RAW (plan cfd12523): the plottable body's HTML escaping + the shared
+            // output-boundary legality policy are applied ONCE at the container stamp
+            // (LatteX.openTag), like every other data-* value.
+            data.put("graph-expr", body.strip());
             data.put("graph-domain", graphDomain);
             data.put("graph-open", graphOpen);
         }
@@ -340,15 +346,6 @@ final class LxOptionsParser {
         return new MathSyntaxException(
             "unknown \\lx option key: \"" + key
                 + "\" (known top-level keys: style, fx, intent, concept, a11y, data, graph)");
-    }
-
-    /** HTML-escapes an accessibility label so it is safe to stamp on the container. */
-    private static String htmlEscape(String s) {
-        return s.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&#39;");
     }
 
     private static boolean isAsciiLetter(char c) {

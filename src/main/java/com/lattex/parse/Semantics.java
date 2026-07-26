@@ -15,15 +15,18 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>{@link #intent()} / {@link #concept()} — lowercase snake-case identifiers
  *       ({@code ^[a-z][a-z0-9_]*$}), or {@code null} if unset.</li>
- *   <li>{@link #a11yLabel()} — a free-text accessibility label, already
- *       HTML-escaped by the parser, or {@code null} if unset.</li>
- *   <li>{@link #data()} — arbitrary {@code data.*} identifier attributes (both key
- *       and value are identifiers), defensively copied; may be empty.</li>
+ *   <li>{@link #a11yLabel()} — a free-text accessibility label stored RAW
+ *       (unescaped); the shared output-boundary legality policy + HTML-attr
+ *       escaping are applied where it is stamped onto the container (plan
+ *       cfd12523). {@code null} if unset.</li>
+ *   <li>{@link #data()} — {@code data.*} attributes (identifier keys; values are
+ *       identifiers except the free-text {@code graph-expr}, stored RAW and
+ *       escaped at the container boundary), defensively copied; may be empty.</li>
  * </ul>
  *
  * @param intent    the intent identifier, or {@code null}
  * @param concept   the concept identifier, or {@code null}
- * @param a11yLabel the HTML-escaped accessibility label, or {@code null}
+ * @param a11yLabel the RAW (unescaped) accessibility label, or {@code null}
  * @param data      the {@code data.*} attributes (defensively copied)
  */
 public record Semantics(String intent, String concept, String a11yLabel, Map<String, String> data) {
@@ -58,7 +61,7 @@ public record Semantics(String intent, String concept, String a11yLabel, Map<Str
         return Optional.ofNullable(concept);
     }
 
-    /** The accessibility label (HTML-escaped), if set. */
+    /** The accessibility label (RAW/unescaped; escaped at the container boundary), if set. */
     public Optional<String> a11yLabelValue() {
         return Optional.ofNullable(a11yLabel);
     }

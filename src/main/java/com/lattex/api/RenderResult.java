@@ -11,4 +11,14 @@ package com.lattex.api;
  *                    consumer renders its own fallback, e.g. the verbatim source)
  * @param diagnostics the outcome classification (never null)
  */
-public record RenderResult(String svg, Diagnostics diagnostics) {}
+public record RenderResult(String svg, Diagnostics diagnostics) {
+    /**
+     * Enforces the javadoc's promised invariants (plan cfd12523): {@code svg} is
+     * non-null ({@code ""} when the render did not succeed) and {@code diagnostics} is
+     * non-null (the outcome classification is always present).
+     */
+    public RenderResult {
+        java.util.Objects.requireNonNull(svg, "svg");
+        java.util.Objects.requireNonNull(diagnostics, "diagnostics");
+    }
+}

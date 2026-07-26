@@ -91,6 +91,20 @@ String svg = LatteX.render("\\frac{a+b}{c}", opts);
 `withColor` / `withMathStyle`. See `examples/x-squared.html`, `gallery.html`, and
 `styled.html` for rendered output.
 
+**Fluid (scale-to-fit) display math.** A display equation has a fixed natural width,
+so a wide formula can overflow a narrow container. Opt in with
+`RenderOptions.defaults().withFluid(true)` and the display `<svg>` carries **one**
+sizing rule — `width:100%;max-width:<natural>px;height:auto` — so it shrinks to fit
+a narrower container and never upscales past its natural size (the unchanged viewBox
+keeps the aspect ratio). Presentation-only: the geometry, viewBox, and every glyph
+are byte-identical to the fixed-size render, and this is scale-to-fit, **not**
+line-breaking. Inline math (`renderInline` / `renderInlineResult`) and
+`renderFragment` never go fluid — baseline seating depends on fixed sizing. Default
+**off**: without the flag, output is byte-identical to previous releases. (Honest
+scope note: Stafficy `/docs` does **not** consume fluid yet — its sanitizer strips
+the style attribute, so `/docs` output is unchanged until a separate, deliberate
+two-sided carve-out lands. Fluid works today in any standalone embedding.)
+
 > **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
 > `\mathrm`). The argument is *literal text*: plain characters (spaces preserved),
 > `\$` for a literal dollar, invisible grouping braces, and `$…$` to re-enter math
@@ -136,7 +150,7 @@ The key set:
 | `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `constellation` \| `thread` \| `precedence` \| `cancel` \| `unfold` \| `none` — see `examples/effects.html` live (`unfold` is opt-in/flag-gated and not shown there — see its own preview and the callout below) |
 | `fx.duration` | a `<n>ms` value, e.g. `250ms` |
 | `intent` / `concept` | a lowercase identifier (`^[a-z][a-z0-9_]*$`), e.g. `function` |
-| `a11y.label` | free-text accessibility label (HTML-escaped) |
+| `a11y.label` | free-text accessibility label — stored raw; illegal control characters are stripped and it is HTML-escaped once when stamped onto the container (an unpaired surrogate fails loud) |
 | `data.<name>` | an identifier key + identifier value, e.g. `data.graph=true` |
 
 `\lx` must currently be the **whole** top-level expression (nesting is a future
@@ -202,8 +216,11 @@ wrapper the API emits around it. Three helpers produce that wrapper:
 - **`LatteX.renderFragment(latex, fontSizePx)`** — the inner `<g>/<path>/<rect>`
   markup plus box metrics (`widthPx`/`heightPx`/`depthPx`), for a consumer that
   composes the math inline on a shared baseline (e.g. a diagram renderer drawing
-  math-in-labels). Unlike `render*`, it returns no `<svg>` wrapper. See the API
-  javadoc on `MathFragment`.
+  math-in-labels). Unlike `render*`, it returns no `<svg>` wrapper. `fontSizePx`
+  must be a finite, strictly-positive size no larger than `LatteX.MAX_FRAGMENT_FONT_SIZE`
+  (= `RenderOptions.MAX_SCALE` × the display size, i.e. `800`); a `NaN`/`Infinity`,
+  zero, or negative size is rejected loud (`IllegalArgumentException`) rather than
+  carried into the metrics as garbage. See the API javadoc on `MathFragment`.
 
 In every case the data attributes live on the container the page emits — **never**
 inside the sanitized SVG — so the emitter's minimal alphabet is unchanged.
@@ -293,9 +310,13 @@ svg = subprocess.run(["lattex", r"\frac{a}{b}"],
 ```
 
 Flags: `-o/--output <file>`, `-h/--help`, `-V/--version`, and `--` to end option
-parsing. Exit status is `0` on success, `1` on a render/IO error (with the parser's
-message on stderr for invalid LaTeX), `2` on a usage error. The CLI is a thin wrapper
-over the JVM `LatteX.render` — same core, byte-identical SVG.
+parsing. Exit status is `0` on success, `1` on a render/IO error (including a failed
+stdout write or flush, such as a closed downstream pipe), `2` on a usage error.
+In one-shot mode, invalid LaTeX is explained on stderr. In `--batch`, successful SVG
+and in-place `lattex: error: …` records remain NUL-delimited on stdout.
+Output-delivery failures are explained on stderr; a stdout failure may leave incomplete
+output and never reports success. The CLI is a thin wrapper over the JVM
+`LatteX.render` — same core, byte-identical SVG.
 
 **Build it** (GraalVM CE for JDK 25 must be on `PATH` — e.g. `sdk use java 25-graalce`):
 
