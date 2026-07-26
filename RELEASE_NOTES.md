@@ -32,6 +32,19 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   failed folder. Input is mounted read-write only for watch mode; CLI input can
   remain read-only.
 
+### BrewShot 0.9 test-harness refresh
+
+- **The vendored, test-only BrewShot harness moves from 0.8.0 to 0.9.0.** The
+  replacement was built twice from BrewShot main commit
+  `0e2289dbb42455b559d345393119f3836021f23c`; both clean builds produced SHA-256
+  `405ad143fb143e739cf7979510b435a73df5ad2ddd2e960529ff588cb298307d`.
+  LatteX's zero-runtime-dependency artifact is unchanged.
+- **Local browser behavior is now explicit for contributors.** The normal test
+  suite launches headless Chrome when it is available, BrewShot 0.9 supplies the
+  macOS-safe `--no-startup-window` default, local no-Chrome runs assumption-skip
+  browser pins, and CI keeps those pins mandatory with
+  `LATTEX_REQUIRE_BROWSER=1`.
+
 ### CLI stdout failures now fail honestly
 
 - **One-shot and batch output no longer report success after `PrintStream` swallows
