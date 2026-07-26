@@ -77,8 +77,9 @@ mounts below).
 
 ### Existing CLI flow
 
-The ordinary CLI works unchanged. The explicit `cli` spelling and the legacy
-no-mode spelling are equivalent:
+The ordinary CLI works unchanged behind the explicit `cli` mode. The legacy
+no-mode spelling is also preserved when its first argument is not one of the
+two container mode names, `cli` or `watch`:
 
 ```bash
 docker run --rm lattex:local cli '\frac{a}{b}' > equation.svg
@@ -86,7 +87,17 @@ printf '%s\n' '\sqrt{2}' | docker run --rm -i lattex:local cli > root.svg
 
 # Compatibility form — still the same shipped CLI:
 docker run --rm lattex:local '\frac{a}{b}' > equation.svg
+
+# Escape the two reserved first arguments through explicit CLI mode:
+docker run --rm lattex:local cli watch > watch-expression.svg
+docker run --rm lattex:local cli cli > cli-expression.svg
 ```
+
+Without the explicit prefix, `docker run ... watch` starts the folder worker
+and `docker run ... cli` selects CLI mode with no expression argument. Adding
+`cli` first is therefore required when the literal first CLI argument is
+`watch` or `cli`; after that prefix, argv/stdin/stdout are passed to the shipped
+jar unchanged.
 
 `--help`, `--version`, `--batch`, `--inline`, `--scale`, `--macro`, `--color`,
 and `-o/--output` pass through to the jar unchanged. For a mounted source file,
@@ -148,13 +159,19 @@ printf '%s\n' '\begin{aligned}' 'a &= b + c \\' 'd &= e' '\end{aligned}' \
 mv 'Input/.derivation.tex.tmp' 'Input/derivation.tex'
 ```
 
-Claims are atomic UUID-prefixed moves into `processing/`; two containers sharing
-the same mounts cannot both claim one root source. Valid claims left in
-`processing/` are recovered after restart. State subdirectories, hidden files,
+Claims are atomic moves into `processing/<job-id>/<original-name>`; keeping the
+UUID and source name in separate path components lets filenames near the mount's
+component limit remain valid after claiming. Two containers sharing the same
+mounts cannot both claim one root source, and valid claims left in `processing/`
+are recovered after restart. The prior UUID-prefixed direct-file claim format is
+also recovered during upgrades. Unrecognized state entries, hidden files,
 symlinks, and non-`.tex` files are never scanned. Existing output or archive
 bytes are never overwritten; a distinct name collision is failed explicitly,
 and a same-name source-archive collision with different bytes is retained under
-that state's `collisions/<job-id>/` directory.
+that state's `collisions/<job-id>/` directory. Error diagnostics normally keep
+the source-based name shown above; unusually long names or an occupied
+diagnostic path use a bounded attempt-unique `lattex-<job-id>-<attempt-id>.error.txt`
+name instead.
 
 The polling interval defaults to 500 ms and can be set from 10–60000 ms with
 `LATTEX_WATCH_POLL_MS`. `LATTEX_INPUT_DIR` and `LATTEX_OUTPUT_DIR` exist for

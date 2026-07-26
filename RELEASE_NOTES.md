@@ -15,14 +15,18 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 - **The old CLI contract is unchanged.** `cli` is an explicit container mode,
   while no-mode argv/stdin remains a compatibility path; help, version, batch,
   output-file, render-error, and stdout semantics still come from the shipped
-  `lattex` jar. `cli --input FILE` is a thin mounted-file-to-stdin adapter.
+  `lattex` jar. Because `cli` and `watch` are reserved as the first container
+  argument, literal expressions with either spelling use `cli cli` or
+  `cli watch`. `cli --input FILE` is a thin mounted-file-to-stdin adapter.
 - **Watch mode uses durable folders rather than filename suffix mutation.** It
   atomically claims visible direct-child `.tex` files from `/lattex/input` into
   `input/processing`, atomically publishes complete SVGs under `/lattex/output`,
   and preserves original source names under `input/finished` or `input/failed`.
-  Restart recovery, duplicate-worker races, spaces/multiline sources, partial
-  upload exclusion, and no-overwrite collision handling are mechanically
-  covered by the Docker smoke.
+  UUID claim directories keep the original name in a separate path component,
+  so near-limit ASCII and multibyte filenames cannot terminate or restart-poison
+  the worker. Restart recovery, duplicate-worker races, spaces/multiline sources,
+  partial upload exclusion, bounded diagnostic fallback, and no-overwrite
+  collision handling are mechanically covered by the Docker smoke.
 - **Failures are fail-honest.** A failed job leaves no success-shaped SVG, emits
   only a bounded non-secret error code, and retains the original source in the
   failed folder. Input is mounted read-write only for watch mode; CLI input can

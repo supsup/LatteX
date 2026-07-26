@@ -14,6 +14,7 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -33,12 +34,14 @@ import java.util.UUID;
  * never-throwing diagnostic render API. This class owns only mounted-file
  * orchestration; it is not a second renderer or parser.
  *
- * <p>Claims are atomic renames to a UUID-prefixed direct child of
- * {@code input/processing}. The unique target means two workers can race for
- * one source without either overwriting the other. Completed output and source
- * archives are published with hard links from fully written files, which is an
- * atomic create-if-absent operation on the mounted filesystem. There is no
- * overwrite fallback.
+ * <p>Claims are atomic renames beneath a UUID-named directory in
+ * {@code input/processing}. Keeping the original filename in its own path
+ * component means a legal source name stays legal after claiming. The unique
+ * directory means two workers can race for one source without either
+ * overwriting the other. Completed output and source archives are published
+ * with hard links from fully written files, which is an atomic
+ * create-if-absent operation on the mounted filesystem. There is no overwrite
+ * fallback.
  */
 public final class LatteXFolderWorker {
 
@@ -50,6 +53,7 @@ public final class LatteXFolderWorker {
     private static final int CLAIM_ID_LENGTH = 32;
     private static final String CLAIM_SEPARATOR = "--";
     private static final int DIAGNOSTIC_LIMIT = 512;
+    private static final int MAX_CONVENTIONAL_DIAGNOSTIC_NAME_BYTES = 200;
     // MathParser accepts at most 100,000 UTF-16 code units. Four bytes per
     // unit is a conservative read cap that also bounds malformed input before
     // decoding; the renderer remains the authoritative character-count gate.
@@ -151,17 +155,29 @@ public final class LatteXFolderWorker {
         for (Path source : candidates) {
             String originalName = source.getFileName().toString();
             String jobId = UUID.randomUUID().toString().replace("-", "");
-            Path claimed = processing.resolve(jobId + CLAIM_SEPARATOR + originalName);
+            Path claimDirectory = processing.resolve(jobId);
+            try {
+                Files.createDirectory(claimDirectory);
+            } catch (FileAlreadyExistsException improbableIdCollision) {
+                continue;
+            }
+            Path claimed = claimDirectory.resolve(originalName);
             try {
                 Files.move(source, claimed, StandardCopyOption.ATOMIC_MOVE);
-                claimedAny = true;
-                tryProcess(new Claim(jobId, originalName, claimed));
             } catch (NoSuchFileException | FileAlreadyExistsException raced) {
                 // Another worker won the source rename, or an operator raced a
                 // same-name state entry. No source bytes were overwritten.
+                cleanupClaimDirectoryIfEmpty(claimDirectory);
+                continue;
             } catch (AtomicMoveNotSupportedException unsupported) {
+                cleanupClaimDirectoryIfEmpty(claimDirectory);
                 throw new IOException("input mount cannot atomically claim work", unsupported);
+            } catch (IOException failure) {
+                cleanupClaimDirectoryIfEmpty(claimDirectory);
+                throw failure;
             }
+            claimedAny = true;
+            tryProcess(new Claim(jobId, originalName, claimed, claimDirectory));
         }
         return claimedAny;
     }
@@ -181,6 +197,7 @@ public final class LatteXFolderWorker {
         }
         try (ClaimLease lease = acquired) {
             if (lease == null) {
+                cleanupClaimDirectoryIfEmpty(claim.claimDirectory());
                 return false;
             }
             String attemptId = UUID.randomUUID().toString().replace("-", "");
@@ -330,8 +347,12 @@ public final class LatteXFolderWorker {
 
     private boolean completedByAnotherWorker(Claim claim, FileChannel source)
             throws IOException {
-        return !Files.exists(claim.path(), LinkOption.NOFOLLOW_LINKS)
+        boolean completed = !Files.exists(claim.path(), LinkOption.NOFOLLOW_LINKS)
             && archivedAnywhere(claim, source);
+        if (completed) {
+            cleanupClaimDirectoryIfEmpty(claim.claimDirectory());
+        }
+        return completed;
     }
 
     private void render(Claim claim, FileChannel source, Path renderTemp)
@@ -418,15 +439,23 @@ public final class LatteXFolderWorker {
         Files.deleteIfExists(temp);
         Files.write(temp, diagnostic, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
 
-        Path direct = output.resolve(claim.originalName() + ".error.txt");
         try {
-            publishComplete(temp, direct);
-        } catch (JobFailure collision) {
-            Files.deleteIfExists(temp);
-            Files.write(temp, diagnostic, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            String conventionalName = claim.originalName() + ".error.txt";
+            if (utf8Length(conventionalName)
+                    <= MAX_CONVENTIONAL_DIAGNOSTIC_NAME_BYTES) {
+                try {
+                    publishComplete(temp, output.resolve(conventionalName));
+                    return;
+                } catch (JobFailure collision) {
+                    // Keep the complete temp and publish to the bounded,
+                    // attempt-unique path below. Existing bytes are untouched.
+                }
+            }
+
+            String boundedName = "lattex-" + claim.jobId() + "-" + attemptId
+                + ".error.txt";
             try {
-                publishComplete(temp, output.resolve(
-                    claim.originalName() + "." + claim.jobId() + ".error.txt"));
+                publishComplete(temp, output.resolve(boundedName));
             } catch (JobFailure corruptRecovery) {
                 throw new IOException("unique diagnostic path collision", corruptRecovery);
             }
@@ -450,49 +479,57 @@ public final class LatteXFolderWorker {
 
     private boolean archive(Claim claim, FileChannel source, Path bucket)
             throws IOException {
-        Path direct = bucket.resolve(claim.originalName());
-        ArchiveAttempt directAttempt = tryArchiveAt(claim.path(), source, direct);
-        if (directAttempt == ArchiveAttempt.ARCHIVED) {
-            return true;
-        }
-        if (directAttempt == ArchiveAttempt.ALREADY_ARCHIVED) {
-            return false;
-        }
+        try {
+            Path direct = bucket.resolve(claim.originalName());
+            ArchiveAttempt directAttempt = tryArchiveAt(claim.path(), source, direct);
+            if (directAttempt == ArchiveAttempt.ARCHIVED) {
+                return true;
+            }
+            if (directAttempt == ArchiveAttempt.ALREADY_ARCHIVED) {
+                return false;
+            }
 
-        Path collisionDir = bucket.resolve("collisions").resolve(claim.jobId());
-        ensureDirectory(collisionDir);
-        Path collisionTarget = collisionDir.resolve(claim.originalName());
-        ArchiveAttempt collisionAttempt = tryArchiveAt(
-            claim.path(), source, collisionTarget);
-        if (collisionAttempt == ArchiveAttempt.ARCHIVED) {
-            return true;
+            Path collisionDir = bucket.resolve("collisions").resolve(claim.jobId());
+            ensureDirectory(collisionDir);
+            Path collisionTarget = collisionDir.resolve(claim.originalName());
+            ArchiveAttempt collisionAttempt = tryArchiveAt(
+                claim.path(), source, collisionTarget);
+            if (collisionAttempt == ArchiveAttempt.ARCHIVED) {
+                return true;
+            }
+            if (collisionAttempt == ArchiveAttempt.ALREADY_ARCHIVED
+                    || archivedAnywhere(claim, source)) {
+                return false;
+            }
+            throw new IOException("claim source disappeared before archive");
+        } finally {
+            cleanupClaimDirectoryIfEmpty(claim.claimDirectory());
         }
-        if (collisionAttempt == ArchiveAttempt.ALREADY_ARCHIVED
-                || archivedAnywhere(claim, source)) {
-            return false;
-        }
-        throw new IOException("claim source disappeared before archive");
     }
 
     private boolean archiveWithoutRead(Claim claim, Path bucket, String attemptId)
             throws IOException {
-        Path direct = bucket.resolve(claim.originalName());
         try {
-            Files.createLink(direct, claim.path());
-            return Files.deleteIfExists(claim.path());
-        } catch (FileAlreadyExistsException collision) {
-            Path collisionDir = bucket.resolve("collisions")
-                .resolve(claim.jobId() + "-" + attemptId);
-            ensureDirectory(collisionDir);
-            Path collisionTarget = collisionDir.resolve(claim.originalName());
             try {
-                Files.createLink(collisionTarget, claim.path());
+                Path direct = bucket.resolve(claim.originalName());
+                Files.createLink(direct, claim.path());
                 return Files.deleteIfExists(claim.path());
+            } catch (FileAlreadyExistsException collision) {
+                Path collisionDir = bucket.resolve("collisions")
+                    .resolve(claim.jobId() + "-" + attemptId);
+                ensureDirectory(collisionDir);
+                Path collisionTarget = collisionDir.resolve(claim.originalName());
+                try {
+                    Files.createLink(collisionTarget, claim.path());
+                    return Files.deleteIfExists(claim.path());
+                } catch (NoSuchFileException completedElsewhere) {
+                    return false;
+                }
             } catch (NoSuchFileException completedElsewhere) {
                 return false;
             }
-        } catch (NoSuchFileException completedElsewhere) {
-            return false;
+        } finally {
+            cleanupClaimDirectoryIfEmpty(claim.claimDirectory());
         }
     }
 
@@ -608,7 +645,19 @@ public final class LatteXFolderWorker {
         return lower.endsWith(".tex");
     }
 
-    private static Claim parseClaim(Path path) {
+    private static Claim parseClaim(Path path) throws IOException {
+        if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+            String jobId = path.getFileName().toString();
+            if (!validJobId(jobId)) {
+                return null;
+            }
+            List<Path> children = directChildren(path);
+            if (children.size() != 1 || !eligible(children.get(0))) {
+                return null;
+            }
+            Path claimed = children.get(0);
+            return new Claim(jobId, claimed.getFileName().toString(), claimed, path);
+        }
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
             return null;
         }
@@ -620,17 +669,29 @@ public final class LatteXFolderWorker {
             return null;
         }
         String jobId = name.substring(0, CLAIM_ID_LENGTH);
-        for (int i = 0; i < jobId.length(); i++) {
-            char c = jobId.charAt(i);
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-                return null;
-            }
+        if (!validJobId(jobId)) {
+            return null;
         }
         String original = name.substring(prefixLength);
         if (!eligibleName(original)) {
             return null;
         }
-        return new Claim(jobId, original, path);
+        // Accept the original direct-file claim format for restart compatibility
+        // with containers stopped during an upgrade.
+        return new Claim(jobId, original, path, null);
+    }
+
+    private static boolean validJobId(String jobId) {
+        if (jobId.length() != CLAIM_ID_LENGTH) {
+            return false;
+        }
+        for (int i = 0; i < jobId.length(); i++) {
+            char c = jobId.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean eligibleName(String name) {
@@ -640,6 +701,23 @@ public final class LatteXFolderWorker {
 
     private static String svgName(String sourceName) {
         return sourceName.substring(0, sourceName.length() - ".tex".length()) + ".svg";
+    }
+
+    private static int utf8Length(String value) {
+        return value.getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    private static void cleanupClaimDirectoryIfEmpty(Path claimDirectory)
+            throws IOException {
+        if (claimDirectory == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(claimDirectory);
+        } catch (DirectoryNotEmptyException stillClaimed) {
+            // A live or recovery-visible source remains. Its later transition
+            // owns directory cleanup.
+        }
     }
 
     private static void ensureDirectory(Path dir) throws IOException {
@@ -680,7 +758,8 @@ public final class LatteXFolderWorker {
         return code;
     }
 
-    private record Claim(String jobId, String originalName, Path path) { }
+    private record Claim(String jobId, String originalName, Path path,
+            Path claimDirectory) { }
 
     private record ClaimLease(FileChannel channel, FileLock lock)
             implements AutoCloseable {
