@@ -28,6 +28,45 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   inputs that relied on those shadowing loopholes now fail with the established
   additive-only “built-in command” error.
 
+### Docker distribution: preserved CLI plus an atomic input/output worker
+
+- **One Java 25 image now supports both the existing CLI and a long-running
+  folder worker.** The multi-stage build uses the checked-in Gradle wrapper,
+  installs immutable renderer/worker jars under `/opt/lattex`, copies no test or
+  BrewShot dependency into the runtime, and defaults to non-root UID/GID 10001.
+- **The old CLI contract is unchanged.** `cli` is an explicit container mode,
+  while no-mode argv/stdin remains a compatibility path; help, version, batch,
+  output-file, render-error, and stdout semantics still come from the shipped
+  `lattex` jar. Because `cli` and `watch` are reserved as the first container
+  argument, literal expressions with either spelling use `cli cli` or
+  `cli watch`. `cli --input FILE` is a thin mounted-file-to-stdin adapter.
+- **Watch mode uses durable folders rather than filename suffix mutation.** It
+  atomically claims visible direct-child `.tex` files from `/lattex/input` into
+  `input/processing`, atomically publishes complete SVGs under `/lattex/output`,
+  and preserves original source names under `input/finished` or `input/failed`.
+  UUID claim directories keep the original name in a separate path component,
+  so near-limit ASCII and multibyte filenames cannot terminate or restart-poison
+  the worker. Restart recovery, duplicate-worker races, spaces/multiline sources,
+  partial upload exclusion, bounded diagnostic fallback, and no-overwrite
+  collision handling are mechanically covered by the Docker smoke.
+- **Failures are fail-honest.** A failed job leaves no success-shaped SVG, emits
+  only a bounded non-secret error code, and retains the original source in the
+  failed folder. Input is mounted read-write only for watch mode; CLI input can
+  remain read-only.
+
+### BrewShot 0.9 test-harness refresh
+
+- **The vendored, test-only BrewShot harness moves from 0.8.0 to 0.9.0.** The
+  replacement was built twice from BrewShot main commit
+  `0e2289dbb42455b559d345393119f3836021f23c`; both clean builds produced SHA-256
+  `405ad143fb143e739cf7979510b435a73df5ad2ddd2e960529ff588cb298307d`.
+  LatteX's zero-runtime-dependency artifact is unchanged.
+- **Local browser behavior is now explicit for contributors.** The normal test
+  suite launches headless Chrome when it is available, BrewShot 0.9 supplies the
+  macOS-safe `--no-startup-window` default, local no-Chrome runs assumption-skip
+  browser pins, and CI keeps those pins mandatory with
+  `LATTEX_REQUIRE_BROWSER=1`.
+
 ### CLI stdout failures now fail honestly
 
 - **One-shot and batch output no longer report success after `PrintStream` swallows
