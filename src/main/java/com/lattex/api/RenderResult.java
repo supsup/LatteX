@@ -6,16 +6,16 @@ package com.lattex.api;
  * {@link LatteX#render(String)} for pipelines that must degrade per-formula rather
  * than per-page (the Sirentide {@code renderWithDiagnostics} consumer contract).
  *
- * @param svg         the SVG document when {@code diagnostics.outcome() == OK};
- *                    {@code ""} otherwise (LatteX has no inert-shell fallback — the
- *                    consumer renders its own fallback, e.g. the verbatim source)
+ * @param svg         the rendered SVG document on success; on failure, either
+ *                    {@code ""} (the historical/default contract) or the bounded
+ *                    inert card requested with {@link RenderOptions#renderErrors()}
  * @param diagnostics the outcome classification (never null)
  */
 public record RenderResult(String svg, Diagnostics diagnostics) {
     /**
-     * Enforces the javadoc's promised invariants (plan cfd12523): {@code svg} is
-     * non-null ({@code ""} when the render did not succeed) and {@code diagnostics} is
-     * non-null (the outcome classification is always present).
+     * Enforces the javadoc's promised invariants (plan cfd12523): {@code svg} and
+     * {@code diagnostics} are both non-null. A non-OK result may carry the opt-in
+     * rendered error card, so the outcome — not SVG emptiness — is authoritative.
      */
     public RenderResult {
         java.util.Objects.requireNonNull(svg, "svg");

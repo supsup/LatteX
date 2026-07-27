@@ -38,6 +38,8 @@ public final class Main {
      * 0.5.0 artifact). Falls back to {@code "dev"} only if the resource is absent.
      */
     private static final String VERSION = readVersion();
+    private static final String STDOUT_FAILURE =
+        "lattex: error: failed to write output to stdout; output may be incomplete";
 
     private static String readVersion() {
         try (java.io.InputStream in = Main.class.getResourceAsStream("/lattex-version.properties")) {
@@ -83,17 +85,20 @@ public final class Main {
                                   A SHORT batch may sit entirely in the decoder's
                                   bounded read-ahead; what is ruled out is an
                                   UNBOUNDED whole-stream read or accumulation.
-                                  A malformed expression
-                                  yields a 'lattex: error: …' record and does not
-                                  abort the batch; each record is also capped at
-                                  100,000 characters (read incrementally, with
-                                  read-ahead bounded to a small overshoot past the
-                                  cap — never an unbounded whole-stream read), and an OVERSIZED record
-                                  DOES abort the rest of the batch (its own error
-                                  record is still emitted; everything already
+                                  A malformed expression yields a
+                                  'lattex: error: …' record and does not abort the
+                                  batch; each record is also capped at 100,000
+                                  characters (read incrementally, with read-ahead
+                                  bounded to a small overshoot past the cap — never
+                                  an unbounded whole-stream read), and an OVERSIZED
+                                  record DOES abort the rest of the batch (its own
+                                  error record is still emitted; everything already
                                   produced before it already reached stdout).
-                                  There is no cap on how many records a batch may
-                                  hold. Amortizes startup/spawn cost.
+                                  A stdout failure also aborts: the confirmed
+                                  complete prefix remains valid, the current record
+                                  may be incomplete, and no later records are
+                                  emitted. There is no cap on how many records a
+                                  batch may hold. Amortizes startup/spawn cost.
             -0, --null            In --batch, split stdin on NUL instead of
                                   newlines (for expressions containing newlines).
             --inline              Render in INLINE (text) style — smaller fractions
@@ -126,9 +131,12 @@ public final class Main {
 
         EXIT STATUS:
             0  success
-            1  render/IO error (invalid LaTeX, unwritable output, …); in --batch,
-               at least one record failed — malformed records are still all
-               emitted, but an oversized (>100,000-char) record ends the batch
+            1  render/IO error (invalid LaTeX, unwritable output, failed stdout
+               write/flush, …); in --batch, at least one record failed — malformed
+               records are still all emitted — or an oversized (>100,000-char)
+               record ended the batch, or stdout delivery failed (the batch stops
+               at the first detected output failure; the confirmed complete prefix
+               remains valid)
             2  usage error (unknown flag, missing argument, …)
         """.formatted(VERSION);
 
@@ -193,11 +201,11 @@ public final class Main {
                 switch (arg) {
                     case "-h", "--help" -> {
                         out.print(USAGE);
-                        return 0;
+                        return finishStdout(out, err);
                     }
                     case "-V", "--version" -> {
                         out.println("lattex " + VERSION);
-                        return 0;
+                        return finishStdout(out, err);
                     }
                     case "-o", "--output" -> {
                         if (i + 1 >= args.length) {
@@ -337,6 +345,7 @@ public final class Main {
 
         if (outputFile == null) {
             out.println(svg);
+            return finishStdout(out, err);
         } else {
             try {
                 Files.writeString(outputFile, svg + System.lineSeparator(), StandardCharsets.UTF_8);
@@ -346,6 +355,21 @@ public final class Main {
             }
         }
         return 0;
+    }
+
+    /**
+     * Flushes stdout and reports its sticky error state. {@link PrintStream} deliberately
+     * swallows write and flush {@link IOException}s, so returning success without calling
+     * {@link PrintStream#checkError()} can silently lose the CLI's only output.
+     */
+    private static int finishStdout(PrintStream out, PrintStream err) {
+        if (!out.checkError()) {
+            return 0;
+        }
+        // Keep this diagnostic fixed and bounded: the swallowed IOException message may
+        // be arbitrarily large or contain untrusted downstream details.
+        err.println(STDOUT_FAILURE);
+        return 1;
     }
 
     /**
@@ -404,6 +428,7 @@ public final class Main {
         }
         boolean anyFailed = false;
         boolean anyEmitted = false;
+        int completedRecords = 0;
         int delimiter = nullDelim ? DelimitedRecordReader.NUL : DelimitedRecordReader.NEWLINE;
         try (DelimitedRecordReader reader =
                  new DelimitedRecordReader(in, delimiter, MathParser.MAX_SOURCE_LENGTH)) {
@@ -438,17 +463,25 @@ public final class Main {
                 }
                 out.print(record);
                 out.write(0); // NUL record terminator (SVGs never contain NUL)
-                out.flush(); // progressive: this record reaches the consumer before the next is read
+                out.flush(); // progressive: this record reaches the consumer before the next is processed
                 anyEmitted = true;
                 if (out.checkError()) {
                     // The downstream consumer went away (e.g. a broken pipe): PrintStream
                     // swallows the write IOException and only raises this flag, so without
                     // the check we'd keep reading an unbounded stdin and rendering into a
                     // dead pipe. Stop loud instead of silently spinning.
-                    err.println("lattex: error: failed writing batch output to stdout"
-                        + " (downstream consumer closed the pipe?)");
+                    //
+                    // Naming the COMPLETE-record count is the contract main established
+                    // while this branch was out (origin/main runBatch): the consumer needs
+                    // to know how much of the stream is trustworthy, since the current
+                    // record may be truncated. Preserved here on the streaming path.
+                    String recordNoun = completedRecords == 1 ? "record" : "records";
+                    err.println("lattex: error: failed to write batch output to stdout after "
+                        + completedRecords + " complete " + recordNoun
+                        + "; current record may be incomplete; no later records were emitted");
                     return 1;
                 }
+                completedRecords++;
             }
         } catch (IOException e) {
             err.println("lattex: error: failed to read stdin: " + e.getMessage());
