@@ -203,12 +203,20 @@ final class StreamingBatchTest {
     }
 
     // ------------------------------------------------------------------
-    // (2) Progressive production: each record is emitted before the whole
-    //     input is consumed.
+    // (2) Progressive production: output for an early record reaches stdout
+    //     before later input is SUPPLIED through the pipe.
+    //
+    //     Note precisely what this does and does not prove (Marlow review 473).
+    //     It proves the batch does not wait for end-of-input before producing —
+    //     the writer is still holding later records back when the first output
+    //     lands. It does NOT prove zero decoder read-ahead: had the whole batch
+    //     been available at once, the decoder's bounded buffer could legitimately
+    //     hold all of it before the first render. Only the pipe's back-pressure
+    //     makes this observable, which is why the test supplies input in stages.
     // ------------------------------------------------------------------
 
     @Test
-    void batchProducesEachRecordBeforeTheNextIsEvenRead() throws Exception {
+    void batchProducesEachRecordBeforeLaterInputIsSupplied() throws Exception {
         PipedOutputStream feed = new PipedOutputStream();
         PipedInputStream stdin = new PipedInputStream(feed, 256);
         SyncedCapture capture = new SyncedCapture();

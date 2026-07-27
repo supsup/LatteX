@@ -314,8 +314,9 @@ parsing. Exit status is `0` on success, `1` on a render/IO error (with the parse
 message on stderr for invalid LaTeX), `2` on a usage error. The CLI is a thin wrapper
 over the JVM `LatteX.render` — same core, byte-identical SVG. stdin (and each
 `--batch` record) is read incrementally with a 100,000-character-per-expression cap
-enforced as it's read — never buffered in full before a check — see **Scenario 7** in
-SLOWSTART.md for the `--batch` streaming/limit details.
+enforced as it's read — no *unbounded* whole-stream read before a check, though the
+decoder's bounded read-ahead may already hold a short remainder — see **Scenario 7**
+in SLOWSTART.md for the `--batch` streaming/limit details.
 
 **Build it** (GraalVM CE for JDK 25 must be on `PATH` — e.g. `sdk use java 25-graalce`):
 

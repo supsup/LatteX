@@ -382,10 +382,14 @@ if any failed, so CI still catches it). If an expression contains a literal
 newline (a rare multi-line block), separate inputs with NUL instead and add `-0`.
 
 **Streaming, and the one exception to "keep going."** Both stdin (single
-expression) and `--batch` read incrementally — the whole batch/stream is never
-buffered; each record is read up to its delimiter (capped at 100,000 chars) and
-rendered before the next — so an oversized or adversarial stream can't exhaust
-memory before the CLI ever gets a chance to reject it. Each record is capped at 100,000 characters (the same
+expression) and `--batch` read incrementally — there is no *unbounded*
+whole-stream read or accumulation; each record is read up to its delimiter
+(capped at 100,000 chars) and rendered before the next is *processed* — so an
+oversized or adversarial stream can't exhaust memory before the CLI ever gets a
+chance to reject it. The honest boundary: the decoder keeps a bounded read-ahead,
+so a SHORT batch may already sit entirely in that buffer before the first record
+is rendered. What is guaranteed is bounded peak memory — one record plus its
+output plus fixed decoder buffers — not zero decoder read-ahead. Each record is capped at 100,000 characters (the same
 limit the parser itself enforces on any LaTeX source). There's deliberately **no
 cap on how many records a batch may contain** or on the batch's total size —
 only each record individually is bounded, and nothing is accumulated across

@@ -76,13 +76,19 @@ public final class Main {
             --batch               Render MANY expressions in one process: read
                                   and stream them from stdin (one per line) and
                                   write one NUL-terminated SVG record per input to
-                                  stdout, in order, AS EACH IS PRODUCED — the batch
-                                  is never buffered whole. A malformed expression
+                                  stdout, in order, AS EACH IS PRODUCED — records are
+                                  processed one at a time and outputs are never
+                                  accumulated, so peak memory is bounded to one
+                                  record plus its output plus fixed decoder buffers.
+                                  A SHORT batch may sit entirely in the decoder's
+                                  bounded read-ahead; what is ruled out is an
+                                  UNBOUNDED whole-stream read or accumulation.
+                                  A malformed expression
                                   yields a 'lattex: error: …' record and does not
                                   abort the batch; each record is also capped at
                                   100,000 characters (read incrementally, with
                                   read-ahead bounded to a small overshoot past the
-                                  cap — never the whole stream), and an OVERSIZED record
+                                  cap — never an unbounded whole-stream read), and an OVERSIZED record
                                   DOES abort the rest of the batch (its own error
                                   record is still emitted; everything already
                                   produced before it already reached stdout).
@@ -353,8 +359,11 @@ public final class Main {
      *
      * <p><strong>Streaming (LTX-09, plan ac28238e).</strong> Records are read and rendered
      * ONE AT A TIME via {@link DelimitedRecordReader}, and each record's output is written
-     * and flushed to {@code out} before the next record is even read — the whole input is
-     * never buffered, and results are never accumulated before flushing. Each record is
+     * and flushed to {@code out} before the next record is PROCESSED — not before it is
+     * READ. The decoder's bounded read-ahead may already hold the remaining bytes when the
+     * stream is short, so a small batch can be fully consumed before the first output is
+     * emitted; what is ruled out is an UNBOUNDED whole-stream read. Results are never
+     * accumulated before flushing. Each record is
      * capped at {@link MathParser#MAX_SOURCE_LENGTH} chars, enforced DURING its read (the
      * same cap the parser itself applies, just moved earlier so it bounds the READ, not just
      * the parse).
