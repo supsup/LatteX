@@ -1,5 +1,6 @@
 package com.lattex.api;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -13,16 +14,17 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
  * Generates {@code examples/symbol-index.html} — the exhaustive, drift-free
  * index of EVERY command LatteX supports. Unlike the curated
- * {@code gallery-specimen.html}, this page is auto-enumerated from the parser's
- * own command tables via {@link MathParser#supportedCommands()}, so it always
- * reflects exactly what the renderer accepts and can never drift: add a command
- * to a table and it appears here on the next build.
+ * {@code gallery-specimen.html}, this page is auto-enumerated from the typed
+ * command authority via {@link MathParser#supportedCommands()}, so table-backed,
+ * structural, contextual, text, and non-rendering grammar commands share the
+ * same coverage source as parser dispatch.
  *
  * <p>Each cell renders one command live to a self-contained {@code svg/g/path/
  * rect} subset (no external assets), grouped by {@link Category} with per-group
@@ -37,8 +39,15 @@ class SymbolIndexPageTest {
     @Test
     void writesSymbolIndex() throws IOException {
         List<SupportedCommand> commands = MathParser.supportedCommands();
-        assertTrue(commands.size() >= 300,
+        assertTrue(commands.size() >= 500,
             "a broad, exhaustive index, got " + commands.size());
+        Set<String> names = commands.stream()
+            .map(SupportedCommand::command)
+            .collect(java.util.stream.Collectors.toSet());
+        for (String audit : List.of(
+                "\\boxed", "\\cancel", "\\bra", "\\prescript", "\\bordermatrix")) {
+            assertTrue(names.contains(audit), "accepted command missing from index: " + audit);
+        }
 
         // Group by category, preserving the enum's natural display order.
         Map<Category, List<SupportedCommand>> byCategory = new EnumMap<>(Category.class);
@@ -58,6 +67,8 @@ class SymbolIndexPageTest {
             StringBuilder cells = new StringBuilder();
             for (SupportedCommand c : group) {
                 String svg = LatteX.render(c.renderTemplate());
+                assertTrue(svg.contains("<path") || svg.contains("<rect"),
+                    "index example must render visible ink/context: " + c.command());
                 cells.append(cell(c.command(), svg)).append('\n');
                 total++;
             }
@@ -75,6 +86,12 @@ class SymbolIndexPageTest {
         assertEquals(commands.size(), total, "every enumerated command rendered");
         assertEquals(commands.size(), countOccurrences(written, "<svg"),
             "one rendered SVG per enumerated command");
+
+        Path tracked = Path.of("examples", "symbol-index.html");
+        assertTrue(Files.isRegularFile(tracked),
+            "tracked command index is missing; run ./gradlew generateExamples");
+        assertArrayEquals(Files.readAllBytes(tracked), Files.readAllBytes(out),
+            "tracked command index drifted; run ./gradlew generateExamples and review it");
     }
 
     // ---- HTML template (self-contained, single file, no external assets) ----
@@ -120,7 +137,7 @@ class SymbolIndexPageTest {
                   <p class="eyebrow">LatteX · clean-room LaTeX → SVG</p>
                   <h1>Command index</h1>
                   <p class="lede">Every command the parser supports, auto-enumerated
-                    from its own command tables — <strong>%d commands</strong>, each
+                    from its typed command registry — <strong>%d commands</strong>, each
                     rendered live to a self-contained
                     <code>svg/g/path/rect</code> subset. Generated on every build,
                     so it can never drift from what LatteX actually accepts.</p>

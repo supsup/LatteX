@@ -3,9 +3,14 @@
 *(Looking for the math itself rather than the effects? The renderer tour is
 [showcase.html](showcase.html) — every formula on it ratchet-locked.)*
 
-Every effect in the `\lx[fx.*]{…}` catalogue, each isolated on a one-effect page
-and captured as its own looping GIF via [BrewShot](https://github.com/supsup/BrewShot)'s
-element-targeted `recordGifElement`. Each one **plays itself** — no hover or click needed.
+The production `Effect` vocabulary currently has **29 real effects**: 28 work from
+the ordinary runtime and `unfold` additionally needs the host's interactive-expansion
+flag. Every one has a declared visual specimen captured with
+[BrewShot](https://github.com/supsup/BrewShot): 28 motion GIFs, plus one deliberately
+static `thread` reference that keeps all matching glyphs visible together. Captures use
+the effect's real path — page entry, trusted hover/click, moving pointer, semantic
+sidecar, or flag-enabled toggle — rather than making every interaction pretend to be
+the same autoplay animation.
 
 **These images are for your eyes, not for machines to diff.** The effects randomize on
 purpose — glitch's flicker, shatter's shard paths — so two runs never produce the same
@@ -149,6 +154,14 @@ Each GIF is clipped to its own equation and loops forever; the trigger is shown 
 
 ![supernova](supernova.gif)
 
+### `fx.enter=inkdrop`
+
+```
+\lx[fx.enter=inkdrop]{ \int_a^b f(x)\,dx }
+```
+
+![inkdrop](inkdrop.gif)
+
 ### `fx.hover=diffusion`
 
 ```
@@ -156,6 +169,14 @@ Each GIF is clipped to its own equation and loops forever; the trigger is shown 
 ```
 
 ![diffusion](diffusion.gif)
+
+### `fx.hover=refraction`
+
+```
+\lx[fx.hover=refraction]{ \frac{\sin x}{x} }
+```
+
+![refraction lens following a real pointer](refraction.gif)
 
 ### `fx.click=teleport`
 
@@ -238,8 +259,32 @@ than teach wrong binding.
 
 ![precedence cascade](fx-play-precedence.gif)
 
+`fx.enter=cancel` — the exactly-twice semantic strike. The real producer stamps
+`data-lx-glyphmap` for `\frac{x}{x}`; on entry the matching factors strike out,
+puff away, and settle to a readable gray ghost
+([source page](cancel-preview.html)).
+
+```
+\lx[fx.enter=cancel]{ \frac{x}{x} }
+```
+
+![cancel strike and ghost](cancel.gif)
+
+`fx.click=unfold` — the double-gated bounded-sum bloom. This specimen is rendered
+with `RenderOptions.interactiveExpansion` enabled, then receives two trusted clicks:
+the first reveals the pre-rendered `f(1)+f(2)+f(3)+f(4)` payload and the second
+collapses it back to the sum ([source page](unfold-preview.html)).
+
+```
+\lx[fx.click=unfold]{ \sum_{i=1}^{4} f(i) }
+```
+
+![flag-enabled unfold toggle](unfold.gif)
+
 ---
 
-*Regenerate: capture with a local Chrome via BrewShot `recordGifElement` (see the fx-catalogue
-capture harness). `gravwell` needs a synthetic glyph-click; `refraction`/`inkdrop` await the
-pointer-stream (`recordGifStream`) path.*
+*Regenerate through `./gradlew generateExamples`. The BrewShot capture harness uses
+compositor streaming for `inkdrop`, trusted moving-pointer input for `refraction`, the
+deterministic semantic entry path for `cancel`, and the host-flagged trusted click toggle
+for `unfold`. The headless gallery coverage test fails if a future production effect has no
+declared artifact or if this document points at a missing file.*

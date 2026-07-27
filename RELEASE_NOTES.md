@@ -6,6 +6,127 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Opt-in rendered diagnostic cards
+
+- **Hosts may render a failed formula in place without changing the default.**
+  `LatteX.renderWithDiagnostics(String, RenderOptions)` is the new option-aware
+  overload, and `RenderOptions.defaults().withRenderedErrors(true)` enables a
+  compact failure card. The existing overload still delegates to defaults and
+  still returns `""` on failure; successful output is byte-identical to
+  `LatteX.render(source, options)`, including macros, source styling, scale,
+  color, math style, and the host's fluid flag.
+- **The card is bounded, inert, and fail-soft.** It draws direct `TextRun` and
+  rule geometry through the existing capped SVG emitter—never by reparsing a
+  diagnostic as LaTeX—and stays inside the established `svg/g/path/rect`
+  alphabet. It displays only a stable outcome token, a capped diagnostic
+  message, and one capped source-line excerpt with a reanchored caret. It never
+  displays diagnostic detail, exception cause/class, the complete raw source,
+  or the raw caret block. A malformed row is replaced or omitted; any secondary
+  parse/layout/emit failure returns the same diagnostics with an empty SVG.
+- **The gate belongs to the host.** `\lx[...]` cannot set or clear it, every
+  `RenderOptions` copy method preserves it, and an explicit six-argument
+  compatibility constructor keeps pre-feature source calls default-off. The
+  throwing APIs, CLI, Docker worker, and served integrations do not flip their
+  defaults. `examples/rendered-error.html` and its committed BrewShot Chromium
+  receipt (`examples/rendered-error.png`) document the opt-in path.
+
+### One typed command authority (Marlow/Confluence audit)
+
+- **Parser dispatch, command enumeration/examples, did-you-mean candidates, and
+  user-macro reservation now share one typed descriptor registry.** Each accepted
+  control sequence owns its normalized name, grammar kind, handler identity,
+  index metadata, output role, and macro policy there. The generated command
+  index now covers structural and contextual commands such as `\boxed`,
+  `\cancel`, `\bra`, `\prescript`, and `\bordermatrix`, not only table-backed
+  symbols; the previously hidden delimiter-only `\vert` is indexed and reserved
+  too.
+- **Unknown commands have a typed reason.** `MathSyntaxException` distinguishes an
+  unknown command from an unknown environment internally, without parsing its
+  message or widening the exported module API, and nested text/math context
+  preserves that reason. The established base failure text and source offsets stay
+  intact; suggestion hints intentionally cover the complete registry now.
+- **Built-in macro reservation is stricter by design.** Names the old
+  hand-maintained deny list missed — including `\vert`, `\middle`, and `\cr` —
+  can no longer be shadowed by user macros. Previously valid expressions that do
+  not shadow a built-in retain their parse/render behavior and rendered bytes;
+  inputs that relied on those shadowing loopholes now fail with the established
+  additive-only “built-in command” error.
+
+### Docker distribution: preserved CLI plus an atomic input/output worker
+
+- **One Java 25 image now supports both the existing CLI and a long-running
+  folder worker.** The multi-stage build uses the checked-in Gradle wrapper,
+  installs immutable renderer/worker jars under `/opt/lattex`, copies no test or
+  BrewShot dependency into the runtime, and defaults to non-root UID/GID 10001.
+- **The old CLI contract is unchanged.** `cli` is an explicit container mode,
+  while no-mode argv/stdin remains a compatibility path; help, version, batch,
+  output-file, render-error, and stdout semantics still come from the shipped
+  `lattex` jar. Because `cli` and `watch` are reserved as the first container
+  argument, literal expressions with either spelling use `cli cli` or
+  `cli watch`. `cli --input FILE` is a thin mounted-file-to-stdin adapter.
+- **Watch mode uses durable folders rather than filename suffix mutation.** It
+  atomically claims visible direct-child `.tex` files from `/lattex/input` into
+  `input/processing`, atomically publishes complete SVGs under `/lattex/output`,
+  and preserves original source names under `input/finished` or `input/failed`.
+  UUID claim directories keep the original name in a separate path component,
+  so near-limit ASCII and multibyte filenames cannot terminate or restart-poison
+  the worker. Restart recovery, duplicate-worker races, spaces/multiline sources,
+  partial upload exclusion, bounded diagnostic fallback, and no-overwrite
+  collision handling are mechanically covered by the Docker smoke.
+- **Failures are fail-honest.** A failed job leaves no success-shaped SVG, emits
+  only a bounded non-secret error code, and retains the original source in the
+  failed folder. Input is mounted read-write only for watch mode; CLI input can
+  remain read-only.
+
+### BrewShot 0.9 test-harness refresh
+
+- **The vendored, test-only BrewShot harness moves from 0.8.0 to 0.9.0.** The
+  replacement was built twice from BrewShot main commit
+  `0e2289dbb42455b559d345393119f3836021f23c`; both clean builds produced SHA-256
+  `405ad143fb143e739cf7979510b435a73df5ad2ddd2e960529ff588cb298307d`.
+  LatteX's zero-runtime-dependency artifact is unchanged.
+- **Local browser behavior is now explicit for contributors.** The normal test
+  suite launches headless Chrome when it is available, BrewShot 0.9 supplies the
+  macOS-safe `--no-startup-window` default, local no-Chrome runs assumption-skip
+  browser pins, and CI keeps those pins mandatory with
+  `LATTEX_REQUIRE_BROWSER=1`.
+
+### The BrewShot gallery now covers the executable effect surface
+
+- **All 29 production effects now have a declared visual specimen.** The gallery
+  contains 28 motion GIFs plus the deliberately static `thread` interaction
+  reference; its prose now distinguishes the 28 ordinary-runtime effects from
+  the host-flagged `unfold` effect instead of claiming every interaction is the
+  same autoplay GIF.
+- **The four real gaps are captured through their production paths.** BrewShot's
+  compositor stream keeps `inkdrop`'s body overlays in frame, trusted moving
+  pointer input drives `refraction`, `cancel` records its deterministic semantic
+  strike/ghost, and `unfold` is rendered with interactive expansion enabled and
+  filmed through both trusted click directions.
+- **Coverage drift now fails headlessly.** A manifest is checked against every
+  non-`NONE` `Effect`, every declared asset must exist, representation and file
+  type must agree, and `examples/GALLERY.md` must link the matching directive and
+  artifact. Adding an enum value without documenting and photographing it can no
+  longer leave a false "complete gallery" claim behind.
+- **Supported regeneration also refreshes the executable example pages.** The
+  effects and thread previews now carry the current `cancel`/`unfold` runtime,
+  while the generated symbol index covers all 551 typed-registry commands,
+  including `\aa` and `\underparen`.
+
+### CLI stdout failures now fail honestly
+
+- **One-shot and batch output no longer report success after `PrintStream` swallows
+  a write or flush failure.** Every stdout completion point now checks the stream's
+  sticky error state; a closed consumer or broken pipe exits `1` and emits one
+  bounded stderr diagnostic. Exception text is not echoed.
+- **Batch failure preserves an explicit prefix contract.** Each NUL-terminated record
+  is flushed and checked before the next is emitted. On the first stdout failure,
+  stderr reports how many complete records were confirmed; the current record may be
+  incomplete and later records are not emitted. Malformed expressions retain their
+  existing isolation behavior: their in-place error records do not abort siblings.
+- **Healthy output is byte-identical, and existing success/render/usage exit meanings
+  are unchanged.** The new nonzero path applies only when stdout cannot be delivered.
+
 ### Output size cap is now a hard postcondition (Marlow audit LTX-01)
 
 - **The documented 2,000,000-character SVG output ceiling is enforced as a true

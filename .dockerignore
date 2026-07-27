@@ -1,0 +1,27 @@
+.git
+.gitignore
+.gradle
+build
+**/build
+.idea
+.vscode
+*.iml
+.DS_Store
+/Input
+/Output
+
+# The image compiles production sources plus the container worker. Tests,
+# BrewShot, generated galleries, prose, and host scripts stay out of the build
+# context; the bundled STIX font under src/main/resources remains included.
+bin
+docs
+examples
+libs
+src/test
+tools
+*.md
+*.html
+*.png
+*.gif
+*.zip
+gradlew.bat

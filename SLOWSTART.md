@@ -381,6 +381,11 @@ A single bad expression doesn't sink the batch — its slot becomes a marked
 failed, so CI still catches it). If an expression contains a literal newline (a
 rare multi-line block), separate inputs with NUL instead and add `-0`.
 
+Output delivery is fail-fast. If the stdout consumer closes its pipe or a write/flush
+otherwise fails, `lattex` exits `1` with one bounded stderr diagnostic instead of
+claiming success. Records checked before the failure form a complete, valid prefix;
+the current record may be incomplete, and later records are not emitted.
+
 This is the efficient backend for a docs pipeline rendering a page's many spans —
 and it's what makes a fair **jar-vs-binary** timing comparison possible: without
 it you'd be measuring process-spawn cost, not the renderer.

@@ -37,6 +37,8 @@ public final class Main {
      * 0.5.0 artifact). Falls back to {@code "dev"} only if the resource is absent.
      */
     private static final String VERSION = readVersion();
+    private static final String STDOUT_FAILURE =
+        "lattex: error: failed to write output to stdout; output may be incomplete";
 
     private static String readVersion() {
         try (java.io.InputStream in = Main.class.getResourceAsStream("/lattex-version.properties")) {
@@ -72,7 +74,10 @@ public final class Main {
                                   NUL-terminated SVG record per input to stdout,
                                   in order. A bad expression yields a
                                   'lattex: error: …' record and does not abort
-                                  the batch. Amortizes startup/spawn cost.
+                                  the batch. A stdout failure does abort: the
+                                  confirmed complete prefix remains valid, the
+                                  current record may be incomplete, and no later
+                                  records are emitted. Amortizes startup/spawn cost.
             -0, --null            In --batch, split stdin on NUL instead of
                                   newlines (for expressions containing newlines).
             --inline              Render in INLINE (text) style — smaller fractions
@@ -105,8 +110,10 @@ public final class Main {
 
         EXIT STATUS:
             0  success
-            1  render/IO error (invalid LaTeX, unwritable output, …); in --batch,
-               at least one record failed (all records are still emitted)
+            1  render/IO error (invalid LaTeX, unwritable output, failed stdout
+               write/flush, …); in --batch, at least one record failed (all
+               records are still emitted) or stdout delivery failed (the batch
+               stops at the first detected output failure)
             2  usage error (unknown flag, missing argument, …)
         """.formatted(VERSION);
 
@@ -162,11 +169,11 @@ public final class Main {
                 switch (arg) {
                     case "-h", "--help" -> {
                         out.print(USAGE);
-                        return 0;
+                        return finishStdout(out, err);
                     }
                     case "-V", "--version" -> {
                         out.println("lattex " + VERSION);
-                        return 0;
+                        return finishStdout(out, err);
                     }
                     case "-o", "--output" -> {
                         if (i + 1 >= args.length) {
@@ -293,6 +300,7 @@ public final class Main {
 
         if (outputFile == null) {
             out.println(svg);
+            return finishStdout(out, err);
         } else {
             try {
                 Files.writeString(outputFile, svg + System.lineSeparator(), StandardCharsets.UTF_8);
@@ -302,6 +310,21 @@ public final class Main {
             }
         }
         return 0;
+    }
+
+    /**
+     * Flushes stdout and reports its sticky error state. {@link PrintStream} deliberately
+     * swallows write and flush {@link IOException}s, so returning success without calling
+     * {@link PrintStream#checkError()} can silently lose the CLI's only output.
+     */
+    private static int finishStdout(PrintStream out, PrintStream err) {
+        if (!out.checkError()) {
+            return 0;
+        }
+        // Keep this diagnostic fixed and bounded: the swallowed IOException message may
+        // be arbitrarily large or contain untrusted downstream details.
+        err.println(STDOUT_FAILURE);
+        return 1;
     }
 
     /**
@@ -338,6 +361,7 @@ public final class Main {
         String[] records = input.split(nullDelim ? "\0" : "\n", -1);
         boolean anyFailed = false;
         boolean anyEmitted = false;
+        int completedRecords = 0;
         for (String rec : records) {
             String latex = rec.strip();
             if (latex.isEmpty()) {
@@ -356,8 +380,15 @@ public final class Main {
             out.print(record);
             out.write(0); // NUL record terminator (SVGs never contain NUL)
             anyEmitted = true;
+            if (out.checkError()) {
+                String recordNoun = completedRecords == 1 ? "record" : "records";
+                err.println("lattex: error: failed to write batch output to stdout after "
+                    + completedRecords + " complete " + recordNoun
+                    + "; current record may be incomplete; no later records were emitted");
+                return 1;
+            }
+            completedRecords++;
         }
-        out.flush();
         if (!anyEmitted) {
             err.println("lattex: error: --batch got no expressions on stdin");
             return 2;
