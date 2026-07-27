@@ -1860,26 +1860,38 @@ public final class MathParser {
     /**
      * Renders the escaped token at {@code i} for an unsupported-escape DIAGNOSTIC.
      *
-     * <p>Two source shapes must both yield a LEGAL message, because
-     * {@code Diagnostics.message} promises a human-readable sentence safe for UI and
-     * logs — a string carrying an unpaired surrogate cannot cross LatteX's own
-     * output-legality boundary (Marlow review 474):
+     * <p>{@code Diagnostics.message} promises a human-readable sentence SAFE FOR UI AND
+     * LOGS, so the rejecting message must never itself carry a character that cannot
+     * cross that boundary. Author input is untrusted here by definition — the token is
+     * being rejected precisely because it is not something we accept — so this method
+     * decides display, never the reject/accept outcome.
+     *
+     * <p>Two classes are shown as stable {@code U+XXXX} notation rather than verbatim:
      *
      * <ul>
-     *   <li>a WELL-FORMED supplementary escape ({@code \}+emoji) is shown verbatim,
-     *       as the complete surrogate pair — reading {@code charAt(i)} alone would
-     *       have emitted only the high surrogate and corrupted a legal character;</li>
-     *   <li>an UNPAIRED surrogate already present in the source is shown as
-     *       {@code U+XXXX} notation, so a malformed input can never inject a lone
-     *       surrogate into the message that rejects it.</li>
+     *   <li>an UNPAIRED surrogate present in the source, which is not legal text at all
+     *       and would corrupt the message that rejects it (Marlow review 474);</li>
+     *   <li>any ISO CONTROL character — NUL, ESC, DEL, newline, the C1 range. A raw NUL
+     *       in a diagnostic truncates C consumers, ESC can drive a terminal escape
+     *       sequence, and an embedded newline forges a second log line. Escaping the
+     *       whole class is the point: fixing only the surrogate INSTANCE left the
+     *       control-character class open, which is exactly what Marlow's review 602
+     *       reproduced with a backslash followed by U+0000 reaching the public message
+     *       intact.</li>
      * </ul>
      *
-     * <p>Rejecting the escape is unchanged; only how the offending token is
-     * DISPLAYED differs.
+     * <p>Everything else — including a well-formed supplementary escape like
+     * {@code \}+emoji — is shown verbatim as its COMPLETE code point; reading
+     * {@code charAt(i)} alone would emit a bare high surrogate and corrupt a legal
+     * character.
+     *
+     * <p>Rejecting the escape is unchanged; only how the offending token is DISPLAYED
+     * differs.
      */
     private static String escapedTokenDisplay(String s, int i) {
         int cp = s.codePointAt(i);
-        if (Character.isBmpCodePoint(cp) && Character.isSurrogate((char) cp)) {
+        boolean loneSurrogate = Character.isBmpCodePoint(cp) && Character.isSurrogate((char) cp);
+        if (loneSurrogate || Character.isISOControl(cp)) {
             return String.format("U+%04X", cp);
         }
         return new String(Character.toChars(cp));

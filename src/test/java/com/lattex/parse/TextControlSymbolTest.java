@@ -323,6 +323,59 @@ class TextControlSymbolTest {
         }
     }
 
+    /// Marlow review 602. I fixed the surrogate INSTANCE and left the class open: every
+    /// non-surrogate code point still reached the message verbatim, so a backslash
+    /// followed by U+0000 put a raw NUL into a diagnostic that promises to be safe for
+    /// UI and logs. Each of these is separately harmful, not merely untidy — a NUL
+    /// truncates C consumers, ESC can drive a terminal escape sequence, and an embedded
+    /// newline forges a second log line out of author-controlled input.
+    @Test
+    void isoControlEscapesAreRejectedWithALegalMessage() {
+        record Case(int cp, String notation, String what) {}
+        Case[] cases = {
+            new Case(0x0000, "U+0000", "NUL — truncates C string consumers"),
+            new Case(0x000A, "U+000A", "LF — would forge a second log line"),
+            new Case(0x001B, "U+001B", "ESC — would drive a terminal escape sequence"),
+            new Case(0x007F, "U+007F", "DEL"),
+            new Case(0x0085, "U+0085", "NEL — a C1 control"),
+        };
+        for (Case c : cases) {
+            String control = String.valueOf((char) c.cp());
+            MathSyntaxException e = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("\\text{a\\" + control + "b}"),
+                "control-character escape must still fail loud: " + c.what());
+            String msg = e.getMessage();
+            assertTrue(msg.contains("Unknown command in \\text"), msg);
+            assertTrue(msg.contains(c.notation()),
+                "control must be shown as " + c.notation() + " (" + c.what() + "), got: "
+                    + describe(msg));
+            assertNoIsoControl(msg);
+        }
+    }
+
+    /// The same class through the PUBLIC surface, which is where the contract actually
+    /// lives: renderWithDiagnostics must not hand a caller a message carrying a raw NUL.
+    @Test
+    void isoControlEscapeIsLegalThroughRenderWithDiagnostics() {
+        String control = String.valueOf((char) 0x0000);
+        var result = LatteX.renderWithDiagnostics("\\text{a\\" + control + "b}");
+        String msg = String.valueOf(result.diagnostics().message());
+        assertTrue(msg.contains("Unknown command in \\text"), msg);
+        assertTrue(msg.indexOf('\0') < 0, "a raw NUL must never reach the public message");
+        assertNoIsoControl(msg);
+        assertNoUnpairedSurrogate(msg);
+    }
+
+    /// No ISO control may survive anywhere in a message that claims to be log-safe.
+    private static void assertNoIsoControl(String msg) {
+        for (int i = 0; i < msg.length(); ) {
+            int cp = msg.codePointAt(i);
+            assertTrue(!Character.isISOControl(cp),
+                "ISO control U+" + String.format("%04X", cp) + " at " + i + " in: " + describe(msg));
+            i += Character.charCount(cp);
+        }
+    }
+
     /// The legality boundary itself: no unpaired surrogate anywhere in the string.
     private static void assertNoUnpairedSurrogate(String msg) {
         for (int i = 0; i < msg.length(); i++) {
