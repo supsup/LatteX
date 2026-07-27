@@ -356,6 +356,35 @@ public sealed interface MathNode {
     }
 
     /**
+     * A sub-formula whose ATOM CLASS is forced — the node behind {@code \mathopen}
+     * {@code \mathclose} {@code \mathord} {@code \mathbin} {@code \mathrel}
+     * {@code \mathpunct}, TeX's noad-class-override primitives (TeXbook Ch.17,
+     * "the class of a noad"). Layout-transparent like {@link Colored}: the body
+     * lays out exactly as itself and no glyph changes. What changes is the class
+     * the ENCLOSING row spaces it as — {@link #forcedClass} instead of the body's
+     * own implied class — so {@code \mathbin{\cdot}} gets medium binary-operator
+     * glue on both sides where a bare {@code \cdot} would only get Ord spacing.
+     *
+     * <p>The body may be an EMPTY {@link MathList}: LaTeXML emits a bare
+     * {@code \mathopen{}} as a zero-width open-class marker, and an empty brace
+     * group already parses to an empty list, so that shape needs no special case.
+     *
+     * @param body        the wrapped sub-formula (non-null; possibly an empty
+     *                    {@link MathList})
+     * @param forcedClass the atom class the enclosing row spaces this as (non-null)
+     */
+    record ClassOverride(MathNode body, MathClass forcedClass) implements MathNode {
+        public ClassOverride {
+            if (body == null) {
+                throw new IllegalArgumentException("ClassOverride body must not be null");
+            }
+            if (forcedClass == null) {
+                throw new IllegalArgumentException("ClassOverride forcedClass must not be null");
+            }
+        }
+    }
+
+    /**
      * A framed sub-formula — amsmath's {@code \boxed{…}} (and {@code \fbox{…}}
      * treated as its math-mode analogue): the {@code body} laid out normally with a
      * rectangular rule frame drawn around it at a fixed padding. The frame is four
