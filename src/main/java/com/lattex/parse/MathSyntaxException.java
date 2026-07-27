@@ -23,7 +23,16 @@ import com.lattex.api.LatteXException;
  */
 public final class MathSyntaxException extends LatteXException {
 
-    private static final long serialVersionUID = 2L;
+    /**
+     * Bumped 2 → 3 because inserting {@link LatteXException} into the superclass chain is,
+     * per the Java Object Serialization Specification, an INCOMPATIBLE change: a class's
+     * position in the hierarchy is part of its serialized form. Nothing in LatteX serializes
+     * exceptions — they are thrown across an in-process API — so this is a theoretical
+     * concern, but leaving the UID at 2 would let a stream written by 0.11.0 fail against a
+     * hierarchy mismatch rather than against the version check. Bumping it makes any such
+     * attempt fail as a named {@code InvalidClassException} that says exactly what changed.
+     */
+    private static final long serialVersionUID = 3L;
 
     /** Sentinel offset meaning "no known position." */
     public static final int NO_OFFSET = -1;
