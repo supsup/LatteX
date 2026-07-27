@@ -6,6 +6,23 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### `cancel` now works through the `tryRenderMath` seam (bug fix)
+
+- **The split-wrapper seam stamped `cancel`'s container hook without its glyph
+  data.** `LatteX.render`'s producer gates the `data-lx-glyphmap` sidecar on the
+  shared `usesGlyphmap` predicate (thread **or** cancel), but `tryRenderMath` —
+  the sanctioned path for a consumer that builds its own wrapper element — still
+  carried a literal `Effect.THREAD` check from before `cancel` existed. A
+  `cancel`-authored expression through that seam therefore received the hook with
+  an EMPTY glyphmap, and `cancel` reads that sidecar to find the code point
+  occurring exactly twice. The effect was **silently inert** for exactly the
+  consumer the seam exists for — no exception, no warning, no visible failure.
+- **Both producers now share one gate**, which is what `usesGlyphmap`'s own
+  contract always claimed ("one producer for the stamping gate so the two
+  semantic effects can never drift"). The stale thread-only wording in the
+  `tryRenderMath` javadoc and in one `openTag` comment is corrected to match.
+- Output for `thread`-only and effect-free expressions is unchanged.
+
 ### Trusted, progressively enhanced equation transitions
 
 - **Hosts can present one equation and an alternate form without weakening the
