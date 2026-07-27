@@ -482,3 +482,6 @@ OK	structured-envs	D	\begin{array}{ccc} X & \stackrel{f}{\longrightarrow} & Y \\
 OK	structured-envs	D	\begin{array}{c|cc} & B & B^c \\ \hline A & 0.2 & 0.3 \\ A^c & 0.1 & 0.4 \end{array}
 OK	structured-envs	D	\begin{align*} \log(xy) &= \log x + \log y \\ \log(x/y) &= \log x - \log y \\ \log x^n &= n \log x \end{align*}
 OK	structured-envs	D	\begin{align} a_{n+1} &= a_n + d && \text{(arithmetic)} \\ g_{n+1} &= g_n \cdot r && \text{(geometric)} \end{align}
+OK	calculus-physics	I	\uptau_{\uprho} = \upbeta \cdot \upmu
+OK	calculus-physics	I	\lambda = 632.8\,\mathrm{nm} = 0.6328\,\upmu\mathrm{m}
+OK	calculus-physics	D	\Updelta E = h\upnu, \quad \upalpha + {}^{14}\mathrm{N} \to {}^{17}\mathrm{O} + \mathrm{p}
