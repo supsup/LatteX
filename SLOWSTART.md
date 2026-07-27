@@ -376,10 +376,29 @@ for src, rec in zip(["x^2", "\\frac{a}{b}", "\\sum_{i=1}^{n} i"], records):
     print(src, "→", "rendered" if ok else svg)
 ```
 
-A single bad expression doesn't sink the batch — its slot becomes a marked
-`lattex: error: …` record and the rest still render (the exit code is `1` if any
-failed, so CI still catches it). If an expression contains a literal newline (a
-rare multi-line block), separate inputs with NUL instead and add `-0`.
+A single bad (malformed) expression doesn't sink the batch — its slot becomes a
+marked `lattex: error: …` record and the rest still render (the exit code is `1`
+if any failed, so CI still catches it). If an expression contains a literal
+newline (a rare multi-line block), separate inputs with NUL instead and add `-0`.
+
+**Streaming, and the one exception to "keep going."** Both stdin (single
+expression) and `--batch` read incrementally — there is no *unbounded*
+whole-stream read or accumulation; each record is read up to its delimiter
+(capped at 100,000 chars) and rendered before the next is *processed* — so an
+oversized or adversarial stream can't exhaust memory before the CLI ever gets a
+chance to reject it. The honest boundary: the decoder keeps a bounded read-ahead,
+so a SHORT batch may already sit entirely in that buffer before the first record
+is rendered. What is guaranteed is bounded peak memory — one record plus its
+output plus fixed decoder buffers — not zero decoder read-ahead. Each record is capped at 100,000 characters (the same
+limit the parser itself enforces on any LaTeX source). There's deliberately **no
+cap on how many records a batch may contain** or on the batch's total size —
+only each record individually is bounded, and nothing is accumulated across
+records, so record *count* doesn't threaten memory the way an unbounded single
+read used to. The one place this narrows the "isolate a bad record, keep going"
+promise: an **oversized** record (not a malformed one — too *big*, not invalid
+LaTeX) aborts the rest of the batch instead of being skipped, because skipping
+it would mean reading past the cap that was just enforced. Every record produced
+before it has already been written out.
 
 Output delivery is fail-fast. If the stdout consumer closes its pipe or a write/flush
 otherwise fails, `lattex` exits `1` with one bounded stderr diagnostic instead of
