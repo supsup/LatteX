@@ -163,7 +163,7 @@ The key set:
 refinement). Values are bare tokens or `"quoted strings"`; whitespace outside quotes
 is insignificant. This is the quickstart view — the full option grammar and rationale
 live in the **`lattex-render-styling-options`** design plan. See
-`examples/lx-demo.html` for the macro end-to-end.
+[examples/showcase.html](examples/showcase.html) for the macro end-to-end.
 
 > **`unfold` is doubly gated.** It is the one effect that needs LatteX to *compute*
 > (pre-render a bounded `\sum` into its explicit terms), so it stays off unless BOTH
@@ -207,18 +207,21 @@ global to the input, and macros do not reach nested `$…$` spans inside
 The SVG stays clean; everything interactive rides on a trusted `<span class="lx-math">`
 wrapper the API emits around it. Three helpers produce that wrapper:
 
-- **`LatteX.renderInline(latex)`** — inline math for prose. The root `<svg>`
-  `width`/`height` are emitted in **`em`**, so the math scales to whatever
-  `font-size` it lands in (body text, a heading, …) via plain CSS inheritance — no
-  surrounding-style detection. The wrapper carries `data-lx-depth` (the baseline
-  depth in em); a few lines of page CSS/JS read it and set
-  `vertical-align: calc(-1 * <depth>em)` so the math sits on the text baseline.
-  Defaults to `TEXT` style. See `examples/prose.html`.
+- **`LatteX.renderInline(latex)`** — inline math for prose, defaulting to `TEXT`
+  style. Use **`renderInlineResult(latex)`** when you need to seat it on the
+  baseline: it returns the SVG alongside `depthEm` (ink below the baseline) and
+  `heightEm`, and the *host* applies `vertical-align: calc(-1 * <depthEm>em)`.
+  The metrics ride the result object deliberately — LatteX bakes no style
+  attribute and stamps no depth attribute on the wrapper, so the page keeps
+  ownership of its own CSS policy.
 - **`LatteX.renderStyledHtml(latex)`** — if the source is an `\lx` with `fx.*`
-  effects, wraps the SVG in a container stamped with `data-fx-enter` /
-  `data-fx-hover` / `data-fx-click` (+ `data-fx-duration`). A page-side runtime
-  (CSS `@keyframes` + a little JS) reads those and plays the animation. Sources
-  without effects return the bare SVG. See `examples/fx-demo.html`.
+  effects, wraps the SVG in a container stamped with `data-lx-fx-enter` /
+  `data-lx-fx-hover` / `data-lx-fx-click` (+ `data-lx-fx-duration`). A page-side
+  runtime (CSS `@keyframes` + a little JS) reads those and plays the animation.
+  Sources without effects return the bare SVG. If you own your own wrapper
+  instead, use `tryRenderMath(latex)` — see SLOWSTART §"Emit the wrapper the
+  runtime reads" for why the deprecated `fxContainerAttrs` silently breaks the
+  `thread` and `cancel` effects.
 - **`LatteX.renderFragment(latex, fontSizePx)`** — the inner `<g>/<path>/<rect>`
   markup plus box metrics (`widthPx`/`heightPx`/`depthPx`), for a consumer that
   composes the math inline on a shared baseline (e.g. a diagram renderer drawing
