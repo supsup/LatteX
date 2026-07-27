@@ -57,6 +57,21 @@
   g.setInterval = function (cb) { var id = nextTimerId++; activeIntervals[id] = cb; return id; };
   g.clearInterval = function (id) { delete activeIntervals[id]; };
   g.__lxActiveIntervals = function () { return Object.keys(activeIntervals).length; };
+  // Drive interval callbacks deterministically (a real interval re-fires until
+  // cleared). Each round invokes every still-active interval once; a callback that
+  // clearInterval-s itself (e.g. a detached-element self-teardown) stops firing.
+  g.__lxRunIntervals = function (maxRounds) {
+    var rounds = 0;
+    while (rounds < maxRounds && Object.keys(activeIntervals).length) {
+      var ids = Object.keys(activeIntervals);
+      for (var i = 0; i < ids.length; i++) {
+        var cb = activeIntervals[ids[i]];
+        if (cb) { cb(); }
+      }
+      rounds++;
+    }
+    return rounds;
+  };
   g.__lxActiveTimeouts = function () { return Object.keys(pendingTimeouts).length; };
   g.__lxRunTimeouts = function (maxRounds) {
     var rounds = 0;
