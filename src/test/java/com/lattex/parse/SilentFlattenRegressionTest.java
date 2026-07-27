@@ -17,11 +17,14 @@ import org.junit.jupiter.api.Test;
 ///    literal-dollar escape), invisible grouping braces, and nested math via
 ///    `$…$`. Any command token (`\` + letters) in a literal segment fails loud.
 ///
-/// 2. The optional `[t]`/`[b]`/`[c]` position argument of `aligned`/`split`
+/// 2. The optional `[t]`/`[b]`/`[c]` position argument of `aligned`
 ///    rendered as visible math content ("row 1: [ t ] a, = b") instead of being
 ///    parsed — inconsistent with `array`, whose `[t]` fails loud. It is now
 ///    parsed and IGNORED for display (LatteX renders no surrounding baseline to
 ///    align against); anything else in the bracket fails loud like array does.
+///    `split` originally rode along with `aligned` here, but amsmath gives it no
+///    position argument at all, so it now rejects one loud instead — see
+///    `EnvironmentPositionArgTest` for that both-directions contract.
 class SilentFlattenRegressionTest {
 
     // ---- defect 1: commands inside \text fail loud, never flatten --------
@@ -82,19 +85,20 @@ class SilentFlattenRegressionTest {
     }
 
     @Test
-    void allThreePositionLettersAreAcceptedOnAlignedAndSplit() {
+    void allThreePositionLettersAreAcceptedOnAligned() {
         for (String pos : new String[] {"t", "b", "c"}) {
             assertEquals(
                 MathParserTest.pp(MathParser.parse("\\begin{aligned} a&=b \\end{aligned}")),
                 MathParserTest.pp(MathParser.parse(
                     "\\begin{aligned}[" + pos + "] a&=b \\end{aligned}")),
                 "[" + pos + "] on aligned");
-            assertEquals(
-                MathParserTest.pp(MathParser.parse("\\begin{split} a&=b \\end{split}")),
-                MathParserTest.pp(MathParser.parse(
-                    "\\begin{split}[" + pos + "] a&=b \\end{split}")),
-                "[" + pos + "] on split");
         }
+        // split used to be accepted here too; it now REJECTS a [pos] argument (amsmath
+        // gives it none). The full both-directions contract lives in
+        // EnvironmentPositionArgTest — this pin only records that the split half of
+        // the old assertion was retired deliberately, not lost.
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\begin{split}[t] a&=b \\end{split}"));
     }
 
     @Test

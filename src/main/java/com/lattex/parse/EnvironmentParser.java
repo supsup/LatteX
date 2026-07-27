@@ -81,7 +81,7 @@ final class EnvironmentParser {
             // alternating right/left columns from the & structure exactly like align.
             discardBraceArg(parser, "\\begin{" + env + "}");
         } else if (takesPositionArg(env)) {
-            // aligned/split take LaTeX's OPTIONAL [t]/[b]/[c] vertical-position argument.
+            // aligned takes amsmath's OPTIONAL [t]/[b]/[c] vertical-position argument.
             // Read and IGNORE it: LatteX renders the environment standalone (no
             // surrounding text baseline to align the box against), so the position has
             // no effect on output — but it must be PARSED, not served as row content
@@ -89,6 +89,11 @@ final class EnvironmentParser {
             // other than t/b/c in the bracket fails loud, matching array's argument
             // discipline.
             readAndIgnorePositionArg(parser, env);
+        } else if (rejectsPositionArg(env)) {
+            // split has NO [pos] option in amsmath (only the INNER, embeddable forms
+            // take one). Reject a leading bracket LOUD here, before the body loop can
+            // silently absorb "[t]" as ordinary glyph content in the first cell.
+            rejectPositionArg(parser, env);
         }
 
         // Read the body: cells (& separated) into rows (\\ separated), tracking
@@ -447,12 +452,34 @@ final class EnvironmentParser {
 
     /**
      * True for the environments that take amsmath's optional {@code [t]}/{@code [b]}/
-     * {@code [c]} vertical-position argument: the inner {@code aligned}/{@code split}
-     * forms. The display forms ({@code align}/{@code gather}/…) take no such argument
-     * in LaTeX and get none here.
+     * {@code [c]} vertical-position argument: only the INNER forms, meant to be
+     * embedded inside a larger expression where the position says which of the
+     * block's own rows supplies the baseline the surrounding material aligns to.
+     * {@code aligned} is that form. The display forms ({@code align}/{@code gather}/…)
+     * take no such argument in LaTeX and get none here; neither does {@code split},
+     * which is always used top-level inside a host equation environment and is
+     * rejected loud by {@link #rejectsPositionArg} instead.
+     *
+     * <p>amsmath's other inner form, {@code alignedat}, is not a registered
+     * environment on this base, so it is deliberately out of scope here — when it
+     * lands it belongs on this side of the split, not the rejecting side.
      */
     private static boolean takesPositionArg(String env) {
-        return env.equals("aligned") || env.equals("split");
+        return env.equals("aligned");
+    }
+
+    /**
+     * True for the environments that must REJECT a {@code [pos]} argument rather
+     * than accept it or silently absorb it: {@code split}, which real amsmath gives
+     * no optional position argument at all (it is always used inside a numbered
+     * equation environment, so it has no free baseline to place). Kept as a named
+     * predicate — and not folded into a bare {@code else} — so that every other
+     * environment's handling of a leading bracket is left exactly as it was: this
+     * change narrows {@code takesPositionArg} and adds one rejection, and touches
+     * no third environment.
+     */
+    private static boolean rejectsPositionArg(String env) {
+        return env.equals("split");
     }
 
     /**
@@ -483,6 +510,27 @@ final class EnvironmentParser {
                 + " but found " + MathParser.describe(close));
         }
         parser.next(); // consume ']'
+    }
+
+    /**
+     * Rejects a {@code [pos]} argument on an environment that has none (see
+     * {@link #rejectsPositionArg}). Only a bracket IMMEDIATELY after
+     * {@code \begin{env}} is refused; a {@code [} anywhere later is ordinary body
+     * content and never reaches this method. Failing loud here is the point: the
+     * general body loop below would otherwise absorb {@code [t]} as three glyphs in
+     * the first cell and render it as visible math — the same silent-WRONG class
+     * that {@link #readAndIgnorePositionArg} was introduced to close for
+     * {@code aligned}.
+     */
+    private static void rejectPositionArg(MathParser parser, String env) {
+        Token t = parser.peek();
+        if (t.kind() == Kind.CHAR && t.codePoint() == '[') {
+            throw new MathSyntaxException(
+                "\\begin{" + env + "} takes no [t]/[b]/[c] position argument — only the"
+                    + " inner \\begin{aligned} does; " + env + " is used inside a host"
+                    + " equation environment, which supplies the baseline",
+                parser.currentOffset());
+        }
     }
 
     /** True for {@code alignat}/{@code alignat*} — align with a mandatory {@code {n}} argument. */
