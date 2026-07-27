@@ -1830,7 +1830,7 @@ public final class MathParser {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c == '\\' && i + 1 >= s.length()) {
-                throw MathSyntaxException.unsupported(
+                throw MathSyntaxException.unknownCommand(
                     "Unknown command in \\" + t.name() + ": trailing '\\' with nothing to escape",
                     t.offset());
             } else if (c == '\\' && isAsciiLetter(s.charAt(i + 1))) {
@@ -1846,7 +1846,7 @@ public final class MathParser {
                 sb.append(TEXT_CONTROL_SYMBOLS.get(s.charAt(i + 1)));
                 i++;
             } else if (c == '\\') {
-                throw MathSyntaxException.unsupported(
+                throw MathSyntaxException.unknownCommand(
                     "Unknown command in \\" + t.name() + ": \\" + escapedTokenDisplay(s, i + 1)
                         + " — commands are not expanded in text; wrap math in $...$",
                     t.offset());
