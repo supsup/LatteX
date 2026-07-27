@@ -437,11 +437,16 @@ public final class Main {
                 try {
                     rec = reader.next();
                 } catch (DelimitedRecordReader.TooLongException e) {
-                    out.print("lattex: error: " + e.getMessage());
-                    out.write(0); // NUL record terminator (SVGs never contain NUL)
-                    out.flush();
                     anyFailed = true;
                     anyEmitted = true;
+                    // Routed through the SAME emitter as every other record: this arm used to
+                    // print/write/flush inline and skip the sticky-error check, so a broken
+                    // pipe while emitting the terminal error record was silently missed —
+                    // exit 1 (from the oversize) with an EMPTY stderr, and the caller never
+                    // told that delivery failed (Marlow review 592).
+                    if (!emitRecord(out, err, "lattex: error: " + e.getMessage(), completedRecords)) {
+                        return 1;
+                    }
                     break; // see "An oversized record aborts the rest of the batch" above
                 }
                 if (rec == null) {
@@ -461,24 +466,8 @@ public final class Main {
                     record = "lattex: error: could not render expression: " + e.getMessage();
                     anyFailed = true;
                 }
-                out.print(record);
-                out.write(0); // NUL record terminator (SVGs never contain NUL)
-                out.flush(); // progressive: this record reaches the consumer before the next is processed
                 anyEmitted = true;
-                if (out.checkError()) {
-                    // The downstream consumer went away (e.g. a broken pipe): PrintStream
-                    // swallows the write IOException and only raises this flag, so without
-                    // the check we'd keep reading an unbounded stdin and rendering into a
-                    // dead pipe. Stop loud instead of silently spinning.
-                    //
-                    // Naming the COMPLETE-record count is the contract main established
-                    // while this branch was out (origin/main runBatch): the consumer needs
-                    // to know how much of the stream is trustworthy, since the current
-                    // record may be truncated. Preserved here on the streaming path.
-                    String recordNoun = completedRecords == 1 ? "record" : "records";
-                    err.println("lattex: error: failed to write batch output to stdout after "
-                        + completedRecords + " complete " + recordNoun
-                        + "; current record may be incomplete; no later records were emitted");
+                if (!emitRecord(out, err, record, completedRecords)) {
                     return 1;
                 }
                 completedRecords++;
@@ -492,5 +481,43 @@ public final class Main {
             return 2;
         }
         return anyFailed ? 1 : 0;
+    }
+
+    /**
+     * Emits ONE batch record — body, NUL terminator, flush, and the stdout-delivery check —
+     * and reports whether it was actually delivered.
+     *
+     * <p>THE ONE emission path for every record shape, ordinary and oversized-error alike.
+     * {@link PrintStream} swallows write/flush {@code IOException}s into a sticky flag, so an
+     * emission site that forgets {@link PrintStream#checkError()} loses a broken pipe
+     * silently. That is not hypothetical: the {@code TooLongException} arm previously wrote
+     * its terminal error record inline and skipped the check, so a failed delivery of THAT
+     * record produced exit 1 (from the oversize) with an EMPTY stderr — the caller was never
+     * told stdout had failed, and the record it was told to trust could be absent or
+     * truncated (Marlow review 592). Funnelling both sites here makes the check structural
+     * rather than remembered, so a future third emission site inherits it by construction.
+     *
+     * <p>{@code completedRecords} is the count of PRIOR verified-complete records and is
+     * reported unchanged: the consumer needs to know how much of the stream is trustworthy,
+     * because the current record may be truncated.
+     *
+     * @return {@code true} when the record reached stdout; {@code false} after reporting a
+     *     delivery failure, in which case the caller must stop and exit nonzero
+     */
+    private static boolean emitRecord(PrintStream out, PrintStream err, String record,
+            int completedRecords) {
+        out.print(record);
+        out.write(0); // NUL record terminator (SVGs never contain NUL)
+        out.flush(); // progressive: this record reaches the consumer before the next is processed
+        if (out.checkError()) {
+            // The downstream consumer went away (e.g. a broken pipe): without this check we
+            // would keep reading an unbounded stdin and rendering into a dead pipe.
+            String recordNoun = completedRecords == 1 ? "record" : "records";
+            err.println("lattex: error: failed to write batch output to stdout after "
+                + completedRecords + " complete " + recordNoun
+                + "; current record may be incomplete; no later records were emitted");
+            return false;
+        }
+        return true;
     }
 }
