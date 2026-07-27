@@ -359,3 +359,62 @@ LatteX is a **clean-room** implementation. Before contributing, read [CONTRIBUTI
 ## Disclaimer
 
 This project is provided under the Apache License 2.0 on an "AS IS" basis, without warranties or conditions of any kind. See the LICENSE file for details.
+
+## Trusted equation transitions
+
+`InteractiveMath` is a separate trusted-host API for presenting an initial
+equation and an alternate form. It renders both endpoints independently through
+LatteX's unchanged static renderer, then progressively enhances them with an
+honest whole-expression FLIP/crossfade. It does **not** claim to morph matching
+glyphs, and it does not add a directive to the author-controlled `\lx` grammar.
+
+```java
+import com.lattex.api.InteractiveMath;
+import com.lattex.api.InteractiveOptions;
+import com.lattex.api.InteractiveResult;
+
+InteractiveResult result = InteractiveMath.render(
+    "\\frac{a}{b}",
+    "\\frac{b}{a}",
+    InteractiveOptions.defaults().withDurationMillis(320));
+
+if (result.status() != InteractiveResult.Status.FAILED) {
+    String html = result.html(); // interactive component or one exact static SVG
+}
+```
+
+Serve the two trusted assets separately and load the script with `defer`:
+
+```java
+InteractiveMath.stylesCss(); // serve as /css/lattex-interactive.css
+InteractiveMath.runtimeJs(); // serve as /js/lattex-interactive.js
+```
+
+```html
+<link rel="stylesheet" href="/css/lattex-interactive.css">
+<script defer src="/js/lattex-interactive.js"></script>
+```
+
+The runtime adds hover preview and an explicit keyboard/click control, honors
+`prefers-reduced-motion`, and cleans up detached or document-adopted components.
+For dynamically inserted content call `LatteXInteractive.init(scope)`; call
+`LatteXInteractive.destroy(scope)` before explicit teardown. Initialization and
+teardown are idempotent. With CSS but no successful JavaScript initialization,
+both labeled equations remain readable and the control stays hidden.
+
+The default duration is 240 ms and the accepted range is 0–2000 ms. The current
+trusted endpoint contract is fixed-size: fluid `RenderOptions` are rejected
+because their inline style is outside the pinned minimal-SVG subset. If exactly
+one endpoint fails validation or rendering, the typed `STATIC_FALLBACK` result
+carries the other exact static SVG; `FAILED` never carries a half-built
+component. Combined source, endpoint output, and assembled component sizes are
+independently capped, and each endpoint is revalidated against the current
+`svg/g/path/rect` contract before it enters the wrapper.
+
+For non-JVM extraction, take both resources from the same JAR version used to
+render:
+
+```bash
+unzip -p lattex-0.11.0.jar com/lattex/interactive/lattex-interactive.js  > static/js/lattex-interactive.js
+unzip -p lattex-0.11.0.jar com/lattex/interactive/lattex-interactive.css > static/css/lattex-interactive.css
+```
