@@ -264,13 +264,23 @@ The version is a real immutable release — pin it, and it can never silently ch
 under you (a LatteX update is an explicit version bump).
 
 **Error handling — one typed channel, never an `Error`.** Every public render entry
-(`render`, `renderInline`, `renderFragment`, `renderStyledHtml`) throws exactly one
-exception type: `com.lattex.parse.MathSyntaxException`. A genuine syntax error carries
+(`render`, `renderInline`, `renderFragment`, `renderStyledHtml`) routes every *rendering*
+failure through one exported supertype: **`com.lattex.api.LatteXException`**. Catch that.
+The concrete type is still `com.lattex.parse.MathSyntaxException` (it extends
+`LatteXException`, which extends `IllegalArgumentException`), so existing code catching
+either of those keeps working unchanged — but `com.lattex.parse` is **not exported**, so a
+consumer with its own `module-info` that `requires com.lattex` cannot name it at all. Catch
+the exported supertype and modular and classpath consumers behave identically.
+
+This matters for more than tidiness: `renderFragment` also throws a **bare**
+`IllegalArgumentException` for a non-finite or non-positive `fontSizePx`. Catching
+`LatteXException` distinguishes "your LaTeX is malformed" from "you passed a bad
+parameter"; catching `IllegalArgumentException` conflates them. A genuine syntax error carries
 the source offset and a caret-pointing `caretString()` for author-facing messages; an
 unexpected internal failure in layout/emit is *contained* into the same channel (message
 prefixed `internal render failure`, original failure preserved as the cause) — so a
 `StackOverflowError` or renderer bug can never escape and kill the calling thread. Catch
-`MathSyntaxException`, show the caret, move on. (`OutOfMemoryError` is deliberately not
+`LatteXException`, show the caret, move on. (`OutOfMemoryError` is deliberately not
 caught.) For batch pipelines that must degrade per-formula instead of per-page, use
 `renderWithDiagnostics` — it NEVER throws and returns `RenderResult{svg, Diagnostics}`
 with a Sirentide-parity outcome (`OK`/`PARSE_ERROR`/`RENDER_BUG`…), stage, message, and
@@ -287,6 +297,24 @@ try {
     log.warn("math failed:\n{}", e.caretString()); // fall back to verbatim source
 }
 ```
+
+On the **classpath** (the common case) keep catching the concrete type as above — it is
+what carries `offset()`, `source()`, and the caret. Inside a **module**, catch the
+exported supertype instead:
+
+```java
+try {
+    String svg = com.lattex.api.LatteX.render(userInput);
+} catch (com.lattex.api.LatteXException e) {
+    log.warn("math failed: {}", e.getMessage());
+}
+```
+
+A known limit, stated rather than glossed: `caretString()`, `offset()`, and `source()` are
+declared on the concrete `MathSyntaxException`, so a modular consumer can *catch* every
+render failure but cannot reach the caret data. If you need author-facing carets from
+inside a module today, use `renderWithDiagnostics` — it never throws and returns the caret
+as data, through exported types only.
 
 **Inline math on the text baseline.** `renderInline` gives you the SVG; for prose
 embedding use `renderInlineResult` — the same SVG plus baseline metrics, so the

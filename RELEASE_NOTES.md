@@ -6,6 +6,36 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### A modular consumer can now catch LatteX's render failures (public-contract fix)
+
+- **The documented exception was unnameable from a module.** `LatteX.render`'s javadoc
+  publicly documented `@throws com.lattex.parse.MathSyntaxException`, but `module-info`
+  exports only `com.lattex.api`. A consumer with its own `module-info` doing
+  `requires com.lattex` got `package com.lattex.parse is not visible` — it could not name
+  the type it was documented to catch. The only fallback was `IllegalArgumentException`,
+  which `renderFragment` ALSO throws for a non-finite `fontSizePx`, so a modular consumer
+  could not distinguish *"your LaTeX is malformed"* from *"you passed a bad parameter."*
+- **New exported supertype `com.lattex.api.LatteXException`.** The hierarchy is now purely
+  additive at the top: `IllegalArgumentException → LatteXException → MathSyntaxException`.
+  `MathSyntaxException` is unmoved, still `public final`, still thrown from exactly where it
+  was — only its `extends` clause changed. Existing callers catching it by name, and callers
+  catching the broader `IllegalArgumentException`, are unaffected.
+- **The module fence is NOT widened.** `module-info` is byte-identical; `com.lattex.parse`
+  remains unexported. A test compiles two *real* modules against the built modular jar and
+  asserts both directions — that catching `LatteXException` compiles and works, and that
+  naming `com.lattex.parse.MathSyntaxException` still fails with "not visible". If the fence
+  is ever widened, that negative case goes red.
+- **`serialVersionUID` on `MathSyntaxException` is bumped 2 → 3.** Inserting a superclass is
+  an incompatible serialization change (a class's position in the hierarchy is part of its
+  serialized form). Nothing in LatteX serializes exceptions, so this is theoretical — but the
+  bump makes any such attempt fail as a named `InvalidClassException` instead of an obscure
+  hierarchy mismatch.
+- **Known limit:** `caretString()`, `offset()`, and `source()` remain declared on the concrete
+  `MathSyntaxException`, so a modular consumer can catch every failure but cannot reach the
+  caret data. Use `renderWithDiagnostics` (never throws, returns the caret as data through
+  exported types) from inside a module. Lifting those accessors onto the exported supertype is
+  a candidate follow-up, deliberately not bundled here.
+
 ### `cancel` now works through the `tryRenderMath` seam (bug fix)
 
 - **The split-wrapper seam stamped `cancel`'s container hook without its glyph

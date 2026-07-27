@@ -238,6 +238,10 @@ public final class LatteX {
      * @param latex the LaTeX math source (without surrounding {@code $} delimiters)
      * @param opts  the styling options (never {@code null})
      * @return the SVG document
+     * @throws LatteXException if {@code latex} does not parse or the render is
+     *         contained — the exported supertype of the concrete
+     *         {@code com.lattex.parse.MathSyntaxException} actually thrown, so a
+     *         modular consumer can name what it catches
      */
     public static String render(String latex, RenderOptions opts) {
         java.util.Objects.requireNonNull(opts, "opts");
@@ -357,8 +361,11 @@ public final class LatteX {
      * @return the laid-out {@link MathFragment}
      * @throws IllegalArgumentException if {@code fontSizePx} is not a finite value in
      *         {@code (0, MAX_FRAGMENT_FONT_SIZE]}
-     * @throws com.lattex.parse.MathSyntaxException if {@code latex} does not parse —
-     *         same error behavior as {@link #render(String)}; the consumer catches it
+     * @throws LatteXException if {@code latex} does not parse — same error behavior as
+     *         {@link #render(String)}. This is the exported supertype of the concrete
+     *         {@code com.lattex.parse.MathSyntaxException} thrown, and it is DISTINCT
+     *         from the plain {@code IllegalArgumentException} above: a consumer can
+     *         tell a malformed-LaTeX failure from a bad-argument failure
      */
     public static MathFragment renderFragment(String latex, double fontSizePx) {
         if (!Double.isFinite(fontSizePx) || fontSizePx <= 0.0 || fontSizePx > MAX_FRAGMENT_FONT_SIZE) {
@@ -636,7 +643,8 @@ public final class LatteX {
      *
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @return {@code ""} or a leading-space-prefixed {@code data-lx-fx-*} attribute run
-     * @throws com.lattex.parse.MathSyntaxException if {@code latex} does not parse
+     * @throws LatteXException if {@code latex} does not parse (the exported supertype of
+     *         the concrete {@code com.lattex.parse.MathSyntaxException} thrown)
      */
     /**
      * @deprecated Parse-only: it structurally cannot carry the layout-derived
@@ -807,6 +815,9 @@ public final class LatteX {
                 : "the " + describe(index) + "th root of " + describe(radicand);
             case Spacing _ -> "";
             case MathNode.Colored c -> describe(c.body()); // color is presentation; speak the content
+            // A forced atom class only steers inter-atom glue; there is nothing to
+            // speak, so the wrapper is transparent (like StyleSwitch).
+            case MathNode.ClassOverride co -> describe(co.body());
             case MathNode.Boxed bx -> "boxed " + describe(bx.body());
             case MathNode.Cancel c -> switch (c.kind()) {
                 case CANCELTO -> describe(c.body()) + " cancels to " + describe(c.to());
@@ -886,7 +897,8 @@ public final class LatteX {
      *
      * @param latex a LaTeX math expression
      * @return {@code <math xmlns="http://www.w3.org/1998/Math/MathML">…</math>}
-     * @throws com.lattex.parse.MathSyntaxException if {@code latex} does not parse
+     * @throws LatteXException if {@code latex} does not parse (the exported supertype of
+     *         the concrete {@code com.lattex.parse.MathSyntaxException} thrown)
      */
     public static String toMathML(String latex) {
         return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
@@ -928,6 +940,10 @@ public final class LatteX {
             case MathNode.Colored c ->
                 "<mstyle mathcolor=\"" + xmlEscape(c.color().svgValue()) + "\">"
                     + toMathML(c.body()) + "</mstyle>";
+            // The forced class steers TeX-style inter-atom spacing in the SVG layout
+            // only; MathML spaces from its own operator dictionary and takes no such
+            // hint, so this wrapper is transparent here, like StyleSwitch.
+            case MathNode.ClassOverride co -> toMathML(co.body());
             case MathNode.Boxed bx ->
                 "<menclose notation=\"box\">" + toMathML(bx.body()) + "</menclose>";
             case MathNode.Cancel c -> switch (c.kind()) {
