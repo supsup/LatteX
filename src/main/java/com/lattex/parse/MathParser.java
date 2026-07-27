@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import static com.lattex.parse.Symbols.ACCENTS;
+import static com.lattex.parse.Symbols.ATOM_CLASS_WRAPPERS;
 import static com.lattex.parse.Symbols.BIG_OPERATORS;
 import static com.lattex.parse.Symbols.FONT_VARIANTS;
 import static com.lattex.parse.Symbols.NAMED_OPS;
@@ -1229,6 +1230,17 @@ public final class MathParser {
                 MathVariant.Style variant = FONT_VARIANTS.get(name);
                 MathNode arg = parseFontArg(name);
                 return MathVariant.apply(variant, arg);
+            }
+            case ATOM_CLASS -> {
+                // Atom-class wrapper (\mathopen \mathclose \mathord \mathbin \mathrel
+                // \mathpunct): the SAME "\mathX{arg}" surface shape as a font variant,
+                // but the argument is spacing-class-overridden rather than glyph-
+                // remapped. An empty group (\mathopen{}, which LaTeXML emits as a bare
+                // zero-width open-class marker) is accepted — parseFontArg only rejects
+                // a MISSING argument, and "{}" parses to an empty MathList.
+                MathClass forcedClass = ATOM_CLASS_WRAPPERS.get(name);
+                MathNode arg = parseFontArg(name);
+                return new MathNode.ClassOverride(arg, forcedClass);
             }
             case NAMED_OPERATOR -> {
                 // Predefined named operator (\sin \cos \lim \max …).

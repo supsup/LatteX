@@ -53,7 +53,7 @@ class CommandRegistryTest {
                 case SYMBOL, BIG_OPERATOR, NAMED_OPERATOR, SPACE, MATHSTRUT, BMOD ->
                     GrammarKind.SYMBOL;
                 case NOT -> GrammarKind.PREFIX;
-                case ACCENT, FONT_VARIANT, BOXED, CANCEL, BRA, KET, BRAKET, SUBSTACK,
+                case ACCENT, FONT_VARIANT, ATOM_CLASS, BOXED, CANCEL, BRA, KET, BRAKET, SUBSTACK,
                         PHANTOM, HPHANTOM, VPHANTOM, UNDERBRACE, OVERBRACE, BORDER_MATRIX,
                         OPERATOR_NAME, PMOD, LABEL -> GrammarKind.ONE_ARGUMENT;
                 case FRACTION, CONTINUED_FRACTION, DISPLAY_FRACTION, TEXT_FRACTION,
