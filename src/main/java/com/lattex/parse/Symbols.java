@@ -226,6 +226,24 @@ final class Symbols {
      * bundled STIX script alphabet; {@code \boldsymbol}/{@code \bm} additionally
      * bold Greek (which {@code \mathbf} leaves upright, matching LaTeX).
      */
+    /**
+     * Atom-class wrapper commands -> the {@link MathClass} they force on their
+     * argument: TeX's noad-class-override primitives (TeXbook Ch.17). Same
+     * {@code \mathX{content}} surface shape as {@link #FONT_VARIANTS}, but the
+     * argument is NOT rewritten — it lays out unchanged and only the class the
+     * enclosing row spaces it as changes (see {@link MathNode.ClassOverride}).
+     * This table is the sole source for both the {@link CommandRegistry}
+     * descriptors and the parser's forced-class lookup, so a name can never be
+     * accepted in one place and unknown in the other.
+     */
+    static final Map<String, MathClass> ATOM_CLASS_WRAPPERS = Map.of(
+        "mathopen", MathClass.OPEN,
+        "mathclose", MathClass.CLOSE,
+        "mathord", MathClass.ORD,
+        "mathbin", MathClass.BIN,
+        "mathrel", MathClass.REL,
+        "mathpunct", MathClass.PUNCT);
+
     static final Map<String, MathVariant.Style> FONT_VARIANTS = Map.ofEntries(
         Map.entry("mathbb", MathVariant.Style.BLACKBOARD),
         Map.entry("mathcal", MathVariant.Style.SCRIPT),

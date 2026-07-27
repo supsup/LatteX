@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import static com.lattex.parse.Symbols.ACCENTS;
+import static com.lattex.parse.Symbols.ATOM_CLASS_WRAPPERS;
 import static com.lattex.parse.Symbols.BIG_OPERATORS;
 import static com.lattex.parse.Symbols.FONT_VARIANTS;
 import static com.lattex.parse.Symbols.NAMED_OPS;
@@ -76,8 +77,13 @@ public final class MathParser {
     // guards and crashes the render thread. Both caps instead throw
     // MathSyntaxException (a caught RuntimeException) with a clear message.
 
-    /** Maximum accepted source length, in {@code char}s. */
-    static final int MAX_SOURCE_LENGTH = 100_000;
+    /**
+     * Maximum accepted source length, in {@code char}s. {@code public} (LTX-09,
+     * plan ac28238e) so the CLI's streaming stdin/batch reader can enforce the
+     * identical cap DURING the read — single-sourced, so the transport-level
+     * read limit can never drift from the parser's own limit.
+     */
+    public static final int MAX_SOURCE_LENGTH = 100_000;
 
     /** Maximum recursive nesting depth (groups, arguments, scripts, fences). */
     static final int MAX_DEPTH = 512;
@@ -245,6 +251,22 @@ public final class MathParser {
      * silently corrupted {@code \text{$\frac{12}{34}$}} into {@code \frac1234} —
      * Conf review lattex/210 F1). Brace-invisibility for the LITERAL text runs is
      * applied later, in {@link #textWithNestedMath}, never to a math span.
+     *
+     * <p>Only GENUINELY UNESCAPED braces move the depth counter that finds the
+     * closing {@code '}'}. A backslash starts a CONTROL SYMBOL: the backslash and
+     * the single token it escapes are consumed as ONE atomic unit — exactly as the
+     * top-level lexer treats an escape ({@link #lex} {@code case '\\'}) — copied
+     * verbatim and never re-read. So {@code \{}/{@code \}} stay literal braces
+     * (decoded later in {@link #literalText}) and leave depth untouched, while a
+     * brace that merely FOLLOWS a control symbol — the {@code '{'} in {@code \\{}
+     * (an even backslash run: {@code \\} is one control symbol, e.g. a
+     * {@code \substack} row separator inside a nested {@code $…$} span) — is judged
+     * structural on its own. The earlier fix special-cased only {@code \{}/{@code \}}
+     * and did not consume {@code \\} atomically, so it re-read the second backslash
+     * of {@code \\{} as an escape of the following brace and DROPPED that brace's
+     * structural role — regressing {@code \text{$\substack{a\\{b}}$}} and
+     * {@code \text{$\substack{a\\}$}} (Marlow exact-tip review of 400002b; the
+     * original escaped-brace fix was Marlow's review of f4c0df90; plan d2f3447c).
      */
     private static int lexTextArgument(String s, String command, int i, List<Token> out, int start) {
         int n = s.length();
@@ -260,7 +282,30 @@ public final class MathParser {
         int depth = 1;
         while (i < n) {
             char c = s.charAt(i);
-            if (c == '{') {
+            if (c == '\\' && i + 1 < n) {
+                // A backslash starts a CONTROL SYMBOL: consume the backslash AND
+                // the single token it escapes as ONE atomic unit, mirroring the
+                // top-level lexer (lex() case '\\', which reads '\' + the escaped
+                // char for a non-letter control sequence). Copy BOTH chars verbatim
+                // and advance past both so the escaped token is NEVER re-read as a
+                // fresh escape. Consequences: \{ / \} stay LITERAL braces (decoded
+                // later in literalText) and do NOT move depth; and \\ is consumed
+                // whole, so a brace right AFTER it (the '{' in \\{) is judged
+                // structural on its own — fixing the regression where the second
+                // backslash of \\{ was mistaken for an escape of the following
+                // brace, dropping that brace's structural role. A backslash with no
+                // following char (i+1 == n) falls through to the default arm, keeps
+                // the existing "Unbalanced brace" dangling-backslash error path.
+                // The escaped token is a CODE POINT, not a char: a supplementary
+                // escape (\<emoji>) is a surrogate PAIR, and consuming a fixed 2
+                // chars would split it — copying the high surrogate as "the escaped
+                // token" and leaving the low surrogate to be re-read as a separate
+                // character (Marlow review 474).
+                sb.append(c);
+                int escaped = s.codePointAt(i + 1);
+                sb.appendCodePoint(escaped);
+                i += 1 + Character.charCount(escaped);
+            } else if (c == '{') {
                 depth++;
                 sb.append(c); // interior brace: KEEP (verbatim content)
                 i++;
@@ -1186,6 +1231,17 @@ public final class MathParser {
                 MathNode arg = parseFontArg(name);
                 return MathVariant.apply(variant, arg);
             }
+            case ATOM_CLASS -> {
+                // Atom-class wrapper (\mathopen \mathclose \mathord \mathbin \mathrel
+                // \mathpunct): the SAME "\mathX{arg}" surface shape as a font variant,
+                // but the argument is spacing-class-overridden rather than glyph-
+                // remapped. An empty group (\mathopen{}, which LaTeXML emits as a bare
+                // zero-width open-class marker) is accepted — parseFontArg only rejects
+                // a MISSING argument, and "{}" parses to an empty MathList.
+                MathClass forcedClass = ATOM_CLASS_WRAPPERS.get(name);
+                MathNode arg = parseFontArg(name);
+                return new MathNode.ClassOverride(arg, forcedClass);
+            }
             case NAMED_OPERATOR -> {
                 // Predefined named operator (\sin \cos \lim \max …).
                 OpSpec op = NAMED_OPS.get(name);
@@ -1732,19 +1788,60 @@ public final class MathParser {
     }
 
     /**
+     * The text-mode control-symbol decode table (plan d2f3447c, Marlow audit LTX-12,
+     * follow-up to the text-flatten fix of plan 08eed9a5). A single-char escape
+     * {@code \X} where {@code X} is one of these keys decodes to the mapped literal
+     * character — the LaTeX control-symbol convention for characters that are
+     * otherwise "reserved" or ambiguous in a literal run: {@code \%} and {@code \#}
+     * (comment/parameter markers in real LaTeX, plain text here), {@code \_} and
+     * {@code \&} (subscript/tab markers there, plain text here), {@code \{} and
+     * {@code \}} (the way to get a literal brace when bare braces are invisible
+     * grouping), and {@code \$} (the pre-existing escape — {@code $} toggles math,
+     * so this is the only way to write a literal dollar). {@code \,} (the
+     * thin-space spacing command) is also decoded, to a plain space: math mode
+     * gives {@code \,} its own sub-em {@link MathNode.Spacing} node (see
+     * {@code Symbols.SPACES}), but {@link com.lattex.parse.MathNode.TextRun} is a
+     * flat string with no sub-em spacing primitive to target, so the nearest
+     * faithful decode is an ordinary word-space — real-world unit expressions
+     * lean on it (e.g. {@code \mathrm{m\,s^{-1}}}, {@code \mathrm{J\,K^{-1}}} in
+     * the wild corpus) and a hard rejection there would be a regression, not a fix.
+     *
+     * <p>{@code \\} is deliberately NOT in this table. In standard LaTeX text mode
+     * {@code \\} is a line break; LatteX's {@link com.lattex.parse.MathNode.TextRun}
+     * has no line-break primitive (a text run lays out as one line), so there is no
+     * faithful decode target — silently emitting a space or swallowing it outright
+     * would be an unstated, surprising content change. It falls through to the
+     * generic reject-loud path below like any other unsupported escape.
+     */
+    private static final Map<Character, Character> TEXT_CONTROL_SYMBOLS = Map.of(
+        '$', '$',
+        '%', '%',
+        '#', '#',
+        '{', '{',
+        '}', '}',
+        '_', '_',
+        '&', '&',
+        ',', ' ');
+
+    /**
      * A LITERAL text segment: grouping braces become invisible (exactly the old
-     * lexer-level stripping, relocated here so math spans keep theirs), and
-     * {@code \$} → {@code $} — with {@code $} toggling math, the escape is the
-     * only way to write a literal dollar in text (matches LaTeX).
+     * lexer-level stripping, relocated here so math spans keep theirs), and a
+     * backslash escape resolves one of two ways — never a third, silent one.
      *
      * <p>The supported-in-text set is EXPLICIT: plain characters (spaces
-     * significant), the {@code \$} escape, invisible grouping braces, and — at
-     * the caller's level — nested math via {@code $…$}. A command token
-     * ({@code \} + letters) in a literal segment fails LOUD here: the parser
-     * expands NO commands inside a text run, and the old behavior silently
-     * flattened them to literal characters with the braces dropped
-     * ({@code \text{blah \frac{a}{b}}} served "blah \fracab";
-     * {@code \text{…\eqref{elliptic}}} served "\eqrefelliptic" — plan 08eed9a5).
+     * significant), invisible grouping braces, the {@link #TEXT_CONTROL_SYMBOLS}
+     * escapes (decode to their literal character), and — at the caller's level —
+     * nested math via {@code $…$}. Everything else backslash-led fails LOUD:
+     * a command token ({@code \} + letters, e.g. {@code \frac}), an unmapped
+     * control symbol (e.g. {@code \\}, {@code \^}), or a dangling trailing
+     * backslash. The parser expands NO commands inside a text run, and the old
+     * behavior silently flattened multi-letter commands to literal characters
+     * with the braces dropped ({@code \text{blah \frac{a}{b}}} served
+     * "blah \fracab"; {@code \text{…\eqref{elliptic}}} served "\eqrefelliptic" —
+     * plan 08eed9a5) while unmapped single-char escapes like {@code \%}/{@code \#}
+     * kept their literal backslash instead of decoding OR rejecting
+     * ({@code \text{50\%}} served "50\%" — plan d2f3447c, LTX-12). Neither shape
+     * is acceptable: a supported escape decodes, everything else fails loud.
      * The {@code $…$} toggle is the one supported way to put a command inside
      * {@code \text}.
      */
@@ -1755,10 +1852,11 @@ public final class MathParser {
         StringBuilder sb = new StringBuilder(s.length());
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
-            if (c == '\\' && i + 1 < s.length() && s.charAt(i + 1) == '$') {
-                sb.append('$');
-                i++;
-            } else if (c == '\\' && i + 1 < s.length() && isAsciiLetter(s.charAt(i + 1))) {
+            if (c == '\\' && i + 1 >= s.length()) {
+                throw MathSyntaxException.unknownCommand(
+                    "Unknown command in \\" + t.name() + ": trailing '\\' with nothing to escape",
+                    t.offset());
+            } else if (c == '\\' && isAsciiLetter(s.charAt(i + 1))) {
                 int j = i + 1;
                 while (j < s.length() && isAsciiLetter(s.charAt(j))) {
                     j++;
@@ -1767,11 +1865,96 @@ public final class MathParser {
                     "Unknown command in \\" + t.name() + ": \\" + s.substring(i + 1, j)
                         + " — commands are not expanded in text; wrap math in $...$",
                     t.offset());
+            } else if (c == '\\' && TEXT_CONTROL_SYMBOLS.containsKey(s.charAt(i + 1))) {
+                sb.append(TEXT_CONTROL_SYMBOLS.get(s.charAt(i + 1)));
+                i++;
+            } else if (c == '\\') {
+                throw MathSyntaxException.unknownCommand(
+                    "Unknown command in \\" + t.name() + ": \\" + escapedTokenDisplay(s, i + 1)
+                        + " — commands are not expanded in text; wrap math in $...$",
+                    t.offset());
             } else if (c != '{' && c != '}') {
                 sb.append(c);
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * Renders the escaped token at {@code i} for an unsupported-escape DIAGNOSTIC.
+     *
+     * <p>{@code Diagnostics.message} promises a human-readable sentence SAFE FOR UI AND
+     * LOGS, so the rejecting message must never itself carry a character that cannot
+     * cross that boundary. Author input is untrusted here by definition — the token is
+     * being rejected precisely because it is not something we accept — so this method
+     * decides display, never the reject/accept outcome.
+     *
+     * <p>Which code points are unsafe is decided by {@link #isUnsafeInDiagnostic} — see
+     * there for the classes and the invariant behind them. Deliberately NOT restated
+     * here: an enumeration in two places is how this drifts, and this javadoc has
+     * already been wrong once for exactly that reason.
+     *
+     * <p>Anything safe — including a well-formed supplementary escape like
+     * {@code \}+emoji — is shown verbatim as its COMPLETE code point; reading
+     * {@code charAt(i)} alone would emit a bare high surrogate and corrupt a legal
+     * character.
+     *
+     * <p>Rejecting the escape is unchanged; only how the offending token is DISPLAYED
+     * differs.
+     */
+    private static String escapedTokenDisplay(String s, int i) {
+        int cp = s.codePointAt(i);
+        if (isUnsafeInDiagnostic(cp)) {
+            return String.format("U+%04X", cp);
+        }
+        return new String(Character.toChars(cp));
+    }
+
+    /**
+     * True when {@code cp} must not appear VERBATIM in a diagnostic message.
+     *
+     * <p>The predicate is stated as a question about the OUTPUT CONTRACT — "can this
+     * character cross the safe-for-UI/log boundary?" — rather than as a list of
+     * characters that have bitten us. Enumerating instances is how this got fixed three
+     * times: unpaired surrogates (Marlow 474), then the ISO-control class (Marlow 602),
+     * then the separator and format classes (Marlow 612). Each repair was correct and
+     * each was too narrow, because the previous one answered "which character?" instead
+     * of "which property?".
+     *
+     * <p>Unsafe classes, and why each is separately harmful rather than untidy:
+     *
+     * <ul>
+     *   <li>UNPAIRED SURROGATE — not legal text at all; corrupts the message carrying it.</li>
+     *   <li>ISO CONTROL (Cc) — NUL truncates C consumers, ESC can drive a terminal escape
+     *       sequence, LF forges a second log line out of author-controlled input.</li>
+     *   <li>LINE/PARAGRAPH SEPARATOR (Zl, Zp — U+2028, U+2029) — line terminators to
+     *       JavaScript and to many log readers, so they forge structure exactly like LF
+     *       while not being ISO controls.</li>
+     *   <li>FORMAT (Cf — U+202E RIGHT-TO-LEFT OVERRIDE, zero-width joiners, and friends)
+     *       — invisible, and a bidi override can REORDER the surrounding sentence in a
+     *       terminal or UI, so untrusted input can rewrite how the rejection that names
+     *       it appears to read.</li>
+     * </ul>
+     *
+     * <p>All four share one property: the character changes how the message is
+     * STRUCTURED or DISPLAYED rather than contributing a glyph to it. That is the actual
+     * invariant, and a fifth class meeting it should be added here rather than
+     * special-cased at a call site.
+     */
+    private static boolean isUnsafeInDiagnostic(int cp) {
+        if (Character.isBmpCodePoint(cp) && Character.isSurrogate((char) cp)) {
+            return true; // unpaired surrogate
+        }
+        if (Character.isISOControl(cp)) {
+            return true; // Cc
+        }
+        return switch (Character.getType(cp)) {
+            case Character.LINE_SEPARATOR,       // Zl — U+2028
+                 Character.PARAGRAPH_SEPARATOR,  // Zp — U+2029
+                 Character.FORMAT                // Cf — U+202E and the invisible formatters
+                 -> true;
+            default -> false;
+        };
     }
 
     /**

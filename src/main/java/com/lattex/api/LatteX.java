@@ -586,7 +586,8 @@ public final class LatteX {
         // The fx half rides the SAME stamping source as fxContainerAttrs — one
         // producer, so the two public shapes cannot drift.
         sb.append(fxAttrs(fx));
-        // Token-identity sidecar for the `thread` effect (renderer-derived, [0-9a-f:,;]).
+        // Token-identity sidecar for the `thread` AND `cancel` effects (renderer-derived,
+        // [0-9a-f:,;]); the caller decides presence via the shared usesGlyphmap gate.
         if (!glyphmap.isEmpty()) {
             sb.append(" data-lx-glyphmap=\"").append(glyphmap).append('"');
         }
@@ -687,9 +688,11 @@ public final class LatteX {
      * Render a LaTeX math expression AND its container attributes from one parse+layout —
      * the sanctioned producer path for a consumer that builds its own wrapper element
      * (seam sign-off: lattex room seq 163→165). The {@code data-lx-glyphmap} token-identity
-     * sidecar (present only when a {@code thread} effect is authored) indexes the returned
-     * SVG's {@code <path>}s in emit order; because both halves come from the same
-     * {@link Layout}, the indices cannot desync — the drift a separate attrs call would risk.
+     * sidecar rides the map under the SHARED {@link #usesGlyphmap} gate — present when a
+     * {@code thread} OR a {@code cancel} effect is authored, since both semantic effects read
+     * it — and indexes the returned SVG's {@code <path>}s in emit order; because both halves
+     * come from the same {@link Layout}, the indices cannot desync — the drift a separate
+     * attrs call would risk.
      *
      * <p>Failure semantics mirror the consumer-side {@code tryRender}: ANY failure (parse
      * error, layout overflow, emit fault) yields {@link java.util.Optional#empty()} so the
@@ -709,7 +712,12 @@ public final class LatteX {
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
-            String glyphmap = fx.effects().containsValue(Effect.THREAD)
+            // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
+            // stamping decision, so the seam and the wrapper path cannot drift on whether
+            // the sidecar rides the container. A literal THREAD check here silently left
+            // `cancel` inert on the split-wrapper consumer (it reads the sidecar to find
+            // the code point occurring exactly twice, and an absent map is not an error).
+            String glyphmap = usesGlyphmap(fx)
                 ? SvgEmitter.glyphmap(layout, font) : "";
             String groupmap = precedenceGroupmap(fx, layout, font);
             return java.util.Optional.of(new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap)));
@@ -799,6 +807,9 @@ public final class LatteX {
                 : "the " + describe(index) + "th root of " + describe(radicand);
             case Spacing _ -> "";
             case MathNode.Colored c -> describe(c.body()); // color is presentation; speak the content
+            // A forced atom class only steers inter-atom glue; there is nothing to
+            // speak, so the wrapper is transparent (like StyleSwitch).
+            case MathNode.ClassOverride co -> describe(co.body());
             case MathNode.Boxed bx -> "boxed " + describe(bx.body());
             case MathNode.Cancel c -> switch (c.kind()) {
                 case CANCELTO -> describe(c.body()) + " cancels to " + describe(c.to());
@@ -920,6 +931,10 @@ public final class LatteX {
             case MathNode.Colored c ->
                 "<mstyle mathcolor=\"" + xmlEscape(c.color().svgValue()) + "\">"
                     + toMathML(c.body()) + "</mstyle>";
+            // The forced class steers TeX-style inter-atom spacing in the SVG layout
+            // only; MathML spaces from its own operator dictionary and takes no such
+            // hint, so this wrapper is transparent here, like StyleSwitch.
+            case MathNode.ClassOverride co -> toMathML(co.body());
             case MathNode.Boxed bx ->
                 "<menclose notation=\"box\">" + toMathML(bx.body()) + "</menclose>";
             case MathNode.Cancel c -> switch (c.kind()) {
@@ -1287,7 +1302,17 @@ public final class LatteX {
      * @return the {@code lattex-fx.js} runtime source
      */
     public static String fxRuntimeJs() {
-        return bundledResource("/com/lattex/fx/lattex-fx.js");
+        return FxRuntimeHolder.JS;
+    }
+
+    /**
+     * The fx runtime JS is an immutable bundled resource; read {@code readAllBytes} once,
+     * lazily, mirroring {@link FontHolder} — not on every accessor call (plan 725c1488 /
+     * LTX-03). The class-init lazy holder is thread-safe and the String is immutable, so
+     * the returned value is byte-identical to the per-call read.
+     */
+    private static final class FxRuntimeHolder {
+        static final String JS = bundledResource("/com/lattex/fx/lattex-fx.js");
     }
 
     /**
@@ -1297,7 +1322,12 @@ public final class LatteX {
      * @return the {@code lattex-fx.css} source
      */
     public static String fxStylesCss() {
-        return bundledResource("/com/lattex/fx/lattex-fx.css");
+        return FxStylesHolder.CSS;
+    }
+
+    /** The fx styles CSS — same immutable-resource lazy-holder pattern as {@link FxRuntimeHolder}. */
+    private static final class FxStylesHolder {
+        static final String CSS = bundledResource("/com/lattex/fx/lattex-fx.css");
     }
 
     private static String bundledResource(String path) {

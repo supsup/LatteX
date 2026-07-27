@@ -276,4 +276,80 @@ class FxRuntimeJsHarnessTest {
         assertFalse(parseGlyphmap("2b:2", 3).isNull(), "index pathCount-1 must be accepted");
         assertTrue(parseGlyphmap("2b:3", 3).isNull(), "index == pathCount must refuse");
     }
+
+    // ---- pin 3: constellation global star budget (plan 62fafe76, LTX-10) --------
+
+    @Test
+    void constellationBudgetCapsTotalStarsForAHighPathCountEquation() {
+        // The bounded-fix contract: total stars stay <= the global budget however
+        // many glyph <path>s the equation has (the old sampler was per-path only,
+        // 3-14 stars each, unbounded total → an O(S^2) neighbour scan). 300 long
+        // paths would sample ~4200 stars unbudgeted; buildStars must cap them.
+        int budget = fx.getMember("STAR_BUDGET").asInt();
+        Value stars = context.eval(Source.create("js",
+            "(function () {"
+          + "  var paths = [];"
+          + "  for (var i = 0; i < 300; i++) {"
+          + "    (function (k) { paths.push({"
+          + "      getTotalLength: function () { return 400; },"        // → wants the max 14
+          + "      getScreenCTM: function () { return { a:1,b:0,c:0,d:1,e:k*5,f:k*5 }; },"
+          + "      getPointAtLength: function (d) { return { x:d, y:0 }; }"
+          + "    }); })(i);"
+          + "  }"
+          + "  return __lxInternals.buildStars(paths);"
+          + "})()"));
+        long count = stars.getArraySize();
+        assertTrue(count <= budget,
+            "total stars (" + count + ") must respect the global budget (" + budget + ")");
+        assertTrue(count > 0, "a high-path-count equation still yields a (bounded) star map");
+    }
+
+    @Test
+    void constellationWithinBudgetSamplesEveryDesiredStar() {
+        // Within budget nothing is dropped — the map is the SAME as the unbudgeted
+        // sampler (the effect must look identical when within budget). 3 paths each
+        // wanting the max 14 = 42 stars, well under budget → exactly 42.
+        Value stars = context.eval(Source.create("js",
+            "(function () {"
+          + "  var paths = [];"
+          + "  for (var i = 0; i < 3; i++) {"
+          + "    paths.push({"
+          + "      getTotalLength: function () { return 400; },"
+          + "      getScreenCTM: function () { return { a:1,b:0,c:0,d:1,e:0,f:0 }; },"
+          + "      getPointAtLength: function (d) { return { x:d, y:0 }; }"
+          + "    });"
+          + "  }"
+          + "  return __lxInternals.buildStars(paths);"
+          + "})()"));
+        assertEquals(42, stars.getArraySize(),
+            "within budget every desired star is sampled (3 paths x 14)");
+    }
+
+    // ---- pin 4: thread indexed-membership hover (plan 62fafe76, LTX-10) ----------
+
+    @Test
+    void threadHoverLightsTheIndexedTokenGroupLikeTheOldIndexOf() {
+        // The O(1) indexed-membership lookup must light EXACTLY the glyphs the old
+        // group.indexOf() scan did: code point 0x78 (x) occurs at paths 0 and 2, and
+        // 0x2b (+) at path 1. Hovering either x lights BOTH x's and recedes the +.
+        Value el = makeEl("__lxMakeEl({ 'data-lx-glyphmap': '78:0,2;2b:1' }, 3)");
+        fx.getMember("play").execute(el, "thread", "400ms");
+        Value paths = el.getMember("__paths");
+
+        paths.getArrayElement(0).getMember("__fire").execute("mouseenter");
+        assertEquals("1", paths.getArrayElement(0).getMember("style").getMember("opacity").asString(),
+            "the hovered x lights");
+        assertEquals("1", paths.getArrayElement(2).getMember("style").getMember("opacity").asString(),
+            "the OTHER x in the same token group lights (indexed membership)");
+        assertEquals("0.22", paths.getArrayElement(1).getMember("style").getMember("opacity").asString(),
+            "the unrelated + recedes");
+        assertEquals("28", paths.getArrayElement(0).getMember("style").getMember("strokeWidth").asString(),
+            "lit glyphs get the bold-stroke emphasis");
+
+        // Hovering the other member lights the identical set (symmetry of the id).
+        paths.getArrayElement(2).getMember("__fire").execute("mouseenter");
+        assertEquals("1", paths.getArrayElement(0).getMember("style").getMember("opacity").asString());
+        assertEquals("1", paths.getArrayElement(2).getMember("style").getMember("opacity").asString());
+        assertEquals("0.22", paths.getArrayElement(1).getMember("style").getMember("opacity").asString());
+    }
 }
