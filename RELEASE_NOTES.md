@@ -6,6 +6,36 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Trusted, progressively enhanced equation transitions
+
+- **Hosts can present one equation and an alternate form without weakening the
+  static SVG contract.** `InteractiveMath.render(fromLatex, toLatex)` renders
+  both endpoints independently through the existing renderer and returns a
+  typed `InteractiveResult`. This first release uses an honest
+  whole-expression FLIP/crossfade; it makes no per-glyph morph claim and adds
+  nothing to the author-controlled `\lx` grammar.
+- **Failure is typed, bounded, and fail-soft.** `INTERACTIVE` requires two
+  successful exact endpoints, `STATIC_FALLBACK` returns the one usable static
+  SVG when only one endpoint succeeds, and `FAILED` carries no partial markup.
+  Combined source, per-endpoint output, and final-component sizes have
+  independent caps. A pinned validator admits only LatteX's current
+  `svg/g/path/rect` subset and rejects handlers, links, URL-bearing values,
+  scripts, and widened attributes before assembly.
+- **Interaction is accessible progressive enhancement.** Separately bundled
+  CSS and JavaScript add hover preview and an explicit keyboard/click control,
+  keep ARIA and inert state synchronized, honor reduced motion, support
+  idempotent scoped initialization and teardown, and release detached or
+  adopted components. With CSS but no successful JavaScript initialization,
+  both labeled endpoints remain visible and the hidden control creates no
+  false affordance.
+- **The runtime stays version-locked to the renderer.** Hosts can read the
+  assets through `InteractiveMath.runtimeJs()` and
+  `InteractiveMath.stylesCss()` or extract them from the same JAR they render
+  with. Both resources are registered in GraalVM native-image reachability
+  metadata. Transition duration defaults to 240 ms and is bounded to
+  0–2000 ms; fluid endpoint options remain rejected until their wider SVG
+  style surface is deliberately admitted.
+
 ### Opt-in rendered diagnostic cards
 
 - **Hosts may render a failed formula in place without changing the default.**
