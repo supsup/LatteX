@@ -1,0 +1,462 @@
+package com.lattex.parse;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.lattex.api.LatteX;
+import org.junit.jupiter.api.Test;
+
+/// Text-mode control-symbol decoding (plan d2f3447c, Marlow audit LTX-12 — the
+/// follow-up to the text-flatten fix of plan 08eed9a5).
+///
+/// {@link SilentFlattenRegressionTest} pinned defect 1: a MULTI-letter command
+/// inside `\text{…}` (`\frac`, `\eqref`, …) failed loud instead of silently
+/// flattening. But a single-char escape that is NOT a letter — `\%`, `\#`, `\_`,
+/// `\&` — fell through neither loud nor decoded: it kept its literal backslash
+/// (`\text{50\%}` served "50\%" instead of "50%"). That is the residual this
+/// plan closes: every backslash escape in `\text` now either DECODES (the
+/// documented control-symbol set) or FAILS LOUD (everything else) — never a
+/// silent third option.
+///
+/// Coverage spans every surface literalText's output reaches from one shared
+/// traversal: the parser's own tree (`MathParserTest.pp`), Presentation-MathML
+/// (`<mtext>`), and the accessible description — which is also the only textual
+/// content the rendered SVG carries (`aria-label`; glyphs themselves are vector
+/// paths, not DOM text nodes), so `ariaOf(LatteX.render(...))` is the SVG-surface
+/// check the audit calls for.
+class TextControlSymbolTest {
+
+    private static String ariaOf(String svg) {
+        int i = svg.indexOf("aria-label=\"");
+        int j = svg.indexOf('"', i + "aria-label=\"".length());
+        return svg.substring(i + "aria-label=\"".length(), j);
+    }
+
+    // ---- red-first: the two cases cited in the audit ----------------------
+
+    @Test
+    void percentDecodesNotKeepsTheBackslash() {
+        // Pre-fix this served "50\%" (backslash retained) — neither correct
+        // LaTeX control-symbol behavior nor fail-loud.
+        assertEquals("Txt[ROMAN](50%)",
+            MathParserTest.pp(MathParser.parse("\\text{50\\%}")));
+        assertEquals("<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
+                + "<mtext>50%</mtext></math>",
+            LatteX.toMathML("\\text{50\\%}"));
+        assertEquals("50%", ariaOf(LatteX.render("\\text{50\\%}")));
+    }
+
+    @Test
+    void hashDecodesNotKeepsTheBackslash() {
+        // Pre-fix this served "tag\#1".
+        assertEquals("Txt[ROMAN](tag#1)",
+            MathParserTest.pp(MathParser.parse("\\text{tag\\#1}")));
+        assertEquals("<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
+                + "<mtext>tag#1</mtext></math>",
+            LatteX.toMathML("\\text{tag\\#1}"));
+        assertEquals("tag#1", ariaOf(LatteX.render("\\text{tag\\#1}")));
+    }
+
+    // ---- every documented control symbol decodes, on every surface --------
+
+    @Test
+    void everySupportedControlSymbolDecodesInTheParseTree() {
+        assertEquals("Txt[ROMAN](50%)", MathParserTest.pp(MathParser.parse("\\text{50\\%}")));
+        assertEquals("Txt[ROMAN](tag#1)", MathParserTest.pp(MathParser.parse("\\text{tag\\#1}")));
+        assertEquals("Txt[ROMAN](a_b)", MathParserTest.pp(MathParser.parse("\\text{a\\_b}")));
+        assertEquals("Txt[ROMAN](R&D)", MathParserTest.pp(MathParser.parse("\\text{R\\&D}")));
+        assertEquals("Txt[ROMAN](cost $5)", MathParserTest.pp(MathParser.parse("\\text{cost \\$5}")));
+        // \{ and \} decode to LITERAL braces — distinct from bare {}, which stay
+        // invisible grouping (mixed fixture: escaped vs. unescaped in one input).
+        assertEquals("Txt[ROMAN]({set})", MathParserTest.pp(MathParser.parse("\\text{\\{set\\}}")));
+        assertEquals("Txt[ROMAN](grouped)", MathParserTest.pp(MathParser.parse("\\text{{grouped}}")));
+    }
+
+    @Test
+    void everySupportedControlSymbolDecodesInMathML() {
+        assertTrue(LatteX.toMathML("\\text{50\\%}").contains("<mtext>50%</mtext>"));
+        assertTrue(LatteX.toMathML("\\text{tag\\#1}").contains("<mtext>tag#1</mtext>"));
+        assertTrue(LatteX.toMathML("\\text{a\\_b}").contains("<mtext>a_b</mtext>"));
+        assertTrue(LatteX.toMathML("\\text{R\\&D}").contains("<mtext>R&amp;D</mtext>"),
+            "MathML text content is still XML-escaped after decoding");
+        assertTrue(LatteX.toMathML("\\text{\\{set\\}}").contains("<mtext>{set}</mtext>"));
+    }
+
+    @Test
+    void everySupportedControlSymbolDecodesInTheAccessibleDescriptionAndSvg() {
+        assertEquals("50%", ariaOf(LatteX.render("\\text{50\\%}")));
+        assertEquals("tag#1", ariaOf(LatteX.render("\\text{tag\\#1}")));
+        assertEquals("a_b", ariaOf(LatteX.render("\\text{a\\_b}")));
+        // The aria-label is an XML attribute value, so & is escaped there too —
+        // the SAME escaping toMathML applies, just via SvgEmitter's own escape().
+        assertEquals("R&amp;D", ariaOf(LatteX.render("\\text{R\\&D}")));
+        assertEquals("{set}", ariaOf(LatteX.render("\\text{\\{set\\}}")));
+    }
+
+    @Test
+    void thinSpaceDecodesToAPlainSpaceNotARejectedEscape() {
+        // Pre-fix: \mathrm{J\,s} served "J\,s" (backslash-comma retained). Real
+        // corpus formulas (wild-corpus.tsv calculus-physics rows) rely on \, for
+        // unit spacing inside \mathrm{...} — decode, don't reject.
+        assertEquals("Txt[ROMAN](J s)", MathParserTest.pp(MathParser.parse("\\mathrm{J\\,s}")));
+        assertTrue(LatteX.toMathML("\\mathrm{J\\,s}").contains("<mtext>J s</mtext>"));
+        assertEquals("J s", ariaOf(LatteX.render("\\mathrm{J\\,s}")));
+    }
+
+    // ---- unsupported escapes fail loud, never silently keep the backslash --
+
+    @Test
+    void backslashBackslashFailsLoudNotDecodedToASpaceOrLineBreak() {
+        // \\ is a line break in standard LaTeX text mode; a TextRun has no
+        // line-break primitive (single-line layout), so there is no faithful
+        // decode target. It fails loud like any other unsupported escape rather
+        // than silently becoming a space or vanishing.
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\text{line1\\\\line2}"));
+        assertTrue(e.getMessage().contains("Unknown command in \\text"), e.getMessage());
+    }
+
+    @Test
+    void anUnmappedControlSymbolFailsLoud() {
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\text{a\\^b}"));
+        assertTrue(e.getMessage().contains("Unknown command in \\text: \\^"), e.getMessage());
+    }
+
+    @Test
+    void aTrailingDanglingBackslashFailsLoud() {
+        // A backslash immediately before the terminal brace, \text{oops\}, is an
+        // ESCAPED literal brace (\}) — so the argument is unterminated and fails
+        // loud as an unbalanced brace. (Before the lexTextArgument brace-escape
+        // fix this same input mis-closed early on the escaped brace and served a
+        // lone trailing backslash into literalText, which then reported the
+        // "trailing '\' with nothing to escape" error — Marlow noted that old
+        // test passed only via the very brace-counting bug under repair, so the
+        // genuine dangling-brace shape is asserted here instead.)
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\text{oops\\}"));
+        assertTrue(e.getMessage().contains("Unbalanced brace in \\text"), e.getMessage());
+    }
+
+    // ---- INDEPENDENT escaped-brace gates (Marlow exact-tip review of f4c0df90) --
+    // Each of these fails on the pre-fix lexTextArgument (which counted \{ and \}
+    // toward structural brace depth) and passes after it. They are NOT the
+    // balanced \{...\} case, whose two counting errors cancelled and hid the bug.
+
+    @Test
+    void aStandaloneEscapedLeftBraceIsALiteralBraceOnEverySurface() {
+        // Pre-fix: \{ wrongly incremented depth, so the argument looked
+        // unterminated -> "Unbalanced brace in \text argument".
+        assertEquals("Txt[ROMAN]({)", MathParserTest.pp(MathParser.parse("\\text{\\{}")));
+        assertTrue(LatteX.toMathML("\\text{\\{}").contains("<mtext>{</mtext>"));
+        assertEquals("{", ariaOf(LatteX.render("\\text{\\{}")));
+    }
+
+    @Test
+    void aStandaloneEscapedRightBraceIsALiteralBraceOnEverySurface() {
+        // Pre-fix: \} wrongly decremented depth to 0 and closed the argument
+        // early, leaving a lone trailing backslash -> trailing-backslash error.
+        assertEquals("Txt[ROMAN](})", MathParserTest.pp(MathParser.parse("\\text{\\}}")));
+        assertTrue(LatteX.toMathML("\\text{\\}}").contains("<mtext>}</mtext>"));
+        assertEquals("}", ariaOf(LatteX.render("\\text{\\}}")));
+    }
+
+    @Test
+    void anEscapedRightBraceEmbeddedInOrdinaryTextIsALiteralBraceOnEverySurface() {
+        // Pre-fix: \} closed the argument at 'a\', dropping "b}" and reporting a
+        // trailing-backslash error.
+        assertEquals("Txt[ROMAN](a}b)", MathParserTest.pp(MathParser.parse("\\text{a\\}b}")));
+        assertTrue(LatteX.toMathML("\\text{a\\}b}").contains("<mtext>a}b</mtext>"));
+        assertEquals("a}b", ariaOf(LatteX.render("\\text{a\\}b}")));
+    }
+
+    @Test
+    void anEscapedLeftBraceEmbeddedInOrdinaryTextIsALiteralBraceOnEverySurface() {
+        // Pre-fix: \{ incremented depth, so the closing brace only returned to
+        // depth 1 and the argument looked unterminated -> "Unbalanced brace".
+        assertEquals("Txt[ROMAN](a{b)", MathParserTest.pp(MathParser.parse("\\text{a\\{b}")));
+        assertTrue(LatteX.toMathML("\\text{a\\{b}").contains("<mtext>a{b</mtext>"));
+        assertEquals("a{b", ariaOf(LatteX.render("\\text{a\\{b}")));
+    }
+
+    // ---- MIXED fixture: a decoded positive beside a rejected negative -----
+
+    // ---- REGRESSION gate: an EVEN backslash run before a brace, inside a nested
+    // $…$ math span (Marlow exact-tip review 469 of 400002b; plan d2f3447c) -------
+    // The escaped-brace fix (400002b) special-cased ONLY a '\' immediately followed
+    // by '{'/'}' and did not consume a control symbol atomically. So in \\{ it copied
+    // the first '\' normally, then mistook the SECOND '\' + '{' for an escaped literal
+    // brace — dropping that '{'s structural role. But \\ is ONE control symbol (a
+    // \substack row separator; $…$ re-enters math mode where \\ is valid) and the
+    // brace AFTER it must stay structural. lexTextArgument now consumes '\' + its
+    // escaped token as one unit (mirroring the top-level lexer), so these parse again.
+    //
+    // Both repros are asserted against main's behaviour (exit 0, the structure below)
+    // AND against their DIRECT nested-math equivalent — the same math parsed straight,
+    // without the \text{$…$} re-parse — which cannot regress via lexTextArgument and
+    // pins that the text-embedded span yields an identical tree on every surface.
+
+    @Test
+    void evenBackslashRunBeforeBraceInNestedMathParsesTwoRowSubstack_parseTree() {
+        // \text{$\substack{a\\{b}}$}: main -> two-row substack {a}{b}; tip pre-fix
+        // threw "Unpaired '$' in \text argument". The whole \text is a single math
+        // span, so it collapses to just the substack node — identical to the direct
+        // \substack{a\\{b}}.
+        String embedded = MathParserTest.pp(MathParser.parse("\\text{$\\substack{a\\\\{b}}$}"));
+        String direct = MathParserTest.pp(MathParser.parse("\\substack{a\\\\{b}}"));
+        assertEquals("Mat[SUBSTACK](A(a,ORD)\\\\A(b,ORD))", embedded);
+        assertEquals(direct, embedded, "text-embedded span must match the direct math");
+    }
+
+    @Test
+    void trailingEvenBackslashRunInNestedMathParsesSubstack_parseTree() {
+        // \text{$\substack{a\\}$}: main -> substack with a leading row 'a' and a
+        // trailing row separator (a single 'a' row in the tree); tip pre-fix threw
+        // "Unbalanced brace in \text argument".
+        String embedded = MathParserTest.pp(MathParser.parse("\\text{$\\substack{a\\\\}$}"));
+        String direct = MathParserTest.pp(MathParser.parse("\\substack{a\\\\}"));
+        assertEquals("Mat[SUBSTACK](A(a,ORD))", embedded);
+        assertEquals(direct, embedded, "text-embedded span must match the direct math");
+    }
+
+    @Test
+    void evenBackslashRunBeforeBraceInNestedMathParsesTwoRowSubstack_mathML() {
+        String embedded = LatteX.toMathML("\\text{$\\substack{a\\\\{b}}$}");
+        assertEquals(LatteX.toMathML("\\substack{a\\\\{b}}"), embedded);
+        assertEquals("<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
+                + "<mtable><mtr><mtd><mi>a</mi></mtd></mtr>"
+                + "<mtr><mtd><mi>b</mi></mtd></mtr></mtable></math>",
+            embedded);
+    }
+
+    @Test
+    void trailingEvenBackslashRunInNestedMathParsesSubstack_mathML() {
+        String embedded = LatteX.toMathML("\\text{$\\substack{a\\\\}$}");
+        assertEquals(LatteX.toMathML("\\substack{a\\\\}"), embedded);
+        assertEquals("<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
+                + "<mtable><mtr><mtd><mi>a</mi></mtd></mtr></mtable></math>",
+            embedded);
+    }
+
+    @Test
+    void evenBackslashRunBeforeBraceInNestedMathRendersSameAsDirectMath_svgAria() {
+        // SVG/ARIA surface: rendering no longer throws (exit 0) and the accessible
+        // description of the text-embedded span equals that of the direct math —
+        // the structural match the audit calls for on the render surface.
+        String embedded = LatteX.render("\\text{$\\substack{a\\\\{b}}$}");
+        assertTrue(embedded.contains("<svg"), "renders an SVG (no exception)");
+        assertEquals(ariaOf(LatteX.render("\\substack{a\\\\{b}}")), ariaOf(embedded));
+    }
+
+    @Test
+    void trailingEvenBackslashRunInNestedMathRendersSameAsDirectMath_svgAria() {
+        String embedded = LatteX.render("\\text{$\\substack{a\\\\}$}");
+        assertTrue(embedded.contains("<svg"), "renders an SVG (no exception)");
+        assertEquals(ariaOf(LatteX.render("\\substack{a\\\\}")), ariaOf(embedded));
+    }
+
+    @Test
+    void aDecodedSymbolBesideAnUnsupportedOneInTheSameArgumentStillFailsLoud() {
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\text{50\\% off, save\\\\more}"));
+        assertTrue(e.getMessage().contains("Unknown command in \\text"), e.getMessage());
+    }
+
+    @Test
+    void decodingWorksInTheSplitPathBesideANestedMathSpanToo() {
+        // The $…$-split path calls literalText on each literal segment too —
+        // decoding must not be a fast-path-only behavior.
+        assertEquals("L(Txt[ROMAN](50%, x=) A(x,ORD) Txt[ROMAN]( wins))",
+            MathParserTest.pp(MathParser.parse("\\text{50\\%, x=$x$ wins}")));
+    }
+
+    // ------------------------------------------------------------------
+    // Marlow review 474 — the REJECTION MESSAGE must itself be legal text.
+    //
+    // Rejecting an unsupported escape is correct and unchanged. Corrupting a
+    // well-formed supplementary character into an unpaired surrogate while
+    // rejecting it is not: Diagnostics.message promises a human-readable
+    // sentence safe for UI/log, and a lone surrogate cannot cross LatteX's own
+    // output-legality boundary. These pin both halves Marlow asked for.
+    // ------------------------------------------------------------------
+
+    /// A well-formed supplementary escape still fails loud, but the message
+    /// carries the COMPLETE character rather than a severed high surrogate.
+    @Test
+    void supplementaryUnsupportedEscapeKeepsAValidPairInTheMessage() {
+        String emoji = "😀"; // U+1F600, a surrogate PAIR
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\text{a\\" + emoji + "b}"));
+        String msg = e.getMessage();
+        assertTrue(msg.contains("Unknown command in \\text"), msg);
+        assertTrue(msg.contains(emoji),
+            "message must carry the whole code point, not a severed surrogate: " + msg);
+        assertNoUnpairedSurrogate(msg);
+    }
+
+    /// The same escape through the rendering surface: renderWithDiagnostics must
+    /// surface a legal message too, not only the thrown exception.
+    @Test
+    void supplementaryUnsupportedEscapeIsLegalThroughRenderWithDiagnostics() {
+        String emoji = "😀";
+        var result = LatteX.renderWithDiagnostics("\\text{a\\" + emoji + "b}");
+        String msg = String.valueOf(result.diagnostics().message());
+        assertTrue(msg.contains("Unknown command in \\text"), msg);
+        assertNoUnpairedSurrogate(msg);
+    }
+
+    /// A LONE surrogate already in the source is a malformed-input case: it must
+    /// still be rejected, and the rejection must not echo the lone surrogate back
+    /// into the message. U+XXXX notation keeps that message legal.
+    @Test
+    void loneSourceSurrogatesAreRejectedWithALegalMessage() {
+        for (String bad : new String[] {"\uD83D", "\uDE00"}) { // lone high, lone low
+            MathSyntaxException e = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("\\text{a\\" + bad + "b}"),
+                "lone surrogate escape must still fail loud");
+            String msg = e.getMessage();
+            assertTrue(msg.contains("Unknown command in \\text"), msg);
+            assertTrue(msg.contains("U+D83D") || msg.contains("U+DE00"),
+                "lone surrogate must be shown as U+XXXX notation, got: " + msg);
+            assertNoUnpairedSurrogate(msg);
+        }
+    }
+
+    /// Marlow review 602. I fixed the surrogate INSTANCE and left the class open: every
+    /// non-surrogate code point still reached the message verbatim, so a backslash
+    /// followed by U+0000 put a raw NUL into a diagnostic that promises to be safe for
+    /// UI and logs. Each of these is separately harmful, not merely untidy — a NUL
+    /// truncates C consumers, ESC can drive a terminal escape sequence, and an embedded
+    /// newline forges a second log line out of author-controlled input.
+    @Test
+    void isoControlEscapesAreRejectedWithALegalMessage() {
+        record Case(int cp, String notation, String what) {}
+        Case[] cases = {
+            new Case(0x0000, "U+0000", "NUL — truncates C string consumers"),
+            new Case(0x000A, "U+000A", "LF — would forge a second log line"),
+            new Case(0x001B, "U+001B", "ESC — would drive a terminal escape sequence"),
+            new Case(0x007F, "U+007F", "DEL"),
+            new Case(0x0085, "U+0085", "NEL — a C1 control"),
+        };
+        for (Case c : cases) {
+            String control = String.valueOf((char) c.cp());
+            MathSyntaxException e = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("\\text{a\\" + control + "b}"),
+                "control-character escape must still fail loud: " + c.what());
+            String msg = e.getMessage();
+            assertTrue(msg.contains("Unknown command in \\text"), msg);
+            assertTrue(msg.contains(c.notation()),
+                "control must be shown as " + c.notation() + " (" + c.what() + "), got: "
+                    + describe(msg));
+            assertNoIsoControl(msg);
+        }
+    }
+
+    /// The same class through the PUBLIC surface, which is where the contract actually
+    /// lives: renderWithDiagnostics must not hand a caller a message carrying a raw NUL.
+    @Test
+    void isoControlEscapeIsLegalThroughRenderWithDiagnostics() {
+        String control = String.valueOf((char) 0x0000);
+        var result = LatteX.renderWithDiagnostics("\\text{a\\" + control + "b}");
+        String msg = String.valueOf(result.diagnostics().message());
+        assertTrue(msg.contains("Unknown command in \\text"), msg);
+        assertTrue(msg.indexOf('\0') < 0, "a raw NUL must never reach the public message");
+        assertNoIsoControl(msg);
+        assertNoUnpairedSurrogate(msg);
+    }
+
+    /// Marlow review 612. The ISO-control repair was still an INSTANCE fix: U+2028 and
+    /// U+2029 are line terminators to JavaScript and to many log readers (Zl/Zp, not Cc),
+    /// and U+202E RIGHT-TO-LEFT OVERRIDE is a Cf format character that can REORDER the
+    /// sentence rejecting it. All three survived to the public message.
+    ///
+    /// Third narrowing on the same helper, so the predicate is now stated as a question
+    /// about the output contract rather than a list of characters that have bitten us.
+    @Test
+    void separatorAndFormatEscapesAreRejectedWithALegalMessage() {
+        record Case(int cp, String notation, String what) {}
+        Case[] cases = {
+            new Case(0x2028, "U+2028", "LINE SEPARATOR - a JS line terminator"),
+            new Case(0x2029, "U+2029", "PARAGRAPH SEPARATOR - forges log structure"),
+            new Case(0x202E, "U+202E", "RTL OVERRIDE - reorders the rejecting sentence"),
+            new Case(0x200D, "U+200D", "ZERO WIDTH JOINER - invisible in the message"),
+        };
+        for (Case c : cases) {
+            String bad = new String(Character.toChars(c.cp()));
+            MathSyntaxException e = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("\\text{a\\" + bad + "b}"),
+                "separator/format escape must still fail loud: " + c.what());
+            String msg = e.getMessage();
+            assertTrue(msg.contains("Unknown command in \\text"), msg);
+            assertTrue(msg.contains(c.notation()),
+                "must be shown as " + c.notation() + " (" + c.what() + "), got: " + describe(msg));
+            assertNoUnsafeDiagnosticChar(msg);
+        }
+    }
+
+    /// The public surface, which is where the safe-for-UI/log contract actually lives.
+    @Test
+    void separatorAndFormatEscapesAreLegalThroughRenderWithDiagnostics() {
+        for (int cp : new int[] {0x2028, 0x2029, 0x202E}) {
+            String bad = new String(Character.toChars(cp));
+            var result = LatteX.renderWithDiagnostics("\\text{a\\" + bad + "b}");
+            String msg = String.valueOf(result.diagnostics().message());
+            assertTrue(msg.contains("Unknown command in \\text"), msg);
+            assertNoUnsafeDiagnosticChar(msg);
+        }
+    }
+
+    /// The WHOLE contract in one sweep: no character that changes how the message is
+    /// structured or displayed, rather than contributing a glyph, may survive in it.
+    private static void assertNoUnsafeDiagnosticChar(String msg) {
+        for (int i = 0; i < msg.length(); ) {
+            int cp = msg.codePointAt(i);
+            int type = Character.getType(cp);
+            boolean unsafe = (Character.isBmpCodePoint(cp) && Character.isSurrogate((char) cp))
+                || Character.isISOControl(cp)
+                || type == Character.LINE_SEPARATOR
+                || type == Character.PARAGRAPH_SEPARATOR
+                || type == Character.FORMAT;
+            assertTrue(!unsafe, "unsafe U+" + String.format("%04X", cp) + " at " + i
+                + " in: " + describe(msg));
+            i += Character.charCount(cp);
+        }
+    }
+
+    /// No ISO control may survive anywhere in a message that claims to be log-safe.
+    private static void assertNoIsoControl(String msg) {
+        for (int i = 0; i < msg.length(); ) {
+            int cp = msg.codePointAt(i);
+            assertTrue(!Character.isISOControl(cp),
+                "ISO control U+" + String.format("%04X", cp) + " at " + i + " in: " + describe(msg));
+            i += Character.charCount(cp);
+        }
+    }
+
+    /// The legality boundary itself: no unpaired surrogate anywhere in the string.
+    private static void assertNoUnpairedSurrogate(String msg) {
+        for (int i = 0; i < msg.length(); i++) {
+            char c = msg.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                assertTrue(i + 1 < msg.length() && Character.isLowSurrogate(msg.charAt(i + 1)),
+                    "unpaired HIGH surrogate at " + i + " in: " + describe(msg));
+                i++;
+            } else {
+                assertTrue(!Character.isLowSurrogate(c),
+                    "unpaired LOW surrogate at " + i + " in: " + describe(msg));
+            }
+        }
+    }
+
+    /// Surrogate-safe rendering of a string for an assertion failure message —
+    /// printing the raw string is exactly what we are asserting is unsafe.
+    private static String describe(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            sb.append(Character.isSurrogate(c) ? String.format("\\u%04X", (int) c) : c);
+        }
+        return sb.toString();
+    }
+}

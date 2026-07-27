@@ -251,8 +251,10 @@ public final class SvgEmitter {
 
     /**
      * A visitor over the INKED glyphs of a layout, in emit order. {@code pathData} is the
-     * glyph's outline {@code <path d>} string — computed lazily one glyph at a time and
-     * retained NOWHERE by the traversal.
+     * glyph's outline {@code <path d>} string — handed to the visitor one glyph at a time
+     * and accumulated NOWHERE by the traversal (no per-render list of every path). The
+     * string itself is memoized for the font's lifetime on the font's bounded per-glyph
+     * {@code glyphPathData} cache (plan 725c1488 / LTX-03), so repeat visits reuse it.
      */
     @FunctionalInterface
     interface InkedGlyphVisitor {
@@ -274,7 +276,16 @@ public final class SvgEmitter {
     static void forEachInkedGlyph(Layout layout, SfntFont font, InkedGlyphVisitor visitor) {
         int pathIndex = 0;
         for (PositionedGlyph g : layout.glyphs()) {
-            String d = GlyphPath.toPathData(font.outline(g.glyphId()));
+            // Path data is a pure function of the glyph id, so it is memoized on the font
+            // keyed by glyph id (bounded IMMUTABLE cache, cardinality ≤ the font's glyph
+            // count — plan 725c1488 / LTX-03). The three emission consumers (this SVG
+            // pass, glyphmap, groupmap) each run forEachInkedGlyph, and repeat renders
+            // recur; the cache means ONE path string per glyph is generated and SHARED,
+            // never regenerated. LTX-01's streaming is preserved: the cache holds a bounded
+            // per-glyph string (like the outline cache), NOT a per-render concatenation of
+            // every path — emitInner still appends one glyph at a time through the
+            // CappedBuilder, so a runaway still refuses DURING growth.
+            String d = font.glyphPathData(g.glyphId(), gid -> GlyphPath.toPathData(font.outline(gid)));
             if (d.isEmpty()) {
                 continue; // inkless — no <path>, no index; SHARED so every consumer agrees
             }

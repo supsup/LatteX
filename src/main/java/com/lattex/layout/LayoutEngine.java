@@ -182,6 +182,10 @@ public final class LayoutEngine {
             case Radical(var radicand, var index) -> radicalBox(radicand, index, ctx);
             case Spacing(var muWidth) -> Box.glue(muWidth * ctx.mu());
             case Colored(var body, var color) -> coloredBox(body, color, ctx);
+            // \mathopen/\mathclose/\mathord/\mathbin/\mathrel/\mathpunct: the forced
+            // class matters ONLY to classOf (the enclosing row's spacing lookup) — the
+            // wrapper itself lays out exactly as its body, like Colored/StyledMath.
+            case MathNode.ClassOverride(var body, _) -> layoutBox(body, ctx);
             case MathNode.Boxed(var body) -> boxedBox(body, ctx);
             case MathNode.Cancel cancel -> cancelBox(cancel, ctx);
             case Phantom(var content, var keepW, var keepV) ->
@@ -767,6 +771,10 @@ public final class LayoutEngine {
             case MathList _ -> MathClass.ORD; // a {group} behaves as an Ord atom
             case Accent _ -> MathClass.ORD;   // an accented nucleus is Ord
             case Colored c -> classOf(c.body()); // color is transparent: take the body's class
+            // \mathopen/\mathclose/\mathord/\mathbin/\mathrel/\mathpunct: overriding
+            // the class this row spaces the body as IS the whole point of the wrapper,
+            // so the body's own implied class is deliberately discarded here.
+            case MathNode.ClassOverride co -> co.forcedClass();
             case MathNode.Boxed _ -> MathClass.ORD; // a framed box behaves as an Ord atom
             case MathNode.Cancel _ -> MathClass.ORD; // a struck sub-formula behaves as an Ord atom
             case MathNode.Tagged t -> classOf(t.body()); // the tag rides outside; class = body's
