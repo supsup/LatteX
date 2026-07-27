@@ -28,11 +28,19 @@ trip degrades to a typed `OUTPUT_CAP_EXCEEDED` diagnostic, never an escaped erro
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
 ratchet: 484/484 real-world formulas, 100%, and only allowed to go up). For the
-fx layer in motion, see the **[effects showcase](examples/effects.html)** — all
-27 animated effects live — and **[the fx gallery](examples/GALLERY.md)** for
-captured previews (every effect as its own looping GIF). For the parallel MathML
+fx layer in motion, see the **[effects showcase](examples/effects.html)** for the
+general runtime grid and **[the fx gallery](examples/GALLERY.md)** for all 29
+production effects: 28 motion GIFs plus the deliberately static semantic `thread`
+reference. For the parallel MathML
 output, **[examples/mathml.html](examples/mathml.html)** shows each formula's SVG
 render beside its `toMathML()` serialization — same parse, two products.
+
+For a host that wants an author-visible failure without inventing its own UI,
+**[examples/rendered-error.html](examples/rendered-error.html)** shows the opt-in,
+bounded error card. The committed image below is captured from the current Java
+renderer in a real Chromium session by BrewShot.
+
+![LatteX opt-in rendered diagnostic card, showing a typed outcome, bounded message, source-line excerpt, and reanchored caret as inert SVG paths](examples/rendered-error.png)
 
 ![A scroll through the LatteX showcase — the definition of the derivative, Euler's identity, the Basel problem, a Gaussian integral, the curl determinant, a piecewise cases block, an aligned derivation, and the 0.3.0 stack mechanism (underbrace + substack), every formula rendered to self-contained SVG](examples/showcase.gif)
 
@@ -52,13 +60,162 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 ## Status
 
-Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (484/484) as of **0.7.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **27-effect** `fx` layer (newest always-on: `precedence`, the order-of-operations cascade) — plus the flag-gated `unfold` click-to-expand `\sum` bloom (opt-in, its own preview, not in the always-on showcase) — are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (484/484) as of **0.7.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **28-effect always-on** `fx` layer (including the semantic `thread`, `precedence`, and `cancel` effects) — plus the flag-gated `unfold` click-to-expand `\sum` bloom, for **29 production effects total** — are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+
+## Opt-in rendered diagnostics
+
+The historical diagnostic API still returns an empty SVG on failure by default.
+A host can explicitly ask LatteX to render a small failure card instead:
+
+```java
+RenderOptions options = RenderOptions.defaults().withRenderedErrors(true);
+RenderResult result = LatteX.renderWithDiagnostics(
+    "\\frac{a + b}{\\sqrt{x^2 + 1}", options);
+
+// result.diagnostics() is still the original typed diagnostic.
+// result.svg() is a bounded inert card only when that diagnostic is non-OK.
+```
+
+Successful SVG bytes are identical to `LatteX.render(source, options)`. On a
+failure, the card contains only a stable outcome name, the bounded diagnostic
+message, and at most one bounded source-line excerpt with a reanchored caret.
+It never exposes `Diagnostics.detail()`, an exception type/cause, the full raw
+source, or `caretString()`. Text becomes direct font-path geometry through the
+same capped `svg/g/path/rect` emitter; it is never reparsed as LaTeX.
+
+This is a host-only switch: source authors cannot enable or disable it through
+`\lx[...]`. The original overload, throwing render methods, CLI, and Docker
+worker all retain their previous defaults and behavior.
+
+## Docker: one-shot CLI or watched folders
+
+The repository ships one Java 25 image with two explicit modes. `cli` preserves
+the existing jar's argv/stdin/stdout contract; `watch` keeps running and turns
+eligible files dropped into a mounted input folder into self-contained SVGs.
+The image builds from source with the checked-in Gradle wrapper, has no BrewShot
+or browser runtime dependency, and runs as the dedicated non-root UID/GID
+`10001:10001` unless you deliberately map it to your own non-root host IDs.
+
+Build it from the repository root:
+
+```bash
+docker build -t lattex:local .
+mkdir -p Input Output
+```
+
+`Input/` and `Output/` are operator data, not repository artifacts. They are
+excluded from the Docker build context; keep them out of commits (or place the
+same two folders at any absolute host path and change only the left side of the
+mounts below).
+
+### Existing CLI flow
+
+The ordinary CLI works unchanged behind the explicit `cli` mode. The legacy
+no-mode spelling is also preserved when its first argument is not one of the
+two container mode names, `cli` or `watch`:
+
+```bash
+docker run --rm lattex:local cli '\frac{a}{b}' > equation.svg
+printf '%s\n' '\sqrt{2}' | docker run --rm -i lattex:local cli > root.svg
+
+# Compatibility form — still the same shipped CLI:
+docker run --rm lattex:local '\frac{a}{b}' > equation.svg
+
+# Escape the two reserved first arguments through explicit CLI mode:
+docker run --rm lattex:local cli watch > watch-expression.svg
+docker run --rm lattex:local cli cli > cli-expression.svg
+```
+
+Without the explicit prefix, `docker run ... watch` starts the folder worker
+and `docker run ... cli` selects CLI mode with no expression argument. Adding
+`cli` first is therefore required when the literal first CLI argument is
+`watch` or `cli`; after that prefix, argv/stdin/stdout are passed to the shipped
+jar unchanged.
+
+`--help`, `--version`, `--batch`, `--inline`, `--scale`, `--macro`, `--color`,
+and `-o/--output` pass through to the jar unchanged. For a mounted source file,
+the container-only `cli --input FILE` adapter feeds that file to the same CLI's
+stdin. The input mount can therefore be read-only while output stays writable:
+
+```bash
+printf '%s\n' '\int_0^1 x^2\,dx' > 'Input/integral.tex'
+
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/Input:/lattex/input:ro" \
+  -v "$PWD/Output:/lattex/output" \
+  lattex:local cli --input '/lattex/input/integral.tex' \
+  -o '/lattex/output/integral.svg'
+```
+
+### Long-running watch flow
+
+Watch mode must mount `Input` read-write because claiming and completion are
+represented by atomic source-file moves. Mapping your non-root host IDs is a
+convenient way to make bind-mount ownership honest; omitting `--user` uses the
+image's non-root `10001:10001` identity instead.
+
+```bash
+docker run -d --name lattex-watch \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD/Input:/lattex/input" \
+  -v "$PWD/Output:/lattex/output" \
+  lattex:local watch
+
+docker logs -f lattex-watch
+```
+
+Only visible, regular, direct-child `*.tex` files in `/lattex/input` are jobs.
+The worker creates and owns these state folders inside that mount:
+
+```text
+/lattex/input/
+├── processing/   claimed or restart-recoverable jobs
+├── finished/     original sources that rendered successfully
+└── failed/       original sources that failed
+/lattex/output/   completed SVGs or bounded error diagnostics
+```
+
+For `Input/pythagoras.tex`, success atomically publishes
+`Output/pythagoras.svg` and preserves the original source name as
+`Input/finished/pythagoras.tex`. A render/read failure publishes no success SVG,
+writes a bounded non-secret `Output/pythagoras.tex.error.txt`, and moves the
+source to `Input/failed/pythagoras.tex`.
+
+Producers should never write a live `.tex` name incrementally. Write a hidden
+or otherwise ineligible sibling first, then atomically rename it into the input
+root when complete:
+
+```bash
+printf '%s\n' '\begin{aligned}' 'a &= b + c \\' 'd &= e' '\end{aligned}' \
+  > 'Input/.derivation.tex.tmp'
+mv 'Input/.derivation.tex.tmp' 'Input/derivation.tex'
+```
+
+Claims are atomic moves into `processing/<job-id>/<original-name>`; keeping the
+UUID and source name in separate path components lets filenames near the mount's
+component limit remain valid after claiming. Two containers sharing the same
+mounts cannot both claim one root source, and valid claims left in `processing/`
+are recovered after restart. The prior UUID-prefixed direct-file claim format is
+also recovered during upgrades. Unrecognized state entries, hidden files,
+symlinks, and non-`.tex` files are never scanned. Existing output or archive
+bytes are never overwritten; a distinct name collision is failed explicitly,
+and a same-name source-archive collision with different bytes is retained under
+that state's `collisions/<job-id>/` directory. Error diagnostics normally keep
+the source-based name shown above; unusually long names or an occupied
+diagnostic path use a bounded attempt-unique `lattex-<job-id>-<attempt-id>.error.txt`
+name instead.
+
+The polling interval defaults to 500 ms and can be set from 10–60000 ms with
+`LATTEX_WATCH_POLL_MS`. `LATTEX_INPUT_DIR` and `LATTEX_OUTPUT_DIR` exist for
+controlled tests/custom images; the documented container contract remains
+`/lattex/input` and `/lattex/output`.
 
 ## The fx layer is OPTIONAL
 
-The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, shatter, sparkler, precedence, and 21 more — 27 always-on effects total, plus the flag-gated `unfold` described below) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations.
+The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, shatter, sparkler, precedence, and 22 more — 28 always-on effects total, plus the flag-gated `unfold` described below) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations.
 
-**LatteX is a pure typesetter by default** — it lays out the math you give it and computes nothing from it. The one exception is fully opt-in and doubly gated: the `unfold` effect (a bounded `\sum` blooming into its explicit terms) needs LatteX to pre-render the expanded form, so a small `RenderOptions.interactiveExpansion` flag (**default off**) must be enabled by the host **and** the equation must carry an `fx.*=unfold` directive. With the flag off — the default — the pass never runs, an `unfold` directive degrades inert, and a plain page pays zero cost. Because it is opt-in, `unfold` is not part of the always-on `examples/effects.html` showcase (still 27 effects); it gets its own preview instead. See `SumExpansion`.
+**LatteX is a pure typesetter by default** — it lays out the math you give it and computes nothing from it. The one exception is fully opt-in and doubly gated: the `unfold` effect (a bounded `\sum` blooming into its explicit terms) needs LatteX to pre-render the expanded form, so a small `RenderOptions.interactiveExpansion` flag (**default off**) must be enabled by the host **and** the equation must carry an `fx.*=unfold` directive. With the flag off — the default — the pass never runs, an `unfold` directive degrades inert, and a plain page pays zero cost. Because it is opt-in, `unfold` is not part of the general `examples/effects.html` grid; it gets its own flag-enabled preview instead. See `SumExpansion`.
 
 On the JVM, read the assets straight off the API:
 
@@ -74,7 +231,7 @@ unzip -p lattex-0.11.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
 unzip -p lattex-0.11.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
 ```
 
-Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the whole catalogue live in `examples/effects.html` — or see it without building anything: **[the fx gallery](examples/GALLERY.md)** has real-browser screenshots and GIFs of the effects in motion, captured by [BrewShot](https://github.com/supsup/BrewShot) on every `./gradlew generateExamples` run.
+Either way the consumer gets them **from the jar it already renders with** — no separately-managed asset, and the runtime can never drift from the renderer that stamped the attributes. Three rules from real integrations: extract from the **same jar version** you render with (never a cached copy); ship the js and css **together or not at all** (the css pre-hides `fx.enter` equations for the js to reveal); load the script with `defer` so it runs after the math is in the DOM. Full stack-by-stack walkthrough: **[SLOWSTART.md](SLOWSTART.md)** Scenario 4. Browse the general runtime grid in `examples/effects.html`; the dedicated semantic and flag-gated examples join it in **[the fx gallery](examples/GALLERY.md)**, whose BrewShot visuals are regenerated by `./gradlew generateExamples` and whose enum-to-artifact coverage is build-failing.
 
 ## PNG export — `bin/lattex-shot`
 
@@ -184,6 +341,11 @@ Two implementation choices are what make the top image clean:
 ```
 
 Requires a Java 25 toolchain (Gradle provisions it via the toolchain spec).
+The normal build includes real-browser BrewShot pins: they launch headless
+Chrome when it is available and assumption-skip locally when it is not. CI
+sets `LATTEX_REQUIRE_BROWSER=1` so browser absence fails instead of silently
+reducing coverage. See [CONTRIBUTING.md](CONTRIBUTING.md#build--test) for the
+full test-gate contract.
 
 ## License
 

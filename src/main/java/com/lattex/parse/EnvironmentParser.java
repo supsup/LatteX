@@ -56,7 +56,7 @@ final class EnvironmentParser {
             String suggestion = FuzzyMatch.nearest(env, ENVIRONMENTS.keySet())
                 .map(hit -> " — did you mean \\begin{" + hit + "}?")
                 .orElse("");
-            throw MathSyntaxException.unsupported(
+            throw MathSyntaxException.unknownEnvironment(
                 "Unknown environment: \\begin{" + env + "}" + suggestion,
                 MathSyntaxException.NO_OFFSET);
         }
@@ -104,7 +104,7 @@ final class EnvironmentParser {
                 throw new MathSyntaxException(
                     "Unterminated \\begin{" + env + "}: missing \\end{" + env + "}");
             }
-            if (parser.isCommand(t, "end")) {
+            if (parser.isCommand(t, CommandRegistry.Handler.END)) {
                 parser.next();
                 String endEnv = readBraceName(parser, "\\end");
                 if (!endEnv.equals(env)) {
@@ -113,20 +113,20 @@ final class EnvironmentParser {
                 }
                 break;
             }
-            if (parser.isCommand(t, "hline") || parser.isCommand(t, "hdashline")) {
+            if (parser.isCommand(t, CommandRegistry.Handler.ROW_RULE)) {
                 RowRule rule = t.name().equals("hline") ? RowRule.SOLID : RowRule.DASHED;
                 parser.next();
                 hlines.merge(rawRows.size(), rule,
                     (a, b) -> a == RowRule.SOLID ? a : b); // a solid line wins
                 continue;
             }
-            if (parser.isCommand(t, "nonumber") || parser.isCommand(t, "notag")) {
+            if (parser.isCommand(t, CommandRegistry.Handler.EQUATION_SUPPRESSOR)) {
                 // Equation-numbering suppressors: LatteX renders no equation numbers, so
                 // these are inert no-ops (skipped here so an env body containing them parses).
                 parser.next();
                 continue;
             }
-            if (parser.isCommand(t, "\\") || parser.isCommand(t, "cr")) {
+            if (parser.isCommand(t, CommandRegistry.Handler.ROW_SEPARATOR)) {
                 parser.next();
                 skipRowBreakOptions(parser); // an optional \\[len] / \\* is accepted and ignored
                 row.add(MathParser.wrap(cell));
@@ -191,7 +191,7 @@ final class EnvironmentParser {
             if (t.kind() == Kind.EOF) {
                 throw new MathSyntaxException("Unterminated \\begin{CD}: missing \\end{CD}");
             }
-            if (parser.isCommand(t, "end")) {
+            if (parser.isCommand(t, CommandRegistry.Handler.END)) {
                 parser.next();
                 String endEnv = readBraceName(parser, "\\end");
                 if (!endEnv.equals("CD")) {
@@ -199,7 +199,7 @@ final class EnvironmentParser {
                 }
                 break;
             }
-            if (parser.isCommand(t, "\\") || parser.isCommand(t, "cr")) {
+            if (parser.isCommand(t, CommandRegistry.Handler.ROW_SEPARATOR)) {
                 parser.next();
                 skipRowBreakOptions(parser);
                 if (!objectCell.isEmpty()) {
@@ -288,7 +288,7 @@ final class EnvironmentParser {
         List<MathNode> label = new ArrayList<>();
         while (true) {
             Token t = parser.peek();
-            if (t.kind() == Kind.EOF || parser.isCommand(t, "end")) {
+            if (t.kind() == Kind.EOF || parser.isCommand(t, CommandRegistry.Handler.END)) {
                 throw new MathSyntaxException(
                     "unterminated CD connector: missing '" + d + "' delimiter", atOffset);
             }
