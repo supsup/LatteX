@@ -638,6 +638,11 @@ final class Symbols {
         "text", TextStyle.ROMAN,
         "textrm", TextStyle.ROMAN,
         "mathrm", TextStyle.ROMAN,
+        // \textnormal takes \text semantics: LaTeX defines it as the document's
+        // normal text font inside math, which — absent any document-class bold or
+        // italic override, which this renderer does not model — is exactly the
+        // upright roman \text/\textrm already produce.
+        "textnormal", TextStyle.ROMAN,
         "textbf", TextStyle.BOLD,
         "textit", TextStyle.ITALIC,
         "texttt", TextStyle.MONO);

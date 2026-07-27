@@ -563,11 +563,50 @@ public final class MathParser {
             case "scriptscriptstyle" -> MathNode.StyleLevel.SCRIPT_SCRIPT;
             default -> throw new IllegalStateException("not a style switch: " + name);
         };
+        return new MathNode.StyleSwitch(level, parseRestOfGroup());
+    }
+
+    /**
+     * The body of every SWITCH-grammar command: a declaration's scope IS the rest of
+     * its enclosing group, so greedily consume components up to the group boundary
+     * ({@code }}, EOF, or a matrix cell/row separator) and wrap them. Single-sourced
+     * here so {@code \displaystyle}, {@code \color}, and the legacy font switches
+     * cannot drift apart on where a declaration stops.
+     */
+    private MathNode parseRestOfGroup() {
         List<MathNode> rest = new ArrayList<>();
         while (!isStyleSwitchBoundary(peek())) {
             rest.add(parseComponent());
         }
-        return new MathNode.StyleSwitch(level, wrap(rest));
+        return wrap(rest);
+    }
+
+    /**
+     * A legacy TeX 2.09 font switch: {@code {\rm …}} {@code {\bf …}} {@code {\it …}}
+     * {@code {\cal …}}. These are DECLARATIONS, not argument-taking commands — the
+     * font applies from the switch to the end of the enclosing group — so the body is
+     * {@link #parseRestOfGroup()}, exactly like {@link #parseStyleSwitch} and
+     * {@link #parseColorSwitch}. That is why the registry gives them
+     * {@link CommandRegistry.GrammarKind#SWITCH} and not the {@code ONE_ARGUMENT}
+     * grammar of their {@code \mathbf}/{@code \mathit}/{@code \mathcal} cousins:
+     * {@code {\bf x}y} leaves {@code y} unstyled, while {@code \bf{x}y} bolds BOTH.
+     *
+     * <p>The mapped semantics reuse the existing {@link MathVariant} alphabets, so no
+     * new node kind appears — the consumed group's atoms are rewritten to the same
+     * variant code points {@code \mathbf{…}} produces. {@code \rm} selects upright
+     * roman, which is already how an unstyled math atom renders here (an {@link
+     * MathNode.Atom} draws its own code point verbatim), so {@code \rm}'s entire
+     * observable effect is the group scoping — no remap.
+     */
+    private MathNode parseFontSwitch(String name) {
+        MathNode body = parseRestOfGroup();
+        return switch (name) {
+            case "rm" -> body;
+            case "bf" -> MathVariant.apply(MathVariant.Style.BOLD, body);
+            case "it" -> MathVariant.apply(MathVariant.Style.ITALIC, body);
+            case "cal" -> MathVariant.apply(MathVariant.Style.SCRIPT, body);
+            default -> throw new IllegalStateException("not a legacy font switch: " + name);
+        };
     }
 
     /**
@@ -583,11 +622,7 @@ public final class MathParser {
      */
     private MathNode parseColorSwitch() {
         Color color = parseColorArg("\\color");
-        List<MathNode> rest = new ArrayList<>();
-        while (!isStyleSwitchBoundary(peek())) {
-            rest.add(parseComponent());
-        }
-        return new MathNode.Colored(wrap(rest), color);
+        return new MathNode.Colored(parseRestOfGroup(), color);
     }
 
     /** Where a {@code \displaystyle}-family switch stops consuming: group end or a cell/row sep. */
@@ -969,6 +1004,9 @@ public final class MathParser {
             }
             case STYLE_SWITCH -> {
                 return parseStyleSwitch(name);
+            }
+            case FONT_SWITCH -> {
+                return parseFontSwitch(name);
             }
             case TEXT_COLOR -> {
                 // \textcolor{color}{body}: paint body a fixed color. The name/hex is
