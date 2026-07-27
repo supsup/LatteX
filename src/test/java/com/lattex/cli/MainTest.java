@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.lattex.parse.MathParser;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -119,6 +120,22 @@ final class MainTest {
     @Test
     void doubleDashTreatsFollowingAsExpression() {
         Result r = invoke("--", "x^2");
+        assertEquals(0, r.code(), () -> "stderr: " + r.err());
+        assertTrue(r.out().startsWith("<svg"));
+    }
+
+    @Test
+    void rendersExpressionFromStdinWhenNoArgv() {
+        // Exercises the streaming (LTX-09, plan ac28238e) NO_DELIMITER stdin path.
+        Result r = invokeStdin("\\sqrt{2}");
+        assertEquals(0, r.code(), () -> "stderr: " + r.err());
+        assertTrue(r.out().startsWith("<svg"));
+        assertTrue(r.out().contains("</svg>"));
+    }
+
+    @Test
+    void stdinExpressionIsStrippedOfSurroundingWhitespace() {
+        Result r = invokeStdin("  \n  x^2  \n\n");
         assertEquals(0, r.code(), () -> "stderr: " + r.err());
         assertTrue(r.out().startsWith("<svg"));
     }
@@ -278,6 +295,39 @@ final class MainTest {
             + System.lineSeparator(), diagnostic);
         assertTrue(diagnostic.length() < 200,
             "the injected 10,000-character exception message must not reach stderr");
+    }
+
+    /// Marlow review 592, the uncovered CROSS-PRODUCT: a failing stdout while emitting the
+    /// OVERSIZED-record error. Both halves were tested separately and neither caught this —
+    /// the stdout-failure tests above use ordinary rendered records, and the oversized-record
+    /// test in StreamingBatchTest writes to a healthy ByteArrayOutputStream.
+    ///
+    /// The bug that lived in the gap: the TooLongException arm wrote its terminal error
+    /// record inline and never called checkError(), so a broken pipe there was swallowed.
+    /// The process still exited 1 — from the oversize — while stderr stayed EMPTY, so the
+    /// caller was told nothing about the delivery failure and the terminal record it was
+    /// meant to trust could be absent or truncated. An exit code that is right for the wrong
+    /// reason is the hardest kind of silence to notice.
+    @Test
+    void batchStdoutFailureWhileEmittingTheOversizedRecordStillReportsTheDeliveryFailure() {
+        String oversized = "x".repeat(MathParser.MAX_SOURCE_LENGTH + 1);
+        FailAfterBytesOutputStream failingOut = new FailAfterBytesOutputStream(0);
+        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
+        InputStream in = new ByteArrayInputStream((oversized + "\n").getBytes(StandardCharsets.UTF_8));
+
+        int code = Main.run(new String[] {"--batch"}, in,
+            new PrintStream(failingOut, false, StandardCharsets.UTF_8),
+            new PrintStream(errBytes, true, StandardCharsets.UTF_8));
+
+        String diagnostic = errBytes.toString(StandardCharsets.UTF_8);
+        assertEquals(1, code, "a failed oversized-record delivery must fail the batch");
+        assertEquals("lattex: error: failed to write batch output to stdout after 0 complete records;"
+            + " current record may be incomplete; no later records were emitted"
+            + System.lineSeparator(), diagnostic,
+            "stderr must name the delivery failure, not stay silent because the exit code "
+                + "already happened to be 1 for the oversize");
+        assertTrue(diagnostic.length() < 200,
+            "the bounded diagnostic must not carry the oversized record's content");
     }
 
     @Test
