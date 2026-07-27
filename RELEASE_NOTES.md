@@ -157,6 +157,29 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 - **Healthy output is byte-identical, and existing success/render/usage exit meanings
   are unchanged.** The new nonzero path applies only when stdout cannot be delivered.
 
+### fx runtime — bounded effects + detached-element lifecycle
+
+- **`constellation` is bounded.** The star map now honours a global star budget
+  (total stars are capped however many glyph `<path>`s the equation has — the old
+  sampler was per-path only, 3–14 stars each, with no ceiling), and joins stars via a
+  spatial grid instead of an O(S²) all-pairs nearest-neighbour scan. The per-frame
+  radial gradient — previously re-allocated for **every** visible star on **every**
+  animation frame — is baked once into a reusable sprite and blitted with `globalAlpha`.
+  Within budget the star map is unchanged; over budget it downsamples evenly across the
+  whole equation.
+- **`thread` hover is O(1) per glyph.** Hovering a token used to call
+  `group.indexOf()` for every path on every `mouseenter` (a large repeated-token group
+  approached O(P²) per hover); each path now carries an integer group id, so lighting a
+  token's occurrences is a constant-time membership check. The glyphs that light are
+  exactly the same.
+- **Perpetual effects tear down when their element leaves the DOM.** `hologram` (an idle
+  interval + resize listener + body overlay) and `neonsign` (a self-rescheduling flicker
+  chain) were cleaned up only on real page scrolling — so removing an equation from a
+  no-scroll SPA view leaked the interval/timeout and listeners forever. They now stop
+  their perpetual work as soon as the host element is disconnected (`el.isConnected`),
+  and a new **`window.LatteXFx.destroy(el)`** ends a live show immediately and
+  idempotently. No new `data-lx-*` attributes; the visible effects are unchanged.
+
 ### Font/emission hot paths are memoized — output byte-identical (Marlow audit LTX-03)
 
 - **Immutable font hot paths are now cached, so a render stops re-decoding the same
@@ -199,6 +222,49 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   can no longer create effectively unbounded layout work. A pathological case where the
   extender advance did not exceed the overlap (hostile font-part data) previously looped
   forever; it now fails loud with `OUTPUT_CAP_EXCEEDED`.
+
+### CLI: streaming stdin/`--batch` instead of buffering the whole input (Marlow audit LTX-09)
+
+- **stdin and `--batch` records are read incrementally, with a per-record cap
+  enforced DURING the read.** The CLI used to `readAllBytes()` stdin whole before
+  checking anything — `MathParser`'s 100,000-char cap runs only after parsing
+  starts, and only per formula, so a multi-gigabyte stdin (or a single giant
+  `--batch` record) could exhaust process memory before that cap was ever
+  reached. A new `DelimitedRecordReader` decodes UTF-8 incrementally and throws
+  the moment a record's decoded length exceeds `MathParser.MAX_SOURCE_LENGTH`
+  (now `public`, single-sourced so the two can never drift). The cap is checked
+  on each record's RAW length, before any caller-side `strip()` (fail-closed on
+  whitespace-padded transport). The memory bound is CONSTANT, not zero
+  read-ahead: accumulated record CONTENT stops at cap+1 units (the char that
+  trips the check), and the decoder's own read-ahead is bounded to one decode
+  buffer past it — a short remaining suffix may fall entirely within that buffer,
+  but it is never an unbounded read of the whole stream, however large the input.
+- **`--batch` output is now progressive.** Records are rendered and flushed to
+  stdout one at a time as they're read, instead of splitting the entire input
+  into an array before producing the first result. Order and per-record error
+  shape (`lattex: error: …`, isolated to that record) are unchanged; a
+  well-formed batch's output is byte-identical to before. A dead downstream
+  consumer (broken pipe) now ends the batch loud via `PrintStream.checkError()`
+  instead of spinning an unbounded stdin read into a closed pipe.
+- **Aggregate policy: no cap on record count or total batch size — only a
+  per-record cap.** Nothing is accumulated across records (peak memory is one
+  record + its rendered output, not the input size), so an unbounded number of
+  records is a time/CPU concern for the caller, not a memory one. This is a
+  deliberate choice, not an oversight — see the javadoc on `Main.runBatch` and
+  the streaming note in SLOWSTART.md Scenario 7.
+- **One narrowing of `--batch`'s error isolation:** an individual malformed
+  expression still isolates and the batch continues, exactly as before. An
+  **oversized** record (over the 100,000-char cap) now aborts the rest of the
+  batch instead of being skipped-and-continued — locating where the next record
+  starts would require reading past the cap that was just enforced, which is
+  the exact unbounded read this change exists to close. Every record already
+  produced before the oversized one has already reached stdout.
+- **No change to rendered output for well-formed input.** Verified against a
+  byte-identity golden captured from the pre-streaming implementation, plus a
+  dedicated split-semantics test proving the streaming NUL/newline record
+  boundaries (trailing delimiter, empty records, leading delimiter, a single
+  record with no delimiter) exactly match the old `String.split(delim, -1)`
+  behavior.
 
 ### Output-boundary legality + public-boundary validation
 

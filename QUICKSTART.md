@@ -316,7 +316,11 @@ In one-shot mode, invalid LaTeX is explained on stderr. In `--batch`, successful
 and in-place `lattex: error: …` records remain NUL-delimited on stdout.
 Output-delivery failures are explained on stderr; a stdout failure may leave incomplete
 output and never reports success. The CLI is a thin wrapper over the JVM
-`LatteX.render` — same core, byte-identical SVG.
+`LatteX.render` — same core, byte-identical SVG. stdin (and each `--batch` record) is
+read incrementally with a 100,000-character-per-expression cap enforced as it's read —
+no *unbounded* whole-stream read before a check, though the decoder's bounded read-ahead
+may already hold a short remainder — see **Scenario 7** in SLOWSTART.md for the
+`--batch` streaming/limit details.
 
 **Build it** (GraalVM CE for JDK 25 must be on `PATH` — e.g. `sdk use java 25-graalce`):
 
