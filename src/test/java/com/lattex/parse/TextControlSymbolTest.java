@@ -270,4 +270,82 @@ class TextControlSymbolTest {
         assertEquals("L(Txt[ROMAN](50%, x=) A(x,ORD) Txt[ROMAN]( wins))",
             MathParserTest.pp(MathParser.parse("\\text{50\\%, x=$x$ wins}")));
     }
+
+    // ------------------------------------------------------------------
+    // Marlow review 474 — the REJECTION MESSAGE must itself be legal text.
+    //
+    // Rejecting an unsupported escape is correct and unchanged. Corrupting a
+    // well-formed supplementary character into an unpaired surrogate while
+    // rejecting it is not: Diagnostics.message promises a human-readable
+    // sentence safe for UI/log, and a lone surrogate cannot cross LatteX's own
+    // output-legality boundary. These pin both halves Marlow asked for.
+    // ------------------------------------------------------------------
+
+    /// A well-formed supplementary escape still fails loud, but the message
+    /// carries the COMPLETE character rather than a severed high surrogate.
+    @Test
+    void supplementaryUnsupportedEscapeKeepsAValidPairInTheMessage() {
+        String emoji = "😀"; // U+1F600, a surrogate PAIR
+        MathSyntaxException e = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\text{a\\" + emoji + "b}"));
+        String msg = e.getMessage();
+        assertTrue(msg.contains("Unknown command in \\text"), msg);
+        assertTrue(msg.contains(emoji),
+            "message must carry the whole code point, not a severed surrogate: " + msg);
+        assertNoUnpairedSurrogate(msg);
+    }
+
+    /// The same escape through the rendering surface: renderWithDiagnostics must
+    /// surface a legal message too, not only the thrown exception.
+    @Test
+    void supplementaryUnsupportedEscapeIsLegalThroughRenderWithDiagnostics() {
+        String emoji = "😀";
+        var result = LatteX.renderWithDiagnostics("\\text{a\\" + emoji + "b}");
+        String msg = String.valueOf(result.diagnostics().message());
+        assertTrue(msg.contains("Unknown command in \\text"), msg);
+        assertNoUnpairedSurrogate(msg);
+    }
+
+    /// A LONE surrogate already in the source is a malformed-input case: it must
+    /// still be rejected, and the rejection must not echo the lone surrogate back
+    /// into the message. U+XXXX notation keeps that message legal.
+    @Test
+    void loneSourceSurrogatesAreRejectedWithALegalMessage() {
+        for (String bad : new String[] {"\uD83D", "\uDE00"}) { // lone high, lone low
+            MathSyntaxException e = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("\\text{a\\" + bad + "b}"),
+                "lone surrogate escape must still fail loud");
+            String msg = e.getMessage();
+            assertTrue(msg.contains("Unknown command in \\text"), msg);
+            assertTrue(msg.contains("U+D83D") || msg.contains("U+DE00"),
+                "lone surrogate must be shown as U+XXXX notation, got: " + msg);
+            assertNoUnpairedSurrogate(msg);
+        }
+    }
+
+    /// The legality boundary itself: no unpaired surrogate anywhere in the string.
+    private static void assertNoUnpairedSurrogate(String msg) {
+        for (int i = 0; i < msg.length(); i++) {
+            char c = msg.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                assertTrue(i + 1 < msg.length() && Character.isLowSurrogate(msg.charAt(i + 1)),
+                    "unpaired HIGH surrogate at " + i + " in: " + describe(msg));
+                i++;
+            } else {
+                assertTrue(!Character.isLowSurrogate(c),
+                    "unpaired LOW surrogate at " + i + " in: " + describe(msg));
+            }
+        }
+    }
+
+    /// Surrogate-safe rendering of a string for an assertion failure message —
+    /// printing the raw string is exactly what we are asserting is unsafe.
+    private static String describe(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            sb.append(Character.isSurrogate(c) ? String.format("\\u%04X", (int) c) : c);
+        }
+        return sb.toString();
+    }
 }

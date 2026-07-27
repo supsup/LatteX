@@ -262,9 +262,15 @@ public final class MathParser {
                 // brace, dropping that brace's structural role. A backslash with no
                 // following char (i+1 == n) falls through to the default arm, keeps
                 // the existing "Unbalanced brace" dangling-backslash error path.
+                // The escaped token is a CODE POINT, not a char: a supplementary
+                // escape (\<emoji>) is a surrogate PAIR, and consuming a fixed 2
+                // chars would split it — copying the high surrogate as "the escaped
+                // token" and leaving the low surrogate to be re-read as a separate
+                // character (Marlow review 474).
                 sb.append(c);
-                sb.append(s.charAt(i + 1));
-                i += 2;
+                int escaped = s.codePointAt(i + 1);
+                sb.appendCodePoint(escaped);
+                i += 1 + Character.charCount(escaped);
             } else if (c == '{') {
                 depth++;
                 sb.append(c); // interior brace: KEEP (verbatim content)
@@ -1786,7 +1792,7 @@ public final class MathParser {
                 i++;
             } else if (c == '\\') {
                 throw MathSyntaxException.unsupported(
-                    "Unknown command in \\" + t.name() + ": \\" + s.charAt(i + 1)
+                    "Unknown command in \\" + t.name() + ": \\" + escapedTokenDisplay(s, i + 1)
                         + " — commands are not expanded in text; wrap math in $...$",
                     t.offset());
             } else if (c != '{' && c != '}') {
@@ -1794,6 +1800,34 @@ public final class MathParser {
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * Renders the escaped token at {@code i} for an unsupported-escape DIAGNOSTIC.
+     *
+     * <p>Two source shapes must both yield a LEGAL message, because
+     * {@code Diagnostics.message} promises a human-readable sentence safe for UI and
+     * logs — a string carrying an unpaired surrogate cannot cross LatteX's own
+     * output-legality boundary (Marlow review 474):
+     *
+     * <ul>
+     *   <li>a WELL-FORMED supplementary escape ({@code \}+emoji) is shown verbatim,
+     *       as the complete surrogate pair — reading {@code charAt(i)} alone would
+     *       have emitted only the high surrogate and corrupted a legal character;</li>
+     *   <li>an UNPAIRED surrogate already present in the source is shown as
+     *       {@code U+XXXX} notation, so a malformed input can never inject a lone
+     *       surrogate into the message that rejects it.</li>
+     * </ul>
+     *
+     * <p>Rejecting the escape is unchanged; only how the offending token is
+     * DISPLAYED differs.
+     */
+    private static String escapedTokenDisplay(String s, int i) {
+        int cp = s.codePointAt(i);
+        if (Character.isBmpCodePoint(cp) && Character.isSurrogate((char) cp)) {
+            return String.format("U+%04X", cp);
+        }
+        return new String(Character.toChars(cp));
     }
 
     /**
