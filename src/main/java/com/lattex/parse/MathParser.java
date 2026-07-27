@@ -24,11 +24,8 @@ import com.lattex.parse.MathNode.SupSub;
 import com.lattex.parse.MathNode.TextRun;
 import com.lattex.parse.MathNode.TextStyle;
 import java.util.ArrayList;
-import java.util.EnumMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import static com.lattex.parse.Symbols.ACCENTS;
 import static com.lattex.parse.Symbols.BIG_OPERATORS;
 import static com.lattex.parse.Symbols.FONT_VARIANTS;
@@ -140,6 +137,10 @@ public final class MathParser {
         List<Token> out = new ArrayList<>();
         int i = 0;
         int n = s.length();
+        // A definition's next control sequence is its NAME, not an invocation.
+        // This small lexical state is what lets \def\text{x} preserve \text as
+        // a COMMAND token instead of greedily capturing {x} as text content.
+        boolean definitionTargetPending = false;
         while (i < n) {
             char c = s.charAt(i);
             if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
@@ -162,17 +163,36 @@ public final class MathParser {
                         }
                         String name = s.substring(i, j);
                         i = j;
-                        if (TEXT_COMMANDS.containsKey(name)) {
+                        boolean definitionTarget = definitionTargetPending;
+                        if (CommandRegistry.hasGrammar(
+                                name, CommandRegistry.GrammarKind.TEXT_ARGUMENT)
+                                && !definitionTarget
+                                && hasTextArgument(s, i)) {
                             // Capture the {…} argument raw so text-mode spaces
                             // survive (math mode strips whitespace); grouping
-                            // braces are invisible, as in LaTeX.
+                            // braces are invisible, as in LaTeX. A text-family
+                            // command without an argument stays a COMMAND token:
+                            // that lets MacroExpander inspect
+                            // \newcommand{\textbf}{...} and reject the name via
+                            // the typed built-in reservation policy, while the
+                            // ordinary parser still reports the established
+                            // missing-text-argument error.
                             i = lexTextArgument(s, name, i, out, start);
                         } else {
                             out.add(Token.cmd(name, start));
                         }
+                        if (definitionTarget) {
+                            definitionTargetPending = false;
+                        } else if (CommandRegistry.hasGrammar(
+                                name, CommandRegistry.GrammarKind.DEFINITION)) {
+                            definitionTargetPending = true;
+                        }
                     } else {
                         // Single-character control sequence: \, \{ \} \| \! etc.
                         out.add(Token.cmd(String.valueOf(d), start));
+                        if (definitionTargetPending) {
+                            definitionTargetPending = false;
+                        }
                         i++;
                     }
                 }
@@ -205,6 +225,14 @@ public final class MathParser {
 
     private static boolean isAsciiLetter(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    }
+
+    /** Whether the next non-whitespace source character opens a text argument. */
+    private static boolean hasTextArgument(String s, int i) {
+        while (i < s.length() && isWhitespace(s.charAt(i))) {
+            i++;
+        }
+        return i < s.length() && s.charAt(i) == '{';
     }
 
     /**
@@ -295,7 +323,8 @@ public final class MathParser {
                 "input too long: " + latex.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
-        if (LxOptionsParser.looksLikeTopLevelLx(latex)) {
+        if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                && LxOptionsParser.looksLikeTopLevelLx(latex)) {
             return LxOptionsParser.parseLx(latex.strip(), macros);
         }
         return parseMath(latex, 0, macros);
@@ -357,8 +386,15 @@ public final class MathParser {
         return peek().offset();
     }
 
-    boolean isCommand(Token t, String name) {
-        return t.kind() == Kind.COMMAND && t.name().equals(name);
+    boolean isCommand(Token t, String name, CommandRegistry.Handler handler) {
+        return t.kind() == Kind.COMMAND
+            && t.name().equals(name)
+            && CommandRegistry.hasHandler(name, handler);
+    }
+
+    boolean isCommand(Token t, CommandRegistry.Handler handler) {
+        return t.kind() == Kind.COMMAND
+            && CommandRegistry.hasHandler(t.name(), handler);
     }
 
     // ------------------------------------------------------------------
@@ -371,7 +407,7 @@ public final class MathParser {
         while (peek().kind() != Kind.EOF) {
             // \tag{label} is equation-global: hoist it out of the component stream and
             // attach it to the whole equation, wherever it appears in the source.
-            if (isCommand(peek(), "tag")) {
+            if (isCommand(peek(), "tag", CommandRegistry.Handler.TAG)) {
                 next(); // consume \tag
                 if (tag != null) {
                     throw new MathSyntaxException("Multiple \\tag on one equation");
@@ -425,13 +461,10 @@ public final class MathParser {
         return wrap(items);
     }
 
-    /** The five TeX INFIX fraction operators (command names, no backslash). */
-    private static final Set<String> INFIX_FRACTIONS =
-        Set.of("over", "atop", "choose", "brace", "brack");
-
     /** Whether {@code t} is one of the five INFIX fraction operators. */
     private boolean isInfixFraction(Token t) {
-        return t.kind() == Kind.COMMAND && INFIX_FRACTIONS.contains(t.name());
+        return t.kind() == Kind.COMMAND
+            && CommandRegistry.hasGrammar(t.name(), CommandRegistry.GrammarKind.INFIX);
     }
 
     /**
@@ -562,7 +595,8 @@ public final class MathParser {
         return switch (t.kind()) {
             case RBRACE, EOF -> true;
             case CHAR -> t.codePoint() == '&';                              // matrix column separator
-            case COMMAND -> t.name().equals("\\") || t.name().equals("cr"); // matrix row separator
+            case COMMAND ->
+                CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.ROW_SEPARATOR);
             default -> false;
         };
     }
@@ -662,11 +696,11 @@ public final class MathParser {
     private MathNode parseBigOperator(Atom op) {
         LimitsMode mode = LimitsMode.DEFAULT;
         while (peek().kind() == Kind.COMMAND) {
-            String name = peek().name();
-            if (name.equals("limits")) {
+            if (isCommand(peek(), "limits", CommandRegistry.Handler.LIMITS_MODIFIER)) {
                 mode = LimitsMode.LIMITS;
                 next();
-            } else if (name.equals("nolimits")) {
+            } else if (isCommand(
+                    peek(), "nolimits", CommandRegistry.Handler.LIMITS_MODIFIER)) {
                 mode = LimitsMode.NOLIMITS;
                 next();
             } else {
@@ -700,7 +734,7 @@ public final class MathParser {
     private MathNode parseScriptArg(String what) {
         Kind k = peek().kind();
         if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
-                || isCommand(peek(), "right")) {
+                || isCommand(peek(), CommandRegistry.Handler.RIGHT)) {
             throw new MathSyntaxException(
                 "Dangling " + what + ": nothing follows the script marker");
         }
@@ -715,7 +749,7 @@ public final class MathParser {
     private MathNode parseAccentArg(String command) {
         Kind k = peek().kind();
         if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
-                || isCommand(peek(), "right")) {
+                || isCommand(peek(), CommandRegistry.Handler.RIGHT)) {
             throw new MathSyntaxException(
                 "\\" + command + " needs a base to accent, but found " + describe(peek()));
         }
@@ -731,7 +765,7 @@ public final class MathParser {
     private MathNode parseFontArg(String command) {
         Kind k = peek().kind();
         if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
-                || isCommand(peek(), "right")) {
+                || isCommand(peek(), CommandRegistry.Handler.RIGHT)) {
             throw new MathSyntaxException(
                 "\\" + command + " needs an argument, but found " + describe(peek()));
         }
@@ -749,7 +783,7 @@ public final class MathParser {
     private MathNode parseArgument(String context) {
         Kind k = peek().kind();
         if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
-                || isCommand(peek(), "right")) {
+                || isCommand(peek(), CommandRegistry.Handler.RIGHT)) {
             throw new MathSyntaxException(
                 context + " expects an argument, but found " + describe(peek()));
         }
@@ -891,14 +925,24 @@ public final class MathParser {
         Token command = next(); // consume the command
         String name = command.name();
         int commandOffset = command.offset();
+        CommandRegistry.Descriptor descriptor = CommandRegistry.get(name);
+        if (descriptor == null) {
+            throw unknownCommand(name, commandOffset);
+        }
+        return validateCommandOutput(
+            descriptor, parseCommandBody(descriptor, name, commandOffset));
+    }
 
-        switch (name) {
-            case "frac" -> {
+    /** Runs the handler selected by the registry after the command token is consumed. */
+    private MathNode parseCommandBody(
+            CommandRegistry.Descriptor descriptor, String name, int commandOffset) {
+        switch (descriptor.handler()) {
+            case FRACTION -> {
                 MathNode num = parseArgument("\\frac numerator");
                 MathNode den = parseArgument("\\frac denominator");
                 return new Fraction(num, den);
             }
-            case "cfrac" -> {
+            case CONTINUED_FRACTION -> {
                 // Continued fraction: an ordinary ruled fraction forced to display
                 // style (TeXbook: \cfrac sets its parts in \displaystyle), so the
                 // nested a_0+\cfrac{1}{a_1+…} form stays full-size.
@@ -906,7 +950,7 @@ public final class MathParser {
                 MathNode den = parseArgument("\\cfrac denominator");
                 return new Fraction(num, den, true, MathNode.FractionStyle.DISPLAY);
             }
-            case "dfrac" -> {
+            case DISPLAY_FRACTION -> {
                 // Display-style ruled fraction: \dfrac forces \displaystyle regardless
                 // of context (a full-size fraction even inside inline math) — the
                 // amsmath sibling of \tfrac. Same styling as \cfrac without the
@@ -915,7 +959,7 @@ public final class MathParser {
                 MathNode den = parseArgument("\\dfrac denominator");
                 return new Fraction(num, den, true, MathNode.FractionStyle.DISPLAY);
             }
-            case "tfrac" -> {
+            case TEXT_FRACTION -> {
                 // Text-style ruled fraction: \tfrac forces \textstyle (a small,
                 // inline-sized fraction even in display math). The \frac whose style
                 // is pinned to TEXT, mirroring \tbinom for the binom family.
@@ -923,10 +967,10 @@ public final class MathParser {
                 MathNode den = parseArgument("\\tfrac denominator");
                 return new Fraction(num, den, true, MathNode.FractionStyle.TEXT);
             }
-            case "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle" -> {
+            case STYLE_SWITCH -> {
                 return parseStyleSwitch(name);
             }
-            case "textcolor" -> {
+            case TEXT_COLOR -> {
                 // \textcolor{color}{body}: paint body a fixed color. The name/hex is
                 // validated through Color (the only path from a raw string to an SVG
                 // fill); an inner \textcolor wins over an outer one at layout time.
@@ -934,17 +978,17 @@ public final class MathParser {
                 MathNode body = parseArgument("\\textcolor body");
                 return new MathNode.Colored(body, color);
             }
-            case "color" -> {
+            case COLOR_SWITCH -> {
                 return parseColorSwitch();
             }
-            case "boxed", "fbox" -> {
+            case BOXED -> {
                 // \boxed{body} (amsmath) frames a math sub-formula in a rule rectangle.
                 // \fbox is text-mode in LaTeX; here it is accepted as the math-mode
                 // analogue (a clean-room simplification — the frame is identical).
                 MathNode body = parseArgument("\\" + name + " body");
                 return new MathNode.Boxed(body);
             }
-            case "cancel", "bcancel", "xcancel" -> {
+            case CANCEL -> {
                 // \cancel{body} (up /), \bcancel (down \), \xcancel (both — an X): the
                 // body is struck through by one or two diagonal rules. The argument is
                 // parsed through the normal group parse (parseArgument -> parseNucleus),
@@ -957,7 +1001,7 @@ public final class MathParser {
                 MathNode body = parseArgument("\\" + name + " body");
                 return new MathNode.Cancel(kind, body, null);
             }
-            case "cancelto" -> {
+            case CANCEL_TO -> {
                 // \cancelto{value}{body}: an up-diagonal strike with an arrowhead at its
                 // tip, the target value set script-size beyond the tip. The VALUE is the
                 // first brace group, the struck body the second (cancel-package order).
@@ -965,19 +1009,19 @@ public final class MathParser {
                 MathNode body = parseArgument("\\cancelto body");
                 return new MathNode.Cancel(MathNode.CancelKind.CANCELTO, body, to);
             }
-            case "bra" -> {
+            case BRA -> {
                 // \bra{ψ} = ⟨ψ| — a fixed-size angle-bracket + vertical bar (physics braket).
                 MathNode body = parseArgument("\\bra body");
                 return new MathList(List.of(
                     new Atom(0x27E8, MathClass.OPEN), body, new Atom('|', MathClass.CLOSE)));
             }
-            case "ket" -> {
+            case KET -> {
                 // \ket{ψ} = |ψ⟩ — a vertical bar + closing angle bracket.
                 MathNode body = parseArgument("\\ket body");
                 return new MathList(List.of(
                     new Atom('|', MathClass.OPEN), body, new Atom(0x27E9, MathClass.CLOSE)));
             }
-            case "braket" -> {
+            case BRAKET -> {
                 // \braket{a|b} = ⟨a|b⟩ — angle brackets around the body; an inner | (the
                 // inner product's mid bar) renders as-is inside. Fixed-size v1 (the manual
                 // \langle a|b\rangle already renders; stretchy braket is a follow-up).
@@ -985,7 +1029,7 @@ public final class MathParser {
                 return new MathList(List.of(
                     new Atom(0x27E8, MathClass.OPEN), body, new Atom(0x27E9, MathClass.CLOSE)));
             }
-            case "hspace", "mkern", "kern", "mskip" -> {
+            case DIMENSION_SPACE -> {
                 // Dimensioned horizontal glue: \hspace{2em} / \mkern{18mu} / \kern{3pt} —
                 // a braced <number><unit> whose width becomes a Spacing node in math units
                 // (18mu = 1em). \hspace* is accepted (the star is a no-op here — we never
@@ -997,7 +1041,7 @@ public final class MathParser {
                 }
                 return new Spacing(parseDimensionMu(name, commandOffset));
             }
-            case "prescript" -> {
+            case PRESCRIPT -> {
                 // \prescript{sup}{sub}{base} = {}^{sup}_{sub} base — left-attached scripts.
                 // Pure sugar over an empty-base SupSub (the {}^3 idiom) followed by the base;
                 // an empty {} slot renders no script on that side.
@@ -1007,16 +1051,16 @@ public final class MathParser {
                 return new MathList(List.of(
                     new SupSub(new MathList(List.of()), preSup, preSub), base));
             }
-            case "binom" -> {
+            case BINOM -> {
                 return binom(MathNode.FractionStyle.INHERIT);
             }
-            case "dbinom" -> {
+            case DISPLAY_BINOM -> {
                 return binom(MathNode.FractionStyle.DISPLAY);
             }
-            case "tbinom" -> {
+            case TEXT_BINOM -> {
                 return binom(MathNode.FractionStyle.TEXT);
             }
-            case "sqrt" -> {
+            case RADICAL -> {
                 MathNode index = null;
                 if (peek().kind() == Kind.CHAR && peek().codePoint() == '[') {
                     next(); // consume '['
@@ -1025,39 +1069,36 @@ public final class MathParser {
                 MathNode radicand = parseArgument("\\sqrt argument");
                 return new Radical(radicand, index);
             }
-            case "overset" -> {
+            case OVERSET -> {
                 // \overset{above}{base}: above at script size over the base, base
                 // keeps its class (TeXbook \overset). Arguments read eagerly.
                 MathNode above = parseArgument("\\overset annotation");
                 MathNode base = parseArgument("\\overset base");
                 return new MathNode.Stack(base, above, null, MathNode.StackKind.OVERSET);
             }
-            case "underset" -> {
+            case UNDERSET -> {
                 MathNode below = parseArgument("\\underset annotation");
                 MathNode base = parseArgument("\\underset base");
                 return new MathNode.Stack(base, null, below, MathNode.StackKind.UNDERSET);
             }
-            case "stackrel" -> {
+            case STACKREL -> {
                 // \stackrel{above}{rel}: like \overset but the result is class Rel.
                 MathNode above = parseArgument("\\stackrel annotation");
                 MathNode base = parseArgument("\\stackrel base");
                 return new MathNode.Stack(base, above, null, MathNode.StackKind.STACKREL);
             }
-            case "underbrace" -> {
+            case UNDERBRACE -> {
                 // The braced expression; its _ label is attached later as a limit
                 // (see parseComponent -> parseStackLabel), so the brace stack can be
                 // written bare (\\underbrace{x}) or labelled (\\underbrace{x}_{n}).
                 MathNode base = parseArgument("\\underbrace argument");
                 return new MathNode.Stack(base, null, null, MathNode.StackKind.UNDERBRACE);
             }
-            case "overbrace" -> {
+            case OVERBRACE -> {
                 MathNode base = parseArgument("\\overbrace argument");
                 return new MathNode.Stack(base, null, null, MathNode.StackKind.OVERBRACE);
             }
-            case "xrightarrow", "xleftarrow", "xleftrightarrow",
-                 "xRightarrow", "xLeftarrow", "xLeftrightarrow",
-                 "xmapsto", "xhookrightarrow", "xhookleftarrow", "xrightleftharpoons",
-                 "xlongequal" -> {
+            case X_ARROW -> {
                 // amsmath's extensible labelled arrows (the whole \x... family): an
                 // optional [below] label FIRST, then the required {above} label. The '['
                 // is only taken as the optional argument when a matching ']' closes it
@@ -1072,32 +1113,32 @@ public final class MathParser {
                 MathNode above = parseArgument("\\" + name + " label");
                 return new MathNode.XArrow(above, below, xArrowKind(name));
             }
-            case "substack" -> {
+            case SUBSTACK -> {
                 return parseSubstack();
             }
-            case "phantom" -> {
+            case PHANTOM -> {
                 // Occupies the content's full box (width + height + depth), no ink.
                 return new Phantom(parseGroup(), true, true);
             }
-            case "hphantom" -> {
+            case HPHANTOM -> {
                 // Occupies the content's width only (zero height/depth).
                 return new Phantom(parseGroup(), true, false);
             }
-            case "vphantom" -> {
+            case VPHANTOM -> {
                 // Occupies the content's height/depth only (zero width).
                 return new Phantom(parseGroup(), false, true);
             }
-            case "mathstrut" -> {
+            case MATHSTRUT -> {
                 // A zero-width strut with the height/depth of '(' — i.e. \vphantom{(}.
                 return new Phantom(new Atom('(', MathClass.OPEN), false, true);
             }
-            case "left" -> {
+            case LEFT -> {
                 int leftDelim = readDelimiter("\\left");
                 MathNode body = parseFencedBody();
                 int rightDelim = readDelimiter("\\right");
                 return new Fenced(leftDelim, body, rightDelim);
             }
-            case "not" -> {
+            case NOT -> {
                 // \not overlays a negation slash on the following relation. We
                 // realise it with the precomposed negated code point when one
                 // exists (STIX has the glyph); otherwise we fail loudly rather
@@ -1112,23 +1153,23 @@ public final class MathParser {
                 throw new MathSyntaxException(
                     "\\not has no precomposed negation for the following symbol");
             }
-            case "begin" -> {
+            case BEGIN -> {
                 return EnvironmentParser.parseEnvironment(this);
             }
-            case "bordermatrix" -> {
+            case BORDER_MATRIX -> {
                 return parseBorderMatrix();
             }
-            case "end" -> throw new MathSyntaxException(
+            case END -> throw new MathSyntaxException(
                 "\\end without a matching \\begin");
-            case "hline", "hdashline" -> throw new MathSyntaxException(
+            case ROW_RULE -> throw new MathSyntaxException(
                 "\\" + name + " is only valid inside an array/matrix environment");
-            case "right" -> throw new MathSyntaxException("\\right without matching \\left");
-            case "lx" -> throw new MathSyntaxException(
+            case RIGHT -> throw new MathSyntaxException("\\right without matching \\left");
+            case LX -> throw new MathSyntaxException(
                 "nested \\lx not supported: \\lx must be the whole top-level expression "
                     + "(a future refinement may allow nesting)");
-            case "limits", "nolimits" ->
+            case LIMITS_MODIFIER ->
                 throw new MathSyntaxException("\\" + name + " must directly follow a large operator");
-            case "operatorname" -> {
+            case OPERATOR_NAME -> {
                 // \operatorname{name} (beside scripts) / \operatorname*{name} (limits).
                 boolean withLimits = false;
                 if (peek().kind() == Kind.CHAR && peek().codePoint() == '*') {
@@ -1138,86 +1179,106 @@ public final class MathParser {
                 String opText = readOperatorNameArg();
                 return new OperatorName(opText, withLimits);
             }
-            default -> {
-                // Font-variant alphabet (\mathbb \mathcal \mathbf \boldsymbol …)?
-                // Rewrites the enclosed atoms to math-alphanumeric code points —
-                // no new node kind (see MathVariant).
+            case FONT_VARIANT -> {
+                // Font-variant alphabet (\mathbb \mathcal \mathbf \boldsymbol …):
+                // rewrite enclosed atoms to math-alphanumeric code points.
                 MathVariant.Style variant = FONT_VARIANTS.get(name);
-                if (variant != null) {
-                    MathNode arg = parseFontArg(name);
-                    return MathVariant.apply(variant, arg);
-                }
-                // Predefined named operator (\sin \cos \lim \max \operatorname*…)?
+                MathNode arg = parseFontArg(name);
+                return MathVariant.apply(variant, arg);
+            }
+            case NAMED_OPERATOR -> {
+                // Predefined named operator (\sin \cos \lim \max …).
                 OpSpec op = NAMED_OPS.get(name);
-                if (op != null) {
-                    return new OperatorName(op.display(), op.takesLimits());
-                }
-                // Accent (glyph accent, wide accent, or over/underline rule)?
+                return new OperatorName(op.display(), op.takesLimits());
+            }
+            case ACCENT -> {
+                // Accent (glyph accent, wide accent, or over/underline rule).
                 AccentSpec accent = ACCENTS.get(name);
-                if (accent != null) {
-                    MathNode base = parseAccentArg(name);
-                    return new Accent(name, base, accent.codePoint(),
-                        accent.stretchy(), accent.under());
-                }
-                // The mod family (wild-corpus GAP tier). \bmod is the binary
-                // "mod" word (a mathbin in TeX; the upright operator word is the
-                // dominant visual, so OperatorName's roman rendering fits);
-                // \pmod{m} typesets "(mod m)" with a leading 18mu, per TeX.
-                if (name.equals("bmod")) {
-                    return new OperatorName("mod", false);
-                }
-                if (name.equals("pmod")) {
-                    MathNode arg = parseGroup();
-                    return new MathList(List.of(
-                        new Spacing(18.0),
-                        new Atom('(', MathClass.OPEN),
-                        new OperatorName("mod", false),
-                        new Spacing(6.0),
-                        arg,
-                        new Atom(')', MathClass.CLOSE)));
-                }
-                // Large operator?
+                MathNode base = parseAccentArg(name);
+                return new Accent(name, base, accent.codePoint(),
+                    accent.stretchy(), accent.under());
+            }
+            case BMOD -> {
+                return new OperatorName("mod", false);
+            }
+            case PMOD -> {
+                MathNode arg = parseGroup();
+                return new MathList(List.of(
+                    new Spacing(18.0),
+                    new Atom('(', MathClass.OPEN),
+                    new OperatorName("mod", false),
+                    new Spacing(6.0),
+                    arg,
+                    new Atom(')', MathClass.CLOSE)));
+            }
+            case BIG_OPERATOR -> {
                 Sym big = BIG_OPERATORS.get(name);
-                if (big != null) {
-                    return new Atom(big.codePoint(), big.mathClass());
-                }
-                // Explicit spacing?
+                return new Atom(big.codePoint(), big.mathClass());
+            }
+            case SPACE -> {
                 Double mu = SPACES.get(name);
-                if (mu != null) {
-                    return new Spacing(mu);
-                }
-                // Symbol / greek?
+                return new Spacing(mu);
+            }
+            case SYMBOL -> {
                 Sym sym = SYMBOLS.get(name);
-                if (sym != null) {
-                    return new Atom(sym.codePoint(), sym.mathClass());
-                }
+                return new Atom(sym.codePoint(), sym.mathClass());
+            }
+            case SIZED_DELIMITER -> {
                 // \big/\Big/\bigg/\Bigg (+ l/r/m class variants): fixed-size delimiters.
-                // Runs AFTER BIG_OPERATORS/SYMBOLS, so \bigcup, \bigstar, … are gone.
                 MathNode sized = tryParseSizedDelim(name);
-                if (sized != null) {
-                    return sized;
+                if (sized == null) {
+                    throw new IllegalStateException(
+                        "descriptor does not name a sized delimiter: \\" + name);
                 }
+                return sized;
+            }
+            case EQUATION_SUPPRESSOR -> {
                 // Equation-numbering control commands are INERT in LatteX (no automatic
-                // equation numbering / cross-referencing). Rather than throw "Unknown
-                // command" — which today breaks otherwise-valid align/gather/multline
-                // blocks that carry them — accept them as no-glyph no-ops. An empty
-                // MathList contributes nothing to layout/SVG/MathML.
-                if (name.equals("nonumber") || name.equals("notag")) {
-                    return new MathList(List.of());
-                }
+                // numbering / cross-referencing). An empty MathList contributes nothing.
+                return nonRenderingResult(descriptor);
+            }
+            case LABEL -> {
                 // \label{key}: consume and DISCARD its mandatory brace group (mirrors
                 // the strictness of the \tag reader), then emit nothing.
-                if (name.equals("label")) {
-                    if (peek().kind() != Kind.LBRACE) {
-                        throw new MathSyntaxException("\\label expects a {key} group");
-                    }
-                    parseGroup(); // read and discard the label
-                    return new MathList(List.of());
+                if (peek().kind() != Kind.LBRACE) {
+                    throw new MathSyntaxException("\\label expects a {key} group");
                 }
-                throw MathSyntaxException.unsupported(
-                    "Unknown command: \\" + name + commandSuggestion(name), commandOffset);
+                parseGroup(); // read and discard the label
+                return nonRenderingResult(descriptor);
             }
+            case TEXT -> throw new MathSyntaxException(
+                "\\" + name + " expects a '{...}' text argument", commandOffset);
+            case DELIMITER, INFIX_FRACTION, TAG, MIDDLE, ROW_SEPARATOR, DEFINITION ->
+                throw unknownCommand(name, commandOffset);
         }
+        throw new IllegalStateException(
+            "command handler is not dispatched: " + descriptor.handler());
+    }
+
+    /**
+     * Enforces the handler's output contract on every successful ordinary-command
+     * dispatch. Context-only controls ({@code \end}) and macro definitions are
+     * consumed before this dispatch and are behavior-pinned in the registry tests.
+     */
+    private static MathNode validateCommandOutput(
+            CommandRegistry.Descriptor descriptor, MathNode result) {
+        boolean empty = result instanceof MathList list && list.items().isEmpty();
+        if (descriptor.outputKind() == CommandRegistry.OutputKind.NON_RENDERING && !empty) {
+            throw new IllegalStateException(
+                "non-rendering command emitted a node: "
+                    + descriptor.displayName());
+        }
+        return result;
+    }
+
+    /** Empty result for a successfully consumed control-only command. */
+    private static MathNode nonRenderingResult(CommandRegistry.Descriptor descriptor) {
+        if (descriptor.outputKind() != CommandRegistry.OutputKind.NON_RENDERING) {
+            throw new IllegalStateException(
+                "rendering command routed through non-rendering dispatch: "
+                    + descriptor.displayName());
+        }
+        return new MathList(List.of());
     }
 
     /**
@@ -1245,7 +1306,7 @@ public final class MathParser {
             if (t.kind() == Kind.EOF) {
                 throw new MathSyntaxException("Unbalanced brace in \\substack argument");
             }
-            if (isCommand(t, "\\") || isCommand(t, "cr")) {
+            if (isCommand(t, CommandRegistry.Handler.ROW_SEPARATOR)) {
                 next();
                 rows.add(List.of(wrap(row)));
                 row = new ArrayList<>();
@@ -1301,7 +1362,7 @@ public final class MathParser {
             if (t.kind() == Kind.EOF) {
                 throw new MathSyntaxException("Unbalanced brace in \\bordermatrix argument");
             }
-            if (isCommand(t, "\\") || isCommand(t, "cr")) {
+            if (isCommand(t, CommandRegistry.Handler.ROW_SEPARATOR)) {
                 next();
                 row.add(wrap(cell));
                 cell = new ArrayList<>();
@@ -1382,11 +1443,11 @@ public final class MathParser {
         List<MathNode> items = new ArrayList<>();
         while (true) {
             Token t = peek();
-            if (isCommand(t, "right")) {
+            if (isCommand(t, CommandRegistry.Handler.RIGHT)) {
                 next(); // consume \right; the delimiter is read by the caller
                 break;
             }
-            if (isCommand(t, "middle")) {
+            if (isCommand(t, CommandRegistry.Handler.MIDDLE)) {
                 // \middle <delim> — a mid delimiter stretched like the enclosing
                 // \left..\right pair (L2, plan lattex-middle-evalbar). Legal ONLY
                 // here: outside a fenced body the command falls through to the
@@ -1511,7 +1572,8 @@ public final class MathParser {
             if (t.kind() == Kind.CHAR) {
                 sb.appendCodePoint(t.codePoint());
                 next();
-            } else if (t.kind() == Kind.COMMAND && SPACES.containsKey(t.name())) {
+            } else if (t.kind() == Kind.COMMAND
+                    && CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.SPACE)) {
                 // Spacing commands are allowed inside an operator name (arg\,max,
                 // lim\;sup): a positive space renders as one literal space; a negative
                 // space (\!) collapses. The name stays plain text — no math nucleus.
@@ -1584,21 +1646,12 @@ public final class MathParser {
             };
         }
         if (t.kind() == Kind.COMMAND) {
-            return switch (t.name()) {
-                case "{" -> '{';
-                case "}" -> '}';
-                case "|" -> 0x2016;      // \| is the double bar ‖ (synonym of \Vert)
-                case "Vert" -> 0x2016;   // ‖
-                case "vert" -> '|';
-                case "langle" -> 0x27E8; // ⟨
-                case "rangle" -> 0x27E9; // ⟩
-                case "lfloor" -> 0x230A; // ⌊
-                case "rfloor" -> 0x230B; // ⌋
-                case "lceil" -> 0x2308;  // ⌈
-                case "rceil" -> 0x2309;  // ⌉
-                default -> throw new MathSyntaxException(
+            java.util.OptionalInt delimiter = CommandRegistry.delimiterCodePoint(t.name());
+            if (delimiter.isEmpty()) {
+                throw new MathSyntaxException(
                     context + ": \\" + t.name() + " is not a valid delimiter");
-            };
+            }
+            return delimiter.getAsInt();
         }
         throw new MathSyntaxException(context + ": expected a delimiter but found " + describe(t));
     }
@@ -1658,8 +1711,10 @@ public final class MathParser {
                 try {
                     items.add(parseMath(span, depth));
                 } catch (MathSyntaxException e) {
-                    throw new MathSyntaxException("in \\" + t.name() + " nested math '$"
-                        + span + "$': " + e.getMessage(), t.offset());
+                    throw MathSyntaxException.withUnsupportedKind(
+                        "in \\" + t.name() + " nested math '$"
+                            + span + "$': " + e.getMessage(),
+                        t.offset(), e.unsupportedKind());
                 }
             }
             i = close + 1;
@@ -1702,7 +1757,7 @@ public final class MathParser {
                 while (j < s.length() && isAsciiLetter(s.charAt(j))) {
                     j++;
                 }
-                throw MathSyntaxException.unsupported(
+                throw MathSyntaxException.unknownCommand(
                     "Unknown command in \\" + t.name() + ": \\" + s.substring(i + 1, j)
                         + " — commands are not expanded in text; wrap math in $...$",
                     t.offset());
@@ -1733,7 +1788,8 @@ public final class MathParser {
                 while (j < n && Character.isLetter(s.charAt(j))) {
                     j++;
                 }
-                if (j > i + 1 && TEXT_COMMANDS.containsKey(s.substring(i + 1, j))) {
+                if (j > i + 1 && CommandRegistry.hasGrammar(
+                        s.substring(i + 1, j), CommandRegistry.GrammarKind.TEXT_ARGUMENT)) {
                     // nested text-family command: skip its whole braced argument
                     while (j < n && isWhitespace(s.charAt(j))) {
                         j++;
@@ -1787,12 +1843,9 @@ public final class MathParser {
     }
 
     // ------------------------------------------------------------------
-    // Read-only command enumeration (the drift-free "every supported
-    // command" index). This exposes the internal command tables as a flat,
-    // categorised list so a generator can render every command LatteX
-    // accepts. It adds NO parsing/layout/emit behaviour — it only reads the
-    // static tables built above, so the index can never drift from what the
-    // parser actually supports: add a command to a table and it appears here.
+    // Read-only command enumeration (the drift-free "every supported command"
+    // index). The same typed descriptors that gate lexer/grammar/parser dispatch
+    // supply this flat, categorised list and its accepted examples.
     // ------------------------------------------------------------------
 
     /**
@@ -1810,7 +1863,10 @@ public final class MathParser {
         NAMED_OPERATOR("Named operators"),
         ACCENT("Accents & decorations"),
         FONT_VARIANT("Font variants"),
-        SPACING("Spacing");
+        SPACING("Spacing"),
+        STRUCTURE("Structures & layout"),
+        TEXT("Text"),
+        CONTROL("Grammar & controls");
 
         private final String title;
 
@@ -1837,104 +1893,60 @@ public final class MathParser {
     }
 
     /**
-     * Enumerates every command in the parser's static command tables (symbols,
-     * big operators, named operators, accents, font variants, spacing) into a
-     * flat list, each paired with a category and a render template. READ-ONLY:
-     * this reflects exactly what {@link #parse} accepts today and updates
-     * automatically when a table gains an entry.
+     * Enumerates every command in the authoritative descriptor registry into a
+     * flat list, each paired with a category and an accepted render template.
+     * This includes structural, contextual, text, and non-rendering grammar
+     * commands as well as the symbol tables; the latter use a visible surrounding
+     * expression in their template. READ-ONLY and deterministically ordered.
      */
     public static List<SupportedCommand> supportedCommands() {
+        return SupportedCommandsHolder.COMMANDS;
+    }
+
+    /** Initialization-on-demand holder keeps the immutable public projection cached. */
+    private static final class SupportedCommandsHolder {
+        private static final List<SupportedCommand> COMMANDS = buildSupportedCommands();
+
+        private SupportedCommandsHolder() {
+        }
+    }
+
+    private static List<SupportedCommand> buildSupportedCommands() {
         List<SupportedCommand> out = new ArrayList<>();
-        SYMBOLS.forEach((name, sym) ->
-            out.add(new SupportedCommand("\\" + name, categorize(sym), "\\" + name)));
-        BIG_OPERATORS.forEach((name, sym) ->
-            out.add(new SupportedCommand("\\" + name, Category.BIG_OPERATOR,
-                "\\" + name + "_{i=1}^{n}")));
-        NAMED_OPS.forEach((name, op) ->
-            out.add(new SupportedCommand("\\" + name, Category.NAMED_OPERATOR,
-                op.takesLimits() ? "\\" + name + "_{x\\to0}" : "\\" + name + " x")));
-        ACCENTS.forEach((name, acc) ->
-            out.add(new SupportedCommand("\\" + name, Category.ACCENT,
-                "\\" + name + accentBase(acc))));
-        FONT_VARIANTS.forEach((name, style) ->
-            out.add(new SupportedCommand("\\" + name, Category.FONT_VARIANT,
-                (name.equals("boldsymbol") || name.equals("bm"))
-                    ? "\\" + name + "{\\alpha\\beta\\gamma}"
-                    : "\\" + name + "{RQZ}")));
-        SPACES.forEach((name, mu) ->
-            out.add(new SupportedCommand("\\" + name, Category.SPACING,
-                "a\\" + name + " b")));
-        // The source tables are unordered maps; sort by (category, command) so the
-        // enumeration — and the generated index page — is deterministic (drift-free).
-        out.sort(java.util.Comparator
-            .comparingInt((SupportedCommand c) -> c.category().ordinal())
-            .thenComparing(SupportedCommand::command));
+        for (CommandRegistry.Descriptor descriptor : CommandRegistry.descriptors()) {
+            out.add(new SupportedCommand(
+                descriptor.displayName(), descriptor.category(), descriptor.indexExample()));
+        }
         return List.copyOf(out);
     }
 
     /**
-     * The keyword-dispatched structural commands handled by the big {@code switch} in
-     * {@link #parseCommandBody} (fractions, roots, binomials, phantoms, style/color, …).
-     * Unlike the symbol/operator/accent tables, these are NOT reachable via
-     * {@link #supportedCommands()}, so a "did you mean?" over commands alone would never
-     * propose {@code \frac}. This hand-maintained set fills that gap; keep it in sync with
-     * the switch when a structural command is added or renamed. (Purely a suggestion
-     * source — it changes no parse behavior.)
-     */
-    private static final List<String> STRUCTURAL_COMMANDS = List.of(
-        "frac", "cfrac", "dfrac", "tfrac", "binom", "dbinom", "tbinom", "sqrt",
-        "overset", "underset", "stackrel", "underbrace", "overbrace", "substack",
-        "phantom", "hphantom", "vphantom", "mathstrut", "operatorname",
-        "textcolor", "color", "left", "right", "not", "bmod", "pmod",
-        "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle",
-        "limits", "nolimits", "begin", "end",
-        "xrightarrow", "xleftarrow", "xleftrightarrow", "xRightarrow", "xLeftarrow",
-        "xLeftrightarrow", "xmapsto", "xhookrightarrow", "xhookleftarrow",
-        "xrightleftharpoons", "xlongequal");
-
-    /**
      * A {@code " — did you mean \frac?"} suffix for an unknown command {@code name}
      * (given WITHOUT its leading backslash), or {@code ""} when no supported command is
-     * within the {@link FuzzyMatch} threshold. The candidate set is every
-     * {@link #supportedCommands()} name (backslash stripped — these track the tables
-     * automatically) plus the {@link #STRUCTURAL_COMMANDS} the switch handles directly.
+     * within the {@link FuzzyMatch} threshold. Candidates come only from the
+     * authoritative descriptor registry.
      */
     private static String commandSuggestion(String name) {
-        List<String> names = new ArrayList<>(STRUCTURAL_COMMANDS);
-        for (SupportedCommand c : supportedCommands()) {
-            names.add(c.command().substring(1)); // drop the leading '\'
-        }
-        return FuzzyMatch.nearest(name, names)
+        return CommandRegistry.nearestSuggestion(name)
             .map(hit -> " — did you mean \\" + hit + "?")
             .orElse("");
     }
 
-    /** Categorises a symbol-table entry by its code-point range and math class. */
-    private static Category categorize(Sym sym) {
-        int cp = sym.codePoint();
-        // Greek + Coptic block covers every Greek letter and \var* / digamma form.
-        if (cp >= 0x0370 && cp <= 0x03FF) {
-            return Category.GREEK;
-        }
-        // Arrows block + Supplemental Arrows-A (the long arrows \longleftarrow …).
-        if ((cp >= 0x2190 && cp <= 0x21FF) || (cp >= 0x27F0 && cp <= 0x27FF)) {
-            return Category.ARROW;
-        }
-        return switch (sym.mathClass()) {
-            case REL -> Category.RELATION;
-            case BIN -> Category.BINARY_OPERATOR;
-            // Explicit residual (drift-guard): a new MathClass must fail to compile here.
-            // (OP falls here too — a bare big-operator glyph spaces as ORDINARY.)
-            case ORD, OP, INNER, OPEN, CLOSE, PUNCT -> Category.ORDINARY;
-        };
+    /** Suggests another command when {@code name} is known but invalid here. */
+    private static String commandAlternative(String name) {
+        return CommandRegistry.nearestAlternative(name)
+            .map(hit -> " — did you mean \\" + hit + "?")
+            .orElse("");
     }
 
-    /** A base to place under an accent: wide accents & rules get a run, others a single letter. */
-    private static String accentBase(AccentSpec acc) {
-        if (acc.codePoint() == Accent.RULE) {
-            return "{a+b}"; // overline / underline rule over a short expression
-        }
-        return acc.stretchy() ? "{abc}" : "{x}";
+    private static MathSyntaxException unknownCommand(String name, int offset) {
+        // A registry-known contextual command used in the wrong place must not
+        // suggest itself, but can retain a useful established alternative.
+        String suggestion = CommandRegistry.get(name) == null
+            ? commandSuggestion(name)
+            : commandAlternative(name);
+        return MathSyntaxException.unknownCommand(
+            "Unknown command: \\" + name + suggestion, offset);
     }
 
     /**

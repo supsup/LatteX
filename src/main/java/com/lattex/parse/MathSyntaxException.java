@@ -21,13 +21,21 @@ public final class MathSyntaxException extends IllegalArgumentException {
     /** Sentinel offset meaning "no known position." */
     public static final int NO_OFFSET = -1;
 
+    /**
+     * Internal typed unsupported-construct reason; never inferred from exception
+     * text and deliberately not added to LatteX's public API.
+     */
+    enum UnsupportedKind {
+        NONE,
+        UNKNOWN_COMMAND,
+        UNKNOWN_ENVIRONMENT
+    }
+
     private final int offset;
     private String source; // the full input, attached by MathParser.parse; null if standalone
     // An unknown command / environment (a construct LatteX does not support), as opposed
-    // to malformed syntax. Lets the Outcome mapping classify a typo as UNSUPPORTED_CONSTRUCT
-    // instead of PARSE_ERROR so consumers can tell "you meant \frac" from "your braces are
-    // unbalanced." Defaults false; set only via the unsupported(...) factory.
-    private boolean unsupportedConstruct = false;
+    // to malformed syntax. Typed so registry/macro callers never parse message text.
+    private UnsupportedKind unsupportedKind = UnsupportedKind.NONE;
 
     // L10 (plan lattex-hostile-input-hardening): marks a RESOURCE-CAP trip (output
     // bytes / layout boxes) so renderWithDiagnostics classifies OUTPUT_CAP_EXCEEDED
@@ -45,14 +53,26 @@ public final class MathSyntaxException extends IllegalArgumentException {
     }
 
     /**
-     * Builds an exception flagged as an UNSUPPORTED construct (an unknown command or
-     * environment name) rather than malformed syntax. Same message/offset channel as the
-     * plain constructor; only {@link #isUnsupportedConstruct()} differs, which the
-     * diagnostics layer reads to classify the {@link com.lattex.api.Outcome}.
+     * Builds an exception typed as an unknown command while preserving the established
+     * public message/offset channel.
      */
-    static MathSyntaxException unsupported(String message, int offset) {
+    static MathSyntaxException unknownCommand(String message, int offset) {
+        return withUnsupportedKind(message, offset, UnsupportedKind.UNKNOWN_COMMAND);
+    }
+
+    /** Builds an exception typed as an unknown environment. */
+    static MathSyntaxException unknownEnvironment(String message, int offset) {
+        return withUnsupportedKind(message, offset, UnsupportedKind.UNKNOWN_ENVIRONMENT);
+    }
+
+    /**
+     * Rebuilds a contextual error without dropping its typed unsupported reason.
+     * {@link UnsupportedKind#NONE} deliberately returns an ordinary syntax error.
+     */
+    static MathSyntaxException withUnsupportedKind(
+            String message, int offset, UnsupportedKind unsupportedKind) {
         MathSyntaxException e = new MathSyntaxException(message, offset);
-        e.unsupportedConstruct = true;
+        e.unsupportedKind = unsupportedKind == null ? UnsupportedKind.NONE : unsupportedKind;
         return e;
     }
 
@@ -95,7 +115,24 @@ public final class MathSyntaxException extends IllegalArgumentException {
      * classify the {@link com.lattex.api.Outcome} as {@code UNSUPPORTED_CONSTRUCT}.
      */
     public boolean isUnsupportedConstruct() {
-        return unsupportedConstruct;
+        return unsupportedKind() != UnsupportedKind.NONE;
+    }
+
+    /** Internal typed unsupported reason, or {@link UnsupportedKind#NONE}. */
+    UnsupportedKind unsupportedKind() {
+        // Null is possible only when an exception serialized before this typed
+        // field existed is deserialized with the retained serialVersionUID.
+        return unsupportedKind == null ? UnsupportedKind.NONE : unsupportedKind;
+    }
+
+    /** Internal discriminator for an unknown command. */
+    boolean isUnknownCommand() {
+        return unsupportedKind() == UnsupportedKind.UNKNOWN_COMMAND;
+    }
+
+    /** Internal discriminator for an unknown environment. */
+    boolean isUnknownEnvironment() {
+        return unsupportedKind() == UnsupportedKind.UNKNOWN_ENVIRONMENT;
     }
 
     /**

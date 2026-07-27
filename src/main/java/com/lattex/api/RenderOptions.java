@@ -48,10 +48,17 @@ import java.util.regex.Pattern;
  *                  Geometry/layout are untouched; inline results
  *                  ({@link LatteX#renderInlineResult}) and fragments
  *                  ({@link LatteX#renderFragment}) stay fixed-size regardless.
+ * @param renderErrors the HOST opt-in for a bounded rendered failure card from
+ *                  {@link LatteX#renderWithDiagnostics(String, RenderOptions)}.
+ *                  Default {@code false}: diagnostic failures keep the historical
+ *                  empty-SVG result. This flag is not part of the author-controlled
+ *                  {@code \lx} option language and never changes throwing
+ *                  {@link LatteX#render(String, RenderOptions)}.
  */
 public record RenderOptions(double scale, Color color, MathStyle mathStyle,
                             java.util.Map<String, String> macros,
-                            boolean interactiveExpansion, boolean fluid) {
+                            boolean interactiveExpansion, boolean fluid,
+                            boolean renderErrors) {
 
     /** Lower clamp for {@link #scale()} — below this glyphs collapse to nothing. */
     public static final double MIN_SCALE = 0.1;
@@ -74,39 +81,50 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
 
     /** Three-arg compatibility constructor: no preset macros, expansion off, fixed-size. */
     public RenderOptions(double scale, Color color, MathStyle mathStyle) {
-        this(scale, color, mathStyle, java.util.Map.of(), false, false);
+        this(scale, color, mathStyle, java.util.Map.of(), false, false, false);
     }
 
     /** Four-arg compatibility constructor: preset macros, interactive expansion off, fixed-size. */
     public RenderOptions(double scale, Color color, MathStyle mathStyle,
                          java.util.Map<String, String> macros) {
-        this(scale, color, mathStyle, macros, false, false);
+        this(scale, color, mathStyle, macros, false, false, false);
     }
 
     /** Five-arg compatibility constructor: pre-{@code fluid} shape, fixed-size sizing. */
     public RenderOptions(double scale, Color color, MathStyle mathStyle,
                          java.util.Map<String, String> macros, boolean interactiveExpansion) {
-        this(scale, color, mathStyle, macros, interactiveExpansion, false);
+        this(scale, color, mathStyle, macros, interactiveExpansion, false, false);
+    }
+
+    /** Six-arg compatibility constructor: pre-rendered-error shape, card disabled. */
+    public RenderOptions(double scale, Color color, MathStyle mathStyle,
+                         java.util.Map<String, String> macros,
+                         boolean interactiveExpansion, boolean fluid) {
+        this(scale, color, mathStyle, macros, interactiveExpansion, fluid, false);
     }
 
     /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style, expansion off, fixed-size. */
     public static RenderOptions defaults() {
-        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of(), false, false);
+        return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY,
+            java.util.Map.of(), false, false, false);
     }
 
     /** A copy with a different scale (must be in {@code [MIN_SCALE, MAX_SCALE]}). */
     public RenderOptions withScale(double newScale) {
-        return new RenderOptions(newScale, color, mathStyle, macros, interactiveExpansion, fluid);
+        return new RenderOptions(newScale, color, mathStyle, macros,
+            interactiveExpansion, fluid, renderErrors);
     }
 
     /** A copy with a different color. */
     public RenderOptions withColor(Color newColor) {
-        return new RenderOptions(scale, newColor, mathStyle, macros, interactiveExpansion, fluid);
+        return new RenderOptions(scale, newColor, mathStyle, macros,
+            interactiveExpansion, fluid, renderErrors);
     }
 
     /** A copy with a different math style. */
     public RenderOptions withMathStyle(MathStyle newStyle) {
-        return new RenderOptions(scale, color, newStyle, macros, interactiveExpansion, fluid);
+        return new RenderOptions(scale, color, newStyle, macros,
+            interactiveExpansion, fluid, renderErrors);
     }
 
     /**
@@ -115,7 +133,8 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      * additive-only rule as inline definitions).
      */
     public RenderOptions withMacros(java.util.Map<String, String> newMacros) {
-        return new RenderOptions(scale, color, mathStyle, newMacros, interactiveExpansion, fluid);
+        return new RenderOptions(scale, color, mathStyle, newMacros,
+            interactiveExpansion, fluid, renderErrors);
     }
 
     /**
@@ -126,7 +145,8 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      * ONLY on an equation that authored the directive. A plain page pays zero cost.
      */
     public RenderOptions withInteractiveExpansion(boolean enabled) {
-        return new RenderOptions(scale, color, mathStyle, macros, enabled, fluid);
+        return new RenderOptions(scale, color, mathStyle, macros,
+            enabled, fluid, renderErrors);
     }
 
     /**
@@ -143,7 +163,18 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      * fixed-size regardless of this flag.
      */
     public RenderOptions withFluid(boolean enabled) {
-        return new RenderOptions(scale, color, mathStyle, macros, interactiveExpansion, enabled);
+        return new RenderOptions(scale, color, mathStyle, macros,
+            interactiveExpansion, enabled, renderErrors);
+    }
+
+    /**
+     * A copy with the host-only rendered-error card enabled or disabled. The flag
+     * is consulted only by {@link LatteX#renderWithDiagnostics(String, RenderOptions)};
+     * author source cannot set it, and the throwing render API ignores it.
+     */
+    public RenderOptions withRenderedErrors(boolean enabled) {
+        return new RenderOptions(scale, color, mathStyle, macros,
+            interactiveExpansion, fluid, enabled);
     }
 
     /**

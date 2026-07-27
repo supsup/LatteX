@@ -105,16 +105,41 @@ public final class LatteX {
     /**
      * Diagnostic render (L6.2, plan lattex-containment-diagnostics): the same SVG
      * {@link #render(String)} produces, plus a structured {@link Diagnostics} — and it
-     * NEVER throws. A syntax error returns {@code PARSE_ERROR} with the offset/caret;
-     * an internal layout/emit failure returns {@code RENDER_BUG} with the throwable
-     * crumb in {@code detail}. The Sirentide-parity twin (lattex/126): one consumer
-     * code path handles a failed diagram and a failed formula identically.
+     * NEVER throws. This historical overload keeps its exact defaults, including the
+     * empty SVG on failure.
      */
     public static RenderResult renderWithDiagnostics(String latex) {
+        return renderWithDiagnostics(latex, RenderOptions.defaults());
+    }
+
+    /**
+     * Diagnostic render with host options. Success is byte-identical to
+     * {@link #render(String, RenderOptions)}. On failure, the host-only
+     * {@link RenderOptions#renderErrors()} gate may replace the historical empty SVG
+     * with a bounded inert error card; the original {@link Diagnostics} is preserved.
+     * Throwing {@code render} behavior is unaffected, and source {@code \lx} options
+     * cannot set or clear the outer host gate.
+     *
+     * @param latex the LaTeX math source
+     * @param opts host render options; a null value is contained as a diagnostic bug
+     * @return the render result, never {@code null}
+     */
+    public static RenderResult renderWithDiagnostics(String latex, RenderOptions opts) {
+        RenderResult result = diagnosticRender(latex, opts);
+        if (opts == null || !opts.renderErrors()
+                || result.diagnostics().outcome() == Outcome.OK) {
+            return result;
+        }
+        return renderedErrorFailSoft(result.diagnostics(),
+            () -> RenderedErrorCard.render(latex, result.diagnostics(), FontHolder.FONT));
+    }
+
+    private static RenderResult diagnosticRender(String latex, RenderOptions opts) {
         String stage = "parse";
         try {
-            MathNode node = MathParser.parse(latex);
-            RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
+            java.util.Objects.requireNonNull(opts, "opts");
+            MathNode node = MathParser.parse(latex, opts.macros());
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
             MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             stage = "layout";
             SfntFont font = FontHolder.FONT;
@@ -122,7 +147,10 @@ public final class LatteX {
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
             Layout layout = LayoutEngine.layout(body, ctx);
             stage = "emit";
-            String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
+            // fluid and renderErrors are host-only. Source \lx may replace visual
+            // style, but it cannot alter either host gate.
+            String svg = SvgEmitter.emit(
+                layout, font, describe(body), style.color(), opts.fluid());
             return new RenderResult(svg, new Diagnostics(Outcome.OK, "emit",
                 "Rendered successfully.", -1, "", -1, ""));
         } catch (MathSyntaxException e) {
@@ -155,6 +183,20 @@ public final class LatteX {
                 e.getClass().getSimpleName()
                     + (e.getMessage() == null ? "" : ": " + e.getMessage()),
                 -1, ""));
+        }
+    }
+
+    /**
+     * The secondary card stage is independently fail-soft. Package-private so the
+     * forced-failure discriminator can inject a throwing renderer without a public
+     * test hook. OutOfMemoryError is deliberately not caught, matching containRender.
+     */
+    static RenderResult renderedErrorFailSoft(Diagnostics diagnostics,
+            java.util.function.Supplier<String> renderer) {
+        try {
+            return new RenderResult(renderer.get(), diagnostics);
+        } catch (StackOverflowError | RuntimeException cardFailure) {
+            return new RenderResult("", diagnostics);
         }
     }
 
