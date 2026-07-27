@@ -1,5 +1,7 @@
 package com.lattex.parse;
 
+import com.lattex.api.LatteXException;
+
 /**
  * Thrown when {@link MathParser} cannot parse its input: an unbalanced brace, a
  * dangling script, an unknown command, a bad delimiter, and so on. The message
@@ -11,10 +13,15 @@ package com.lattex.parse;
  * the full {@link #source()} input, so {@link #caretString()} can point a {@code ^}
  * at the offending column — an author-facing error instead of a positionless message.
  *
- * <p>Extends {@link IllegalArgumentException} so existing callers that catch the
- * broader type keep working.
+ * <p>Extends the exported {@link LatteXException}, which itself extends
+ * {@link IllegalArgumentException} — so existing callers that catch either of those
+ * broader types keep working, and a MODULAR consumer (which cannot name this
+ * non-exported {@code com.lattex.parse} type at all) can still catch every render
+ * failure by naming {@code com.lattex.api.LatteXException}. The hierarchy is purely
+ * additive at the top: {@code IllegalArgumentException → LatteXException →
+ * MathSyntaxException}; this class is unmoved and unchanged in identity.
  */
-public final class MathSyntaxException extends IllegalArgumentException {
+public final class MathSyntaxException extends LatteXException {
 
     private static final long serialVersionUID = 2L;
 
