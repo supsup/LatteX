@@ -61,7 +61,8 @@ final class EnvironmentParser {
                 MathSyntaxException.NO_OFFSET);
         }
 
-        // array carries a user column spec {ccc|c}; other envs are uniform.
+        // array carries a user column spec {ccc|c} and subarray a single-letter {c}/{l};
+        // eqnarray synthesises a fixed one. Every other env derives its columns from the body.
         List<ColumnAlign> specAligns = null;
         List<Integer> specVlines = null;
         if (isEqnarray(env)) {
@@ -75,6 +76,13 @@ final class EnvironmentParser {
             ColumnSpec cs = readColumnSpec(parser);
             specAligns = cs.aligns();
             specVlines = cs.vlines();
+        } else if (isSubarray(env)) {
+            // subarray takes a MANDATORY single-letter {c}/{l} column spec. Like eqnarray
+            // above, it hands buildMatrix a DECLARED column spec rather than letting the
+            // column count be derived from the body — subarray is one column by definition,
+            // so a stray '&' must fail loud rather than silently widening the stack.
+            specAligns = List.of(readSubarrayColSpec(parser));
+            specVlines = List.of(0, 0);
         } else if (isAlignat(env)) {
             // alignat has a MANDATORY {n} column-pair count. Read and DISCARD it (mirrors
             // the ARRAY column-spec read above); LatteX's ALIGN path then derives the
@@ -374,11 +382,14 @@ final class EnvironmentParser {
         int cols;
         List<ColumnAlign> aligns;
         List<Integer> vlines;
-        if (spec.kind() == MatrixKind.ARRAY) {
+        // A DECLARED column spec (array's {lcr|}, eqnarray's synthesised three columns,
+        // subarray's single {c}/{l}) fixes the grid width and makes an over-wide row an
+        // error; every other environment derives its width from the widest body row.
+        if (specAligns != null) {
             cols = specAligns.size();
             for (List<MathNode> r : rawRows) {
                 if (r.size() > cols) {
-                    throw new MathSyntaxException("array row has " + r.size()
+                    throw new MathSyntaxException("\\begin{" + env + "} row has " + r.size()
                         + " cells but the column spec declares only " + cols);
                 }
             }
@@ -488,6 +499,52 @@ final class EnvironmentParser {
     /** True for {@code alignat}/{@code alignat*} — align with a mandatory {@code {n}} argument. */
     private static boolean isAlignat(String env) {
         return env.equals("alignat") || env.equals("alignat*");
+    }
+
+    /**
+     * True for {@code subarray} — amsmath's single-column stack, which takes a mandatory
+     * one-letter {@code {c}}/{@code {l}} column spec instead of {@code array}'s general one.
+     */
+    private static boolean isSubarray(String env) {
+        return env.equals("subarray");
+    }
+
+    /**
+     * Reads {@code subarray}'s mandatory {@code {c}} or {@code {l}} column spec. Unlike
+     * {@code array}'s multi-column {@code {lcr|}} ({@link #readColumnSpec}), amsmath's
+     * {@code subarray} declares exactly ONE column and accepts only {@code c} or
+     * {@code l} — no {@code r}, and no {@code |} rules, since it is always a bare
+     * limit stack. A missing brace, an unsupported letter, or any extra character
+     * fails loud, matching {@code array}'s argument discipline.
+     */
+    private static ColumnAlign readSubarrayColSpec(MathParser parser) {
+        if (parser.peek().kind() != Kind.LBRACE) {
+            throw new MathSyntaxException(
+                "\\begin{subarray} requires a {c} or {l} column spec but found "
+                    + MathParser.describe(parser.peek()));
+        }
+        parser.next(); // consume '{'
+        Token t = parser.peek();
+        if (t.kind() != Kind.CHAR) {
+            throw new MathSyntaxException(
+                "subarray column spec must be 'c' or 'l', but found " + MathParser.describe(t));
+        }
+        int cp = t.codePoint();
+        ColumnAlign align = switch (cp) {
+            case 'c' -> ColumnAlign.CENTER;
+            case 'l' -> ColumnAlign.LEFT;
+            default -> throw new MathSyntaxException(
+                "unsupported subarray column type '" + new String(Character.toChars(cp))
+                    + "' (only c and l are supported)");
+        };
+        parser.next(); // consume the column letter
+        if (parser.peek().kind() != Kind.RBRACE) {
+            throw new MathSyntaxException(
+                "subarray column spec must be a single 'c' or 'l', but found "
+                    + MathParser.describe(parser.peek()));
+        }
+        parser.next(); // consume '}'
+        return align;
     }
 
     /**

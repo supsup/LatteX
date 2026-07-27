@@ -1288,6 +1288,12 @@ public final class MathParser {
      * script style with a tightened baseline, used to stack several conditions under
      * a big-operator limit ({@code \sum_{\substack{i<j \\ i \ne k}}}). Rows are
      * {@code \\}-separated; each row is an ordinary math list.
+     *
+     * <p>amsmath's {@code subarray} environment builds the SAME
+     * {@link MatrixKind#SUBSTACK} grid through {@link EnvironmentParser} (LaTeXML
+     * expands {@code \substack} into {@code \begin{subarray}{c}…\end{subarray}}),
+     * differing only in taking a {@code {c}}/{@code {l}} column spec where
+     * {@code \substack} is always centred.
      */
     private MathNode parseSubstack() {
         if (peek().kind() != Kind.LBRACE) {

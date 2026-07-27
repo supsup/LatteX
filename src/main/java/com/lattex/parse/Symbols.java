@@ -658,6 +658,14 @@ final class Symbols {
         Map.entry("Vmatrix", new EnvSpec(0x2016, 0x2016, MatrixKind.MATRIX, ColumnAlign.CENTER)),
         Map.entry("smallmatrix", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.SMALL, ColumnAlign.CENTER)),
         Map.entry("array", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ARRAY, ColumnAlign.CENTER)),
+        // subarray: amsmath's single-column limit stack, the SAME grid \substack builds
+        // (MatrixKind.SUBSTACK — script style, tightened inter-row gaps, no edge padding),
+        // reached through a \begin/\end instead of a brace argument. It carries a MANDATORY
+        // one-letter {c}/{l} column spec that EnvironmentParser reads into a synthesised
+        // declared-column spec (as eqnarray does), so the uniform field below is unused.
+        // LaTeXML expands \substack into \begin{subarray}{c}…\end{subarray}, which is why
+        // this shape turns up in harvested corpora (a limit stack under \sum).
+        Map.entry("subarray", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.SUBSTACK, ColumnAlign.CENTER)),
         Map.entry("cases", new EnvSpec('{', NO_DELIM, MatrixKind.CASES, ColumnAlign.LEFT)),
         // eqnarray: a fixed 3-column right/center/left grid (LHS, relation, RHS). It
         // reuses ARRAY's machinery but takes NO user column spec — EnvironmentParser
