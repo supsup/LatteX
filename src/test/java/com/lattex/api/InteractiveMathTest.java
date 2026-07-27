@@ -282,6 +282,13 @@ class InteractiveMathTest {
         assertFalse(js.contains("lattex-fx"));
         assertFalse(css.contains("lattex-fx"));
         assertFalse(js.contains("inner" + "HTML"));
+
+        String nativeResources = resource(
+            "/META-INF/native-image/com.lattex/lattex/resource-config.json");
+        assertTrue(nativeResources.contains(
+            "\\\\Qcom/lattex/interactive/lattex-interactive.js\\\\E"));
+        assertTrue(nativeResources.contains(
+            "\\\\Qcom/lattex/interactive/lattex-interactive.css\\\\E"));
     }
 
     @Test
