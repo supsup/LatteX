@@ -1895,11 +1895,57 @@ public final class MathParser {
      */
     private static String escapedTokenDisplay(String s, int i) {
         int cp = s.codePointAt(i);
-        boolean loneSurrogate = Character.isBmpCodePoint(cp) && Character.isSurrogate((char) cp);
-        if (loneSurrogate || Character.isISOControl(cp)) {
+        if (isUnsafeInDiagnostic(cp)) {
             return String.format("U+%04X", cp);
         }
         return new String(Character.toChars(cp));
+    }
+
+    /**
+     * True when {@code cp} must not appear VERBATIM in a diagnostic message.
+     *
+     * <p>The predicate is stated as a question about the OUTPUT CONTRACT — "can this
+     * character cross the safe-for-UI/log boundary?" — rather than as a list of
+     * characters that have bitten us. Enumerating instances is how this got fixed three
+     * times: unpaired surrogates (Marlow 474), then the ISO-control class (Marlow 602),
+     * then the separator and format classes (Marlow 612). Each repair was correct and
+     * each was too narrow, because the previous one answered "which character?" instead
+     * of "which property?".
+     *
+     * <p>Unsafe classes, and why each is separately harmful rather than untidy:
+     *
+     * <ul>
+     *   <li>UNPAIRED SURROGATE — not legal text at all; corrupts the message carrying it.</li>
+     *   <li>ISO CONTROL (Cc) — NUL truncates C consumers, ESC can drive a terminal escape
+     *       sequence, LF forges a second log line out of author-controlled input.</li>
+     *   <li>LINE/PARAGRAPH SEPARATOR (Zl, Zp — U+2028, U+2029) — line terminators to
+     *       JavaScript and to many log readers, so they forge structure exactly like LF
+     *       while not being ISO controls.</li>
+     *   <li>FORMAT (Cf — U+202E RIGHT-TO-LEFT OVERRIDE, zero-width joiners, and friends)
+     *       — invisible, and a bidi override can REORDER the surrounding sentence in a
+     *       terminal or UI, so untrusted input can rewrite how the rejection that names
+     *       it appears to read.</li>
+     * </ul>
+     *
+     * <p>All four share one property: the character changes how the message is
+     * STRUCTURED or DISPLAYED rather than contributing a glyph to it. That is the actual
+     * invariant, and a fifth class meeting it should be added here rather than
+     * special-cased at a call site.
+     */
+    private static boolean isUnsafeInDiagnostic(int cp) {
+        if (Character.isBmpCodePoint(cp) && Character.isSurrogate((char) cp)) {
+            return true; // unpaired surrogate
+        }
+        if (Character.isISOControl(cp)) {
+            return true; // Cc
+        }
+        return switch (Character.getType(cp)) {
+            case Character.LINE_SEPARATOR,       // Zl — U+2028
+                 Character.PARAGRAPH_SEPARATOR,  // Zp — U+2029
+                 Character.FORMAT                // Cf — U+202E and the invisible formatters
+                 -> true;
+            default -> false;
+        };
     }
 
     /**

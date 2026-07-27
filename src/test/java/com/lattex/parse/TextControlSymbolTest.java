@@ -366,6 +366,64 @@ class TextControlSymbolTest {
         assertNoUnpairedSurrogate(msg);
     }
 
+    /// Marlow review 612. The ISO-control repair was still an INSTANCE fix: U+2028 and
+    /// U+2029 are line terminators to JavaScript and to many log readers (Zl/Zp, not Cc),
+    /// and U+202E RIGHT-TO-LEFT OVERRIDE is a Cf format character that can REORDER the
+    /// sentence rejecting it. All three survived to the public message.
+    ///
+    /// Third narrowing on the same helper, so the predicate is now stated as a question
+    /// about the output contract rather than a list of characters that have bitten us.
+    @Test
+    void separatorAndFormatEscapesAreRejectedWithALegalMessage() {
+        record Case(int cp, String notation, String what) {}
+        Case[] cases = {
+            new Case(0x2028, "U+2028", "LINE SEPARATOR - a JS line terminator"),
+            new Case(0x2029, "U+2029", "PARAGRAPH SEPARATOR - forges log structure"),
+            new Case(0x202E, "U+202E", "RTL OVERRIDE - reorders the rejecting sentence"),
+            new Case(0x200D, "U+200D", "ZERO WIDTH JOINER - invisible in the message"),
+        };
+        for (Case c : cases) {
+            String bad = new String(Character.toChars(c.cp()));
+            MathSyntaxException e = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("\\text{a\\" + bad + "b}"),
+                "separator/format escape must still fail loud: " + c.what());
+            String msg = e.getMessage();
+            assertTrue(msg.contains("Unknown command in \\text"), msg);
+            assertTrue(msg.contains(c.notation()),
+                "must be shown as " + c.notation() + " (" + c.what() + "), got: " + describe(msg));
+            assertNoUnsafeDiagnosticChar(msg);
+        }
+    }
+
+    /// The public surface, which is where the safe-for-UI/log contract actually lives.
+    @Test
+    void separatorAndFormatEscapesAreLegalThroughRenderWithDiagnostics() {
+        for (int cp : new int[] {0x2028, 0x2029, 0x202E}) {
+            String bad = new String(Character.toChars(cp));
+            var result = LatteX.renderWithDiagnostics("\\text{a\\" + bad + "b}");
+            String msg = String.valueOf(result.diagnostics().message());
+            assertTrue(msg.contains("Unknown command in \\text"), msg);
+            assertNoUnsafeDiagnosticChar(msg);
+        }
+    }
+
+    /// The WHOLE contract in one sweep: no character that changes how the message is
+    /// structured or displayed, rather than contributing a glyph, may survive in it.
+    private static void assertNoUnsafeDiagnosticChar(String msg) {
+        for (int i = 0; i < msg.length(); ) {
+            int cp = msg.codePointAt(i);
+            int type = Character.getType(cp);
+            boolean unsafe = (Character.isBmpCodePoint(cp) && Character.isSurrogate((char) cp))
+                || Character.isISOControl(cp)
+                || type == Character.LINE_SEPARATOR
+                || type == Character.PARAGRAPH_SEPARATOR
+                || type == Character.FORMAT;
+            assertTrue(!unsafe, "unsafe U+" + String.format("%04X", cp) + " at " + i
+                + " in: " + describe(msg));
+            i += Character.charCount(cp);
+        }
+    }
+
     /// No ISO control may survive anywhere in a message that claims to be log-safe.
     private static void assertNoIsoControl(String msg) {
         for (int i = 0; i < msg.length(); ) {
