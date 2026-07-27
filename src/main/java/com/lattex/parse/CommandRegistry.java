@@ -71,6 +71,7 @@ final class CommandRegistry {
         NAMED_OPERATOR(GrammarKind.SYMBOL, OutputKind.RENDERING),
         ACCENT(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         FONT_VARIANT(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
+        ATOM_CLASS(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         SPACE(GrammarKind.SYMBOL, OutputKind.RENDERING),
         FRACTION(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
         CONTINUED_FRACTION(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
@@ -266,6 +267,13 @@ final class CommandRegistry {
                 (name.equals("boldsymbol") || name.equals("bm"))
                     ? "\\" + name + "{\\alpha\\beta\\gamma}"
                     : "\\" + name + "{RQZ}"));
+        // Atom-class wrappers are indexed under SPACING: their entire observable
+        // effect is the inter-atom glue the enclosing row inserts around them
+        // (the glyphs are untouched), so the example puts the wrapper BETWEEN two
+        // ordinary atoms where that glue is visible.
+        Symbols.ATOM_CLASS_WRAPPERS.forEach((name, forcedClass) ->
+            add(out, name, Category.SPACING, Handler.ATOM_CLASS,
+                "x\\" + name + "{y}z"));
         Symbols.SPACES.forEach((name, mu) ->
             add(out, name, Category.SPACING, Handler.SPACE, "a\\" + name + " b"));
         Symbols.TEXT_COMMANDS.forEach((name, style) ->

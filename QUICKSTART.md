@@ -107,10 +107,16 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 
 > **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
 > `\mathrm`). The argument is *literal text*: plain characters (spaces preserved),
-> `\$` for a literal dollar, invisible grouping braces, and `$…$` to re-enter math
-> mode (`\text{if $x>0$ then}`). Commands are **not** expanded inside text —
-> `\text{see \eqref{eq1}}` fails loud (`Unknown command in \text: \eqref`) rather
-> than silently serving the flattened characters; wrap math in `$…$` instead.
+> invisible grouping braces, `$…$` to re-enter math mode (`\text{if $x>0$ then}`),
+> and an EXPLICIT set of control-symbol escapes that decode to their literal
+> character — `\$` `\%` `\#` `\_` `\&` `\{` `\}` — plus `\,` (thin space), which
+> decodes to a plain space (text runs have no sub-em spacing unit). Every other
+> backslash sequence fails loud: a command (`\text{see \eqref{eq1}}` fails with
+> `Unknown command in \text: \eqref`), an unmapped control symbol (`\^`, `\~`),
+> `\\` (a line break in real LaTeX — text runs are single-line, so it has no
+> target and is rejected rather than silently dropped), or a trailing lone `\`.
+> Nothing is ever silently flattened *or* left with a stray backslash; wrap math
+> in `$…$` instead.
 >
 > **`aligned`/`split` position argument.** The optional `[t]`/`[b]`/`[c]` after
 > `\begin{aligned}`/`\begin{split}` is parsed and **ignored**: it selects which
@@ -316,7 +322,11 @@ In one-shot mode, invalid LaTeX is explained on stderr. In `--batch`, successful
 and in-place `lattex: error: …` records remain NUL-delimited on stdout.
 Output-delivery failures are explained on stderr; a stdout failure may leave incomplete
 output and never reports success. The CLI is a thin wrapper over the JVM
-`LatteX.render` — same core, byte-identical SVG.
+`LatteX.render` — same core, byte-identical SVG. stdin (and each `--batch` record) is
+read incrementally with a 100,000-character-per-expression cap enforced as it's read —
+no *unbounded* whole-stream read before a check, though the decoder's bounded read-ahead
+may already hold a short remainder — see **Scenario 7** in SLOWSTART.md for the
+`--batch` streaming/limit details.
 
 **Build it** (GraalVM CE for JDK 25 must be on `PATH` — e.g. `sdk use java 25-graalce`):
 

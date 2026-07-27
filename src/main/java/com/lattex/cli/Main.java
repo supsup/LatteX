@@ -1,6 +1,7 @@
 package com.lattex.cli;
 
 import com.lattex.api.LatteX;
+import com.lattex.parse.MathParser;
 import com.lattex.parse.MathSyntaxException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -66,18 +67,38 @@ public final class Main {
         The math EXPRESSION is taken from the (space-joined) positional
         arguments, or — when none are given — read from standard input.
         The SVG document is written to standard output, or to a file with -o.
+        Stdin is read and capped incrementally (never buffered whole before a
+        check): an expression over 100,000 characters fails loud. No new read is
+        issued once the cap trips; the decoder's bounded read-ahead may already
+        hold the remaining bytes when the stream is short, but it is never an
+        unbounded read of the whole stream.
 
         OPTIONS:
             -o, --output <FILE>   Write the SVG to FILE instead of stdout.
             --batch               Render MANY expressions in one process: read
-                                  them from stdin (one per line) and write one
-                                  NUL-terminated SVG record per input to stdout,
-                                  in order. A bad expression yields a
-                                  'lattex: error: …' record and does not abort
-                                  the batch. A stdout failure does abort: the
-                                  confirmed complete prefix remains valid, the
-                                  current record may be incomplete, and no later
-                                  records are emitted. Amortizes startup/spawn cost.
+                                  and stream them from stdin (one per line) and
+                                  write one NUL-terminated SVG record per input to
+                                  stdout, in order, AS EACH IS PRODUCED — records are
+                                  processed one at a time and outputs are never
+                                  accumulated, so peak memory is bounded to one
+                                  record plus its output plus fixed decoder buffers.
+                                  A SHORT batch may sit entirely in the decoder's
+                                  bounded read-ahead; what is ruled out is an
+                                  UNBOUNDED whole-stream read or accumulation.
+                                  A malformed expression yields a
+                                  'lattex: error: …' record and does not abort the
+                                  batch; each record is also capped at 100,000
+                                  characters (read incrementally, with read-ahead
+                                  bounded to a small overshoot past the cap — never
+                                  an unbounded whole-stream read), and an OVERSIZED
+                                  record DOES abort the rest of the batch (its own
+                                  error record is still emitted; everything already
+                                  produced before it already reached stdout).
+                                  A stdout failure also aborts: the confirmed
+                                  complete prefix remains valid, the current record
+                                  may be incomplete, and no later records are
+                                  emitted. There is no cap on how many records a
+                                  batch may hold. Amortizes startup/spawn cost.
             -0, --null            In --batch, split stdin on NUL instead of
                                   newlines (for expressions containing newlines).
             --inline              Render in INLINE (text) style — smaller fractions
@@ -111,9 +132,11 @@ public final class Main {
         EXIT STATUS:
             0  success
             1  render/IO error (invalid LaTeX, unwritable output, failed stdout
-               write/flush, …); in --batch, at least one record failed (all
-               records are still emitted) or stdout delivery failed (the batch
-               stops at the first detected output failure)
+               write/flush, …); in --batch, at least one record failed — malformed
+               records are still all emitted — or an oversized (>100,000-char)
+               record ended the batch, or stdout delivery failed (the batch stops
+               at the first detected output failure; the confirmed complete prefix
+               remains valid)
             2  usage error (unknown flag, missing argument, …)
         """.formatted(VERSION);
 
@@ -144,6 +167,15 @@ public final class Main {
      * Runs the CLI with explicit input + output streams (testable). Never calls
      * {@link System#exit}. In {@code --batch} mode, reads many expressions from
      * {@code in} and writes one NUL-delimited SVG (or error) record per input.
+     *
+     * <p><strong>Stream ownership.</strong> When {@code in} is consumed (stdin mode or
+     * {@code --batch}), this method takes ownership of it and CLOSES it before returning
+     * (the streaming {@link DelimitedRecordReader} is managed with try-with-resources,
+     * and closing the reader closes the underlying stream). This differs from the
+     * pre-streaming implementation, which read {@code in} via {@code readAllBytes()}
+     * without closing it. Callers that must keep {@code in} open after {@code run}
+     * returns should pass a close-shielded wrapper. {@code out} and {@code err} are NOT
+     * closed. In production {@code in} is {@link System#in}, for which closing is benign.
      *
      * @param args the raw command-line arguments
      * @param in   the input stream read when no positional expression is given / in batch mode
@@ -268,9 +300,22 @@ public final class Main {
         if (sawExpr) {
             latex = expr.toString();
         } else {
-            // No expression on the command line — read it from stdin.
-            try {
-                latex = new String(in.readAllBytes(), StandardCharsets.UTF_8).strip();
+            // No expression on the command line — read it from stdin. Streamed
+            // (LTX-09, plan ac28238e): the reader enforces MathParser's own
+            // MAX_SOURCE_LENGTH cap WHILE reading, so an adversarial/huge stdin
+            // fails loud without ever buffering more than a small overshoot past
+            // the cap — no more readAllBytes()-then-check on the raw stream.
+            try (DelimitedRecordReader reader =
+                     new DelimitedRecordReader(in, DelimitedRecordReader.NO_DELIMITER,
+                         MathParser.MAX_SOURCE_LENGTH)) {
+                // The reader caps the RAW decoded length; the strip() below runs only
+                // AFTER it returns. So a whitespace-padded record that crosses the cap
+                // is rejected before we ever trim it — the cap is fail-closed on raw
+                // length, not on the post-strip content (see DelimitedRecordReader).
+                latex = reader.next().strip();
+            } catch (DelimitedRecordReader.TooLongException e) {
+                err.println("lattex: error: " + e.getMessage());
+                return 1;
             } catch (IOException e) {
                 err.println("lattex: error: failed to read stdin: " + e.getMessage());
                 return 1;
@@ -335,6 +380,38 @@ public final class Main {
      * {@code out}, IN ORDER: the SVG on success, or a {@code lattex: error: …} line on failure.
      * A single bad expression is isolated (its error record is emitted) and never aborts the batch;
      * the exit code is 1 if any record failed, else 0. Blank records are skipped.
+     *
+     * <p><strong>Streaming (LTX-09, plan ac28238e).</strong> Records are read and rendered
+     * ONE AT A TIME via {@link DelimitedRecordReader}, and each record's output is written
+     * and flushed to {@code out} before the next record is PROCESSED — not before it is
+     * READ. The decoder's bounded read-ahead may already hold the remaining bytes when the
+     * stream is short, so a small batch can be fully consumed before the first output is
+     * emitted; what is ruled out is an UNBOUNDED whole-stream read. Results are never
+     * accumulated before flushing. Each record is
+     * capped at {@link MathParser#MAX_SOURCE_LENGTH} chars, enforced DURING its read (the
+     * same cap the parser itself applies, just moved earlier so it bounds the READ, not just
+     * the parse).
+     *
+     * <p><strong>Aggregate cap: none, by design.</strong> There is no cap on the total
+     * number of records or total bytes across a batch — only on each record individually.
+     * This is safe because nothing is accumulated across records: peak memory is
+     * O(one record + its rendered output), not O(input size), so record COUNT does not
+     * threaten memory the way an unbounded single read did. An unbounded batch is a CPU/time
+     * concern for the caller (it runs until stdin closes), not a memory one, and the caller
+     * can always kill the process or close the pipe. Do not add a total-record/byte cap
+     * without also updating this note and the CLI docs.
+     *
+     * <p><strong>An oversized record aborts the rest of the batch.</strong> When a record
+     * exceeds the per-record cap, {@link DelimitedRecordReader} has already stopped reading
+     * it (and hasn't located its end) — locating the next record's start would require
+     * reading past the cap we just enforced, which is exactly the unbounded read this whole
+     * change exists to prevent. So an oversized record's error is emitted and the batch stops
+     * there (exit 1); every record already produced before it has already been flushed to
+     * {@code out}. This is the one place batch's "isolate a bad record, keep going" promise
+     * narrows to "isolate a bad record, then stop, once bad means unreadable" — previously a
+     * too-long record still isolated-and-continued because the whole input was already
+     * in memory as a split array; that same case now only reaches memory safety by giving up
+     * the ability to skip past it.
      */
     private static int runBatch(InputStream in, PrintStream out, PrintStream err,
                                 Path outputFile, boolean sawExpr, boolean nullDelim,
@@ -349,50 +426,98 @@ public final class Main {
                 + " do not also pass an expression argument");
             return 2;
         }
-        String input;
-        try {
-            input = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            err.println("lattex: error: failed to read stdin: " + e.getMessage());
-            return 1;
-        }
-        // -1 limit keeps trailing empties; blank records are skipped below (so a trailing
-        // newline / separator does not produce a phantom render).
-        String[] records = input.split(nullDelim ? "\0" : "\n", -1);
         boolean anyFailed = false;
         boolean anyEmitted = false;
         int completedRecords = 0;
-        for (String rec : records) {
-            String latex = rec.strip();
-            if (latex.isEmpty()) {
-                continue;
+        int delimiter = nullDelim ? DelimitedRecordReader.NUL : DelimitedRecordReader.NEWLINE;
+        try (DelimitedRecordReader reader =
+                 new DelimitedRecordReader(in, delimiter, MathParser.MAX_SOURCE_LENGTH)) {
+            while (true) {
+                String rec;
+                try {
+                    rec = reader.next();
+                } catch (DelimitedRecordReader.TooLongException e) {
+                    anyFailed = true;
+                    anyEmitted = true;
+                    // Routed through the SAME emitter as every other record: this arm used to
+                    // print/write/flush inline and skip the sticky-error check, so a broken
+                    // pipe while emitting the terminal error record was silently missed —
+                    // exit 1 (from the oversize) with an EMPTY stderr, and the caller never
+                    // told that delivery failed (Marlow review 592).
+                    if (!emitRecord(out, err, "lattex: error: " + e.getMessage(), completedRecords)) {
+                        return 1;
+                    }
+                    break; // see "An oversized record aborts the rest of the batch" above
+                }
+                if (rec == null) {
+                    break; // stream exhausted; every record (including the trailing empty) is in
+                }
+                String latex = rec.strip();
+                if (latex.isEmpty()) {
+                    continue;
+                }
+                String record;
+                try {
+                    record = LatteX.render(latex, opts);
+                } catch (MathSyntaxException e) {
+                    record = "lattex: error: invalid LaTeX: " + e.getMessage();
+                    anyFailed = true;
+                } catch (RuntimeException e) {
+                    record = "lattex: error: could not render expression: " + e.getMessage();
+                    anyFailed = true;
+                }
+                anyEmitted = true;
+                if (!emitRecord(out, err, record, completedRecords)) {
+                    return 1;
+                }
+                completedRecords++;
             }
-            String record;
-            try {
-                record = LatteX.render(latex, opts);
-            } catch (MathSyntaxException e) {
-                record = "lattex: error: invalid LaTeX: " + e.getMessage();
-                anyFailed = true;
-            } catch (RuntimeException e) {
-                record = "lattex: error: could not render expression: " + e.getMessage();
-                anyFailed = true;
-            }
-            out.print(record);
-            out.write(0); // NUL record terminator (SVGs never contain NUL)
-            anyEmitted = true;
-            if (out.checkError()) {
-                String recordNoun = completedRecords == 1 ? "record" : "records";
-                err.println("lattex: error: failed to write batch output to stdout after "
-                    + completedRecords + " complete " + recordNoun
-                    + "; current record may be incomplete; no later records were emitted");
-                return 1;
-            }
-            completedRecords++;
+        } catch (IOException e) {
+            err.println("lattex: error: failed to read stdin: " + e.getMessage());
+            return 1;
         }
         if (!anyEmitted) {
             err.println("lattex: error: --batch got no expressions on stdin");
             return 2;
         }
         return anyFailed ? 1 : 0;
+    }
+
+    /**
+     * Emits ONE batch record — body, NUL terminator, flush, and the stdout-delivery check —
+     * and reports whether it was actually delivered.
+     *
+     * <p>THE ONE emission path for every record shape, ordinary and oversized-error alike.
+     * {@link PrintStream} swallows write/flush {@code IOException}s into a sticky flag, so an
+     * emission site that forgets {@link PrintStream#checkError()} loses a broken pipe
+     * silently. That is not hypothetical: the {@code TooLongException} arm previously wrote
+     * its terminal error record inline and skipped the check, so a failed delivery of THAT
+     * record produced exit 1 (from the oversize) with an EMPTY stderr — the caller was never
+     * told stdout had failed, and the record it was told to trust could be absent or
+     * truncated (Marlow review 592). Funnelling both sites here makes the check structural
+     * rather than remembered, so a future third emission site inherits it by construction.
+     *
+     * <p>{@code completedRecords} is the count of PRIOR verified-complete records and is
+     * reported unchanged: the consumer needs to know how much of the stream is trustworthy,
+     * because the current record may be truncated.
+     *
+     * @return {@code true} when the record reached stdout; {@code false} after reporting a
+     *     delivery failure, in which case the caller must stop and exit nonzero
+     */
+    private static boolean emitRecord(PrintStream out, PrintStream err, String record,
+            int completedRecords) {
+        out.print(record);
+        out.write(0); // NUL record terminator (SVGs never contain NUL)
+        out.flush(); // progressive: this record reaches the consumer before the next is processed
+        if (out.checkError()) {
+            // The downstream consumer went away (e.g. a broken pipe): without this check we
+            // would keep reading an unbounded stdin and rendering into a dead pipe.
+            String recordNoun = completedRecords == 1 ? "record" : "records";
+            err.println("lattex: error: failed to write batch output to stdout after "
+                + completedRecords + " complete " + recordNoun
+                + "; current record may be incomplete; no later records were emitted");
+            return false;
+        }
+        return true;
     }
 }
