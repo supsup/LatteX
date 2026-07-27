@@ -1871,21 +1871,12 @@ public final class MathParser {
      * being rejected precisely because it is not something we accept — so this method
      * decides display, never the reject/accept outcome.
      *
-     * <p>Two classes are shown as stable {@code U+XXXX} notation rather than verbatim:
+     * <p>Which code points are unsafe is decided by {@link #isUnsafeInDiagnostic} — see
+     * there for the classes and the invariant behind them. Deliberately NOT restated
+     * here: an enumeration in two places is how this drifts, and this javadoc has
+     * already been wrong once for exactly that reason.
      *
-     * <ul>
-     *   <li>an UNPAIRED surrogate present in the source, which is not legal text at all
-     *       and would corrupt the message that rejects it (Marlow review 474);</li>
-     *   <li>any ISO CONTROL character — NUL, ESC, DEL, newline, the C1 range. A raw NUL
-     *       in a diagnostic truncates C consumers, ESC can drive a terminal escape
-     *       sequence, and an embedded newline forges a second log line. Escaping the
-     *       whole class is the point: fixing only the surrogate INSTANCE left the
-     *       control-character class open, which is exactly what Marlow's review 602
-     *       reproduced with a backslash followed by U+0000 reaching the public message
-     *       intact.</li>
-     * </ul>
-     *
-     * <p>Everything else — including a well-formed supplementary escape like
+     * <p>Anything safe — including a well-formed supplementary escape like
      * {@code \}+emoji — is shown verbatim as its COMPLETE code point; reading
      * {@code charAt(i)} alone would emit a bare high surrogate and corrupt a legal
      * character.
