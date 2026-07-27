@@ -9,6 +9,12 @@
       },
       {
         "pattern": "\\Qcom/lattex/fx/lattex-fx.css\\E"
+      },
+      {
+        "pattern": "\\Qcom/lattex/interactive/lattex-interactive.js\\E"
+      },
+      {
+        "pattern": "\\Qcom/lattex/interactive/lattex-interactive.css\\E"
       }
     ]
   }

@@ -1,0 +1,74 @@
+/* Trusted host component for InteractiveMath. Static LatteX SVG remains untouched. */
+.lx-transition {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 100%;
+}
+
+.lx-transition__caption {
+  font-weight: 600;
+}
+
+.lx-transition__stage {
+  display: grid;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.lx-transition__state {
+  min-inline-size: 0;
+  transform-origin: center center;
+}
+
+.lx-transition__state > svg {
+  display: block;
+  max-inline-size: 100%;
+}
+
+.lx-transition__label {
+  display: block;
+  font-size: 0.875em;
+  margin-block-end: 0.25rem;
+}
+
+/* With CSS but no successful JS initialization, both labeled states remain visible. */
+.lx-transition__control {
+  display: none;
+  justify-self: start;
+}
+
+.lx-transition.lx-transition--ready {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.lx-transition--ready .lx-transition__stage {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.lx-transition--ready .lx-transition__state {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.lx-transition--ready .lx-transition__control {
+  display: inline-flex;
+}
+
+.lx-transition--ready .lx-transition__state--to,
+.lx-transition--ready.lx-transition--to .lx-transition__state--from {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lx-transition--ready .lx-transition__state--from,
+.lx-transition--ready.lx-transition--to .lx-transition__state--to {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lx-transition__state {
+    scroll-behavior: auto;
+  }
+}

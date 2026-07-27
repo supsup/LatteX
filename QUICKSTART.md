@@ -437,3 +437,51 @@ open in a browser.
 ## License
 
 Code: [Apache-2.0](LICENSE). Bundled STIX Two Math font: SIL Open Font License (OFL).
+
+## 8. Trusted two-state equation transitions
+
+Use `InteractiveMath` when a trusted host wants to show one equation and an
+alternate form without changing LatteX's static SVG emitter or the author
+`\lx` grammar:
+
+```java
+import com.lattex.api.InteractiveMath;
+import com.lattex.api.InteractiveOptions;
+import com.lattex.api.InteractiveResult;
+
+InteractiveResult result = InteractiveMath.render(
+    "\\frac{a}{b}",
+    "\\frac{b}{a}",
+    InteractiveOptions.defaults().withDurationMillis(320));
+
+if (result.status() != InteractiveResult.Status.FAILED) {
+    String html = result.html(); // interactive component or one exact static SVG
+}
+```
+
+Both endpoints are rendered independently. `INTERACTIVE` contains the trusted
+two-state component, `STATIC_FALLBACK` contains one exact static SVG when only
+one endpoint succeeds, and `FAILED` contains no partial markup. The first
+runtime performs a whole-expression FLIP/crossfade rather than claiming
+per-glyph morphing. Duration defaults to 240 ms, accepts 0–2000 ms, and the
+current endpoint contract requires fixed-size `RenderOptions`.
+
+Serve the separately bundled assets from the same JAR version:
+
+```java
+InteractiveMath.stylesCss(); // /css/lattex-interactive.css
+InteractiveMath.runtimeJs(); // /js/lattex-interactive.js
+```
+
+```html
+<link rel="stylesheet" href="/css/lattex-interactive.css">
+<script defer src="/js/lattex-interactive.js"></script>
+```
+
+The script auto-initializes document content. For dynamically inserted
+components call `LatteXInteractive.init(scope)`, and call
+`LatteXInteractive.destroy(scope)` before explicit teardown. Hover previews the
+alternate state; the explicit control works by click or keyboard. Reduced
+motion disables animation, not the state change. With CSS but no successful
+JavaScript initialization, both labeled states stay readable and the control
+remains hidden.
