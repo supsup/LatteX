@@ -57,6 +57,18 @@ dependencies {
 // dir. Verify: run `test`, then `git status --porcelain` must be empty.
 tasks.test {
     useJUnitPlatform()
+    // Input for ModularBoundaryTest: the built MODULAR jar. That test compiles a genuine
+    // separate named module against it with the real javac (a same-module unit test cannot
+    // prove a JPMS boundary — the module system does not enforce a module against itself),
+    // then loads that module in its own ModuleLayer and runs it. It must be the jar and not
+    // the exploded class dir: the consumer actually renders, which needs the bundled font
+    // resource, and the jar is also what a real downstream consumer puts on its module path.
+    // Declared as a task input so the check re-runs whenever the module changes.
+    val moduleJar = tasks.jar.flatMap { it.archiveFile }
+    inputs.file(moduleJar).withPropertyName("lattexModuleJar")
+    doFirst {
+        systemProperty("lattex.moduleJar", moduleJar.get().asFile.absolutePath)
+    }
 }
 
 // Regenerates the tracked examples/ artifacts on demand: the HTML pages ("examples"
