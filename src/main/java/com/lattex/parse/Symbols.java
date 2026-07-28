@@ -246,6 +246,15 @@ final class Symbols {
 
     static final Map<String, MathVariant.Style> FONT_VARIANTS = Map.ofEntries(
         Map.entry("mathbb", MathVariant.Style.BLACKBOARD),
+        // \mathds (dsfont package) is a plain alias for \mathbb, widely used for
+        // the indicator function \mathds{1}. dsfont ships its own double-struck
+        // glyphs, but the semantics — and, against the bundled STIX alphabet, the
+        // glyphs — are identical, so \mathds{1} resolves to 𝟙 exactly like
+        // \mathbb{1}. An alias is one FONT_VARIANTS row and nothing else: the
+        // FONT_VARIANT handler in CommandRegistry owns the ONE_ARGUMENT grammar
+        // and RENDERING output for every name in this table, so the alias cannot
+        // acquire a contract that disagrees with the routine that parses it.
+        Map.entry("mathds", MathVariant.Style.BLACKBOARD),
         Map.entry("mathcal", MathVariant.Style.SCRIPT),
         Map.entry("mathscr", MathVariant.Style.SCRIPT),
         Map.entry("mathfrak", MathVariant.Style.FRAKTUR),
@@ -622,6 +631,15 @@ final class Symbols {
 
         // -- Punctuation -----------------------------------------------------
         m.put("colon", new Sym(0x003A, MathClass.PUNCT)); // : (punctuation spacing)
+
+        // \# — cardinality notation (\#E(\mathbb{F}_p)-style group orders), common
+        // in harvested number-theory sources. Lexes as a single-character control
+        // sequence on the same path as \{ / \| below, so a SYMBOLS entry is all it
+        // needs: CommandRegistry derives its SYMBOL descriptor (and therefore its
+        // grammar, index row, suggestion candidacy, and macro reservation) from
+        // this table. ASCII '#' (U+0023) is an ordinary symbol — not a delimiter,
+        // so it stays out of delimiterCodePointFor and cannot follow \left/\right.
+        m.put("#", new Sym('#', MathClass.ORD));
 
         // -- Delimiters usable as ordinary symbols (outside \left..\right) ---
         m.put("{", new Sym('{', MathClass.OPEN));
