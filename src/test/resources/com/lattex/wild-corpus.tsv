@@ -434,6 +434,7 @@ OK	structured-envs	D	\mathcal{L}(\theta,\phi;x) = \underbrace{\mathbb{E}_{q_\phi
 OK	structured-envs	D	\overbrace{1 + 2 + \cdots + n}^{=\,n(n+1)/2}
 OK	structured-envs	D	\sum_{\substack{i = 1, \dots, m \\ j = 1, \dots, n}} a_{ij} b_{ji}
 OK	structured-envs	D	\sum_{\substack{p \le x \\ p\ \mathrm{prime}}} \frac{1}{p} = \log\log x + M + o(1)
+OK	structured-envs	D	\sum_{\begin{subarray}{c} i \ge 0 \\ j \le n \end{subarray}} a_{ij}
 OK	structured-envs	D	X_n \xrightarrow{d} X, \qquad Y_n \xrightarrow{\ p\ } c
 OK	structured-envs	D	\mathrm{CaCO_3} \xrightarrow{\ \Delta\ } \mathrm{CaO} + \mathrm{CO_2}
 OK	structured-envs	D	0 \longrightarrow A \xrightarrow{\ f\ } B \xrightarrow{\ g\ } C \longrightarrow 0
