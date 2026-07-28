@@ -11,8 +11,22 @@
 # export. RenderOptions -- which IS exported -- had public constructors and methods
 # whose signatures referenced it. Consumers therefore saw public API mentioning a
 # type they could not name. Moving MathStyle into com.lattex.api makes those
-# already-public signatures actually usable; the 8 removals below are the SAME
-# members re-typed, not deletions.
+# already-public signatures actually usable.
+#
+# THE 15 ADDITIONS, COUNTED BY DECLARING CLASS (corrected by Fixpoint, lattex/712 --
+# my first accounting said "12 re-typed + 3 new" and was BOTH wrong and internally
+# inconsistent, since the group I called 3 was then enumerated as seven things):
+#   8 declared by RenderOptions -- 5 constructors, mathStyle(), withMathStyle(),
+#     parseMathStyle(). These pair 1:1 with the 8 removals below: SAME members,
+#     signature re-typed from com.lattex.layout.MathStyle to com.lattex.api.MathStyle.
+#     Note this IS source- and binary-breaking for a consumer compiled against the
+#     old signature, even though no member is gained or lost.
+#   7 declared by MathStyle itself -- the type, its four constants, and the
+#     compiler-declared values()/valueOf(). This is the genuinely new surface.
+#
+# Fixpoint's own first count was 14/1 from a greedy regex that stripped to the LAST
+# com.lattex.api.X, and a RenderOptions constructor taking a MathStyle parameter
+# ends in MathStyle. Recorded because the same regex will mislead the next reader.
 #
 # WHAT IS DELIBERATELY *NOT* HERE: scriptStyle, fractionChildStyle and isDisplay.
 # Those three TeXbook helpers lived on the enum as package-private methods, and

@@ -58,6 +58,36 @@ class MathStyleIsConstantsOnlyTest {
                 .formatted(authored));
     }
 
+    /**
+     * Closes a channel Fixpoint found by mutant at lattex/712: a {@code public static}
+     * nested class inside MathStyle left BOTH of the other assertions green while the
+     * exported-surface gate caught it (exit 1). Reflection over declared METHODS cannot
+     * see a declared TYPE, so the method check alone was strictly weaker than the gate.
+     *
+     * <p>The honest division of labour, since neither instrument subsumes the other:
+     * the GATE is stronger on SHAPE — it reads class-file access flags and sees any
+     * member kind, including ones this test does not enumerate. This test's unique
+     * contribution is constant ORDER, which the gate does not check at all (his swap
+     * mutant: test RED, gate PASS). Keep both; neither is redundant.
+     */
+    @Test
+    @DisplayName("MathStyle declares no nested types either")
+    void mathStyleDeclaresNoNestedTypes() {
+        List<String> nested = Arrays.stream(MathStyle.class.getDeclaredClasses())
+            .filter(c -> !c.isSynthetic())
+            .map(Class::getSimpleName)
+            .sorted()
+            .toList();
+
+        assertTrue(
+            nested.isEmpty(),
+            () -> """
+                MathStyle declares nested type(s): %s. A nested type on an exported enum \
+                is exported surface too, and the method check above cannot see it — \
+                reflection over declared methods does not enumerate declared classes."""
+                .formatted(nested));
+    }
+
     @Test
     @DisplayName("MathStyle still has exactly the four TeX styles, in TeXbook order")
     void mathStyleHasExactlyFourConstantsInOrder() {
