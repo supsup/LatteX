@@ -236,8 +236,13 @@ real production `/docs` integration ran, minus its framework:
    `script-src 'self'` CSP needs no nonce.)
 3. **Emit the wrapper the runtime reads.** The effects live as attributes on a
    container *around* the SVG — `<span class="lx-math" data-lx-fx-hover="glow">…svg…</span>`.
-   On the JVM, `LatteX.renderStyledHtml(latex)` emits it (or `fxContainerAttrs(latex)`
-   returns just the validated attribute string if you own your own wrapper).
+   On the JVM, `LatteX.renderStyledHtml(latex)` emits it. **If you own your own
+   wrapper, use `LatteX.tryRenderMath(latex)`** — it returns the SVG and the
+   validated container attributes from ONE parse+layout, so the two halves cannot
+   desync. Do **not** use the deprecated `fxContainerAttrs(latex)` for this: it
+   structurally cannot carry the `data-lx-glyphmap` sidecar, so the glyphmap-reading
+   effects (`thread`, `cancel`) render a container hook with no glyph data and sit
+   silently inert — no exception, no warning, just an effect that never fires.
    From a **non-JVM SSG** there is no CLI flag for this yet (a known gap — the
    binary emits bare SVG), but the runtime only reads *attributes*; it doesn't
    care who wrote them. A Hugo shortcode / 11ty filter can stamp the wrapper
