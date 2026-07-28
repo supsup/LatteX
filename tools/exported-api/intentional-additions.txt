@@ -4,3 +4,35 @@
 # relative to the PR base authorize the current diff, so history cannot silently
 # approve a later reintroduction. Matching is exact and there are no wildcards.
 # Every new line must match a real addition and be explained in the PR and notes.
+
+# --- 2026-07-28  MathStyle relocated to the exported api package (Fixpoint ruling lattex/666)
+#
+# WHY: MathStyle was a public enum in com.lattex.layout, which module-info does NOT
+# export. RenderOptions -- which IS exported -- had public constructors and methods
+# whose signatures referenced it. Consumers therefore saw public API mentioning a
+# type they could not name. Moving MathStyle into com.lattex.api makes those
+# already-public signatures actually usable; the 8 removals below are the SAME
+# members re-typed, not deletions.
+#
+# WHAT IS DELIBERATELY *NOT* HERE: scriptStyle, fractionChildStyle and isDisplay.
+# Those three TeXbook helpers lived on the enum as package-private methods, and
+# moving the enum as-is would have forced all three PUBLIC and permanent -- the
+# defect raised at lattex/665 and ruled on at 666. They now live on LayoutContext
+# in the non-exported layout package. This gate's output is the proof: it lists
+# the type and its four constants, and none of the three helpers.
+# MathStyleIsConstantsOnlyTest keeps it that way.
+public constructor com.lattex.api.RenderOptions(double,com.lattex.api.Color,com.lattex.api.MathStyle)
+public constructor com.lattex.api.RenderOptions(double,com.lattex.api.Color,com.lattex.api.MathStyle,java.util.Map)
+public constructor com.lattex.api.RenderOptions(double,com.lattex.api.Color,com.lattex.api.MathStyle,java.util.Map,boolean)
+public constructor com.lattex.api.RenderOptions(double,com.lattex.api.Color,com.lattex.api.MathStyle,java.util.Map,boolean,boolean)
+public constructor com.lattex.api.RenderOptions(double,com.lattex.api.Color,com.lattex.api.MathStyle,java.util.Map,boolean,boolean,boolean)
+public method com.lattex.api.RenderOptions#mathStyle():com.lattex.api.MathStyle
+public method com.lattex.api.RenderOptions#withMathStyle(com.lattex.api.MathStyle):com.lattex.api.RenderOptions
+public static field com.lattex.api.MathStyle#DISPLAY:com.lattex.api.MathStyle
+public static field com.lattex.api.MathStyle#SCRIPT:com.lattex.api.MathStyle
+public static field com.lattex.api.MathStyle#SCRIPT_SCRIPT:com.lattex.api.MathStyle
+public static field com.lattex.api.MathStyle#TEXT:com.lattex.api.MathStyle
+public static method com.lattex.api.MathStyle#valueOf(java.lang.String):com.lattex.api.MathStyle
+public static method com.lattex.api.MathStyle#values():com.lattex.api.MathStyle[]
+public static method com.lattex.api.RenderOptions#parseMathStyle(java.lang.String):com.lattex.api.MathStyle
+public type com.lattex.api.MathStyle
