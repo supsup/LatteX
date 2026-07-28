@@ -1,0 +1,3 @@
+public constructor com.example.internal.Leaked()
+public method com.example.internal.Leaked#newlyExported():void
+public type com.example.internal.Leaked

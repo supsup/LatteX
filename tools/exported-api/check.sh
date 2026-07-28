@@ -9,7 +9,6 @@ fi
 base_commit=$1
 tip_commit=$2
 script_dir=$(cd "$(dirname "$0")" && pwd -P)
-tip_allowlist=${3:-"$script_dir/intentional-additions.txt"}
 
 base_sha=$(git rev-parse --verify "${base_commit}^{commit}")
 tip_sha=$(git rev-parse --verify "${tip_commit}^{commit}")
@@ -35,6 +34,16 @@ if [[ ! -f "$base_allowlist" ]]; then
   touch "$base_allowlist"
 fi
 
+if [[ $# -eq 3 ]]; then
+  tip_allowlist=$3
+else
+  tip_allowlist="$tip_tree/tools/exported-api/intentional-additions.txt"
+fi
+if [[ ! -f "$tip_allowlist" ]]; then
+  echo "ERROR: tip intentional-additions ledger does not exist: $tip_allowlist" >&2
+  exit 1
+fi
+
 echo "Building base $base_sha"
 (
   cd "$base_tree"
@@ -49,8 +58,8 @@ echo "Building tip  $tip_sha"
 
 java "$script_dir/ExportedSurfaceGate.java" \
   --base-classes "$base_tree/build/classes/java/main" \
-  --base-module-info "$base_tree/src/main/java/module-info.java" \
+  --base-module-info-class "$base_tree/build/classes/java/main/module-info.class" \
   --tip-classes "$tip_tree/build/classes/java/main" \
-  --tip-module-info "$tip_tree/src/main/java/module-info.java" \
+  --tip-module-info-class "$tip_tree/build/classes/java/main/module-info.class" \
   --base-allowlist "$base_allowlist" \
   --tip-allowlist "$tip_allowlist"

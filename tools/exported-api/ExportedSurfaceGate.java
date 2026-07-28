@@ -19,8 +19,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -29,19 +27,15 @@ import java.util.stream.Stream;
  * visibility is the only source of truth for the surface itself.
  */
 public final class ExportedSurfaceGate {
-    private static final Pattern MODULE_DECLARATION = Pattern.compile(
-            "\\b(?:open\\s+)?module\\s+[A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*\\s*\\{");
-    private static final Pattern EXPORT = Pattern.compile(
-            "\\bexports\\s+([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)"
-                    + "(?:\\s+to\\s+[^;]+)?\\s*;");
-
     private ExportedSurfaceGate() {
     }
 
     public static void main(String[] args) throws Exception {
         Map<String, Path> options = parseArgs(args);
-        Set<String> base = surface(options.get("--base-classes"), options.get("--base-module-info"));
-        Set<String> tip = surface(options.get("--tip-classes"), options.get("--tip-module-info"));
+        Set<String> base = surface(
+                options.get("--base-classes"), options.get("--base-module-info-class"));
+        Set<String> tip = surface(
+                options.get("--tip-classes"), options.get("--tip-module-info-class"));
         Set<String> baseAllowlist = readAllowlist(options.get("--base-allowlist"));
         Set<String> tipAllowlist = readAllowlist(options.get("--tip-allowlist"));
         TreeSet<String> newIntentions = new TreeSet<>(tipAllowlist);
@@ -84,8 +78,8 @@ public final class ExportedSurfaceGate {
 
     private static Map<String, Path> parseArgs(String[] args) {
         Set<String> required = Set.of(
-                "--base-classes", "--base-module-info",
-                "--tip-classes", "--tip-module-info",
+                "--base-classes", "--base-module-info-class",
+                "--tip-classes", "--tip-module-info-class",
                 "--base-allowlist", "--tip-allowlist");
         if (args.length != required.size() * 2) {
             usage();
@@ -109,14 +103,14 @@ public final class ExportedSurfaceGate {
 
     private static void usage() {
         System.err.println("Usage: java ExportedSurfaceGate.java "
-                + "--base-classes DIR --base-module-info FILE "
-                + "--tip-classes DIR --tip-module-info FILE "
+                + "--base-classes DIR --base-module-info-class FILE "
+                + "--tip-classes DIR --tip-module-info-class FILE "
                 + "--base-allowlist FILE --tip-allowlist FILE");
         System.exit(2);
     }
 
-    private static Set<String> surface(Path classes, Path moduleInfo) throws IOException {
-        Set<String> exportedPackages = exportedPackages(moduleInfo);
+    private static Set<String> surface(Path classes, Path moduleInfoClass) throws IOException {
+        Set<String> exportedPackages = exportedPackages(moduleInfoClass);
         Map<String, ParsedClass> parsed = new HashMap<>();
         try (Stream<Path> paths = Files.walk(classes)) {
             for (Path path : paths.filter(Files::isRegularFile)
@@ -180,19 +174,25 @@ public final class ExportedSurfaceGate {
         return result;
     }
 
-    private static Set<String> exportedPackages(Path moduleInfo) throws IOException {
-        String source = Files.readString(moduleInfo, StandardCharsets.UTF_8);
-        String withoutComments = source
-                .replaceAll("(?s)/\\*.*?\\*/", " ")
-                .replaceAll("(?m)//.*$", " ");
-        if (!MODULE_DECLARATION.matcher(withoutComments).find()) {
-            throw new IllegalArgumentException("No JPMS module declaration found in " + moduleInfo);
+    private static Set<String> exportedPackages(Path moduleInfoClass) throws IOException {
+        ClassModel model;
+        try {
+            model = ClassFile.of().parse(moduleInfoClass);
+        } catch (RuntimeException malformedClass) {
+            throw new IllegalArgumentException(
+                    "Malformed compiled JPMS descriptor: " + moduleInfoClass, malformedClass);
         }
+        if (!model.isModuleInfo()) {
+            throw new IllegalArgumentException(
+                    "Compiled descriptor is not module-info.class: " + moduleInfoClass);
+        }
+        var module = model.findAttribute(Attributes.module())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No Module attribute in compiled descriptor: " + moduleInfoClass));
         TreeSet<String> packages = new TreeSet<>();
-        Matcher matcher = EXPORT.matcher(withoutComments);
-        while (matcher.find()) {
-            packages.add(matcher.group(1));
-        }
+        module.exports().stream()
+                .map(export -> export.exportedPackage().asSymbol().name())
+                .forEach(packages::add);
         return packages;
     }
 
