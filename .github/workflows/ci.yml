@@ -11,6 +11,25 @@ on:
   pull_request:
 
 jobs:
+  exported-surface:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Prove the exported-surface detector fires and clears causally
+        run: tools/exported-api/self-test.sh
+      - name: Reject undeclared public/protected additions in exported packages
+        run: >-
+          tools/exported-api/check.sh
+          "${{ github.event.pull_request.base.sha }}"
+          "${{ github.sha }}"
+
   build:
     runs-on: ubuntu-latest
     steps:
