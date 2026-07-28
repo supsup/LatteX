@@ -1,5 +1,6 @@
 package com.lattex.layout;
 
+import com.lattex.api.MathStyle;
 import com.lattex.font.MathConstants;
 import com.lattex.font.SfntFont;
 

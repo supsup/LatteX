@@ -3,6 +3,7 @@ package com.lattex.layout;
 import com.lattex.font.GlyphOutline;
 import com.lattex.font.SfntFont;
 import com.lattex.api.Color;
+import com.lattex.api.MathStyle;
 import com.lattex.parse.MathNode;
 import com.lattex.parse.MathSyntaxException;
 import com.lattex.parse.MathNode.Accent;

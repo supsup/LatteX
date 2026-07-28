@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.lattex.font.SfntFont;
-import com.lattex.layout.MathStyle;
 import com.lattex.parse.MathSyntaxException;
 import java.util.ArrayList;
 import java.util.List;

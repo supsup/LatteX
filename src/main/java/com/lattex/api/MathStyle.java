@@ -1,4 +1,4 @@
-package com.lattex.layout;
+package com.lattex.api;
 
 /**
  * The four TeX math styles (TeXbook Appendix G): display, text, script, and
@@ -13,11 +13,16 @@ package com.lattex.layout;
  * <ul>
  *   <li>{@link #scriptStyle()} — one step smaller, floor at script-script
  *       ({@code D,T → S}; {@code S,SS → SS}). Used for both scripts; the
- *       subscript additionally cramps (see {@link LayoutContext#subscript()}).</li>
+ *       subscript additionally cramps (see {@code LayoutContext#subscript()}).</li>
  *   <li>{@link #fractionChildStyle()} — one full step down
  *       ({@code D → T → S → SS}, floor at {@code SS}). Numerator and denominator
  *       are set in this style (the denominator additionally cramps).</li>
  * </ul>
+ *
+ * <p>{@link #scriptStyle()}, {@link #fractionChildStyle()} and {@link #isDisplay()} are
+ * {@code public} (rather than package-private) because the layout engine that consumes
+ * them — {@code com.lattex.layout} — is a different package than this enum's home,
+ * {@code com.lattex.api}.
  */
 public enum MathStyle {
     /** Displayed equations ({@code \[..\]}); the top-level default. */
@@ -30,7 +35,7 @@ public enum MathStyle {
     SCRIPT_SCRIPT;
 
     /** The style a superscript/subscript is set in — one step smaller. */
-    MathStyle scriptStyle() {
+    public MathStyle scriptStyle() {
         return switch (this) {
             case DISPLAY, TEXT -> SCRIPT;
             case SCRIPT, SCRIPT_SCRIPT -> SCRIPT_SCRIPT;
@@ -38,7 +43,7 @@ public enum MathStyle {
     }
 
     /** The style a fraction numerator/denominator is set in — one full step down. */
-    MathStyle fractionChildStyle() {
+    public MathStyle fractionChildStyle() {
         return switch (this) {
             case DISPLAY -> TEXT;
             case TEXT -> SCRIPT;
@@ -47,7 +52,7 @@ public enum MathStyle {
     }
 
     /** Whether this is display style (selects the {@code *DisplayStyle*} MATH constants). */
-    boolean isDisplay() {
+    public boolean isDisplay() {
         return this == DISPLAY;
     }
 }
