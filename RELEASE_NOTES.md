@@ -6,6 +6,23 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Pull requests now expose exported-API growth mechanically
+
+- **CI diffs the compiled surface, not merely `module-info.java`.** For every
+  pull request, a base-to-tip gate selects the packages exported by each JPMS
+  descriptor, then derives their accessible public/protected types and declared
+  fields, constructors, and methods from class-file visibility. This catches a
+  package move that forces internal members public while leaving the descriptor
+  byte-identical—the exact failure mode found during the `MathStyle` move.
+- **Additions require an exact, reviewable declaration.** An unrecognized
+  fully-qualified signature fails the build; intentional additions use an
+  exact-line ledger with no patterns or wildcards. Removals are reported but do
+  not fail this addition-focused gate.
+- **The detector carries causal controls.** Its self-test reproduces the original
+  three-method widening and names every leaked signature, passes after those
+  helpers are relocated out of the exported enum, and proves that deliberately
+  added public and protected methods fail while `module-info.java` is unchanged.
+
 ### A modular consumer can now catch LatteX's render failures (public-contract fix)
 
 - **The documented exception was unnameable from a module.** `LatteX.render`'s javadoc
