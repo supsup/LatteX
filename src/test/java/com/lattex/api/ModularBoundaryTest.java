@@ -212,6 +212,50 @@ class ModularBoundaryTest {
                 + "malformed-LaTeX; got: " + truncate(badSize));
     }
 
+    // ---- MathStyle nameability (RenderOptions canonical constructor) -------------
+
+    /**
+     * The {@code MathStyle}-move regression: {@link RenderOptions} — exported — used to
+     * have a record component of the NON-exported type {@code com.lattex.layout.MathStyle}.
+     * A modular consumer could reach {@code RenderOptions} but could neither name what
+     * {@code mathStyle()} returns nor call the canonical constructor for any argument
+     * list. {@code MathStyle} now lives in {@code com.lattex.api}, so a consumer whose
+     * only LatteX imports are exported {@code com.lattex.api} types compiles and can call
+     * the seven-arg canonical constructor directly.
+     */
+    @Test
+    void modularConsumerNamesMathStyleAndCallsRenderOptionsCanonicalConstructor(@TempDir Path tmp)
+            throws IOException, ReflectiveOperationException {
+        Path modulePath = moduleJar();
+
+        Path src = tmp.resolve("src");
+        List<Path> sources = List.of(
+            copyResource("/modularconsumer/module-info.java", src.resolve("module-info.java")),
+            copyResource("/modularconsumer/com/lattexprobe/Consumer.java",
+                src.resolve("com/lattexprobe/Consumer.java")));
+
+        Path out = tmp.resolve("out");
+        CompileResult result = compileModule(sources, modulePath, out);
+        if (!result.ok()) {
+            fail("the modular consumer FAILED to compile against the exported com.lattex "
+                + "surface — MathStyle must be nameable, and RenderOptions's canonical "
+                + "constructor callable, from a module. Diagnostics:\n" + result.report());
+        }
+
+        ModuleFinder finder = ModuleFinder.of(modulePath, out);
+        Configuration cf = ModuleLayer.boot().configuration()
+            .resolve(finder, ModuleFinder.of(), Set.of("lattexprobe"));
+        ModuleLayer layer = ModuleLayer.defineModulesWithOneLoader(
+                cf, List.of(ModuleLayer.boot()), ClassLoader.getPlatformClassLoader())
+            .layer();
+        Class<?> consumer = layer.findLoader("lattexprobe").loadClass("com.lattexprobe.Consumer");
+
+        String result2 = (String) invokeNoArgs(consumer, "canonicalRenderOptions");
+        assertEquals("MATHSTYLE:TEXT", result2,
+            "a modular consumer could not name com.lattex.api.MathStyle and call "
+                + "RenderOptions's canonical constructor");
+    }
+
     // ---- NEGATIVE (the fence) ----------------------------------------------------
 
     @Test
@@ -265,6 +309,17 @@ class ModularBoundaryTest {
         } catch (InvocationTargetException e) {
             throw new AssertionError(
                 "the modular consumer threw out of " + method + " instead of handling it: "
+                    + e.getCause(), e.getCause());
+        }
+    }
+
+    private static Object invokeNoArgs(Class<?> type, String method)
+            throws ReflectiveOperationException {
+        try {
+            return type.getMethod(method).invoke(null);
+        } catch (InvocationTargetException e) {
+            throw new AssertionError(
+                "the modular consumer threw out of " + method + " instead of returning: "
                     + e.getCause(), e.getCause());
         }
     }
