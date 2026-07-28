@@ -2,14 +2,14 @@
 set -euo pipefail
 
 if [[ $# -lt 2 || $# -gt 3 ]]; then
-  echo "usage: $0 BASE_COMMIT TIP_COMMIT [ALLOWLIST]" >&2
+  echo "usage: $0 BASE_COMMIT TIP_COMMIT [TIP_ALLOWLIST]" >&2
   exit 2
 fi
 
 base_commit=$1
 tip_commit=$2
 script_dir=$(cd "$(dirname "$0")" && pwd -P)
-allowlist=${3:-"$script_dir/intentional-additions.txt"}
+tip_allowlist=${3:-"$script_dir/intentional-additions.txt"}
 
 base_sha=$(git rev-parse --verify "${base_commit}^{commit}")
 tip_sha=$(git rev-parse --verify "${tip_commit}^{commit}")
@@ -29,6 +29,12 @@ mkdir -p "$base_tree" "$tip_tree" "$gate_tmp/gradle-home"
 git archive --format=tar "$base_sha" | tar -xf - -C "$base_tree"
 git archive --format=tar "$tip_sha" | tar -xf - -C "$tip_tree"
 
+base_allowlist="$base_tree/tools/exported-api/intentional-additions.txt"
+if [[ ! -f "$base_allowlist" ]]; then
+  base_allowlist="$gate_tmp/base-allowlist-empty.txt"
+  touch "$base_allowlist"
+fi
+
 echo "Building base $base_sha"
 (
   cd "$base_tree"
@@ -46,4 +52,5 @@ java "$script_dir/ExportedSurfaceGate.java" \
   --base-module-info "$base_tree/src/main/java/module-info.java" \
   --tip-classes "$tip_tree/build/classes/java/main" \
   --tip-module-info "$tip_tree/src/main/java/module-info.java" \
-  --allowlist "$allowlist"
+  --base-allowlist "$base_allowlist" \
+  --tip-allowlist "$tip_allowlist"

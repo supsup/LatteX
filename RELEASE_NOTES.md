@@ -16,8 +16,10 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   byte-identical—the exact failure mode found during the `MathStyle` move.
 - **Additions require an exact, reviewable declaration.** An unrecognized
   fully-qualified signature fails the build; intentional additions use an
-  exact-line ledger with no patterns or wildcards. Removals are reported but do
-  not fail this addition-focused gate.
+  exact-line ledger with no patterns or wildcards. Only lines newly added by the
+  current pull request authorize its diff, and unused new declarations fail, so
+  ledger history cannot pre-approve a later reintroduction. Removals are
+  reported but do not fail this addition-focused gate.
 - **The detector carries causal controls.** Its self-test reproduces the original
   three-method widening and names every leaked signature, passes after those
   helpers are relocated out of the exported enum, and proves that deliberately

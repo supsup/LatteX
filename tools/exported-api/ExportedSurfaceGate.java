@@ -42,25 +42,38 @@ public final class ExportedSurfaceGate {
         Map<String, Path> options = parseArgs(args);
         Set<String> base = surface(options.get("--base-classes"), options.get("--base-module-info"));
         Set<String> tip = surface(options.get("--tip-classes"), options.get("--tip-module-info"));
-        Set<String> allowlist = readAllowlist(options.get("--allowlist"));
+        Set<String> baseAllowlist = readAllowlist(options.get("--base-allowlist"));
+        Set<String> tipAllowlist = readAllowlist(options.get("--tip-allowlist"));
+        TreeSet<String> newIntentions = new TreeSet<>(tipAllowlist);
+        newIntentions.removeAll(baseAllowlist);
 
         TreeSet<String> additions = new TreeSet<>(tip);
         additions.removeAll(base);
         TreeSet<String> removals = new TreeSet<>(base);
         removals.removeAll(tip);
         TreeSet<String> unapproved = new TreeSet<>(additions);
-        unapproved.removeAll(allowlist);
+        unapproved.removeAll(newIntentions);
+        TreeSet<String> unusedIntentions = new TreeSet<>(newIntentions);
+        unusedIntentions.removeAll(additions);
 
         System.out.printf("Exported surface: base=%d tip=%d additions=%d removals=%d%n",
                 base.size(), tip.size(), additions.size(), removals.size());
-        printChanges("Added", additions, allowlist);
+        printChanges("Added", additions, newIntentions);
         printChanges("Removed", removals, Set.of());
 
         if (!unapproved.isEmpty()) {
             System.err.println("ERROR: unapproved additions to an exported package:");
             unapproved.forEach(entry -> System.err.println("  + " + entry));
             System.err.println("Declare each intentional addition as an exact line in "
-                    + options.get("--allowlist") + ".");
+                    + options.get("--tip-allowlist") + ".");
+        }
+        if (!unusedIntentions.isEmpty()) {
+            System.err.println("ERROR: new intentional-additions lines without matching surface additions:");
+            unusedIntentions.forEach(entry -> System.err.println("  ! " + entry));
+            System.err.println("Remove stale, misspelled, or pre-emptive declarations from "
+                    + options.get("--tip-allowlist") + ".");
+        }
+        if (!unapproved.isEmpty() || !unusedIntentions.isEmpty()) {
             System.exit(1);
         }
 
@@ -72,7 +85,8 @@ public final class ExportedSurfaceGate {
     private static Map<String, Path> parseArgs(String[] args) {
         Set<String> required = Set.of(
                 "--base-classes", "--base-module-info",
-                "--tip-classes", "--tip-module-info", "--allowlist");
+                "--tip-classes", "--tip-module-info",
+                "--base-allowlist", "--tip-allowlist");
         if (args.length != required.size() * 2) {
             usage();
         }
@@ -96,7 +110,8 @@ public final class ExportedSurfaceGate {
     private static void usage() {
         System.err.println("Usage: java ExportedSurfaceGate.java "
                 + "--base-classes DIR --base-module-info FILE "
-                + "--tip-classes DIR --tip-module-info FILE --allowlist FILE");
+                + "--tip-classes DIR --tip-module-info FILE "
+                + "--base-allowlist FILE --tip-allowlist FILE");
         System.exit(2);
     }
 

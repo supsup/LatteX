@@ -20,9 +20,12 @@ tools/exported-api/check.sh BASE_COMMIT TIP_COMMIT
 ```
 
 The command reports additions and removals. Any addition must exactly match a
-line in `intentional-additions.txt`; there are no patterns or wildcards. Add an
-entry only when the PR deliberately expands the exported contract, and explain
-that decision in the PR and release notes. Entries remain as an audit ledger.
+line that the current PR adds to `intentional-additions.txt`; there are no
+patterns or wildcards. Existing ledger lines cannot authorize a later
+reintroduction, and a new line without a matching surface addition fails as a
+typo or pre-approval. Add an entry only when the PR deliberately expands the
+exported contract, and explain that decision in the PR and release notes.
+Entries remain after merge as an audit ledger.
 
 The fixture allowlists are narrower test evidence, not production approvals.
 In particular, `lattex-mathstyle-intentional.txt` approves the enum surface from

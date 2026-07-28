@@ -19,15 +19,24 @@ compile_fixture() {
   javac -d "$gate_tmp/classes/$name" "@$gate_tmp/$name.sources"
 }
 
-run_gate() {
+run_gate_with_allowlists() {
   local tip=$1
-  local log=$2
+  local base_allowlist=$2
+  local tip_allowlist=$3
+  local log=$4
   java "$script_dir/ExportedSurfaceGate.java" \
     --base-classes "$gate_tmp/classes/base" \
     --base-module-info "$fixture_dir/base/module-info.java" \
     --tip-classes "$gate_tmp/classes/$tip" \
     --tip-module-info "$fixture_dir/$tip/module-info.java" \
-    --allowlist "$fixture_dir/mathstyle-intentional.txt" >"$log" 2>&1
+    --base-allowlist "$base_allowlist" \
+    --tip-allowlist "$tip_allowlist" >"$log" 2>&1
+}
+
+run_gate() {
+  run_gate_with_allowlists "$1" \
+    "$script_dir/intentional-additions.txt" \
+    "$fixture_dir/mathstyle-intentional.txt" "$2"
 }
 
 for fixture in base widened corrected positive; do
@@ -58,6 +67,34 @@ run_gate corrected "$corrected_log" || {
   exit 1
 }
 
+historic_log="$gate_tmp/historic.log"
+if run_gate_with_allowlists corrected \
+    "$fixture_dir/mathstyle-intentional.txt" \
+    "$fixture_dir/mathstyle-intentional.txt" "$historic_log"; then
+  echo "self-test failure: historic ledger lines unexpectedly approved a reintroduction" >&2
+  cat "$historic_log" >&2
+  exit 1
+fi
+grep -F -- 'public type com.example.api.MathStyle' "$historic_log" >/dev/null || {
+  echo "self-test failure: historic-ledger control did not reject the reintroduced type" >&2
+  cat "$historic_log" >&2
+  exit 1
+}
+
+unused_log="$gate_tmp/unused.log"
+if run_gate_with_allowlists corrected \
+    "$script_dir/intentional-additions.txt" \
+    "$fixture_dir/mathstyle-intentional-with-unused.txt" "$unused_log"; then
+  echo "self-test failure: an unused new declaration unexpectedly passed" >&2
+  cat "$unused_log" >&2
+  exit 1
+fi
+grep -F -- 'public method com.example.api.MathStyle#notActuallyAdded():void' "$unused_log" >/dev/null || {
+  echo "self-test failure: unused-declaration control did not name the stale line" >&2
+  cat "$unused_log" >&2
+  exit 1
+}
+
 positive_log="$gate_tmp/positive.log"
 if run_gate positive "$positive_log"; then
   echo "self-test failure: the deliberate public/protected additions unexpectedly passed" >&2
@@ -83,3 +120,4 @@ done
 echo "PASS: widened MathStyle fails with all three methods named."
 echo "PASS: relocated-method MathStyle passes with only the intentional enum surface."
 echo "PASS: deliberate public and protected additions fail even though module-info is unchanged."
+echo "PASS: historic ledger lines cannot approve reintroduction; unused new lines fail."

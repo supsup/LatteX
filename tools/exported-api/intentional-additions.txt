@@ -1,5 +1,6 @@
 # Exact exported-surface signatures intentionally introduced by a PR belong here.
 #
-# Keep entries after merge as a durable decision ledger. A stale entry cannot
-# approve a different signature: matching is exact and there are no wildcards.
-# Every new line should be explained in the PR and release notes.
+# Keep entries after merge as a durable decision ledger. Only lines that are NEW
+# relative to the PR base authorize the current diff, so history cannot silently
+# approve a later reintroduction. Matching is exact and there are no wildcards.
+# Every new line must match a real addition and be explained in the PR and notes.
