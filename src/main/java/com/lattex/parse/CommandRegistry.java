@@ -80,6 +80,7 @@ final class CommandRegistry {
         STYLE_SWITCH(GrammarKind.SWITCH, OutputKind.RENDERING),
         TEXT_COLOR(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
         COLOR_SWITCH(GrammarKind.SWITCH, OutputKind.RENDERING),
+        FONT_SWITCH(GrammarKind.SWITCH, OutputKind.RENDERING),
         BOXED(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         CANCEL(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         CANCEL_TO(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
@@ -285,6 +286,15 @@ final class CommandRegistry {
         for (String name : List.of(
                 "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle")) {
             add(out, name, Category.STRUCTURE, Handler.STYLE_SWITCH, "\\" + name + " x");
+        }
+        // Legacy TeX 2.09 font switches. These are DECLARATIONS — {\bf x} restyles
+        // everything from the switch to the end of the enclosing group — so their
+        // grammar is SWITCH (the \displaystyle / \color shape), NOT the
+        // ONE_ARGUMENT shape of their \mathbf/\mathit/\mathcal cousins. Modelling
+        // them as argument-takers would silently change what {\bf x}y means.
+        for (String name : List.of("rm", "bf", "it", "cal")) {
+            add(out, name, Category.FONT_VARIANT, Handler.FONT_SWITCH,
+                "{\\" + name + " x} y");
         }
         add(out, "textcolor", Category.STRUCTURE, Handler.TEXT_COLOR, "\\textcolor{red}{x}");
         add(out, "color", Category.STRUCTURE, Handler.COLOR_SWITCH, "{\\color{red}x}");
