@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.lattex.layout.MathStyle;
+import com.lattex.api.MathStyle;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -25,13 +25,13 @@ class RenderOptionsTest {
     @org.junit.jupiter.api.Test
     void macrosRejectNull() {
         org.junit.jupiter.api.Assertions.assertThrows(NullPointerException.class,
-            () -> new RenderOptions(1.0, Color.CURRENT, com.lattex.layout.MathStyle.DISPLAY, null));
+            () -> new RenderOptions(1.0, Color.CURRENT, com.lattex.api.MathStyle.DISPLAY, null));
     }
 
     @org.junit.jupiter.api.Test
     void threeArgConstructorMeansNoMacros() {
         org.junit.jupiter.api.Assertions.assertEquals(java.util.Map.of(),
-            new RenderOptions(1.0, Color.CURRENT, com.lattex.layout.MathStyle.DISPLAY).macros());
+            new RenderOptions(1.0, Color.CURRENT, com.lattex.api.MathStyle.DISPLAY).macros());
         org.junit.jupiter.api.Assertions.assertEquals(java.util.Map.of(),
             RenderOptions.defaults().macros());
     }

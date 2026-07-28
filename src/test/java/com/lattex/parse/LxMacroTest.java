@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.lattex.api.Color;
-import com.lattex.layout.MathStyle;
+import com.lattex.api.MathStyle;
 import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.StyledMath;
 import org.junit.jupiter.api.Test;

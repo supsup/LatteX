@@ -1,5 +1,6 @@
 package com.lattex.layout;
 
+import com.lattex.api.MathStyle;
 import com.lattex.font.MathConstants;
 import com.lattex.font.SfntFont;
 
@@ -81,24 +82,54 @@ public record LayoutContext(SfntFont font, MathConstants constants, double fontS
         return new LayoutContext(font, constants, fontSize, style, cramped, fenceDepth + 1);
     }
 
+    /// TeXbook Appendix G {@code C↑}/{@code C↓}: the style a superscript or subscript is
+    /// set in — one step smaller, floored at script-script. Lives HERE rather than on
+    /// {@link MathStyle} because it is an internal layout rule, and MathStyle is on the
+    /// exported API surface where every method becomes a permanent public contract.
+    private static MathStyle scriptStyle(MathStyle style) {
+        return switch (style) {
+            case DISPLAY, TEXT -> MathStyle.SCRIPT;
+            case SCRIPT, SCRIPT_SCRIPT -> MathStyle.SCRIPT_SCRIPT;
+        };
+    }
+
+    /// The style a fraction numerator/denominator is set in — one full step down,
+    /// floored at script-script. Internal layout rule; see {@link #scriptStyle}.
+    private static MathStyle fractionChildStyle(MathStyle style) {
+        return switch (style) {
+            case DISPLAY -> MathStyle.TEXT;
+            case TEXT -> MathStyle.SCRIPT;
+            case SCRIPT, SCRIPT_SCRIPT -> MathStyle.SCRIPT_SCRIPT;
+        };
+    }
+
+    /// Whether this context is in display style. PACKAGE-PRIVATE, not private: the
+    /// fixture in tools/exported-api makes the analogous method private, which works
+    /// there because nothing outside calls it. Here LayoutEngine has six call sites,
+    /// and it is in this same package — so package-private is the faithful analogue.
+    /// The intent that matters is identical: NOT on the exported surface.
+    boolean isDisplay() {
+        return style == MathStyle.DISPLAY;
+    }
+
     /** Context for a superscript: one style smaller, cramping inherited. */
     public LayoutContext superscript() {
-        return with(style.scriptStyle(), cramped);
+        return with(scriptStyle(style), cramped);
     }
 
     /** Context for a subscript: one style smaller, always cramped. */
     public LayoutContext subscript() {
-        return with(style.scriptStyle(), true);
+        return with(scriptStyle(style), true);
     }
 
     /** Context for a fraction numerator: one style down, cramping inherited. */
     public LayoutContext numerator() {
-        return with(style.fractionChildStyle(), cramped);
+        return with(fractionChildStyle(style), cramped);
     }
 
     /** Context for a fraction denominator: one style down, always cramped. */
     public LayoutContext denominator() {
-        return with(style.fractionChildStyle(), true);
+        return with(fractionChildStyle(style), true);
     }
 
     /** Context forcing display style ({@code \cfrac}, {@code \dbinom}), cramping inherited. */

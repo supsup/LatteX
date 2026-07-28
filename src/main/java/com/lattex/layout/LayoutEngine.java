@@ -1,5 +1,7 @@
 package com.lattex.layout;
 
+import com.lattex.api.MathStyle;
+
 import com.lattex.font.GlyphOutline;
 import com.lattex.font.SfntFont;
 import com.lattex.api.Color;
@@ -818,7 +820,7 @@ public final class LayoutEngine {
         // limits), and sets them beside as ordinary scripts in text style. This
         // reuses the BigOperator limit-stacking path — sup is the upper limit,
         // sub the lower — exactly as a large operator does.
-        if (base instanceof OperatorName on && on.takesLimits() && ctx.style().isDisplay()) {
+        if (base instanceof OperatorName on && on.takesLimits() && ctx.isDisplay()) {
             Box upperBox = sup == null ? null : layoutBox(sup, ctx.superscript());
             Box lowerBox = sub == null ? null : layoutBox(sub, ctx.subscript());
             return stackLimits(baseBox, upperBox, lowerBox, ctx);
@@ -955,7 +957,7 @@ public final class LayoutEngine {
         };
         var c = ctx.constants();
         double scale = ctx.scale();
-        boolean display = ctx.style().isDisplay();
+        boolean display = ctx.isDisplay();
 
         Box numBox = layoutBox(frac.numerator(), ctx.numerator());
         Box denBox = layoutBox(frac.denominator(), ctx.denominator());
@@ -1027,7 +1029,7 @@ public final class LayoutEngine {
         SfntFont font = ctx.font();
         var c = ctx.constants();
         double scale = ctx.scale();
-        boolean display = ctx.style().isDisplay();
+        boolean display = ctx.isDisplay();
 
         Box radBox = layoutBox(radicand, ctx.cramp());
         double gap = (display ? c.radicalDisplayStyleVerticalGap() : c.radicalVerticalGap()) * scale;
@@ -1109,7 +1111,7 @@ public final class LayoutEngine {
         SfntFont font = ctx.font();
         var c = ctx.constants();
         double scale = ctx.scale();
-        boolean display = ctx.style().isDisplay();
+        boolean display = ctx.isDisplay();
 
         // Display style uses a larger operator glyph (an OpenType MATH vertical
         // variant at least displayOperatorMinHeight tall, else the largest one).
@@ -1223,7 +1225,7 @@ public final class LayoutEngine {
     private static Box stackBox(MathNode.Stack st, LayoutContext ctx) {
         var c = ctx.constants();
         double scale = ctx.scale();
-        boolean display = ctx.style().isDisplay();
+        boolean display = ctx.isDisplay();
         double gap = (display ? c.stackDisplayStyleGapMin() : c.stackGapMin()) * scale;
 
         Box baseBox = layoutBox(st.base(), ctx);
@@ -1347,7 +1349,7 @@ public final class LayoutEngine {
         SfntFont font = ctx.font();
         var c = ctx.constants();
         double scale = ctx.scale();
-        boolean display = ctx.style().isDisplay();
+        boolean display = ctx.isDisplay();
         double gap = (display ? c.stackDisplayStyleGapMin() : c.stackGapMin()) * scale;
 
         // Labels at script size, like a stack's above/below marks.
