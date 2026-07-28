@@ -237,4 +237,47 @@ class LegacyFontSwitchTest {
             assertTrue(failure.getMessage().contains("built-in"), failure.getMessage());
         }
     }
+
+    // ---------------------------------------------------------------------------
+    // KNOWN LIMITATION PINS — these assert what this parser CURRENTLY does, which
+    // is NOT what TeX 2.09 does. They are here so the gap is visible, and so any
+    // future fix must consciously break them rather than silently changing
+    // behaviour nobody had written down.
+    //
+    // Found by Fixpoint's probe at lattex/706. The 13 tests above all place \rm
+    // ALONE in its group, so every one of them is green through this defect BY
+    // CONSTRUCTION — a suite can be exhaustive about a shape it never builds.
+    // ---------------------------------------------------------------------------
+
+    /**
+     * TeX 2.09: a later declaration REPLACES the earlier one for the rest of the
+     * group, so {@code {\bf x \rm y}} is bold-x ROMAN-y. This parser NESTS instead,
+     * and {@code \rm} does no remap, so the enclosing {@code \bf} re-applies to y.
+     *
+     * <p>WHEN THIS TEST FAILS the cancel has been implemented — rewrite it to assert
+     * plain 'y' (0x79) and delete this note.
+     */
+    @Test
+    void rmCannotCancelAnEnclosingSwitch_KNOWN_LIMITATION() {
+        // second element SHOULD be 0x79 ('y') in real TeX; it is the bold/italic/script y
+        assertEquals(List.of(0x1D431, 0x1D432), atoms("{\\bf x \\rm y}"));
+        assertEquals(List.of(0x1D465, 0x1D466), atoms("{\\it x \\rm y}"));
+        assertEquals(List.of(0x1D4CD, 0x1D4CE), atoms("{\\cal x \\rm y}"));
+    }
+
+    /**
+     * The other direction IS correct, and only accidentally: the inner switch maps
+     * the atom out of ASCII, and variant application remaps ASCII only, so the
+     * enclosing variant leaves that code point alone.
+     *
+     * <p>This is the CONTROL for the pin above. It proves the interleaved shape is
+     * genuinely exercised and that the failure is specific to {@code \rm} rather than
+     * to interleaving in general — without it, the pin could pass because interleaved
+     * input was mishandled everywhere.
+     */
+    @Test
+    void aRemappingSwitchDoesCancelAnEnclosingOne() {
+        assertEquals(List.of(0x78, 0x1D432), atoms("{\\rm x \\bf y}"));      // roman x, bold y
+        assertEquals(List.of(0x1D431, 0x1D466), atoms("{\\bf x \\it y}"));   // bold x, italic y
+    }
 }

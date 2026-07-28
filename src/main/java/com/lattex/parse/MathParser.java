@@ -638,10 +638,38 @@ public final class MathParser {
      *
      * <p>The mapped semantics reuse the existing {@link MathVariant} alphabets, so no
      * new node kind appears — the consumed group's atoms are rewritten to the same
-     * variant code points {@code \mathbf{…}} produces. {@code \rm} selects upright
-     * roman, which is already how an unstyled math atom renders here (an {@link
-     * MathNode.Atom} draws its own code point verbatim), so {@code \rm}'s entire
-     * observable effect is the group scoping — no remap.
+     * variant code points {@code \mathbf{…}} produces. {@code \rm} performs no remap,
+     * because an unstyled math atom already renders as upright roman (an {@link
+     * MathNode.Atom} draws its own code point verbatim).
+     *
+     * <h4>KNOWN LIMITATION — a later switch NESTS, it does not REPLACE</h4>
+     * In real TeX 2.09 a second declaration in the same group REPLACES the first for
+     * the remainder of that group. This parser instead makes the later switch a CHILD
+     * of the earlier one, because each switch consumes {@link #parseRestOfGroup()}.
+     *
+     * <p>That difference is unobservable for three of the four switches, and only for
+     * an accidental reason: {@link MathVariant#apply} remaps ASCII letters only, so an
+     * inner {@code \bf}/{@code \it}/{@code \cal} moves the atom OUT of ASCII and the
+     * enclosing switch then leaves that code point alone. {@code \rm} is the sole
+     * switch that does no remap — upright roman IS ASCII — so the enclosing variant
+     * re-applies to it and {@code \rm} CANNOT CANCEL an enclosing switch:
+     *
+     * <pre>{@code
+     *   {\bf x \rm y}   ->  bold x, BOLD y      (TeX: bold x, roman y)
+     *   {\it x \rm y}   ->  italic x, ITALIC y  (TeX: italic x, roman y)
+     *   {\cal x \rm y}  ->  script x, SCRIPT y  (TeX: script x, roman y)
+     *   {\rm x \bf y}   ->  roman x, bold y     (correct, by the accident above)
+     *   {\bf x \it y}   ->  bold x, italic y    (correct, by the accident above)
+     * }</pre>
+     *
+     * <p>Fixing it properly requires marking an inner switch's subtree OPAQUE to the
+     * enclosing {@code apply}, which is a structural change to variant application and
+     * is deliberately NOT bundled with the table additions this branch carries. The
+     * current behaviour is PINNED by {@code LegacyFontSwitchTest} so the limitation is
+     * visible and any future fix must consciously break those pins. Found by
+     * Fixpoint's probe at lattex/706 — the pre-existing 13 tests all placed
+     * {@code \rm} alone in its group, so the suite was green through this by
+     * construction.
      */
     private MathNode parseFontSwitch(String name) {
         MathNode body = parseRestOfGroup();
