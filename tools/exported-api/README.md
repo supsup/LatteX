@@ -1,6 +1,9 @@
 # Exported-surface gate
 
-`ExportedSurfaceGate.java` compares two compiled LatteX revisions. It reads each
+`ExportedSurfaceGate.java` compares two compiled LatteX revisions. CI compares
+the current PR base with GitHub's checked-out merge candidate, so a branch that
+lags main is measured as it would actually land rather than as an obsolete raw
+head snapshot. The tool reads each
 revision's `module-info.java` only to learn which packages are exported. The
 surface itself comes from class-file access flags: accessible public/protected
 types and their declared public/protected fields, constructors, and methods.

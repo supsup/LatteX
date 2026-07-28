@@ -9,9 +9,9 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 ### Pull requests now expose exported-API growth mechanically
 
 - **CI diffs the compiled surface, not merely `module-info.java`.** For every
-  pull request, a base-to-tip gate selects the packages exported by each JPMS
-  descriptor, then derives their accessible public/protected types and declared
-  fields, constructors, and methods from class-file visibility. This catches a
+  pull request, a base-to-merge-candidate gate selects the packages exported by
+  each JPMS descriptor, then derives their accessible public/protected types and
+  declared fields, constructors, and methods from class-file visibility. This catches a
   package move that forces internal members public while leaving the descriptor
   byte-identical—the exact failure mode found during the `MathStyle` move.
 - **Additions require an exact, reviewable declaration.** An unrecognized
