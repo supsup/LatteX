@@ -17,7 +17,7 @@ import com.lattex.parse.MathNode.Phantom;
 import com.lattex.parse.MathNode.Radical;
 import com.lattex.api.Color;
 import com.lattex.api.RenderOptions;
-import com.lattex.layout.MathStyle;
+import com.lattex.api.MathStyle;
 import com.lattex.parse.MathNode.Spacing;
 import com.lattex.parse.MathNode.StyledMath;
 import com.lattex.parse.MathNode.SupSub;
@@ -608,11 +608,78 @@ public final class MathParser {
             case "scriptscriptstyle" -> MathNode.StyleLevel.SCRIPT_SCRIPT;
             default -> throw new IllegalStateException("not a style switch: " + name);
         };
+        return new MathNode.StyleSwitch(level, parseRestOfGroup());
+    }
+
+    /**
+     * The body of every SWITCH-grammar command: a declaration's scope IS the rest of
+     * its enclosing group, so greedily consume components up to the group boundary
+     * ({@code }}, EOF, or a matrix cell/row separator) and wrap them. Single-sourced
+     * here so {@code \displaystyle}, {@code \color}, and the legacy font switches
+     * cannot drift apart on where a declaration stops.
+     */
+    private MathNode parseRestOfGroup() {
         List<MathNode> rest = new ArrayList<>();
         while (!isStyleSwitchBoundary(peek())) {
             rest.add(parseComponent());
         }
-        return new MathNode.StyleSwitch(level, wrap(rest));
+        return wrap(rest);
+    }
+
+    /**
+     * A legacy TeX 2.09 font switch: {@code {\rm …}} {@code {\bf …}} {@code {\it …}}
+     * {@code {\cal …}}. These are DECLARATIONS, not argument-taking commands — the
+     * font applies from the switch to the end of the enclosing group — so the body is
+     * {@link #parseRestOfGroup()}, exactly like {@link #parseStyleSwitch} and
+     * {@link #parseColorSwitch}. That is why the registry gives them
+     * {@link CommandRegistry.GrammarKind#SWITCH} and not the {@code ONE_ARGUMENT}
+     * grammar of their {@code \mathbf}/{@code \mathit}/{@code \mathcal} cousins:
+     * {@code {\bf x}y} leaves {@code y} unstyled, while {@code \bf{x}y} bolds BOTH.
+     *
+     * <p>The mapped semantics reuse the existing {@link MathVariant} alphabets, so no
+     * new node kind appears — the consumed group's atoms are rewritten to the same
+     * variant code points {@code \mathbf{…}} produces. {@code \rm} performs no remap,
+     * because an unstyled math atom already renders as upright roman (an {@link
+     * MathNode.Atom} draws its own code point verbatim).
+     *
+     * <h4>KNOWN LIMITATION — a later switch NESTS, it does not REPLACE</h4>
+     * In real TeX 2.09 a second declaration in the same group REPLACES the first for
+     * the remainder of that group. This parser instead makes the later switch a CHILD
+     * of the earlier one, because each switch consumes {@link #parseRestOfGroup()}.
+     *
+     * <p>That difference is unobservable for three of the four switches, and only for
+     * an accidental reason: {@link MathVariant#apply} remaps ASCII letters only, so an
+     * inner {@code \bf}/{@code \it}/{@code \cal} moves the atom OUT of ASCII and the
+     * enclosing switch then leaves that code point alone. {@code \rm} is the sole
+     * switch that does no remap — upright roman IS ASCII — so the enclosing variant
+     * re-applies to it and {@code \rm} CANNOT CANCEL an enclosing switch:
+     *
+     * <pre>{@code
+     *   {\bf x \rm y}   ->  bold x, BOLD y      (TeX: bold x, roman y)
+     *   {\it x \rm y}   ->  italic x, ITALIC y  (TeX: italic x, roman y)
+     *   {\cal x \rm y}  ->  script x, SCRIPT y  (TeX: script x, roman y)
+     *   {\rm x \bf y}   ->  roman x, bold y     (correct, by the accident above)
+     *   {\bf x \it y}   ->  bold x, italic y    (correct, by the accident above)
+     * }</pre>
+     *
+     * <p>Fixing it properly requires marking an inner switch's subtree OPAQUE to the
+     * enclosing {@code apply}, which is a structural change to variant application and
+     * is deliberately NOT bundled with the table additions this branch carries. The
+     * current behaviour is PINNED by {@code LegacyFontSwitchTest} so the limitation is
+     * visible and any future fix must consciously break those pins. Found by
+     * Fixpoint's probe at lattex/706 — the pre-existing 13 tests all placed
+     * {@code \rm} alone in its group, so the suite was green through this by
+     * construction.
+     */
+    private MathNode parseFontSwitch(String name) {
+        MathNode body = parseRestOfGroup();
+        return switch (name) {
+            case "rm" -> body;
+            case "bf" -> MathVariant.apply(MathVariant.Style.BOLD, body);
+            case "it" -> MathVariant.apply(MathVariant.Style.ITALIC, body);
+            case "cal" -> MathVariant.apply(MathVariant.Style.SCRIPT, body);
+            default -> throw new IllegalStateException("not a legacy font switch: " + name);
+        };
     }
 
     /**
@@ -628,11 +695,7 @@ public final class MathParser {
      */
     private MathNode parseColorSwitch() {
         Color color = parseColorArg("\\color");
-        List<MathNode> rest = new ArrayList<>();
-        while (!isStyleSwitchBoundary(peek())) {
-            rest.add(parseComponent());
-        }
-        return new MathNode.Colored(wrap(rest), color);
+        return new MathNode.Colored(parseRestOfGroup(), color);
     }
 
     /** Where a {@code \displaystyle}-family switch stops consuming: group end or a cell/row sep. */
@@ -1015,6 +1078,9 @@ public final class MathParser {
             case STYLE_SWITCH -> {
                 return parseStyleSwitch(name);
             }
+            case FONT_SWITCH -> {
+                return parseFontSwitch(name);
+            }
             case TEXT_COLOR -> {
                 // \textcolor{color}{body}: paint body a fixed color. The name/hex is
                 // validated through Color (the only path from a raw string to an SVG
@@ -1344,6 +1410,12 @@ public final class MathParser {
      * script style with a tightened baseline, used to stack several conditions under
      * a big-operator limit ({@code \sum_{\substack{i<j \\ i \ne k}}}). Rows are
      * {@code \\}-separated; each row is an ordinary math list.
+     *
+     * <p>amsmath's {@code subarray} environment builds the SAME
+     * {@link MatrixKind#SUBSTACK} grid through {@link EnvironmentParser} (LaTeXML
+     * expands {@code \substack} into {@code \begin{subarray}{c}…\end{subarray}}),
+     * differing only in taking a {@code {c}}/{@code {l}} column spec where
+     * {@code \substack} is always centred.
      */
     private MathNode parseSubstack() {
         if (peek().kind() != Kind.LBRACE) {

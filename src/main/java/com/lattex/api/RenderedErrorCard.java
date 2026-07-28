@@ -4,7 +4,7 @@ import com.lattex.font.SfntFont;
 import com.lattex.layout.Layout;
 import com.lattex.layout.LayoutContext;
 import com.lattex.layout.LayoutEngine;
-import com.lattex.layout.MathStyle;
+import com.lattex.api.MathStyle;
 import com.lattex.layout.PositionedGlyph;
 import com.lattex.layout.Rule;
 import com.lattex.parse.MathNode.TextRun;

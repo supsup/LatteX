@@ -1,6 +1,6 @@
 package com.lattex.api;
 
-import com.lattex.layout.MathStyle;
+import com.lattex.api.MathStyle;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;

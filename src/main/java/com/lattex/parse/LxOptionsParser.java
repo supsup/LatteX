@@ -2,7 +2,7 @@ package com.lattex.parse;
 
 import com.lattex.api.Color;
 import com.lattex.api.RenderOptions;
-import com.lattex.layout.MathStyle;
+import com.lattex.api.MathStyle;
 import com.lattex.parse.MathNode.StyledMath;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;

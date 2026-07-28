@@ -246,6 +246,15 @@ final class Symbols {
 
     static final Map<String, MathVariant.Style> FONT_VARIANTS = Map.ofEntries(
         Map.entry("mathbb", MathVariant.Style.BLACKBOARD),
+        // \mathds (dsfont package) is a plain alias for \mathbb, widely used for
+        // the indicator function \mathds{1}. dsfont ships its own double-struck
+        // glyphs, but the semantics — and, against the bundled STIX alphabet, the
+        // glyphs — are identical, so \mathds{1} resolves to 𝟙 exactly like
+        // \mathbb{1}. An alias is one FONT_VARIANTS row and nothing else: the
+        // FONT_VARIANT handler in CommandRegistry owns the ONE_ARGUMENT grammar
+        // and RENDERING output for every name in this table, so the alias cannot
+        // acquire a contract that disagrees with the routine that parses it.
+        Map.entry("mathds", MathVariant.Style.BLACKBOARD),
         Map.entry("mathcal", MathVariant.Style.SCRIPT),
         Map.entry("mathscr", MathVariant.Style.SCRIPT),
         Map.entry("mathfrak", MathVariant.Style.FRAKTUR),
@@ -309,6 +318,80 @@ final class Symbols {
         m.put("varphi", new Sym(0x03C6, MathClass.ORD));     // φ
         m.put("varkappa", new Sym(0x03F0, MathClass.ORD));   // ϰ
         m.put("digamma", new Sym(0x03DD, MathClass.ORD));    // ϝ
+
+        // -- Upright Greek: the upgreek package (\\upalpha ... \\upomega) -------
+        // ISO 80000-2 writes units, constants and chemical/particle names with
+        // UPRIGHT Greek (\\upmu m, an \\upalpha particle, \\uppi mesons), reserving
+        // slanted Greek for variables. The upgreek package is how real physics
+        // and chemistry sources spell that, so these names show up throughout a
+        // wild corpus and must parse rather than fail loud.
+        //
+        // GLYPH SOURCE — verified against the bundled font, not assumed. STIX
+        // Two Math draws the Greek and Coptic block (U+0370..U+03FF) UPRIGHT;
+        // the SLANTED Greek it ships lives in Mathematical Italic Greek
+        // (U+1D6E2..U+1D71B), a separate run reached via
+        // MathVariant.Style.ITALIC. Measured on the font's own outlines, every
+        // Mathematical-Italic Greek glyph leans further right than its base-block
+        // counterpart, and only the italic run carries MATH italics corrections.
+        // So the base block IS the upright alphabet upgreek asks for — at
+        // REGULAR weight, which is what upgreek means (it is not a bold switch).
+        // UprightGreekTest pins that measurement so a font swap cannot quietly
+        // turn these mappings slanted.
+        //
+        // WRITTEN OUT, NOT DERIVED from the \alpha row above. LatteX currently
+        // renders \alpha from the same upright base block, so today \\upalpha and
+        // \alpha share a glyph. That coincidence is temporary: giving the plain
+        // Greek commands their LaTeX-correct math-italic forms is a separate
+        // change, and when it happens upgreek must NOT follow it. Pinning the
+        // upright code point here keeps this family upright by construction
+        // instead of by accident.
+        //
+        // The set is upgreek's: the 24 lowercase letters, the 6 \var* symbol
+        // forms, and the 11 uppercase letters LaTeX itself provides. There is no
+        // \Upalpha/\Upbeta/... because there is no \Alpha/\Beta either — those
+        // are typed as Latin A, B. \varkappa and \digamma get no upright command
+        // for the same reason: upgreek does not define one.
+        m.put("upalpha", new Sym(0x03B1, MathClass.ORD));      // α
+        m.put("upbeta", new Sym(0x03B2, MathClass.ORD));       // β
+        m.put("upgamma", new Sym(0x03B3, MathClass.ORD));      // γ
+        m.put("updelta", new Sym(0x03B4, MathClass.ORD));      // δ
+        m.put("upepsilon", new Sym(0x03F5, MathClass.ORD));    // ϵ (lunate, mirrors \epsilon)
+        m.put("upzeta", new Sym(0x03B6, MathClass.ORD));       // ζ
+        m.put("upeta", new Sym(0x03B7, MathClass.ORD));        // η
+        m.put("uptheta", new Sym(0x03B8, MathClass.ORD));      // θ
+        m.put("upiota", new Sym(0x03B9, MathClass.ORD));       // ι
+        m.put("upkappa", new Sym(0x03BA, MathClass.ORD));      // κ
+        m.put("uplambda", new Sym(0x03BB, MathClass.ORD));     // λ
+        m.put("upmu", new Sym(0x03BC, MathClass.ORD));         // μ
+        m.put("upnu", new Sym(0x03BD, MathClass.ORD));         // ν
+        m.put("upxi", new Sym(0x03BE, MathClass.ORD));         // ξ
+        m.put("upomicron", new Sym(0x03BF, MathClass.ORD));    // ο (LatteX defines \omicron)
+        m.put("uppi", new Sym(0x03C0, MathClass.ORD));         // π
+        m.put("uprho", new Sym(0x03C1, MathClass.ORD));        // ρ
+        m.put("upsigma", new Sym(0x03C3, MathClass.ORD));      // σ
+        m.put("uptau", new Sym(0x03C4, MathClass.ORD));        // τ
+        m.put("upupsilon", new Sym(0x03C5, MathClass.ORD));    // υ
+        m.put("upphi", new Sym(0x03D5, MathClass.ORD));        // ϕ (closed, mirrors \phi)
+        m.put("upchi", new Sym(0x03C7, MathClass.ORD));        // χ
+        m.put("uppsi", new Sym(0x03C8, MathClass.ORD));        // ψ
+        m.put("upomega", new Sym(0x03C9, MathClass.ORD));      // ω
+        m.put("upvarepsilon", new Sym(0x03B5, MathClass.ORD)); // ε
+        m.put("upvartheta", new Sym(0x03D1, MathClass.ORD));   // ϑ
+        m.put("upvarpi", new Sym(0x03D6, MathClass.ORD));      // ϖ
+        m.put("upvarrho", new Sym(0x03F1, MathClass.ORD));     // ϱ
+        m.put("upvarsigma", new Sym(0x03C2, MathClass.ORD));   // ς
+        m.put("upvarphi", new Sym(0x03C6, MathClass.ORD));     // φ
+        m.put("Upgamma", new Sym(0x0393, MathClass.ORD));      // Γ
+        m.put("Updelta", new Sym(0x0394, MathClass.ORD));      // Δ
+        m.put("Uptheta", new Sym(0x0398, MathClass.ORD));      // Θ
+        m.put("Uplambda", new Sym(0x039B, MathClass.ORD));     // Λ
+        m.put("Upxi", new Sym(0x039E, MathClass.ORD));         // Ξ
+        m.put("Uppi", new Sym(0x03A0, MathClass.ORD));         // Π
+        m.put("Upsigma", new Sym(0x03A3, MathClass.ORD));      // Σ
+        m.put("Upupsilon", new Sym(0x03A5, MathClass.ORD));    // Υ
+        m.put("Upphi", new Sym(0x03A6, MathClass.ORD));        // Φ
+        m.put("Uppsi", new Sym(0x03A8, MathClass.ORD));        // Ψ
+        m.put("Upomega", new Sym(0x03A9, MathClass.ORD));      // Ω
 
         // -- Binary operators (MathClass.BIN) --------------------------------
         m.put("pm", new Sym(0x00B1, MathClass.BIN));       // ±
@@ -623,6 +706,15 @@ final class Symbols {
         // -- Punctuation -----------------------------------------------------
         m.put("colon", new Sym(0x003A, MathClass.PUNCT)); // : (punctuation spacing)
 
+        // \# — cardinality notation (\#E(\mathbb{F}_p)-style group orders), common
+        // in harvested number-theory sources. Lexes as a single-character control
+        // sequence on the same path as \{ / \| below, so a SYMBOLS entry is all it
+        // needs: CommandRegistry derives its SYMBOL descriptor (and therefore its
+        // grammar, index row, suggestion candidacy, and macro reservation) from
+        // this table. ASCII '#' (U+0023) is an ordinary symbol — not a delimiter,
+        // so it stays out of delimiterCodePointFor and cannot follow \left/\right.
+        m.put("#", new Sym('#', MathClass.ORD));
+
         // -- Delimiters usable as ordinary symbols (outside \left..\right) ---
         m.put("{", new Sym('{', MathClass.OPEN));
         m.put("}", new Sym('}', MathClass.CLOSE));
@@ -656,6 +748,11 @@ final class Symbols {
         "text", TextStyle.ROMAN,
         "textrm", TextStyle.ROMAN,
         "mathrm", TextStyle.ROMAN,
+        // \textnormal takes \text semantics: LaTeX defines it as the document's
+        // normal text font inside math, which — absent any document-class bold or
+        // italic override, which this renderer does not model — is exactly the
+        // upright roman \text/\textrm already produce.
+        "textnormal", TextStyle.ROMAN,
         "textbf", TextStyle.BOLD,
         "textit", TextStyle.ITALIC,
         "texttt", TextStyle.MONO);
@@ -676,6 +773,14 @@ final class Symbols {
         Map.entry("Vmatrix", new EnvSpec(0x2016, 0x2016, MatrixKind.MATRIX, ColumnAlign.CENTER)),
         Map.entry("smallmatrix", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.SMALL, ColumnAlign.CENTER)),
         Map.entry("array", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ARRAY, ColumnAlign.CENTER)),
+        // subarray: amsmath's single-column limit stack, the SAME grid \substack builds
+        // (MatrixKind.SUBSTACK — script style, tightened inter-row gaps, no edge padding),
+        // reached through a \begin/\end instead of a brace argument. It carries a MANDATORY
+        // one-letter {c}/{l} column spec that EnvironmentParser reads into a synthesised
+        // declared-column spec (as eqnarray does), so the uniform field below is unused.
+        // LaTeXML expands \substack into \begin{subarray}{c}…\end{subarray}, which is why
+        // this shape turns up in harvested corpora (a limit stack under \sum).
+        Map.entry("subarray", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.SUBSTACK, ColumnAlign.CENTER)),
         Map.entry("cases", new EnvSpec('{', NO_DELIM, MatrixKind.CASES, ColumnAlign.LEFT)),
         // eqnarray: a fixed 3-column right/center/left grid (LHS, relation, RHS). It
         // reuses ARRAY's machinery but takes NO user column spec — EnvironmentParser

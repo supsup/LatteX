@@ -1,0 +1,9 @@
+# The enum type and compiler-declared enum members are the intentional part of
+# the move. The three TeXbook transition methods are deliberately absent.
+public type com.example.api.MathStyle
+public static field com.example.api.MathStyle#DISPLAY:com.example.api.MathStyle
+public static field com.example.api.MathStyle#SCRIPT:com.example.api.MathStyle
+public static field com.example.api.MathStyle#SCRIPT_SCRIPT:com.example.api.MathStyle
+public static field com.example.api.MathStyle#TEXT:com.example.api.MathStyle
+public static method com.example.api.MathStyle#valueOf(java.lang.String):com.example.api.MathStyle
+public static method com.example.api.MathStyle#values():com.example.api.MathStyle[]
