@@ -6,6 +6,28 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Example galleries contain their formulas (visual bug fix)
+
+- **A wide formula no longer renders outside its card.** The shared example-page
+  style fixed one axis — `height: 120px; width: auto` — and left the other
+  unbounded, so an SVG scaled to a fixed height took whatever width its viewBox
+  aspect ratio implied. At the 204px card content width, anything wider than
+  about 1.7:1 spilled onto the page background: `a + b = c` (4.65:1) rendered
+  558px wide and put **177px over each edge**, with the "a +" and the "=" sitting
+  entirely off the card while the caption stayed neatly inside. Five of the ten
+  gallery cards were affected.
+- **Both axes are now constrained** with `max-width`/`max-height` and auto sizing,
+  so the viewBox aspect ratio is preserved and each formula fits inside whichever
+  limit binds first. The card additionally carries `min-width: 0`, because a grid
+  item defaults to `min-width: auto` and grows to fit its content — without that
+  the card expands and the SVG's `max-width: 100%` resolves against a box that has
+  already given way.
+- **Scope is wider than the symptom.** `galleryPage(...)` is the shared template
+  behind seven committed example pages, not just `gallery.html`. The other six had
+  the same latent defect and merely lacked a formula wide enough to spill, so all
+  seven are regenerated. The repair is in the generator; `examples/*.html` is
+  written by the example tasks and a hand-edit would match no actual build.
+
 ### Long-tail wild-corpus notation now fails honestly or renders directly
 
 - **stmaryrd double brackets are native symbols.** `\llbracket` and
