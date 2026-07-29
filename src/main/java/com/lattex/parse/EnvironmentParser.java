@@ -73,10 +73,10 @@ final class EnvironmentParser {
             specAligns = List.of(ColumnAlign.RIGHT, ColumnAlign.CENTER, ColumnAlign.LEFT);
             specVlines = List.of(0, 0, 0, 0);
         } else if (spec.kind() == MatrixKind.ARRAY) {
-            // LaTeX array accepts an OPTIONAL [t]/[b] vertical-position argument
+            // LaTeX array accepts an OPTIONAL [t]/[b]/[c] vertical-position argument
             // before its mandatory column spec. LatteX renders the grid standalone,
             // so consume the argument but do not carry it into the layout tree.
-            readAndIgnorePositionArg(parser, env, false);
+            readAndIgnorePositionArg(parser, env);
             ColumnSpec cs = readColumnSpec(parser);
             specAligns = cs.aligns();
             specVlines = cs.vlines();
@@ -100,7 +100,7 @@ final class EnvironmentParser {
             // (0.11.0 silently rendered "[ t ] a" as math — plan 08eed9a5). Anything
             // other than t/b/c in the bracket fails loud, matching array's argument
             // discipline.
-            readAndIgnorePositionArg(parser, env, true);
+            readAndIgnorePositionArg(parser, env);
         }
 
         // Read the body: cells (& separated) into rows (\\ separated), tracking
@@ -471,19 +471,14 @@ final class EnvironmentParser {
     }
 
     /**
-     * Reads and IGNORES an optional vertical-position argument; a no-op when no
-     * {@code [} follows {@code \begin{env}}. {@code array} admits documented
-     * {@code [t]}/{@code [b]}, while the existing inner aligned/split contract also
-     * admits {@code [c]}. The position selects which row's baseline anchors the box
+     * Reads and IGNORES an optional {@code [t]}/{@code [b]}/{@code [c]}
+     * vertical-position argument; a no-op when no {@code [} follows
+     * {@code \begin{env}}. The position selects which row's baseline anchors the box
      * in surrounding text — LatteX renders the environment standalone, so it has no
      * visual effect. Every other bracket value fails loud rather than leaking into
      * the body or being mistaken for array's mandatory column spec.
-     *
-     * @param acceptsCenter whether {@code [c]} is accepted in addition to
-     *                      {@code [t]}/{@code [b]}
      */
-    private static void readAndIgnorePositionArg(
-            MathParser parser, String env, boolean acceptsCenter) {
+    private static void readAndIgnorePositionArg(MathParser parser, String env) {
         Token t = parser.peek();
         if (t.kind() != Kind.CHAR || t.codePoint() != '[') {
             return; // the argument is optional — no '[' means no argument
@@ -492,16 +487,16 @@ final class EnvironmentParser {
         Token pos = parser.peek();
         if (pos.kind() != Kind.CHAR
                 || (pos.codePoint() != 't' && pos.codePoint() != 'b'
-                    && (!acceptsCenter || pos.codePoint() != 'c'))) {
+                    && pos.codePoint() != 'c')) {
             throw new MathSyntaxException("\\begin{" + env + "} position must be "
-                + (acceptsCenter ? "[t], [b] or [c]" : "[t] or [b]") + ","
+                + "[t], [b] or [c],"
                 + " but found " + MathParser.describe(pos));
         }
         parser.next(); // consume the position letter
         Token close = parser.peek();
         if (close.kind() != Kind.CHAR || close.codePoint() != ']') {
             throw new MathSyntaxException("\\begin{" + env + "} position must be "
-                + (acceptsCenter ? "[t], [b] or [c]" : "[t] or [b]") + ","
+                + "[t], [b] or [c],"
                 + " but found " + MathParser.describe(close));
         }
         parser.next(); // consume ']'

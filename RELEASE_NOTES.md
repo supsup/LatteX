@@ -13,10 +13,10 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   opening/closing atom classes. Five exact `math.PR` expressions from the
   2026-07-23 survey are now in the wild-corpus pass-set ratchet.
 - **`array` consumes its documented vertical-position option.**
-  `\begin{array}[t]{...}` and `[b]` are parsed before the mandatory column
+  `\begin{array}[t]{...}`, `[b]`, and `[c]` are parsed before the mandatory column
   specification. LatteX renders an array as a standalone formula, so it
-  intentionally ignores the surrounding-baseline choice; empty, `[c]`,
-  multi-letter, and unknown values fail loud instead of leaking into cells.
+  intentionally ignores the surrounding-baseline choice; empty, multi-letter,
+  and unknown values fail loud instead of leaking into cells.
 - **Standalone unresolved references stay visible without pretending to resolve.**
   `\ref{key}` renders `??` and `\eqref{key}` renders `(??)`. The mandatory key
   is consumed but never emitted into SVG or accessibility text. LatteX has no

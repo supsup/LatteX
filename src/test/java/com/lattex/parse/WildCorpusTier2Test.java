@@ -33,11 +33,11 @@ class WildCorpusTier2Test {
     }
 
     @Test
-    void arrayTopAndBottomPositionsAreConsumedBeforeTheColumnSpec() {
+    void arrayStandardPositionsAreConsumedBeforeTheColumnSpec() {
         String plain = "\\begin{array}{cc}a&b\\\\c&d\\end{array}";
         MathNode expected = MathParser.parse(plain);
 
-        for (String position : List.of("t", "b")) {
+        for (String position : List.of("t", "b", "c")) {
             String positioned = "\\begin{array}[" + position + "]{cc}a&b\\\\c&d\\end{array}";
             assertEquals(expected, MathParser.parse(positioned), positioned);
             assertEquals(LatteX.render(plain), LatteX.render(positioned), positioned);
@@ -47,8 +47,8 @@ class WildCorpusTier2Test {
     }
 
     @Test
-    void arrayRejectsUndocumentedOrMalformedPositions() {
-        for (String position : List.of("", "c", "x", "tb")) {
+    void arrayRejectsUnknownOrMalformedPositions() {
+        for (String position : List.of("", "x", "tb")) {
             MathSyntaxException failure = assertThrows(MathSyntaxException.class,
                 () -> MathParser.parse("\\begin{array}[" + position
                     + "]{c}x\\end{array}"), position);

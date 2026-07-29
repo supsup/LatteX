@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **186 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **186**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **187 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **187**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -162,6 +162,7 @@ following once the node exists.
 | `\begin{array}{c\|c}1&2\\\hline 3&4\end{array}` | array with vertical and horizontal rules — array node + column spec + \\hline | `PARSES-NOW` |
 | `\begin{array}[t]{cc}a&b\\c&d\end{array}` | array optional top position is consumed before the column spec (standalone layout ignores baseline placement) | `PARSES-NOW` |
 | `\begin{array}[b]{cc}a&b\\c&d\end{array}` | array optional bottom position is consumed before the column spec (standalone layout ignores baseline placement) | `PARSES-NOW` |
+| `\begin{array}[c]{cc}a&b\\c&d\end{array}` | array optional center position is consumed before the column spec (standalone layout ignores baseline placement) | `PARSES-NOW` |
 | `\vdots` | vertical dots symbol | `PARSES-NOW` |
 | `\ddots` | diagonal dots symbol | `PARSES-NOW` |
 

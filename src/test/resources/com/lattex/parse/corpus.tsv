@@ -117,6 +117,7 @@ PARSES-NOW	matrix	\bordermatrix{&1&2\\1&a&b\\2&c&d}	bordered matrix with row/col
 PARSES-NOW	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with vertical and horizontal rules — array node + column spec + \hline
 PARSES-NOW	matrix	\begin{array}[t]{cc}a&b\\c&d\end{array}	array optional top position is consumed before the column spec (standalone layout ignores baseline placement)
 PARSES-NOW	matrix	\begin{array}[b]{cc}a&b\\c&d\end{array}	array optional bottom position is consumed before the column spec (standalone layout ignores baseline placement)
+PARSES-NOW	matrix	\begin{array}[c]{cc}a&b\\c&d\end{array}	array optional center position is consumed before the column spec (standalone layout ignores baseline placement)
 PARSES-NOW	matrix	\vdots	vertical dots symbol
 PARSES-NOW	matrix	\ddots	diagonal dots symbol
 # ==== aligned equations (align / aligned / gather) =================
