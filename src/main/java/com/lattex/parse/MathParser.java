@@ -1368,6 +1368,24 @@ public final class MathParser {
                 parseGroup(); // read and discard the label
                 return nonRenderingResult(descriptor);
             }
+            case REFERENCE -> {
+                // LatteX has no document-level label resolver. Consume the key so it
+                // cannot leak into output, then render a visible unresolved marker:
+                // "??" for \ref and "(??)" for \eqref. This is fail-honest without
+                // pretending that a standalone formula renderer resolved a document.
+                if (peek().kind() != Kind.LBRACE) {
+                    throw new MathSyntaxException("\\" + name + " expects a {key} group");
+                }
+                parseGroup(); // read and discard the reference key
+                MathNode placeholder = new MathList(List.of(
+                    Atom.ord('?'), Atom.ord('?')));
+                return switch (name) {
+                    case "ref" -> placeholder;
+                    case "eqref" -> new Fenced('(', placeholder, ')');
+                    default -> throw new IllegalStateException(
+                        "reference handler does not name a reference command: \\" + name);
+                };
+            }
             case TEXT -> throw new MathSyntaxException(
                 "\\" + name + " expects a '{...}' text argument", commandOffset);
             case DELIMITER, INFIX_FRACTION, TAG, MIDDLE, ROW_SEPARATOR, DEFINITION ->

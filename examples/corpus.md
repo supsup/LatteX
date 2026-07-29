@@ -24,7 +24,7 @@ document and the parser cannot drift. **Tiers here are empirical, not guessed.**
 | **`NEEDS-FONT-STYLE`** | Missing feature is fundamentally a font-variant glyph set or emitter color. | throws `MathSyntaxException` |
 | **`PARSER-BUG`** | `parse()` crashes with a *non*-`MathSyntaxException` (NPE/SOE/CCE). A robustness bug. | crashes |
 
-> **Empirical frontier** over **181 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **181**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
+> **Empirical frontier** over **187 entries** — the tier column is the source of truth in [`corpus.tsv`](../src/test/resources/com/lattex/parse/corpus.tsv), verified against `parse()` by `CorpusParseTest`: `PARSES-NOW` **187**, `PARSER-BUG` **0**. The parser fails cleanly (a named `MathSyntaxException`) on the entire not-yet frontier — no crashes.
 
 Note on the split: `PARSES-NOW` vs `NEEDS-S4-LAYOUT` both parse today; the layout
 tier is reserved for parsed trees whose faithful rendering needs a *new* S4
@@ -89,6 +89,7 @@ following once the node exists.
 | `\\|e\\|` | double-bar norm delimiters (\\\| maps to ‖, U+2016, like \\Vert) | `PARSES-NOW` |
 | `\left\\| \frac{x}{y} \right\\|` | stretchy double-bar norm around tall content | `PARSES-NOW` |
 | `\langle f\rangle` | angle brackets as ordinary symbols (outside \\left..\\right) | `PARSES-NOW` |
+| `\llbracket f\rrbracket` | stmaryrd double brackets — dedicated U+27E6/U+27E7 opening and closing glyphs | `PARSES-NOW` |
 | `\lfloor g\rfloor` | floor delimiters as ordinary symbols | `PARSES-NOW` |
 | `\lceil h\rceil` | ceiling delimiters as ordinary symbols | `PARSES-NOW` |
 | `\ulcorner i\urcorner` | corner delimiters as ordinary symbols | `PARSES-NOW` |
@@ -159,6 +160,9 @@ following once the node exists.
 | `A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}` | full matrix with \\cdots \\vdots \\ddots | `PARSES-NOW` |
 | `\bordermatrix{&1&2\\1&a&b\\2&c&d}` | bordered matrix with row/col labels — \\bordermatrix node (labels outside a paren-fenced body) | `PARSES-NOW` |
 | `\begin{array}{c\|c}1&2\\\hline 3&4\end{array}` | array with vertical and horizontal rules — array node + column spec + \\hline | `PARSES-NOW` |
+| `\begin{array}[t]{cc}a&b\\c&d\end{array}` | array optional top position is consumed before the column spec (standalone layout ignores baseline placement) | `PARSES-NOW` |
+| `\begin{array}[b]{cc}a&b\\c&d\end{array}` | array optional bottom position is consumed before the column spec (standalone layout ignores baseline placement) | `PARSES-NOW` |
+| `\begin{array}[c]{cc}a&b\\c&d\end{array}` | array optional center position is consumed before the column spec (standalone layout ignores baseline placement) | `PARSES-NOW` |
 | `\vdots` | vertical dots symbol | `PARSES-NOW` |
 | `\ddots` | diagonal dots symbol | `PARSES-NOW` |
 
@@ -175,6 +179,13 @@ following once the node exists.
 | `\begin{split}a&=b+c\\&=d\end{split}` | split — a single equation broken over lines, aligned on the relation (reuses the align machinery) | `PARSES-NOW` |
 | `\begin{multline}a+b+c+d\\+e+f+g\\+h+i\end{multline}` | multline — one long equation: first line flush-left, last flush-right, middle centred | `PARSES-NOW` |
 | `\begin{multline*}\int_0^1 f\\=\frac{1}{2}\end{multline*}` | starred multline (no equation number) — same layout | `PARSES-NOW` |
+
+## Unresolved cross-references
+
+| LaTeX | Description | Tier |
+| --- | --- | --- |
+| `x=\ref{eq:x}` | standalone unresolved reference — visible ?? placeholder; document label key is consumed, not rendered | `PARSES-NOW` |
+| `x=\eqref{eq:x}` | standalone unresolved equation reference — visible (??) placeholder; document label key is consumed, not rendered | `PARSES-NOW` |
 
 ## Named operators / misc
 

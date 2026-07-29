@@ -6,6 +6,23 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Long-tail wild-corpus notation now fails honestly or renders directly
+
+- **stmaryrd double brackets are native symbols.** `\llbracket` and
+  `\rrbracket` render STIX Two Math's dedicated U+27E6/U+27E7 glyphs with
+  opening/closing atom classes. Five exact `math.PR` expressions from the
+  2026-07-23 survey are now in the wild-corpus pass-set ratchet.
+- **`array` consumes its documented vertical-position option.**
+  `\begin{array}[t]{...}`, `[b]`, and `[c]` are parsed before the mandatory column
+  specification. LatteX renders an array as a standalone formula, so it
+  intentionally ignores the surrounding-baseline choice; empty, multi-letter,
+  and unknown values fail loud instead of leaking into cells.
+- **Standalone unresolved references stay visible without pretending to resolve.**
+  `\ref{key}` renders `??` and `\eqref{key}` renders `(??)`. The mandatory key
+  is consumed but never emitted into SVG or accessibility text. LatteX has no
+  document-level label resolver; references inside `\text{...}` remain a named
+  unsupported-command error rather than silently flattening control text.
+
 ### Pull requests now expose exported-API growth mechanically
 
 - **CI diffs the compiled surface, not merely `module-info.java`.** For every

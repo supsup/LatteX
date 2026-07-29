@@ -73,6 +73,10 @@ final class EnvironmentParser {
             specAligns = List.of(ColumnAlign.RIGHT, ColumnAlign.CENTER, ColumnAlign.LEFT);
             specVlines = List.of(0, 0, 0, 0);
         } else if (spec.kind() == MatrixKind.ARRAY) {
+            // LaTeX array accepts an OPTIONAL [t]/[b]/[c] vertical-position argument
+            // before its mandatory column spec. LatteX renders the grid standalone,
+            // so consume the argument but do not carry it into the layout tree.
+            readAndIgnorePositionArg(parser, env);
             ColumnSpec cs = readColumnSpec(parser);
             specAligns = cs.aligns();
             specVlines = cs.vlines();
@@ -467,13 +471,12 @@ final class EnvironmentParser {
     }
 
     /**
-     * Reads and IGNORES an optional {@code [t]}/{@code [b]}/{@code [c]} position
-     * argument (see {@link #takesPositionArg}); a no-op when no {@code [} follows
-     * the {@code \begin{env}}. The position selects which row's baseline anchors
-     * the box in surrounding TEXT — LatteX renders the environment standalone, so
-     * there is no surrounding baseline and the argument has no visual effect.
-     * Any other bracket content fails loud (array's argument discipline: parse or
-     * reject, never leak into the body).
+     * Reads and IGNORES an optional {@code [t]}/{@code [b]}/{@code [c]}
+     * vertical-position argument; a no-op when no {@code [} follows
+     * {@code \begin{env}}. The position selects which row's baseline anchors the box
+     * in surrounding text — LatteX renders the environment standalone, so it has no
+     * visual effect. Every other bracket value fails loud rather than leaking into
+     * the body or being mistaken for array's mandatory column spec.
      */
     private static void readAndIgnorePositionArg(MathParser parser, String env) {
         Token t = parser.peek();
@@ -483,14 +486,17 @@ final class EnvironmentParser {
         parser.next(); // consume '['
         Token pos = parser.peek();
         if (pos.kind() != Kind.CHAR
-                || (pos.codePoint() != 't' && pos.codePoint() != 'b' && pos.codePoint() != 'c')) {
-            throw new MathSyntaxException("\\begin{" + env + "} position must be [t], [b] or [c],"
+                || (pos.codePoint() != 't' && pos.codePoint() != 'b'
+                    && pos.codePoint() != 'c')) {
+            throw new MathSyntaxException("\\begin{" + env + "} position must be "
+                + "[t], [b] or [c],"
                 + " but found " + MathParser.describe(pos));
         }
         parser.next(); // consume the position letter
         Token close = parser.peek();
         if (close.kind() != Kind.CHAR || close.codePoint() != ']') {
-            throw new MathSyntaxException("\\begin{" + env + "} position must be [t], [b] or [c],"
+            throw new MathSyntaxException("\\begin{" + env + "} position must be "
+                + "[t], [b] or [c],"
                 + " but found " + MathParser.describe(close));
         }
         parser.next(); // consume ']'

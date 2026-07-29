@@ -10,10 +10,10 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * The WILD-CORPUS COVERAGE RATCHET. 484 formulas gathered from real documents
- * (calculus/physics, stats/ML, algebra/discrete, Wikipedia/textbook, and
- * structured environments — 2026-07-06 sweep), exactly as authors write them,
- * deliberately UNSANITIZED toward what LatteX supports.
+ * The WILD-CORPUS COVERAGE RATCHET. 502 formulas gathered from real documents
+ * (calculus/physics, stats/ML, algebra/discrete, Wikipedia/textbook, structured
+ * environments, and the 2026-07-23 math.PR follow-up), exactly as authors write
+ * them, deliberately UNSANITIZED toward what LatteX supports.
  *
  * <p>Each row carries a STATUS: {@code OK} (rendered at sweep time — the
  * PASS-SET) or {@code GAP} (a known failure, the feature roadmap). The pins:
@@ -56,8 +56,8 @@ class WildCorpusCoverageTest {
                 }
             }
         }
-        assertTrue(okRows >= 482, "pass-set shrank in the TSV itself: " + okRows
-            + " OK rows (started at 417) — statuses may only flip GAP->OK");
+        assertTrue(okRows >= 502, "pass-set shrank in the TSV itself: " + okRows
+            + " OK rows (current floor 502; started at 417) — statuses may only flip GAP->OK");
         assertTrue(broken.isEmpty(), broken.size()
             + " previously-rendering formulas REGRESSED:\n  "
             + String.join("\n  ", broken.subList(0, Math.min(10, broken.size())))

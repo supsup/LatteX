@@ -60,6 +60,7 @@ PARSES-NOW	delim-fixed	|d|	vertical bars
 PARSES-NOW	delim-fixed	\|e\|	double-bar norm delimiters (\| maps to ‖, U+2016, like \Vert)
 PARSES-NOW	delim-fixed	\left\| \frac{x}{y} \right\|	stretchy double-bar norm around tall content
 PARSES-NOW	delim-fixed	\langle f\rangle	angle brackets as ordinary symbols (outside \left..\right)
+PARSES-NOW	delim-fixed	\llbracket f\rrbracket	stmaryrd double brackets — dedicated U+27E6/U+27E7 opening and closing glyphs
 PARSES-NOW	delim-fixed	\lfloor g\rfloor	floor delimiters as ordinary symbols
 PARSES-NOW	delim-fixed	\lceil h\rceil	ceiling delimiters as ordinary symbols
 PARSES-NOW	delim-fixed	\ulcorner i\urcorner	corner delimiters as ordinary symbols
@@ -114,6 +115,9 @@ PARSES-NOW	matrix	\begin{smallmatrix}a&b\\c&d\end{smallmatrix}	inline small matr
 PARSES-NOW	matrix	A_{m,n}=\begin{pmatrix}a_{1,1}&\cdots&a_{1,n}\\\vdots&\ddots&\vdots\\a_{m,1}&\cdots&a_{m,n}\end{pmatrix}	full matrix with \cdots \vdots \ddots
 PARSES-NOW	matrix	\bordermatrix{&1&2\\1&a&b\\2&c&d}	bordered matrix with row/col labels — \bordermatrix node (labels outside a paren-fenced body)
 PARSES-NOW	matrix	\begin{array}{c|c}1&2\\\hline 3&4\end{array}	array with vertical and horizontal rules — array node + column spec + \hline
+PARSES-NOW	matrix	\begin{array}[t]{cc}a&b\\c&d\end{array}	array optional top position is consumed before the column spec (standalone layout ignores baseline placement)
+PARSES-NOW	matrix	\begin{array}[b]{cc}a&b\\c&d\end{array}	array optional bottom position is consumed before the column spec (standalone layout ignores baseline placement)
+PARSES-NOW	matrix	\begin{array}[c]{cc}a&b\\c&d\end{array}	array optional center position is consumed before the column spec (standalone layout ignores baseline placement)
 PARSES-NOW	matrix	\vdots	vertical dots symbol
 PARSES-NOW	matrix	\ddots	diagonal dots symbol
 # ==== aligned equations (align / aligned / gather) =================
@@ -126,6 +130,9 @@ PARSES-NOW	gather	\begin{gather}a=b\\x+y=z\end{gather}	gather — each row centr
 PARSES-NOW	align	\begin{split}a&=b+c\\&=d\end{split}	split — a single equation broken over lines, aligned on the relation (reuses the align machinery)
 PARSES-NOW	align	\begin{multline}a+b+c+d\\+e+f+g\\+h+i\end{multline}	multline — one long equation: first line flush-left, last flush-right, middle centred
 PARSES-NOW	align	\begin{multline*}\int_0^1 f\\=\frac{1}{2}\end{multline*}	starred multline (no equation number) — same layout
+# ==== unresolved cross-references ==================================
+PARSES-NOW	reference	x=\ref{eq:x}	standalone unresolved reference — visible ?? placeholder; document label key is consumed, not rendered
+PARSES-NOW	reference	x=\eqref{eq:x}	standalone unresolved equation reference — visible (??) placeholder; document label key is consumed, not rendered
 # ==== named operators / misc =======================================
 PARSES-NOW	named-op	\lim_{x\to\infty}\exp(-x)=0	limit and exp — \lim (under-limits in display) + roman \exp
 PARSES-NOW	named-op	\cos(2\theta)=\cos^2\theta-\sin^2\theta	cos and sin — roman named operators with beside scripts

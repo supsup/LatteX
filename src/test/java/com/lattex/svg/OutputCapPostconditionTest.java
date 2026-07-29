@@ -310,8 +310,9 @@ class OutputCapPostconditionTest {
         for (byte b : md.digest()) {
             hex.append(String.format("%02x", b));
         }
-        // Captured on the pre-change tip (main 3347765) BEFORE the cap change.
-        assertEquals("800ae87551a8079fddc4e2d2cba7a5c6e919f169c577e20c2ac22f49a623ce6c", hex.toString(),
+        // The original 181-row subset still reproduces the pre-cap-change hash
+        // 800ae875... exactly; this pin adds the five intentional Tier-2 corpus rows.
+        assertEquals("fd731b18aef84038422562601e8353f76268240af3b1fc82adea765b509cc531", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
     }
