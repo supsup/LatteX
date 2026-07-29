@@ -55,7 +55,7 @@ class CommandRegistryTest {
                 case NOT -> GrammarKind.PREFIX;
                 case ACCENT, FONT_VARIANT, ATOM_CLASS, BOXED, CANCEL, BRA, KET, BRAKET, SUBSTACK,
                         PHANTOM, HPHANTOM, VPHANTOM, UNDERBRACE, OVERBRACE, BORDER_MATRIX,
-                        OPERATOR_NAME, PMOD, LABEL -> GrammarKind.ONE_ARGUMENT;
+                        OPERATOR_NAME, PMOD, LABEL, REFERENCE -> GrammarKind.ONE_ARGUMENT;
                 case FRACTION, CONTINUED_FRACTION, DISPLAY_FRACTION, TEXT_FRACTION,
                         TEXT_COLOR, CANCEL_TO, BINOM, DISPLAY_BINOM, TEXT_BINOM, OVERSET,
                         UNDERSET, STACKREL -> GrammarKind.TWO_ARGUMENTS;

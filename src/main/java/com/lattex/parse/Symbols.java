@@ -722,6 +722,11 @@ final class Symbols {
         m.put("Vert", new Sym(0x2016, MathClass.ORD));    // ‖
         m.put("langle", new Sym(0x27E8, MathClass.OPEN)); // ⟨
         m.put("rangle", new Sym(0x27E9, MathClass.CLOSE)); // ⟩
+        // stmaryrd double brackets. STIX Two Math carries the dedicated Unicode
+        // glyphs, so these are real opening/closing atoms rather than a kerned
+        // "[\![" approximation (2026-07-23 math.PR wild-corpus survey).
+        m.put("llbracket", new Sym(0x27E6, MathClass.OPEN)); // ⟦
+        m.put("rrbracket", new Sym(0x27E7, MathClass.CLOSE)); // ⟧
         m.put("lfloor", new Sym(0x230A, MathClass.OPEN)); // ⌊
         m.put("rfloor", new Sym(0x230B, MathClass.CLOSE)); // ⌋
         m.put("lceil", new Sym(0x2308, MathClass.OPEN));  // ⌈

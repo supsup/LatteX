@@ -120,6 +120,7 @@ final class CommandRegistry {
         DELIMITER(GrammarKind.CONTEXTUAL, OutputKind.RENDERING),
         EQUATION_SUPPRESSOR(GrammarKind.CONTEXTUAL, OutputKind.NON_RENDERING),
         LABEL(GrammarKind.ONE_ARGUMENT, OutputKind.NON_RENDERING),
+        REFERENCE(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         INFIX_FRACTION(GrammarKind.INFIX, OutputKind.RENDERING),
         TAG(GrammarKind.TOP_LEVEL, OutputKind.RENDERING),
         MIDDLE(GrammarKind.CONTEXTUAL, OutputKind.RENDERING),
@@ -376,6 +377,8 @@ final class CommandRegistry {
             add(out, name, Category.CONTROL, Handler.EQUATION_SUPPRESSOR, "x\\" + name);
         }
         add(out, "label", Category.CONTROL, Handler.LABEL, "x\\label{eq:x}");
+        add(out, "ref", Category.STRUCTURE, Handler.REFERENCE, "x=\\ref{eq:x}");
+        add(out, "eqref", Category.STRUCTURE, Handler.REFERENCE, "x=\\eqref{eq:x}");
         add(out, "tag", Category.CONTROL, Handler.TAG, "x\\tag{1}");
         for (String name : List.of("over", "atop", "choose", "brace", "brack")) {
             add(out, name, Category.STRUCTURE, Handler.INFIX_FRACTION, "a\\" + name + " b");
