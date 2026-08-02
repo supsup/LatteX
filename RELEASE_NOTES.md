@@ -6,6 +6,16 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Whole-corpus identity gates now cover the documented array-center form
+
+- **The two whole-corpus SHA-256 ratchets are pinned to all 187 authorized rows.**
+  The `array[c]` compatibility repair added one renderable corpus row after the
+  earlier 186-row Tier-2 capture, but its focused review lane did not advance the
+  two aggregate hashes, leaving main red. A causal control removes only that new
+  row and reproduces both prior hashes exactly; the repaired pins therefore admit
+  the reviewed corpus growth without changing runtime code, corpus contents,
+  folding order, thresholds, or assertion strength.
+
 ### The groupmap sidecar grammar is now a producer-side build contract
 
 - **A dedicated test class pins the exact `data-lx-groupmap` serialization grammar

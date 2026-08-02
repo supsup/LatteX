@@ -53,10 +53,13 @@ class FontCacheByteIdentityRatchetTest {
      * The whole-corpus output hash. Captured from the PRISTINE pre-caching tree and
      * pinned here; the post-caching tree must reproduce it byte-for-byte. Re-pinned
      * when the corpus intentionally grew 181 -> 186 rows for Tier 2 after a control
-     * run over the original 181 rows still reproduced the prior hash exactly.
+     * run over the original 181 rows still reproduced the prior hash exactly. The
+     * documented array-center repair then added only the 187th row; removing that
+     * exact row reproduces the 186-row hash, so this pin advances without weakening
+     * the fold or laundering an unrelated output change.
      */
     private static final String PINNED_SHA256 =
-        "bd49f921c29b49b298836d34d61e23351962c8cc19f60be11b40e7fed490f342";
+        "a9ce57ab94f2373d285fd7f661620cb0a3f4ce4af9e48770c37584af90ccc2a9";
 
     private static final SfntFont FONT = SfntFont.loadBundled();
 
