@@ -311,8 +311,11 @@ class OutputCapPostconditionTest {
             hex.append(String.format("%02x", b));
         }
         // The original 181-row subset still reproduces the pre-cap-change hash
-        // 800ae875... exactly; this pin adds the five intentional Tier-2 corpus rows.
-        assertEquals("fd731b18aef84038422562601e8353f76268240af3b1fc82adea765b509cc531", hex.toString(),
+        // 800ae875... exactly; five intentional Tier-2 rows produced fd731b18....
+        // The documented array-center repair adds only the 187th row, and removing
+        // that exact row reproduces fd731b18..., so this is a causal re-pin rather
+        // than permission for an unrelated compliant-output change.
+        assertEquals("d0905205dd209b2efc7fba7974d5d7fcf1fd8aaea4c454717e87e73d1483b1c4", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
     }
