@@ -107,12 +107,61 @@ final class StreamingBatchTest {
             new PrintStream(out, true, StandardCharsets.UTF_8),
             new PrintStream(err, true, StandardCharsets.UTF_8));
         assertEquals(1, code);
-        String[] recs = out.toString(StandardCharsets.UTF_8).split("\0", -1);
         // First record rendered fine; second is the streaming-cap error; batch stops there.
-        assertTrue(recs.length >= 2, () -> "expected at least 2 records, got " + recs.length);
-        assertTrue(recs[0].startsWith("<svg"), "the sibling before the oversized record still rendered");
-        assertTrue(recs[1].startsWith("lattex: error:") && recs[1].contains("exceeds the 100000-char limit"),
-            () -> "expected a streaming-cap error record, got: " + recs[1]);
+        // The count is asserted EXACTLY, not as a lower bound: this test's name claims the
+        // batch ABORTS, and ">= 2" is satisfied just as well by a batch that sailed on and
+        // emitted more — the one outcome the name rules out. An exact count is the only
+        // form of this assertion that can fail if the abort regresses.
+        List<String> recs = splitNulRecords(out.toByteArray());
+        assertEquals(2, recs.size(),
+            () -> "expected exactly 2 records (sibling + cap error, then abort), got " + recs.size());
+        assertTrue(recs.get(0).startsWith("<svg"), "the sibling before the oversized record still rendered");
+        assertTrue(recs.get(1).startsWith("lattex: error:")
+                && recs.get(1).contains("exceeds the 100000-char limit"),
+            () -> "expected a streaming-cap error record, got: " + recs.get(1));
+    }
+
+    // ------------------------------------------------------------------
+    // (1d) An oversized record MID-stream, pinned from BOTH sides: the sibling
+    //      BEFORE it was already emitted, and the sibling AFTER it never is.
+    //
+    //      The test above ends the stream at the oversized record (its tail is an
+    //      infinite generator), so it can only observe the "before" side. The
+    //      documented policy — "an oversized record aborts the rest of the batch",
+    //      because locating the NEXT record's start would require reading past the
+    //      cap just enforced — makes a claim about the "after" side that nothing
+    //      tested. A well-formed record following the oversized one is the only
+    //      fixture that can distinguish abort from skip-and-continue.
+    // ------------------------------------------------------------------
+
+    @Test
+    void anOversizedRecordMidStreamAbortsTheBatchAndTheRecordAfterItIsNeverEmitted() {
+        int cap = com.lattex.parse.MathParser.MAX_SOURCE_LENGTH;
+        String after = "\\sqrt{2}";
+        String stdin = "x^2\n" + "y".repeat(cap + 1) + "\n" + after + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+
+        int code = Main.run(new String[] {"--batch"},
+            new ByteArrayInputStream(stdin.getBytes(StandardCharsets.UTF_8)),
+            new PrintStream(out, true, StandardCharsets.UTF_8),
+            new PrintStream(err, true, StandardCharsets.UTF_8));
+
+        assertEquals(1, code, "an oversized record fails the batch");
+        List<String> recs = splitNulRecords(out.toByteArray());
+        assertEquals(2, recs.size(),
+            () -> "the batch must stop AT the oversized record: sibling-before + its error record "
+                + "and nothing further; got " + recs.size() + " records");
+        assertTrue(recs.get(0).startsWith("<svg"),
+            "the sibling BEFORE the oversized record had already been emitted");
+        assertTrue(recs.get(1).contains("exceeds the " + cap + "-char limit"),
+            () -> "expected the streaming-cap error record, got: " + recs.get(1));
+        // The decisive half: the trailing well-formed record is absent. Compared against its
+        // OWN rendering rather than a tag count, so the assertion cannot be satisfied by
+        // coincidence in the first record's bytes.
+        assertFalse(out.toString(StandardCharsets.UTF_8).contains(com.lattex.api.LatteX.render(after)),
+            "the record AFTER the oversized one must never be rendered — its start cannot be "
+                + "located without reading past the cap that was just enforced");
     }
 
     // ------------------------------------------------------------------
@@ -414,6 +463,159 @@ final class StreamingBatchTest {
             "malformed leading byte must decode to U+FFFD and keep the newline record boundary");
         assertEquals(2, actual.size(), "the newline must still split into exactly two records");
         assertEquals("ab", actual.get(1), "content after the malformed byte + delimiter is intact");
+    }
+
+    // ------------------------------------------------------------------
+    // (5) AGGREGATE-BOUND fixture — plan ac28238e: "CLI tests gain aggregate-bound
+    //     fixtures (current ones are small in-memory only)".
+    //
+    //     Every cap test above puts ONE record over the cap. That is NOT the shape of
+    //     the defect this plan exists for: the audit's stream is multi-gigabyte and no
+    //     single record ever approaches 100,000 chars, so the per-record cap is
+    //     structurally blind to it and every test that trips the cap passes just as
+    //     happily against the readAllBytes() implementation being replaced. Only a
+    //     fixture whose AGGREGATE dwarfs the cap while every record stays far under it
+    //     can fail if the read path regresses.
+    //
+    //     It is also the fixture that EARNS the documented "aggregate cap: none, by
+    //     design" policy (Main.runBatch javadoc, `--help`). Leaving record count
+    //     unbounded is defensible only because retention is O(one record) and never
+    //     O(stream) — until now an unmeasured prose claim. This measures it.
+    // ------------------------------------------------------------------
+
+    /**
+     * Ceiling on how far the input may run ahead of the output, ON TOP OF the one record
+     * legitimately in flight. Covers {@link java.io.InputStreamReader}'s internal decode
+     * buffer (~8 KB) plus one 4096-char read chunk; 64 KB is a generous multiple of that
+     * and still ~150x below the aggregate stream below, so the bound stays decisive.
+     */
+    private static final long DECODER_READ_AHEAD_SLACK_BYTES = 64L * 1024L;
+
+    /** Counts NUL record terminators as they are written, so the input side can sample output progress. */
+    private static final class NulCountingOutputStream extends OutputStream {
+        private int records;
+
+        @Override
+        public void write(int b) {
+            if (b == 0) {
+                records++;
+            }
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) {
+            for (int i = 0; i < len; i++) {
+                write(b[off + i] & 0xFF);
+            }
+        }
+
+        int records() {
+            return records;
+        }
+    }
+
+    /**
+     * Lazily serves {@code count} copies of one record WITHOUT materializing the aggregate
+     * (a test that buffered 10 MB to prove the CLI does not buffer would be quietly
+     * self-refuting), and tracks the worst read-ahead observed: bytes handed to the consumer
+     * beyond the records it has already finished emitting.
+     *
+     * <p>The sampling is sound because {@code Main.run} reads this stream and writes its
+     * output on the SAME thread, so every observation of the output counter taken inside
+     * {@code read} is a consistent snapshot — no synchronization, no races, no flake.
+     */
+    private static final class AggregateRecordStream extends InputStream {
+        private final byte[] record;
+        private final int count;
+        private final java.util.function.IntSupplier emittedRecords;
+        private int done;
+        private int pos;
+        private long delivered;
+        private long worstReadAhead;
+
+        AggregateRecordStream(byte[] record, int count, java.util.function.IntSupplier emittedRecords) {
+            this.record = record;
+            this.count = count;
+            this.emittedRecords = emittedRecords;
+        }
+
+        @Override
+        public int read() {
+            if (done >= count) {
+                return -1;
+            }
+            int b = record[pos++] & 0xFF;
+            advance(1);
+            return b;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) {
+            if (done >= count) {
+                return -1;
+            }
+            int n = Math.min(len, record.length - pos);
+            System.arraycopy(record, pos, b, off, n);
+            pos += n;
+            advance(n);
+            return n;
+        }
+
+        private void advance(int n) {
+            if (pos == record.length) {
+                pos = 0;
+                done++;
+            }
+            delivered += n;
+            worstReadAhead = Math.max(worstReadAhead,
+                delivered - (long) emittedRecords.getAsInt() * record.length);
+        }
+
+        long delivered() {
+            return delivered;
+        }
+
+        long worstReadAhead() {
+            return worstReadAhead;
+        }
+    }
+
+    @Test
+    void anAggregateFarLargerThanTheCapStreamsWithRetentionBoundedToOneRecord() {
+        int cap = com.lattex.parse.MathParser.MAX_SOURCE_LENGTH; // 100,000
+        // HALF the cap per record: comfortably legal, so nothing here can be mistaken for
+        // the per-record cap doing the work. Whitespace-padded around a trivial expression
+        // so the aggregate is genuinely large while the RENDER cost stays 200x "x^2".
+        byte[] record = (whitespacePad("x^2", cap / 2) + "\n").getBytes(StandardCharsets.UTF_8);
+        int count = 200;
+        long aggregate = (long) record.length * count; // ~10 MB
+        assertTrue(aggregate > 100L * cap,
+            () -> "the fixture must dwarf the per-record cap to be aggregate-bound; got " + aggregate);
+        assertTrue(record.length - 1 < cap, "no single record may approach the cap");
+
+        NulCountingOutputStream sink = new NulCountingOutputStream();
+        AggregateRecordStream in = new AggregateRecordStream(record, count, sink::records);
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+
+        int code = Main.run(new String[] {"--batch"}, in,
+            new PrintStream(sink, true, StandardCharsets.UTF_8),
+            new PrintStream(err, true, StandardCharsets.UTF_8));
+
+        assertEquals(0, code,
+            () -> "an aggregate far past the cap is legal by the documented policy; stderr: "
+                + err.toString(StandardCharsets.UTF_8));
+        assertEquals(count, sink.records(), "every record of the aggregate stream was emitted");
+        assertEquals(aggregate, in.delivered(), "the whole stream was consumed");
+
+        // THE assertion: input never ran more than one record (+ decoder slack) ahead of
+        // output. Under readAllBytes()-then-split the whole ~10 MB is pulled before record
+        // one is emitted, so worstReadAhead would be the entire aggregate — ~87x this bound.
+        long allowed = record.length + DECODER_READ_AHEAD_SLACK_BYTES;
+        assertTrue(in.worstReadAhead() <= allowed,
+            () -> "input ran " + in.worstReadAhead() + " bytes ahead of emitted output, past the "
+                + allowed + "-byte bound (one record + decoder slack): retention is tracking the "
+                + "STREAM (" + aggregate + " bytes), not the record — the aggregate is no longer "
+                + "safe to leave uncapped");
     }
 
     private static List<String> readAllRecords(byte[] bytes, int delimiter) throws IOException {
