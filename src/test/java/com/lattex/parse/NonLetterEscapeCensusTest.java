@@ -311,6 +311,44 @@ class NonLetterEscapeCensusTest {
     }
 
     @Test
+    void theAdditionsIntroducedNoMisleadingSuggestions() {
+        // A widening this census must also catch: four new ONE-CHARACTER names in
+        // the fuzzy-suggestion pool could start decorating unrelated failures with
+        // "\@ — did you mean \%?" (edit distance 1 between any two single chars).
+        // Measured: they do not — every unknown non-letter escape still reports the
+        // bare message. Pinned so a later change to the suggestion threshold cannot
+        // silently turn these rejections into nonsense advice.
+        for (String name : escapeSpace()) {
+            if (CommandRegistry.get(name) != null) {
+                continue;
+            }
+            MathSyntaxException failure = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("\\" + name));
+            assertEquals("Unknown command: \\" + name, failure.getMessage(),
+                "an unknown single-char escape must not acquire a suggestion");
+        }
+    }
+
+    @Test
+    void theSevenSpecialsAgreeAcrossTextModeAndMathMode() {
+        // TWO independent tables encode "the escapable specials": Symbols.SYMBOLS
+        // (math mode — this change) and MathParser's TEXT_CONTROL_SYMBOLS (text
+        // mode — the landed half of plan d2f3447c). Nothing structurally ties them,
+        // so they can drift apart, and a special accepted at one surface but
+        // rejected at the other is precisely the gap shape this plan opened with.
+        // Pinned behaviorally at both surfaces from ONE list, so a future addition
+        // to either table without the other shows up here.
+        for (String special : List.of("#", "$", "%", "&", "_", "{", "}")) {
+            Atom atom = (Atom) MathParser.parse("\\" + special);
+            assertEquals(special.codePointAt(0), atom.codePoint(),
+                "math mode \\" + special + " must be the literal character");
+            assertEquals("Txt[ROMAN](a" + special + "b)",
+                MathParserTest.pp(MathParser.parse("\\text{a\\" + special + "b}")),
+                "text mode \\" + special + " must decode to the same literal character");
+        }
+    }
+
+    @Test
     void theAcceptedSetIsExactlyTheEscapableSpecialsPlusThePreexistingMembers() {
         // A second, independent spelling of the boundary: LaTeX's seven escapable
         // specials must ALL be accepted (that is the residual's whole point), and
