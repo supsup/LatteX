@@ -46,8 +46,9 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Skips (does not fail) when no local Chrome exists.
  */
-@Tag("capture") // browser pin stays in `test` (reference writes land in build/);
-                // `generateExamples` re-runs it writing beside the pages (plan 32148cc8 S2)
+@Tag("capture") // browser pin runs in `browserTest`, not core `test` (plan 8b7596e0);
+                // reference writes land in build/. `generateExamples` re-runs it writing
+                // beside the pages (plan 32148cc8 S2)
 class BrewShotEffectsPageTest {
 
     /** JS audit: any glyph path whose box exceeds ~2x its svg box is a blob. */

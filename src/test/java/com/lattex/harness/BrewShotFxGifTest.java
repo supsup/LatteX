@@ -29,8 +29,9 @@ import org.junit.jupiter.api.Test;
  * frames (a dead trigger or a no-op effect produces identical frames and
  * fails), which pins trigger wiring + animation liveness per effect.
  */
-@Tag("capture") // liveness pin stays in `test` (GIFs land in build/);
-                // `generateExamples` re-runs it writing beside the pages (plan 32148cc8 S2)
+@Tag("capture") // liveness pin runs in `browserTest`, not core `test` (plan 8b7596e0);
+                // GIFs land in build/. `generateExamples` re-runs it writing beside the
+                // pages (plan 32148cc8 S2)
 class BrewShotFxGifTest {
 
     private static final int FRAMES = 14;

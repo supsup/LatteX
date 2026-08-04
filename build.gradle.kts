@@ -46,17 +46,32 @@ dependencies {
     testImplementation("org.graalvm.polyglot:js-community:24.2.2")
 }
 
-// Hermetic `test` (plan 32148cc8 S2, reviewer F1): every test — including the
-// examples/-page GENERATORS (tagged "examples") and the BrewShot capture tests
-// (tagged "capture") — runs in the normal suite, so their security / runtime /
-// alphabet / safe-evaluator / grammar-pin assertions ALWAYS execute in CI.
-// Hermeticity comes from WHERE they write, not from excluding assertions: under
-// `test` the generators write into build/examples and the captures into build/,
-// so `./gradlew test` never touches the working tree. Only `generateExamples`
-// below (which sets -Dlattex.examples.write=true) writes the tracked examples/
-// dir. Verify: run `test`, then `git status --porcelain` must be empty.
+// Hermetic `test` (plan 32148cc8 S2, reviewer F1; capture split: plan 8b7596e0):
+// the examples/-page GENERATORS (tagged "examples") run in the normal suite, so
+// their security / runtime / alphabet / safe-evaluator / grammar-pin assertions
+// ALWAYS execute in CI. Hermeticity comes from WHERE they write, not from
+// excluding assertions: under `test` the generators write into build/examples, so
+// `./gradlew test` never touches the working tree. Only `generateExamples` below
+// (which sets -Dlattex.examples.write=true) writes the tracked examples/ dir.
+// Verify: run `test`, then `git status --porcelain` must be empty.
+//
+// Hermeticity now ALSO means no host Chrome from the core task. `tasks.test` had
+// no tag exclusion, so every real-browser BrewShot pin launched host Chrome on a
+// plain `./gradlew test` whenever Chrome was installed — 16 BrewShot.launch call
+// sites across SIX classes, two of which (BrewShotFxLifecycleTest, 5 sites;
+// InteractiveMathBrowserTest, 3 sites) were entirely UNTAGGED and so would have
+// survived a bare excludeTags("capture") on their own. Both are fixed: every
+// BrewShot.launch call site now sits in a class tagged "capture", and `test`
+// excludes that tag. The browser assertions still ALWAYS run in CI — moved to
+// `browserTest` below, which `check` depends on alongside `test`, so CI coverage
+// is unchanged; only a plain local `./gradlew test` stops launching a browser.
+// (BrowserGate's own fail-closed pins — BrowserGateTest — drive the gate through
+// its injection seam and never launch Chrome, so they stay in core `test`, where
+// a LATTEX_REQUIRE_BROWSER regression still goes red without a browser present.)
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("capture")
+    }
     // Input for ModularBoundaryTest: the built MODULAR jar. That test compiles a genuine
     // separate named module against it with the real javac (a same-module unit test cannot
     // prove a JPMS boundary — the module system does not enforce a module against itself),
@@ -69,6 +84,35 @@ tasks.test {
     doFirst {
         systemProperty("lattex.moduleJar", moduleJar.get().asFile.absolutePath)
     }
+}
+
+// The real-browser BrewShot pins (effects page, fx lifecycle, GIF liveness, fx
+// gallery, rendered-error blob, interactive-math runtime; tagged "capture" — see
+// the census in the comment above `tasks.test`), split out of the core suite
+// (plan 8b7596e0) so `./gradlew test` never launches host Chrome. `check`/`build`
+// still depend on this task (below), so the fail-loud philosophy above holds: the
+// browser assertions are never optional in CI, only separated from the fast core
+// run. Honors the existing `LATTEX_REQUIRE_BROWSER=1` convention (BrowserGate,
+// set by CI): with it set, a missing browser FAILS this task instead of
+// assumption-skipping; a bare local `./gradlew browserTest` (no env var) skips
+// pins it can't run, exactly as `test` did before the split.
+//
+// Self-contained by construction: every capture class builds its own page
+// fixtures in a @BeforeAll from the generators' static builders (e.g.
+// EffectsPageTest.buildEffectsHtml()), so this task needs no output handed over
+// from `test` and the two may run in either order.
+val browserTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Runs the real-browser BrewShot pins (tag \"capture\"); launches host Chrome."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform {
+        includeTags("capture")
+    }
+}
+
+tasks.check {
+    dependsOn(browserTest)
 }
 
 // Regenerates the tracked examples/ artifacts on demand: the HTML pages ("examples"
