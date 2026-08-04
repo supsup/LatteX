@@ -337,15 +337,19 @@ Two implementation choices are what make the top image clean:
 ## Build
 
 ```bash
-./gradlew build
+./gradlew build       # the full gate: compile + test + browserTest
+./gradlew test        # fast core suite only — never launches Chrome
+./gradlew browserTest # the real-browser BrewShot pins on their own
 ```
 
 Requires a Java 25 toolchain (Gradle provisions it via the toolchain spec).
-The normal build includes real-browser BrewShot pins: they launch headless
-Chrome when it is available and assumption-skip locally when it is not. CI
-sets `LATTEX_REQUIRE_BROWSER=1` so browser absence fails instead of silently
-reducing coverage. See [CONTRIBUTING.md](CONTRIBUTING.md#build--test) for the
-full test-gate contract.
+The real-browser BrewShot pins live in their own `browserTest` task: they launch
+headless Chrome when it is available and assumption-skip locally when it is not.
+`build`/`check` depend on both `test` and `browserTest`, so the full gate is
+unchanged, while a plain `./gradlew test` is a fast Chrome-free run. CI sets
+`LATTEX_REQUIRE_BROWSER=1` so browser absence fails instead of silently reducing
+coverage. See [CONTRIBUTING.md](CONTRIBUTING.md#build--test) for the full
+test-gate contract.
 
 ## License
 

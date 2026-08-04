@@ -466,7 +466,8 @@ top-level README still describes an earlier stubbed state — trust this table a
 ## Build
 
 ```bash
-./gradlew build      # compile + test (Java 25 toolchain, auto-provisioned by Gradle)
+./gradlew build      # compile + test + browserTest (Java 25 toolchain, auto-provisioned)
+./gradlew test       # just the fast core suite — never launches Chrome
 ```
 
 Requires a Java 25 toolchain, which Gradle downloads via the toolchain spec. The core

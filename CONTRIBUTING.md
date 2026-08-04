@@ -46,23 +46,40 @@ This subset is a contract with downstream HTML sanitizers (LatteX SVG must pass 
 ## Build & test
 
 ```bash
-./gradlew build      # compile + test
-./gradlew test       # tests only
+./gradlew build       # compile + test + browserTest (the full gate)
+./gradlew test        # fast core suite only — no browser, safe to run anywhere
+./gradlew browserTest # real-browser BrewShot pins only — launches host Chrome
 ```
 
 Java 25 toolchain, provisioned by Gradle. Keep the build dependency-light and the tests deterministic (env-scrubbed — no ambient state).
 
-> **Local browser warning:** the normal `./gradlew test` and `./gradlew build`
-> suites include LatteX's real-browser BrewShot pins. When Chrome is installed,
-> those tests launch it headlessly to check the effects page, fx lifecycle, and
-> GIF liveness; BrewShot 0.9 starts it with `--no-startup-window`. Without Chrome,
-> a local run assumption-skips the browser pins, so a green local build may omit
-> them. CI sets `LATTEX_REQUIRE_BROWSER=1`, which makes browser absence fail closed;
-> the variable does not opt into a separate browser suite. There is no supported
-> Chrome-free command that represents the full verification gate: excluding the
-> `capture` tag is incomplete because the lifecycle tests are intentionally
-> untagged. Use an isolated Java container without Chrome only when you deliberately
-> want the local no-browser lane.
+`test` and `browserTest` are a hard split (plan 8b7596e0). Every real-browser
+BrewShot pin — effects page, fx lifecycle, GIF liveness, fx gallery,
+rendered-error blob, interactive-math runtime — carries a class-level
+`@Tag("capture")` and runs **only** in `browserTest`. `test` excludes that tag
+entirely, so a plain local `./gradlew test` never launches Chrome and cannot pop
+the Chrome error/permission dialogs GUI runs used to trigger.
+
+`check` and `build` depend on **both** tasks, so the full verification gate is
+unchanged — only a bare `./gradlew test` stops launching a browser. CI runs
+`./gradlew build` with `LATTEX_REQUIRE_BROWSER=1` (read by `BrowserGate`) on an
+image whose Chrome presence is verified in a prior step; that variable turns an
+availability skip into a build FAILURE, and it now applies to `browserTest`,
+the task that actually launches Chrome. Locally, without the variable,
+`browserTest` assumption-skips pins it cannot run.
+
+> **Local browser note:** `./gradlew test` is the Chrome-free lane and it is
+> supported — but it is *not* the full gate. Before handing work off, run
+> `./gradlew build` (or `check`) so the browser pins execute too, or say plainly
+> that the browser half is unrun. A green `test` alone never covers them.
+
+Two tasks stay off `check`/`build` and are separate from both of the above:
+`generateExamples` regenerates the tracked `examples/` pages **and** the BrewShot
+visual references (it selects the `examples` and `capture` tags together with
+`-Dlattex.examples.write=true`); run it explicitly, review the diff, commit. Its
+capture half launches Chrome. Regeneration is never part of a verification run —
+`test` and `browserTest` write only into `build/`, which the CI clean-tree gate
+enforces.
 
 ### The fx-runtime JS harness
 

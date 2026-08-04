@@ -1,9 +1,14 @@
 # LatteX CI — every push/PR runs the FULL gate: build (incl. javadoc, the
 # release path), the whole test suite, and the BrewShot real-browser pins
-# (blob audit, fx lifecycle, GIF liveness). The pins are REQUIRED here, not
-# assumed: a verify step proves Chrome is present and LATTEX_REQUIRE_BROWSER=1
-# turns an availability skip into a build FAILURE — a runner-image regression
-# must go red, never green-minus-the-safety-net (review lattex 246 F2).
+# (blob audit, fx lifecycle, GIF liveness). Since plan 8b7596e0 the pins are a
+# SEPARATE Gradle task, `browserTest`, which `check` depends on alongside `test`
+# — so the single `./gradlew build` below still runs both halves and CI coverage
+# is unchanged; only a bare local `./gradlew test` skips the browser.
+# The pins are REQUIRED here, not assumed: a verify step proves Chrome is
+# present on the runner image and LATTEX_REQUIRE_BROWSER=1 (set on the build
+# step below, so `browserTest` inherits it) turns an availability skip into a
+# build FAILURE — a runner-image regression must go red, never
+# green-minus-the-safety-net (review lattex 246 F2).
 name: ci
 on:
   push:
@@ -40,7 +45,10 @@ jobs:
           java-version: '25'
       - name: Verify Chrome present (the pins REQUIRE it; no silent skip)
         run: google-chrome --version
-      - name: Build + full suite (javadoc, containment, corpus, browser pins REQUIRED)
+      - name: Build + full suite (javadoc, containment, corpus, test + browserTest REQUIRED)
+        # `build` → `check` → BOTH `test` (fast core) and `browserTest` (the Chrome
+        # pins). Do not narrow this to `./gradlew test`: that is the Chrome-free
+        # lane and would silently drop every browser pin from CI.
         run: ./gradlew build --no-daemon
         env:
           LATTEX_REQUIRE_BROWSER: '1'
