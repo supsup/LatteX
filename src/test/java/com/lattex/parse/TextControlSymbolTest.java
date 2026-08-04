@@ -180,6 +180,83 @@ class TextControlSymbolTest {
         assertEquals("a{b", ariaOf(LatteX.render("\\text{a\\{b}")));
     }
 
+    // ---- DEPTH-INVARIANCE gates: an escaped brace at depth > 1 -------------
+    //
+    // Every escaped-brace fixture above puts the escape at depth 1 — the top level
+    // of the text argument, where the argument's own closing brace is the very next
+    // structural token. So all of them pin the same instance of the property: "an
+    // escaped brace does not move depth AT DEPTH 1". None of them can observe a fix
+    // that is correct only there.
+    //
+    // That gap is reachable by a plausible mutant: gate the atomic control-symbol
+    // consumption on `depth == 1`. The whole committed suite passes under it — the
+    // standalone gates never leave depth 1, and the \\-run substack gates are spared
+    // because both backslashes fall through the default arm and the brace after them
+    // is structural either way. Only an escaped brace INSIDE a real structural group
+    // sees it. These tests close that.
+    //
+    // Depth is not directly observable, so each case asserts it through the two
+    // things depth decides: the CONTENT (a literal brace, not a stripped invisible
+    // group) and — in the last test — WHERE THE ARGUMENT ENDS, which is the property
+    // depth actually controls. A wrong depth change relocates the closing brace, so
+    // pinning the boundary is a stronger statement than "it did not throw".
+
+    @Test
+    void anEscapedLeftBraceInsideARealStructuralGroupDoesNotMoveDepth() {
+        // \text{{a\{b}}: an invisible grouping brace (depth 1->2), then a LITERAL
+        // escaped brace that must leave depth alone, then two structural closers.
+        assertEquals("Txt[ROMAN](a{b)", MathParserTest.pp(MathParser.parse("\\text{{a\\{b}}")));
+        assertTrue(LatteX.toMathML("\\text{{a\\{b}}").contains("<mtext>a{b</mtext>"));
+        assertEquals("a{b", ariaOf(LatteX.render("\\text{{a\\{b}}")));
+        // Depth-INDEPENDENCE stated directly: wrapping the same text in a structural
+        // group changes nothing, because the group is invisible and the escaped brace
+        // behaves identically at depth 2 as at depth 1.
+        assertEquals(MathParserTest.pp(MathParser.parse("\\text{a\\{b}")),
+            MathParserTest.pp(MathParser.parse("\\text{{a\\{b}}")));
+    }
+
+    @Test
+    void anEscapedRightBraceInsideARealStructuralGroupDoesNotMoveDepth() {
+        // The decrementing half: a \} at depth 2 must not close the group early.
+        assertEquals("Txt[ROMAN](a}b)", MathParserTest.pp(MathParser.parse("\\text{{a\\}b}}")));
+        assertTrue(LatteX.toMathML("\\text{{a\\}b}}").contains("<mtext>a}b</mtext>"));
+        assertEquals("a}b", ariaOf(LatteX.render("\\text{{a\\}b}}")));
+        assertEquals(MathParserTest.pp(MathParser.parse("\\text{a\\}b}")),
+            MathParserTest.pp(MathParser.parse("\\text{{a\\}b}}")));
+    }
+
+    @Test
+    void escapedBracesTwoGroupsDeepDoNotMoveDepth() {
+        // Two nested structural groups (depth 3 at the escape), and a NON-CANCELLING
+        // pair — one \{ and one \} in the same argument would cancel two opposite
+        // depth errors, so this puts a lone \{ at the deepest point instead.
+        assertEquals("Txt[ROMAN](a{)", MathParserTest.pp(MathParser.parse("\\text{{{a\\{}}}")));
+        assertTrue(LatteX.toMathML("\\text{{{a\\{}}}").contains("<mtext>a{</mtext>"));
+        assertEquals("a{", ariaOf(LatteX.render("\\text{{{a\\{}}}")));
+    }
+
+    @Test
+    void bothEscapedBracesInsideAStructuralGroupStayLiteral() {
+        assertEquals("Txt[ROMAN](a{b}c)",
+            MathParserTest.pp(MathParser.parse("\\text{{a\\{b\\}c}}")));
+        assertTrue(LatteX.toMathML("\\text{{a\\{b\\}c}}").contains("<mtext>a{b}c</mtext>"));
+    }
+
+    @Test
+    void anEscapedBraceInsideAGroupDoesNotShiftWhereTheArgumentEnds() {
+        // The property depth actually controls: WHICH '}' terminates the argument.
+        // Trailing math after the \text makes that boundary observable — a stray
+        // depth change would swallow (or stop short of) the '+1' rather than merely
+        // producing different text. Under the depth==1 mutant this throws
+        // "Unbalanced brace in \text argument" because both closers are consumed
+        // returning to depth 1, and '+1' then runs off the end of the input.
+        assertEquals("L(Txt[ROMAN](a{b) A(+,BIN) A(1,ORD))",
+            MathParserTest.pp(MathParser.parse("\\text{{a\\{b}}+1")));
+        // The same boundary at depth 1, so the pair isolates depth as the variable.
+        assertEquals("L(Txt[ROMAN](a{b) A(+,BIN) A(1,ORD))",
+            MathParserTest.pp(MathParser.parse("\\text{a\\{b}+1")));
+    }
+
     // ---- MIXED fixture: a decoded positive beside a rejected negative -----
 
     // ---- REGRESSION gate: an EVEN backslash run before a brace, inside a nested
