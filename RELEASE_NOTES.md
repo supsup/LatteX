@@ -28,6 +28,28 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
   seven are regenerated. The repair is in the generator; `examples/*.html` is
   written by the example tasks and a hand-edit would match no actual build.
 
+### Whole-corpus identity gates now cover the documented array-center form
+
+- **The two whole-corpus SHA-256 ratchets are pinned to all 187 authorized rows.**
+  The `array[c]` compatibility repair added one renderable corpus row after the
+  earlier 186-row Tier-2 capture, but its focused review lane did not advance the
+  two aggregate hashes, leaving main red. A causal control removes only that new
+  row and reproduces both prior hashes exactly; the repaired pins therefore admit
+  the reviewed corpus growth without changing runtime code, corpus contents,
+  folding order, thresholds, or assertion strength.
+
+### The groupmap sidecar grammar is now a producer-side build contract
+
+- **A dedicated test class pins the exact `data-lx-groupmap` serialization grammar
+  consumed downstream.** The Stafficy MD->HTML sanitizer's `MathMarkerConverter.GROUPMAP_VALUE`
+  enforces `^[0-9]+:[0-9]+(,[0-9]+)*(;[0-9]+:[0-9]+(,[0-9]+)*)*$` and silently strips the
+  attribute when a value fails to match. `GroupmapGrammarContractTest` pins that same
+  pattern as a named constant on the producer side, drives it against real nested-fence
+  fixtures (including a 3-rank cascade) and the whole vendored parse corpus, and asserts
+  the fail-honest empty-string cases never degrade into a near-miss non-empty value — so a
+  grammar-changing edit to `SvgEmitter.groupmap` breaks LatteX's own build before the
+  cross-repo drift ever reaches the sanitizer.
+
 ### Long-tail wild-corpus notation now fails honestly or renders directly
 
 - **stmaryrd double brackets are native symbols.** `\llbracket` and
