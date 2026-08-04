@@ -189,11 +189,19 @@ class TextControlSymbolTest {
     // that is correct only there.
     //
     // That gap is reachable by a plausible mutant: gate the atomic control-symbol
-    // consumption on `depth == 1`. The whole committed suite passes under it — the
-    // standalone gates never leave depth 1, and the \\-run substack gates are spared
-    // because both backslashes fall through the default arm and the brace after them
-    // is structural either way. Only an escaped brace INSIDE a real structural group
-    // sees it. These tests close that.
+    // consumption on `depth == 1`. MEASURED, not asserted — with that one clause added
+    // to lexTextArgument the full 893-test suite reports exactly 4 failures, all of
+    // them the tests below, and ZERO incumbent tests. The standalone gates never leave
+    // depth 1, and the \\-run substack gates are spared because both backslashes fall
+    // through the default arm and the brace after them is structural either way. Only
+    // an escaped brace INSIDE a real structural group sees it. These tests close that.
+    //
+    // Full mutant table (each run against the whole suite, kills counted as
+    // incumbent + new):
+    //   revert the escape arm entirely  -> 9 kills (5 incumbent, 4 new)
+    //   escaped-LEFT still increments   -> 9 kills (5 incumbent, 4 new)
+    //   escaped-RIGHT still decrements  -> 7 kills (4 incumbent, 3 new)
+    //   escape arm gated on depth == 1  -> 4 kills (0 incumbent, 4 new)
     //
     // Depth is not directly observable, so each case asserts it through the two
     // things depth decides: the CONTENT (a literal brace, not a stripped invisible
@@ -235,6 +243,17 @@ class TextControlSymbolTest {
         assertEquals("a{", ariaOf(LatteX.render("\\text{{{a\\{}}}")));
     }
 
+    /// Both decode targets in ONE argument at depth 2 — the content check the
+    /// single-direction tests above do not make.
+    ///
+    /// Deliberately labelled WEAK, because mutation measured it as weak: this is the
+    /// CANCELLING shape (one \{ and one \}), the very thing the review faulted the old
+    /// balanced test for. Killed by a mutant that moves depth in ONE direction
+    /// (escaped-left increments; escaped-right decrements), but SPARED both by a full
+    /// revert of the escape arm and by the `depth == 1` gate — under either, the two
+    /// opposite depth errors cancel AND the copied token text comes out byte-identical,
+    /// so nothing is observable here. Kept for its content coverage; the tests above,
+    /// not this one, are what pin the depth property.
     @Test
     void bothEscapedBracesInsideAStructuralGroupStayLiteral() {
         assertEquals("Txt[ROMAN](a{b}c)",
