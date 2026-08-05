@@ -715,6 +715,33 @@ final class Symbols {
         // so it stays out of delimiterCodePointFor and cannot follow \left/\right.
         m.put("#", new Sym('#', MathClass.ORD));
 
+        // \% \& \_ \$ — the rest of LaTeX's escapable specials. Standard LaTeX
+        // escapes SEVEN characters to their literal glyph: \# \$ \% \& \_ \{ \}.
+        // Three of them (\# above, \{ and \} below) already had rows; these four
+        // did not, so \% and \& — ordinary, correct LaTeX that harvested sources
+        // carry constantly ("50\%", "A \& B") — reached the unknown-command throw.
+        // That was LOUD, so never silent corruption, but it rejected valid input.
+        //
+        // EVIDENCE NOTE, stated plainly: there is no TeX engine on this build
+        // machine, so none of this is a pdflatex differential. The semantics
+        // asserted are the DOCUMENTED, uncontroversial behavior of these four
+        // control symbols — a literal %, &, _, $ glyph, ordinary (mathord) atom
+        // class. What IS machine-verified here is the LatteX side: the glyphs
+        // exist in bundled STIX Two Math (SymbolCoverageTest fails the build for
+        // any table code point without a real glyph, never a <text> fallback),
+        // and NonLetterEscapeCensusTest pins the atom, class and rendered output.
+        //
+        // Ordinary symbols, NOT delimiters: none is in delimiterCodePointFor, so
+        // none may follow \left/\right. The escaped forms also stay distinct from
+        // the bare characters, which the lexer/parser own separately — bare '_'
+        // is the subscript operator and bare '&' is the matrix column separator,
+        // while \_ and \& are literal content. CLASS_BY_CODEPOINT excludes ASCII,
+        // so these four rows cannot reclassify any pasted literal character.
+        m.put("%", new Sym('%', MathClass.ORD));
+        m.put("&", new Sym('&', MathClass.ORD));
+        m.put("_", new Sym('_', MathClass.ORD));
+        m.put("$", new Sym('$', MathClass.ORD));
+
         // -- Delimiters usable as ordinary symbols (outside \left..\right) ---
         m.put("{", new Sym('{', MathClass.OPEN));
         m.put("}", new Sym('}', MathClass.CLOSE));
