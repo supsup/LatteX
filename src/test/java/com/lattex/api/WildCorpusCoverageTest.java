@@ -29,6 +29,15 @@ import org.junit.jupiter.api.Test;
  */
 class WildCorpusCoverageTest {
 
+    /// The enforced pass-set floor, named so it can be CITED rather than re-typed.
+    ///
+    /// It was a bare literal inside the assertion, which is how the README came to claim
+    /// 484/484 four releases after the corpus reached 502: nothing connected the prose to
+    /// the pin, so the prose could only be kept true by someone remembering to. Now
+    /// {@code ReadmeCorpusFigureTest} reads THIS constant, so the doc and the ratchet cannot
+    /// disagree without a red test (plan 398daca1 item 1).
+    static final int PASS_SET_FLOOR = 502;
+
     @Test
     void everyPassSetFormulaStillRenders() throws Exception {
         List<String> broken = new ArrayList<>();
@@ -56,8 +65,9 @@ class WildCorpusCoverageTest {
                 }
             }
         }
-        assertTrue(okRows >= 502, "pass-set shrank in the TSV itself: " + okRows
-            + " OK rows (current floor 502; started at 417) — statuses may only flip GAP->OK");
+        assertTrue(okRows >= PASS_SET_FLOOR, "pass-set shrank in the TSV itself: " + okRows
+            + " OK rows (current floor " + PASS_SET_FLOOR
+            + "; started at 417) — statuses may only flip GAP->OK");
         assertTrue(broken.isEmpty(), broken.size()
             + " previously-rendering formulas REGRESSED:\n  "
             + String.join("\n  ", broken.subList(0, Math.min(10, broken.size())))
