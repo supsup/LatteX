@@ -13,12 +13,25 @@
                text-transform: uppercase; color: #1f7d72; margin: 0 0 1.5rem; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 1.5rem; max-width: 900px; }
+    /* min-width:0 lets a grid item shrink below its content; without it the card
+       grows to fit a wide formula and the max-width below resolves against a box
+       that has already expanded. box-sizing keeps the 2.5rem padding inside the
+       column rather than adding to it. */
     .card { display: inline-flex; flex-direction: column; align-items: center; gap: 1.25rem;
             background: #fff; border: 1px solid #e3e8e7; border-radius: 14px;
-            padding: 2rem 2.5rem; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+            padding: 2rem 2.5rem; box-shadow: 0 6px 24px rgba(0,0,0,.06);
+            min-width: 0; max-width: 100%; box-sizing: border-box; }
     .src { font-family: ui-monospace, monospace; font-size: .9rem; color: #3a4749;
            background: #eef2f1; border: 1px solid #e0e6e4; border-radius: 7px; padding: .4rem .8rem; }
-    .render svg { height: 120px; width: auto; display: block; }
+    /* CONTAIN, do not fix one axis. `height:120px; width:auto` scaled a wide
+       formula to a fixed height and let its width run past the card: at a 204px
+       card, any viewBox wider than ~1.7:1 spilled, and `a + b = c` (4.65:1) put
+       177px over EACH edge onto the page background. Constraining both axes with
+       auto sizing preserves the viewBox aspect ratio and fits inside whichever
+       limit binds first. */
+    .render { width: 100%; }
+    .render svg { max-width: 100%; max-height: 120px; width: auto; height: auto;
+                  display: block; margin: 0 auto; }
     figcaption { font-family: ui-monospace, monospace; font-size: .62rem; letter-spacing: .08em;
                  text-transform: uppercase; color: #8a9896; max-width: 22ch; }
   </style>

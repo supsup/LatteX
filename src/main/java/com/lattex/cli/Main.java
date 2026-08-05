@@ -97,8 +97,18 @@ public final class Main {
                                   A stdout failure also aborts: the confirmed
                                   complete prefix remains valid, the current record
                                   may be incomplete, and no later records are
-                                  emitted. There is no cap on how many records a
-                                  batch may hold. Amortizes startup/spawn cost.
+                                  emitted.
+                                  AGGREGATE CAP: NONE, deliberately — neither the
+                                  number of records nor the batch's total size is
+                                  bounded, only each record individually. Nothing
+                                  is accumulated across records, so peak memory is
+                                  O(one record + its output), NOT O(input): a
+                                  10 GB batch of legal records costs the same
+                                  memory as a 10 KB one. An endless batch is a
+                                  TIME cost for the caller, not a memory risk —
+                                  it runs until stdin closes, and closing the pipe
+                                  or killing the process ends it at any point.
+                                  Amortizes startup/spawn cost.
             -0, --null            In --batch, split stdin on NUL instead of
                                   newlines (for expressions containing newlines).
             --inline              Render in INLINE (text) style — smaller fractions
@@ -400,6 +410,21 @@ public final class Main {
      * concern for the caller (it runs until stdin closes), not a memory one, and the caller
      * can always kill the process or close the pipe. Do not add a total-record/byte cap
      * without also updating this note and the CLI docs.
+     *
+     * <p>That O(one record) claim is MEASURED, not asserted: {@code StreamingBatchTest}'s
+     * {@code anAggregateFarLargerThanTheCapStreamsWithRetentionBoundedToOneRecord} drives a
+     * ~10 MB batch (100x the per-record cap) in which NO record exceeds half the cap. It is
+     * the only fixture here whose records are ALL legal, and so the only one that can fail
+     * on a regression that keeps per-record capping perfectly intact while restoring
+     * whole-stream buffering — the audit's actual scenario, which the per-record cap is by
+     * construction blind to. It fails if the input ever runs more than one record (plus
+     * decoder slack) ahead of the emitted output; against the {@code readAllBytes()}
+     * implementation this replaced, the input ran the entire 10,000,200-byte stream ahead
+     * of the first emitted record, 87x past the bound. Verified independent of the cap in
+     * both directions: deleting the during-read cap check does NOT fail it (that is the
+     * other tests' job), and accumulating outputs instead of emitting them progressively
+     * DOES. If the no-aggregate-cap policy is ever revisited, that test is the evidence it
+     * rests on.
      *
      * <p><strong>An oversized record aborts the rest of the batch.</strong> When a record
      * exceeds the per-record cap, {@link DelimitedRecordReader} has already stopped reading
