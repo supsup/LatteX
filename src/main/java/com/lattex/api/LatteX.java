@@ -707,8 +707,30 @@ public final class LatteX {
      * {@code data-lx-glyphmap} sidecar, which is why the {@code thread} effect stayed inert on
      * any consumer using the split render+attrs seam. Use {@link #tryRenderMath(String)} — the
      * render-coupled record computes SVG and container attributes from the SAME parse+layout,
-     * so glyphmap indices can never desync from the emitted paths. Kept one minor version
-     * (seam sign-off, lattex room seq 165); removal after 0.7.0.
+     * so glyphmap indices can never desync from the emitted paths.
+     *
+     * <p><strong>Still here, and the reason is a live caller, not an oversight.</strong>
+     * This javadoc used to promise removal one minor version after the seam sign-off (lattex
+     * room seq 165). The project passed that window four minor releases ago with the method
+     * still public. A removal window that passes in silence
+     * teaches readers that deprecation notes here are not load-bearing, which costs more than
+     * the method does.
+     *
+     * <p>Verified rather than assumed: Stafficy's {@code /docs} pipeline still routes through it
+     * on the split seam — {@code MathMarkerConverter} calls {@code renderer.fxContainerAttrs},
+     * and {@code InProcessJarRenderer} implements that by calling this method. Removing it today
+     * breaks math rendering downstream, so the original promise was not merely late — it was
+     * unkeepable from the moment that consumer existed.
+     *
+     * <p><strong>The removal trigger is a CONDITION, deliberately not a version.</strong> This
+     * goes when no consumer routes through the split render+attrs path — i.e. when Stafficy's
+     * converter takes {@link #tryRenderMath(String)} for every math emit and its
+     * {@code LatteXRenderer.fxContainerAttrs} seam is retired. Naming a future release instead
+     * would re-arm the exact fuse this paragraph exists to defuse: a release number ages by
+     * itself and nothing notices when it passes, while a condition is either met or it is not
+     * and a reader can check which. {@code DeprecationSunsetTest} pins that a version-anchored
+     * removal promise cannot come back — including in prose that only quotes one, which is why
+     * the history above is paraphrased rather than quoted.
      */
     @Deprecated
     public static String fxContainerAttrs(String latex) {

@@ -64,6 +64,16 @@ tasks.test {
     inputs.file(layout.projectDirectory.file("README.md"))
         .withPropertyName("readmeCorpusFigure")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+    // Input for DeprecationSunsetTest: LatteX.java's SOURCE TEXT. This one is subtler than the
+    // README case and I hit it by measurement, not foresight. LatteX.java IS a compiled source
+    // file, so the obvious assumption is that editing it invalidates :test — but that test reads
+    // the file's JAVADOC, and a comment-only edit compiles to BYTE-IDENTICAL bytecode. :compileJava
+    // therefore produces unchanged output and :test stays UP-TO-DATE, so a mutation of the very
+    // prose the guard exists to police silently never runs it. Observed: three attacks on the
+    // deprecation text all "passed" while `:test UP-TO-DATE` scrolled past.
+    inputs.file(layout.projectDirectory.file("src/main/java/com/lattex/api/LatteX.java"))
+        .withPropertyName("deprecationSunsetSource")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     // Input for ModularBoundaryTest: the built MODULAR jar. That test compiles a genuine
     // separate named module against it with the real javac (a same-module unit test cannot
     // prove a JPMS boundary — the module system does not enforce a module against itself),
