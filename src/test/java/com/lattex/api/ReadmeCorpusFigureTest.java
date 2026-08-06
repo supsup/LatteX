@@ -71,17 +71,64 @@ class ReadmeCorpusFigureTest {
                 + "corpus was already 502.");
     }
 
+    /// A version pin: the `as of` clause in any casing, or a bare release stamp. Both corpus
+    /// paragraphs contain ZERO version-like tokens today (verified before widening this), so
+    /// keying on the token itself is safe and does not risk a false fail on legitimate prose.
+    private static final Pattern VERSION_PIN =
+        Pattern.compile("(?i)\\bas of\\b|\\b\\d+\\.\\d+(?:\\.\\d+)?\\b");
+
+    /// Blank-line-delimited paragraphs that state a corpus figure.
+    private static List<String> corpusParagraphs(String text) {
+        List<String> out = new ArrayList<>();
+        for (String p : text.split("\\n\\s*\\n")) {
+            if (CORPUS_FIGURE.matcher(p).find()) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
     @Test
-    void theReadmeCarriesNoVersionPinOnTheCorpusClaim() throws IOException {
-        // The rotted half. "as of 0.7.0" in a CURRENT Status section is a milestone stamp that
+    void noCorpusClaimCarriesAVersionPin() throws IOException {
+        // THE ROTTED HALF. "as of 0.7.0" in a section headed CURRENT is a milestone stamp that
         // ages every release; re-stating it as 0.11.0 would just reset the fuse. This pins its
-        // absence so a future edit does not helpfully reintroduce one.
+        // absence.
+        //
+        // SCOPED TO THE PARAGRAPH, NOT A FORWARD WINDOW — and this is Fixpoint's finding at
+        // lattex/815, demonstrated rather than argued. My first version took
+        // indexOf("100% of the wild corpus") and scanned 120 chars FORWARD, so a pin placed
+        // BEFORE the phrase was invisible:
+        //
+        //     "...to SVG today, as of 0.12.0 — **100% of the wild corpus** (502/502)."
+        //     -> :test EXECUTED (the guard really ran) -> BUILD SUCCESSFUL
+        //
+        // That matters more than an off-by-one because of where English puts the clause. The
+        // shape that ALREADY rotted was trailing ("(484/484) as of 0.7.0"), which is why a
+        // forward window caught it — but the natural way a future editor reintroduces it is
+        // LEADING ("As of 0.12.0, LatteX renders 100% of the wild corpus"). I had pinned the
+        // absence of the exact shape that already failed while the most likely NEXT shape
+        // passed: fixing the instance and naming it the class.
+        //
+        // Keying on the PARAGRAPH containing the corpus FIGURE closes it in three ways a wider
+        // window would not: position no longer matters, the anchor is the figure (which the
+        // sibling test already pins) rather than a prose phrase that can be reworded, and any
+        // phrasing of a version stamp is caught, not just the literal "as of".
         String text = Files.readString(README, StandardCharsets.UTF_8);
-        int idx = text.indexOf("100% of the wild corpus");
-        assertTrue(idx >= 0, "the corpus claim moved or was reworded — this guard is now inert");
-        String window = text.substring(idx, Math.min(text.length(), idx + 120));
-        assertTrue(!window.contains("as of"),
-            "the corpus claim carries a version pin again: \"" + window.strip() + "\" — a claim "
-                + "in a CURRENT section should be current, not stamped with a release that ages");
+        List<String> paragraphs = corpusParagraphs(text);
+        assertTrue(paragraphs.size() >= 2,
+            "expected at least the two corpus paragraphs, found " + paragraphs.size()
+                + " — the anchor has moved and this assertion is now vacuous");
+        for (String p : paragraphs) {
+            Matcher m = VERSION_PIN.matcher(p);
+            // The message is built EAGERLY by assertTrue, so the matched text has to be captured
+            // BEFORE asserting — calling m.group() inside the message throws IllegalStateException
+            // on the passing path, turning a green guard into a red error for its own reasons.
+            boolean pinned = m.find();
+            String found = pinned ? m.group() : "";
+            assertTrue(!pinned,
+                "a corpus claim carries a version pin again (\"" + found + "\") — a claim in a "
+                    + "CURRENT section should be current, not stamped with a release that ages. "
+                    + "Offending paragraph: " + p.strip());
+        }
     }
 }
