@@ -4,6 +4,7 @@ import com.lattex.font.SfntFont;
 import com.lattex.layout.Layout;
 import com.lattex.layout.LayoutContext;
 import com.lattex.layout.LayoutEngine;
+import com.lattex.layout.PositionedGlyph;
 import com.lattex.parse.MathNode;
 import com.lattex.parse.SumExpansion;
 import com.lattex.parse.MathNode.Accent;
@@ -134,6 +135,49 @@ public final class LatteX {
             () -> RenderedErrorCard.render(latex, result.diagnostics(), FontHolder.FONT));
     }
 
+    /** How many distinct unmapped code points a diagnostic names before it summarises. */
+    private static final int MAX_UNMAPPED_REPORTED = 8;
+
+    /**
+     * The distinct author code points this layout drew {@code .notdef} for, in first-appearance
+     * order, rendered as {@code U+XXXX} tokens — or {@code ""} when everything resolved.
+     *
+     * <p>Reads the EMITTED box tree rather than re-walking the parsed source. A second traversal
+     * of the AST would be a mirrored predicate that can drift from what layout actually did, and
+     * the defect being reported here is precisely "what was emitted disagrees with what was
+     * claimed" — so the report must be derived from the emission itself. Only a layout site that
+     * asked the font for AUTHOR text and got glyph id 0 marks a glyph, so construction glyphs
+     * (delimiter pieces, radical surds, big-op symbols) are excluded by construction rather than
+     * by a filter that could fall out of step with them.
+     */
+    private static String unmappedReport(Layout layout) {
+        java.util.LinkedHashSet<Integer> cps = new java.util.LinkedHashSet<>();
+        for (PositionedGlyph g : layout.glyphs()) {
+            if (g.unmappedCodePoint() != PositionedGlyph.MAPPED) {
+                cps.add(g.unmappedCodePoint());
+            }
+        }
+        if (cps.isEmpty()) {
+            return "";
+        }
+        // Bounded like every other author-facing artifact here: a paste of a whole CJK paragraph
+        // must not turn a one-line diagnostic into an unbounded string.
+        StringBuilder sb = new StringBuilder();
+        int shown = 0;
+        for (int cp : cps) {
+            if (shown == MAX_UNMAPPED_REPORTED) {
+                sb.append(", +").append(cps.size() - shown).append(" more");
+                break;
+            }
+            if (shown > 0) {
+                sb.append(", ");
+            }
+            sb.append(String.format(Locale.ROOT, "U+%04X", cp));
+            shown++;
+        }
+        return sb.toString();
+    }
+
     private static RenderResult diagnosticRender(String latex, RenderOptions opts) {
         String stage = "parse";
         try {
@@ -151,6 +195,18 @@ public final class LatteX {
             // style, but it cannot alter either host gate.
             String svg = SvgEmitter.emit(
                 layout, font, describe(body), style.color(), opts.fluid());
+            String unmapped = unmappedReport(layout);
+            if (!unmapped.isEmpty()) {
+                // Non-fatal by construction: outcome stays OK so the host's renderErrors()
+                // gate cannot swap this SVG for an error card. A doc build must not lose a
+                // formula over one stray character — but it must not be told everything is
+                // fine either. detail is "" on every clean render, so a populated detail is a
+                // real discriminator rather than a string convention. Plan a1866884.
+                return new RenderResult(svg, new Diagnostics(Outcome.OK, "layout",
+                    "Rendered, but the font has no glyph for " + unmapped
+                        + " — drawn as a .notdef box, so the visual and the aria-label disagree.",
+                    -1, "unmapped-glyph:" + unmapped, -1, ""));
+            }
             return new RenderResult(svg, new Diagnostics(Outcome.OK, "emit",
                 "Rendered successfully.", -1, "", -1, ""));
         } catch (MathSyntaxException e) {
