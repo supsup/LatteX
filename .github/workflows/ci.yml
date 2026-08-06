@@ -34,6 +34,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # THIS SUITE READS RELEASE TAGS, AND CHECKOUT DOES NOT FETCH THEM BY DEFAULT
+          # (review lattex/828). VersionIdentityGuardTest and ReleaseDocVersionPinTest both
+          # derive from `git tag`; a bare checkout leaves the work tree with ZERO tags, so
+          # ReleaseDocVersionPinTest reds on EVERY run, and VersionIdentityGuardTest reds at
+          # the release cut while blaming a missing tag that is present on the remote.
+          #
+          # BOTH INPUTS ARE REQUIRED, and each one alone is a fix that silently isn't one.
+          # Measured by replaying the real fetch sequence, not reasoned:
+          #
+          #   fetch-tags alone is not enough. checkout sends --no-tags when fetch-tags is
+          #   false, so depth-0 keeps full history and STILL gets no tags. And with depth 1,
+          #   git only follows tags that point AT a fetched commit — so a branch or PR whose
+          #   tip is not itself the tagged commit fetches nothing, which is every run except
+          #   the release commit.
+          #
+          #   fetch-depth alone is not enough either, for the --no-tags reason above.
+          #
+          # Against the real remote (main @2750181, tagged lattex-0.12.0), and against this
+          # branch tip (NOT a tagged commit) — the second column is the one that matters,
+          # because it is the ordinary case:
+          #                              at the tagged commit | at an untagged branch tip
+          #     --no-tags --depth=1              0 tags       |   0 tags   <- before this fix
+          #     --depth=1  + fetch-tags          lattex-0.12.0|   0 tags   <- the trap
+          #     --no-tags   (depth 0)            0 tags       |   0 tags
+          #     depth 0    + fetch-tags          lattex-0.12.0|   lattex-0.12.0
+          #
+          # The middle row is why the table is here. Probing only at the tagged commit says
+          # fetch-tags alone works — it is the single case where it does. End-to-end proof:
+          # in a tagless clone of this branch, ReleaseDocVersionPinTest FAILS; fetch the tags
+          # into that same clone and it passes.
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

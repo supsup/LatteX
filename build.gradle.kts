@@ -5,21 +5,35 @@ plugins {
 }
 
 group = "com.lattex"
-// A real, immutable release version — NOT a rolling SNAPSHOT. Consumers (Stafficy
-// /docs) pin this exact version; a LatteX change requires an explicit version bump +
-// republish, so a pinned consumer can never silently go stale (plan 38cf48e4). Bump on
-// each release that downstream should pick up.
+// WHAT A CONSUMER PINS MUST BE IMMUTABLE. WHAT MAIN DECLARES MUST NOT PRETEND TO BE
+// (plan ab8b2928 — these are two different claims and conflating them caused the defect
+// below).
 //
-// 0.9.0: nested inline math inside \text{…}, matrix-cell style fidelity, container
-// drift guard + type-safe emitter fill — the post-0.8.0 mainline set — plus the
-// hermetic test suite / generateExamples split, the full-corpus render sweep, and
-// the CI clean-tree gate (plan 32148cc8). See RELEASE_NOTES.md.
-// 0.12.0: the doc-truth slice (corpus figure derived from the ratchet, version-pin
-// guard, deprecation sunset keyed to a CONDITION not a date) + the unmapped-glyph
-// diagnostic. FIRST TAGGED RELEASE — see RELEASE_NOTES.md.
-// 0.11.0: corpus frontier close-out (\aa + \bordermatrix → 100% PARSES-NOW) + the
-// cancel fx effect (the third semantic effect) — the post-0.10.0 landed set.
-version = "0.12.0"
+// The original rule here said "a real, immutable release version — NOT a rolling
+// SNAPSHOT", meaning that a CONSUMER (Stafficy /docs) must pin an exact version that can
+// never silently change under it. That part stands and is the whole point.
+//
+// It was read as forbidding main from ever saying SNAPSHOT, which is a different claim,
+// and the result was strictly worse than the thing it was avoiding: on 2026-08-06 main
+// declared "0.11.0" while src/main had drifted 38 files / +4887/-671 from the 0.11.0 cut
+// (963121f), and the repo carried NO release tags at all — only retired/* branch markers.
+// So "0.11.0" named no fixed tree. Two consumers pinning that string days apart got
+// different bytes, and nothing anywhere went red. A bare release number that is not one
+// LOOKS immutable and fails silently; a SNAPSHOT announces itself.
+//
+// THE RULE NOW:
+//   - Between releases, main declares <next>-SNAPSHOT. It is honest about being a moving
+//     target, and no consumer may pin it.
+//   - A RELEASE is a commit that declares the bare version AND carries the matching
+//     annotated tag. The tag is what makes the version immutable — a version string with
+//     no tag behind it is a promise with no mechanism.
+//   - Consumers pin ONLY a tagged release.
+// VersionIdentityGuardTest enforces the second bullet, because the previous version of
+// this rule was enforced by nothing but memory and lost 38 files to it.
+//
+// 0.12.0 (2026-08-06) was the FIRST tagged release. Release history lives in
+// RELEASE_NOTES.md rather than accumulating here.
+version = "0.13.0-SNAPSHOT"
 
 java {
     toolchain {
@@ -76,6 +90,26 @@ tasks.test {
     // deprecation text all "passed" while `:test UP-TO-DATE` scrolled past.
     inputs.file(layout.projectDirectory.file("src/main/java/com/lattex/api/LatteX.java"))
         .withPropertyName("deprecationSunsetSource")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    // Input for VersionIdentityGuardTest: build.gradle.kts itself, which that test READS at
+    // runtime.
+    //
+    // IT IS NOT NEEDED FOR A VERSION CHANGE, and the obvious rationale for it is WRONG — I
+    // measured before writing this comment rather than after. Changing `version` already
+    // invalidates :test by a longer route: processResources declares
+    // `inputs.property("lattexVersion", …)`, so a bump re-runs it, its output sits on the test
+    // runtime classpath, and :test re-runs. Delete this declaration, flip the version, and the
+    // guard still goes RED.
+    //
+    // WHAT IT ACTUALLY CATCHES is the edit that leaves `project.version` IDENTICAL while
+    // breaking the guard's anchor — reformatting the declaration itself. Measured both ways:
+    //     WITHOUT this input:  indent the version line (same value) -> :test UP-TO-DATE, GREEN
+    //                          (the non-vacuity assertion never runs; the guard is silently dead)
+    //     WITH this input:     the same edit -> :test RUNS, both tests RED
+    // That is the silent-clean case — a guard that stops being able to SEE its target while
+    // nothing reports a problem. Keep it, for that reason and not the plausible one.
+    inputs.file(layout.projectDirectory.file("build.gradle.kts"))
+        .withPropertyName("versionDeclaration")
         .withPathSensitivity(PathSensitivity.RELATIVE)
     // Input for ModularBoundaryTest: the built MODULAR jar. That test compiles a genuine
     // separate named module against it with the real javac (a same-module unit test cannot
