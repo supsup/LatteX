@@ -61,10 +61,12 @@ public final class TagFetchDiagnostic {
         }
         return " NOTE: this checkout carries NO TAGS AT ALL, so the tag may exist on the"
             + " remote and simply not have been fetched — that is what a CI checkout looks"
-            + " like, because actions/checkout passes --no-tags unless `fetch-tags: true` is"
-            + " set on the step (fetch-depth alone does NOT do it: checkout sends --no-tags"
-            + " regardless of depth). Either no release has been cut, or the tags were never"
-            + " fetched; from inside the checkout those are indistinguishable. Check"
-            + " `git ls-remote --tags origin` before concluding the tag is missing.";
+            + " like. actions/checkout needs BOTH `fetch-tags: true` AND `fetch-depth: 0` on"
+            + " the step, and each alone silently fails: without fetch-tags it sends --no-tags"
+            + " regardless of depth, and at depth 1 git only follows tags pointing AT a"
+            + " fetched commit, so an untagged branch tip gets none. Either no release has"
+            + " been cut, or the tags were never fetched; from inside the checkout those are"
+            + " indistinguishable. Check `git ls-remote --tags origin` before concluding the"
+            + " tag is missing.";
     }
 }
