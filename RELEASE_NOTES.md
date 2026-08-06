@@ -6,6 +6,34 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+_Nothing yet._
+
+---
+
+## 0.12.0 — 2026-08-06
+
+**The first TAGGED LatteX release.** Every prior version number named a moving
+target: the repo carried no release tags at all — only `retired/*` branch markers —
+so `0.11.0` meant "whatever `src/main` happened to be that day". On 2026-08-06 main
+declared `0.11.0` while sitting **38 files / +4887−671** away from the 0.11.0 cut
+(`963121f`), and two consumers pinning that string days apart got different bytes.
+Stafficy, meanwhile, vendored `lattex-0.11.1.jar` — a version with no mainline
+lineage at all, existing only as two retired branch tips.
+
+`0.12.0` is a commit that declares the bare version **and carries the matching
+annotated tag**. That is what makes it pinnable: `lattex-0.12.0` names one tree,
+permanently. Consumers should pin only a tagged release. Withdrawn: `0.11.1` is not
+a LatteX release and must not be pinned.
+
+Contents are the post-0.11.0 landed set, chiefly the doc-truth slice — the README
+corpus figure now DERIVED from the ratchet floor rather than hand-copied, a
+version-pin guard on the corpus claim, and the `fxContainerAttrs` deprecation
+re-keyed to a CONDITION instead of a date that had already passed four releases
+earlier — plus the unmapped-code-point diagnostic, which names the characters the
+font could not render instead of silently drawing `.notdef` boxes under a
+confident OK.
+
+
 ### Example galleries contain their formulas (visual bug fix)
 
 - **A wide formula no longer renders outside its card.** The shared example-page
