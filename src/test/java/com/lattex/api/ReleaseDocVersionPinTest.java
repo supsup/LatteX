@@ -91,8 +91,11 @@ class ReleaseDocVersionPinTest {
             String tag = out.lines().map(String::trim).filter(t -> !t.isEmpty()).findFirst()
                 .orElse(null);
             assertTrue(tag != null,
-                "no lattex-* release tag exists, so there is no released version for the install "
-                    + "recipes to pin. Cut a release before expecting this guard to pass.");
+                "no lattex-* release tag is VISIBLE IN THIS CHECKOUT, so there is no released "
+                    + "version for the install recipes to pin. Cut a release before expecting "
+                    + "this guard to pass."
+                    + com.lattex.TagFetchDiagnostic.unfetchedCheckoutHint(
+                        com.lattex.TagFetchDiagnostic.totalTags()));
             return tag.substring("lattex-".length());
         } catch (java.io.IOException | InterruptedException e) {
             throw new AssertionError("git could not be consulted for release tags", e);

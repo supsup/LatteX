@@ -100,7 +100,8 @@ class VersionIdentityGuardTest {
                 + "carries no matching tag (tags on HEAD: " + tags + "). A version string with no "
                 + "tag behind it names no fixed tree — that is how main came to declare 0.11.0 "
                 + "while sitting 38 files away from the 0.11.0 cut, with nothing going red. "
-                + "Either tag this commit as the release, or declare a -SNAPSHOT version.");
+                + "Either tag this commit as the release, or declare a -SNAPSHOT version."
+                + TagFetchDiagnostic.unfetchedCheckoutHint(TagFetchDiagnostic.totalTags()));
     }
 
     @Test

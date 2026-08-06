@@ -34,6 +34,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # THIS SUITE READS RELEASE TAGS, AND CHECKOUT DOES NOT FETCH THEM BY DEFAULT
+          # (review lattex/828). VersionIdentityGuardTest and ReleaseDocVersionPinTest both
+          # derive from `git tag`; a bare checkout leaves the work tree with ZERO tags, so
+          # ReleaseDocVersionPinTest reds on EVERY run, and VersionIdentityGuardTest reds at
+          # the release cut while blaming a missing tag that is present on the remote.
+          #
+          # `fetch-tags` is the load-bearing input, NOT `fetch-depth`. checkout passes
+          # `--no-tags` whenever fetch-tags is false REGARDLESS of depth, so `fetch-depth: 0`
+          # alone buys full history and STILL no tags — a plausible fix that silently isn't
+          # one. Measured by replaying the real fetch against the real remote at 2750181
+          # (main, tagged lattex-0.12.0):
+          #     --no-tags --depth=1           -> 0 tags   <- this job before the fix
+          #     --depth=1     + fetch-tags    -> lattex-0.12.0
+          #     --no-tags  (depth 0)          -> 0 tags   <- the fix that isn't
+          #     depth 0       + fetch-tags    -> lattex-0.12.0
+          # Depth 1 suffices once tags are fetched, so this stays a shallow checkout.
+          fetch-tags: true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
