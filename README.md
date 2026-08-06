@@ -27,7 +27,7 @@ trip degrades to a typed `OUTPUT_CAP_EXCEEDED` diagnostic, never an escaped erro
 
 **[examples/showcase.html](examples/showcase.html)** — a curated tour of what
 LatteX renders (every formula on it is regression-locked by the wild-corpus
-ratchet: 484/484 real-world formulas, 100%, and only allowed to go up). For the
+ratchet: 502/502 real-world formulas, 100%, and only allowed to go up). For the
 fx layer in motion, see the **[effects showcase](examples/effects.html)** for the
 general runtime grid and **[the fx gallery](examples/GALLERY.md)** for all 29
 production effects: 28 motion GIFs plus the deliberately static semantic `thread`
@@ -60,7 +60,7 @@ The JVM lacks a modern, permissively-licensed, web-first math renderer. KaTeX an
 
 ## Status
 
-Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (484/484) as of **0.7.0**. A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **28-effect always-on** `fx` layer (including the semantic `thread`, `precedence`, and `cancel` effects) — plus the flag-gated `unfold` click-to-expand `\sum` bloom, for **29 production effects total** — are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
+Early but real. The parse → layout → SVG pipeline is wired end-to-end: `com.lattex.api.LatteX.render(...)` renders fractions, roots, scripts, big operators, matrices, aligned environments, delimiters, stacked annotations (`\underbrace`/`\overbrace`/`\substack`/`\stackrel`/`\overset`/`\underset`), extensible labelled arrows (`\xrightarrow`/`\xleftarrow`), style-pinned fractions (`\dfrac`/`\tfrac`), per-subterm color (`\color`/`\textcolor`), equation numbering (`\tag`), manual delimiter sizing (`\big`/`\Big`/`\bigg`/`\Bigg`), and bare style switches (`\displaystyle`/`\textstyle`/`\scriptstyle`) to SVG today — **100% of the wild corpus** (502/502). A parallel `LatteX.toMathML(...)` emits **Presentation-MathML** from the same parse tree — navigable structure for assistive tech and an interop surface. The `\lx[...]{...}` author syntax, inline em-sizing + baseline alignment, and the full **28-effect always-on** `fx` layer (including the semantic `thread`, `precedence`, and `cancel` effects) — plus the flag-gated `unfold` click-to-expand `\sum` bloom, for **29 production effects total** — are on the mainline, with parse-time DoS guards. See **[QUICKSTART.md](QUICKSTART.md)** for usage and cross-stack integration.
 
 ## Opt-in rendered diagnostics
 

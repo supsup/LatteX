@@ -57,6 +57,13 @@ dependencies {
 // dir. Verify: run `test`, then `git status --porcelain` must be empty.
 tasks.test {
     useJUnitPlatform()
+    // Input for ReadmeCorpusFigureTest: the README itself. It is not a source file, so without
+    // this Gradle holds :test UP-TO-DATE after a README-only edit and the guard never runs —
+    // inert precisely when the prose it guards is being changed. (Observed on the sibling
+    // Sirentide guard: BUILD SUCCESSFUL in 252ms because the task did not execute.)
+    inputs.file(layout.projectDirectory.file("README.md"))
+        .withPropertyName("readmeCorpusFigure")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     // Input for ModularBoundaryTest: the built MODULAR jar. That test compiles a genuine
     // separate named module against it with the real javac (a same-module unit test cannot
     // prove a JPMS boundary — the module system does not enforce a module against itself),
