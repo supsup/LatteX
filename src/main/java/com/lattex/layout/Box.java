@@ -47,8 +47,11 @@ record Box(List<PositionedGlyph> glyphs, List<Rule> rules,
      */
     void drawInto(List<PositionedGlyph> outGlyphs, List<Rule> outRules, double dx, double dy) {
         for (PositionedGlyph g : glyphs) {
+            // unmappedCodePoint rides through the translate: every author glyph reaches the final
+            // Layout via this copy, so dropping it here would leave the diagnostic reporting only
+            // glyphs that happened never to be nested — a silent partial guard.
             outGlyphs.add(new PositionedGlyph(g.glyphId(), g.originX() + dx, g.baselineY() + dy,
-                g.scale(), g.color(), g.sourceCodePoint(), g.fenceDepth()));
+                g.scale(), g.color(), g.sourceCodePoint(), g.fenceDepth(), g.unmappedCodePoint()));
         }
         for (Rule r : rules) {
             if (r.isPolygon()) {

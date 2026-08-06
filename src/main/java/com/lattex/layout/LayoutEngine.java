@@ -239,8 +239,13 @@ public final class LayoutEngine {
         // glyph's emitted <path> (the data-lx-glyphmap sidecar the `thread` effect reads),
         // and the current fence depth so the precedence-cascade groupmap can key this
         // glyph to its paren-nesting level (the data-lx-groupmap sidecar).
+        // SITE 1 of 3 (plan a1866884). glyph id 0 is .notdef — in STIX Two Math a VISIBLE
+        // rectangle, so an unmapped character renders as a box while the API reports success
+        // and the aria-label still claims the original text. Record the code point so
+        // renderWithDiagnostics can name it; the emitted SVG is unchanged either way.
         PositionedGlyph glyph = new PositionedGlyph(gid, 0.0, 0.0, scale, null,
-            atom.codePoint(), ctx.fenceDepth());
+            atom.codePoint(), ctx.fenceDepth(),
+            gid == 0 ? atom.codePoint() : PositionedGlyph.MAPPED);
         double width = font.advanceWidth(gid) * scale;
         double height = o.isEmpty() ? 0.0 : Math.max(0.0, o.yMax() * scale);
         double depth = o.isEmpty() ? 0.0 : Math.max(0.0, -o.yMin() * scale);
@@ -294,7 +299,14 @@ public final class LayoutEngine {
             }
             int gid = font.glyphId(cp);
             GlyphOutline o = font.outline(gid);
-            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale, ctx.fenceDepth())); // carry fence depth so function/text words light with their group (F2)
+            // SITE 2 of 3 (plan a1866884). Reachable with arbitrary author text via
+            // \operatorname{…}; this site was absent from the plan's original audit and was
+            // found by enumerating the call sites instead of trusting the list.
+            // sourceCodePoint stays NO_SOURCE — glyphmap documents these letters as never
+            // threading, and this guard must not move that.
+            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale, null, PositionedGlyph.NO_SOURCE,
+                ctx.fenceDepth(), // carry fence depth so function/text words light with their group (F2)
+                gid == 0 ? cp : PositionedGlyph.MAPPED));
             penX += font.advanceWidth(gid) * scale;
             if (!o.isEmpty()) {
                 height = Math.max(height, o.yMax() * scale);
@@ -340,7 +352,15 @@ public final class LayoutEngine {
                 gid = font.glyphId(cp); // font lacks the shaped variant: plain glyph
             }
             GlyphOutline o = font.outline(gid);
-            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale, ctx.fenceDepth())); // carry fence depth so function/text words light with their group (F2)
+            // SITE 3 of 3 (plan a1866884), and the reason the guard is a COMPLETION rather than
+            // a new idea: the `gid == 0` test above was already here, but it only handles "the
+            // shaped variant is missing, fall back to plain". When the PLAIN glyph is missing
+            // too, gid is still 0 and this proceeded silently — one arm of a two-arm condition
+            // guarded, the other not (cf. f42b236d). Report the AUTHOR's cp, never styledCp:
+            // \textbf{日} must name 日, not the bold variant the author never typed.
+            glyphs.add(new PositionedGlyph(gid, penX, 0.0, scale, null, PositionedGlyph.NO_SOURCE,
+                ctx.fenceDepth(), // carry fence depth so function/text words light with their group (F2)
+                gid == 0 ? cp : PositionedGlyph.MAPPED));
             penX += font.advanceWidth(gid) * scale;
             if (!o.isEmpty()) {
                 height = Math.max(height, o.yMax() * scale);
