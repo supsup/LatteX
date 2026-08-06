@@ -17,7 +17,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # fetch-depth: 0 for the base..head diff this job actually needs.
+          #
+          # fetch-tags IS NOT NEEDED BY THIS JOB TODAY — it is here so this
+          # checkout stops being a TRAP (review lattex/830, Confluence). A bare
+          # `fetch-depth: 0` LOOKS tag-capable and is not: checkout sends
+          # `--no-tags` whenever fetch-tags is false, REGARDLESS of depth. So this
+          # job would hand a tag-derived check an empty `git tag`, and that check
+          # would report "no release tag exists" while the tag sat on the remote.
+          # That exact failure cost the build job below two review rounds, and this
+          # was the same configuration one job up. Defusing it beats documenting
+          # it: the next person who adds a tag-derived check here should simply
+          # have it work.
+          # DO NOT REMOVE AS UNUSED — being unused is the entire point.
           fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
