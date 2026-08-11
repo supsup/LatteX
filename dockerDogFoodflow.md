@@ -139,12 +139,14 @@ sh docker/smoke-test.sh lattex:main-$SHA     # -> "lattex Docker smoke: PASS"
 Modes, mounts, stdin/argv/file input, batch NUL framing, reserved-word escaping, atomic
 claims, restart recovery, collisions, races.
 
-> 📎 **Historical note worth keeping.** This smoke test used to hard-code
-> `grep -q '^lattex 0\.11\.0$'`. When main moved to 0.12.0, a **correct** image began
-> failing its own smoke test — and it failed *silently*: `grep -q` prints nothing, `set -e`
-> aborts, so you got exit 1 with zero output naming neither the check nor the mismatch. It
-> now derives the expected version from `build.gradle.kts` and prints both sides. A pin that
-> must be hand-edited every release is a pin that is wrong between releases.
+> 📎 **If your smoke run exits 1 with no output at all, check this first.** The version
+> check in `docker/smoke-test.sh` hard-codes `grep -q '^lattex 0\.11\.0$'`. Once main moved
+> to 0.12.0, that made a **correct** image fail its own smoke test — and fail *silently*:
+> `grep -q` prints nothing, `set -e` aborts, so you get exit 1 naming neither the failing
+> check nor the mismatch. A repair is in review (plan `4a8bcc34`) that derives the expected
+> version from `build.gradle.kts` and prints both sides; until it lands, a silent exit 1
+> here is the pin, not your image. A pin that must be hand-edited every release is a pin
+> that is wrong between releases.
 
 ---
 
