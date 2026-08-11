@@ -108,6 +108,104 @@ excluded from the Docker build context; keep them out of commits (or place the
 same two folders at any absolute host path and change only the left side of the
 mounts below).
 
+### Setup, end to end — and how to tell your image has gone stale
+
+**Prerequisites: Docker, and nothing else.** No JDK, no Gradle, no Chrome on the
+host. The first build stage is a `temurin:25-jdk` image that compiles the jar with
+the checked-in Gradle wrapper; the runtime stage is `temurin:25-jre-alpine`. Expect
+a few minutes cold (Gradle downloads its dependencies inside the build stage) and
+a **~227 MB** final image. Nothing from your host `build/` directory can leak in —
+`.dockerignore` excludes `build`, `**/build`, `src/test`, and the examples, so the
+image is always compiled from source rather than from whatever jar happens to be
+lying in your working tree.
+
+**Tag convention.** Three names are in circulation, and they mean different things:
+
+| tag | meaning |
+|---|---|
+| `lattex:local` | your throwaway working build — what the examples below use |
+| `lattex:main-<shortsha>` | an immutable build of a specific commit; never re-pointed |
+| `lattex:dogfood` | the **moving** tag for "the image I actually use day to day" |
+
+`lattex:dogfood` is an alias you re-point deliberately. Build the immutable tag
+first, verify it, and only then promote:
+
+```bash
+git -C . fetch origin && git -C . log -1 --format='building %h %s' origin/main
+docker build -t "lattex:main-$(git rev-parse --short origin/main)" .
+```
+
+**Verify before you trust it.** Three checks, cheapest first:
+
+```bash
+IMAGE="lattex:main-$(git rev-parse --short origin/main)"
+
+# 1. Does it render at all?
+docker run --rm "$IMAGE" cli '\frac{a}{b}' | head -1
+
+# 2. Does it report the version this source tree declares?
+docker run --rm "$IMAGE" cli --version      # -> lattex <version from build.gradle.kts>
+
+# 3. The full contract: modes, mounts, atomic claims, restart recovery, races.
+sh docker/smoke-test.sh "$IMAGE"            # -> "lattex Docker smoke: PASS"
+```
+
+Only after `PASS` should you move the moving tag:
+
+```bash
+docker tag "$IMAGE" lattex:dogfood
+```
+
+**Is my dogfood image stale?** This is the question worth asking regularly, because
+a stale image fails in the most misleading way available: it renders confidently and
+is simply *behind*. On 2026-08-11 the local `lattex:dogfood` was 37 commits and eight
+days behind main, and the symptom was `50\% \& 3\_4` returning `error: invalid LaTeX`
+— a perfectly valid expression the current parser accepts. Nothing announced the drift.
+
+```bash
+# What commit is the image built from, and what does main say now?
+docker run --rm lattex:dogfood cli --version
+sed -n 's/^version = "\(.*\)"$/declared in source: \1/p' build.gradle.kts
+
+# How far behind is the commit the image was built from? This reads the immutable
+# lattex:main-<sha> tag riding the same image, and says so when there isn't one —
+# never index RepoTags positionally, the order is not guaranteed.
+built_from=$(docker inspect -f '{{join .RepoTags "\n"}}' lattex:dogfood \
+  | sed -n 's/^lattex:main-//p' | head -1)
+if [ -z "$built_from" ]; then
+  echo "provenance unknown: dogfood carries no lattex:main-<sha> tag — rebuild"
+else
+  echo "built from $built_from, $(git log --oneline "$built_from"..origin/main \
+    | wc -l | tr -d ' ') commit(s) behind main"
+fi
+```
+
+That last check is why the promote step above builds `lattex:main-<sha>` *first* and
+tags `dogfood` as an alias onto it: the immutable tag is the image's only durable
+record of which commit it came from. A `dogfood` built directly, with no sibling
+tag, can still be version-checked but cannot be placed in history.
+
+If the two version strings disagree, the image predates the current source and the
+fix is a rebuild — repeat the build/verify/promote sequence above. `docker/smoke-test.sh`
+derives its expected version from `build.gradle.kts` and prints both sides on a
+mismatch, so running it against a stale image names the problem rather than just
+failing.
+
+**Troubleshooting.**
+
+- *`error: invalid LaTeX` on an expression you believe is valid.* Check the image
+  version first, before the expression. The parser gains notation over time and an
+  old image simply does not have it.
+- *Output files owned by an unexpected user.* The image runs as `10001:10001`. Pass
+  `--user "$(id -u):$(id -g)"` to make bind-mount ownership match your host account.
+- *Watch mode sees nothing.* Only visible, regular, direct-child `*.tex` files in
+  `/lattex/input` are jobs — not nested directories, hidden files, symlinks, or other
+  extensions. Write to a hidden sibling and `mv` it into place (see below); a producer
+  that writes a live `.tex` name incrementally can have a half-written file claimed.
+- *`docker build` fails in the Gradle stage on a slow link.* The build stage resolves
+  dependencies from inside the container with no host cache, so a cold build needs
+  working network; re-running reuses Docker's layer cache.
+
 ### Existing CLI flow
 
 The ordinary CLI works unchanged behind the explicit `cli` mode. The legacy
