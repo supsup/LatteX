@@ -114,6 +114,20 @@ class SumExpansionTest {
         assertInert("\\sum_{i=1}^{4} i - 1");
     }
 
+
+    @Test
+    void aPoweredIndexWithACoefficientStaysAProduct() {
+        // Lattice, lattex/851: the SHARED pass carried the same hole, so unfold had it too.
+        // `\sum_{i=1}^{2} 2i^2` expanded to a tree byte-identical to the parse of
+        // "21^2 + 22^2". One fix in AtomSubstitution repairs both effects, which is the
+        // second time the extraction has paid for itself.
+        assertEquals(parse("2\\cdot 1^2 + 2\\cdot 2^2"),
+            SumExpansion.expand(parse("\\sum_{i=1}^{2} 2i^2")).get().expanded(),
+            "coefficient times a POWERED index is a product, not concatenation");
+        assertNotEquals(parse("21^2 + 22^2"),
+            SumExpansion.expand(parse("\\sum_{i=1}^{2} 2i^2")).get().expanded());
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     private static MathNode parse(String latex) {

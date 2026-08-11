@@ -221,6 +221,49 @@ class FxRuntimeJsHarnessTest {
             "an out-of-bounds varmap must still swap (immediately, with no dim)");
     }
 
+
+    @Test
+    void rapidReverseClickDoesNotLetAStaleTimerInvertStateAndVisuals() {
+        // Lattice, lattex/851 P1 (BLOCKING). The dim defers the swap behind a 150ms timer.
+        // A second click BEFORE that callback fired flipped state back but left the first
+        // timer pending; its stale callback then revealed the payload while __lxSubstituted
+        // was already false -- visuals and state inverted. The existing pins reverse only
+        // AFTER the first timer completes, so they never entered the window.
+        context.eval(Source.create("js",
+            "globalThis.__lxRP0 = __lxMakeEl({});"
+            + "globalThis.__lxRVis = __lxMakeEl({});"
+            + "globalThis.__lxRVis.querySelectorAll = function () { return [globalThis.__lxRP0]; };"
+            + "globalThis.__lxRPay = __lxMakeEl({}); globalThis.__lxRPay.hidden = true;"
+            + "globalThis.__lxREl = __lxMakeEl({'data-lx-var': '78:0'});"
+            + "globalThis.__lxREl.querySelector = function (sel) {"
+            + "  if (sel === ':scope > svg') return globalThis.__lxRVis;"
+            + "  if (sel === ':scope > .lx-fx-substituted') return globalThis.__lxRPay;"
+            + "  return null; };"));
+        Value el = context.getBindings("js").getMember("__lxREl");
+        Value visible = context.getBindings("js").getMember("__lxRVis");
+        Value payload = context.getBindings("js").getMember("__lxRPay");
+        Value p0 = context.getBindings("js").getMember("__lxRP0");
+
+        // Click 1: dims, defers the swap. Click 2 lands INSIDE that window.
+        fx.getMember("substitute").execute(el);
+        assertTrue(el.getMember("__lxSubstituted").asBoolean(), "click 1 sets substituted");
+        fx.getMember("substitute").execute(el);
+        assertFalse(el.getMember("__lxSubstituted").asBoolean(), "click 2 flips back");
+
+        // Now let EVERY pending timer run, including the superseded one.
+        context.eval(Source.create("js", "__lxRunTimeouts(6)"));
+        context.eval(Source.create("js", "__lxFlushRaf(6)"));
+
+        assertFalse(el.getMember("__lxSubstituted").asBoolean(),
+            "state must still say NOT substituted");
+        assertTrue(payload.getMember("hidden").asBoolean(),
+            "the stale callback must NOT reveal the payload after a reverse-click");
+        assertFalse(visible.getMember("hidden").asBoolean(),
+            "the variable form must be the one on screen, matching the state");
+        assertEquals("", p0.getMember("style").getMember("opacity").asString(),
+            "and the dimmed glyph must be restored, not stranded at 0.15");
+    }
+
     // ---- pin 1: placement compose + transform-origin ---------------------------
 
     @Test

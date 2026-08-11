@@ -68,26 +68,103 @@ final class AtomSubstitution {
      */
     static void replaceList(List<MathNode> out, List<MathNode> items, int varCodePoint,
                             int value) {
-        boolean previousWasSubstituted = false;
+        boolean previousTrailsSubstitutedDigit = false;
         for (MathNode item : items) {
             if (item instanceof Atom a && a.codePoint() == varCodePoint) {
                 if (endsWithDigit(out)) {
                     out.add(new Atom(CDOT_CODEPOINT, MathClass.BIN));
                 }
                 out.addAll(digitAtoms(value));      // splice: 10 -> [Atom(1), Atom(0)]
-                previousWasSubstituted = true;
+                previousTrailsSubstitutedDigit = true;
                 continue;
             }
-            if (previousWasSubstituted && item instanceof Atom a && isDigit(a)) {
+            if (item instanceof Atom a) {
+                if (previousTrailsSubstitutedDigit && isDigit(a)) {
+                    out.add(new Atom(CDOT_CODEPOINT, MathClass.BIN));
+                }
+                out.add(a);                         // records are immutable - share
+                previousTrailsSubstitutedDigit = false;
+                continue;
+            }
+            // A COMPOUND node. Its substitution can put a digit at its own leading or
+            // trailing edge (`x^2` with x=3 leads with `3`), and that edge juxtaposes with
+            // a sibling exactly as a bare atom would — which is the hole Lattice found at
+            // lattex/851: `2x^2` produced a tree byte-identical to the parse of `23^2`.
+            Replacement r = replaceNode(item, varCodePoint, value);
+            if ((previousTrailsSubstitutedDigit && r.leadsWithDigit())
+                    || (r.leadsWithSubstitutedDigit() && endsWithDigit(out))) {
                 out.add(new Atom(CDOT_CODEPOINT, MathClass.BIN));
             }
-            if (item instanceof Atom a) {
-                out.add(a);                         // records are immutable - share
-            } else {
-                out.add(replace(item, varCodePoint, value));
-            }
-            previousWasSubstituted = false;
+            out.add(r.node());
+            previousTrailsSubstitutedDigit = r.trailsWithSubstitutedDigit();
         }
+    }
+
+    /**
+     * A transformed node plus the BOUNDARY FACTS a sibling needs to decide whether an
+     * explicit product is required at the seam.
+     *
+     * <p>Carrying the facts out of the transform beats wrapping every nested node in
+     * {@code \cdot} (Lattice's ruling on lattex/851): fences, fractions and radicals
+     * already draw a visible grouping boundary, so a product there is unambiguous to a
+     * reader and an inserted dot would be noise. What is NOT visibly grouped is a
+     * {@link SupSub} base — {@code 3^2} sits on the baseline exactly where a digit would —
+     * so that is the edge whose facts must travel.
+     *
+     * @param node the transformed node
+     * @param leadsWithSubstitutedDigit its first rendered glyph is a digit THIS pass
+     *     substituted (so a preceding digit would concatenate)
+     * @param trailsWithSubstitutedDigit its last BASELINE glyph is a digit this pass
+     *     substituted (so a following digit would concatenate)
+     * @param leadsWithDigit its first rendered glyph is a digit from any source — used when
+     *     the PRECEDING sibling was substituted, where the collision is symmetric
+     */
+    private record Replacement(MathNode node, boolean leadsWithSubstitutedDigit,
+                               boolean trailsWithSubstitutedDigit, boolean leadsWithDigit) { }
+
+    /** Transform a compound node and report its substitution boundary facts. */
+    private static Replacement replaceNode(MathNode node, int varCodePoint, int value) {
+        MathNode replaced = replace(node, varCodePoint, value);
+        boolean substituted = !replaced.equals(node);
+        return switch (replaced) {
+            // The base renders on the baseline, first. A sup/sub is RAISED/LOWERED, so it
+            // cannot concatenate with a following baseline digit — only a bare base can.
+            case SupSub s -> new Replacement(replaced,
+                substituted && leadsWithDigit(s.base()),
+                substituted && s.sup() == null && s.sub() == null && trailsWithDigit(s.base()),
+                leadsWithDigit(s.base()));
+            case MathList ml -> {
+                MathNode first = ml.items().isEmpty() ? null : ml.items().get(0);
+                MathNode last = ml.items().isEmpty() ? null : ml.items().get(ml.items().size() - 1);
+                yield new Replacement(replaced,
+                    substituted && first != null && leadsWithDigit(first),
+                    substituted && last != null && trailsWithDigit(last),
+                    first != null && leadsWithDigit(first));
+            }
+            // Fenced/Fraction/Radical/Boxed/Phantom/Colored and the pass-through leaves all
+            // draw their own visible boundary; a digit inside them cannot be misread as
+            // positional notation with a sibling outside them.
+            default -> new Replacement(replaced, false, false, false);
+        };
+    }
+
+    private static boolean leadsWithDigit(MathNode n) {
+        return switch (n) {
+            case Atom a -> isDigit(a);
+            case SupSub s -> leadsWithDigit(s.base());
+            case MathList ml -> !ml.items().isEmpty() && leadsWithDigit(ml.items().get(0));
+            default -> false;
+        };
+    }
+
+    private static boolean trailsWithDigit(MathNode n) {
+        return switch (n) {
+            case Atom a -> isDigit(a);
+            case SupSub s -> s.sup() == null && s.sub() == null && trailsWithDigit(s.base());
+            case MathList ml -> !ml.items().isEmpty()
+                && trailsWithDigit(ml.items().get(ml.items().size() - 1));
+            default -> false;
+        };
     }
 
     /**

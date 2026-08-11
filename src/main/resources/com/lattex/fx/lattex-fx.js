@@ -2429,6 +2429,16 @@
     var hide = toSubstituted ? collapsed : payload;
     el.__lxSubstituted = toSubstituted;
 
+    // GENERATION GUARD (Lattice, lattex/851 P1). The dim below defers the swap behind a
+    // timer. A second click before that callback fires flips the state back, but the FIRST
+    // timer was still pending: its stale callback then revealed the payload while
+    // __lxSubstituted was already false, leaving visuals and state inverted. Bumping a
+    // generation on every entry lets the stale callback recognise that it has been
+    // superseded and do nothing. A generation counter beats clearTimeout here because it
+    // also invalidates a callback that has already been dequeued and is about to run.
+    var generation = (el.__lxSubstituteGen || 0) + 1;
+    el.__lxSubstituteGen = generation;
+
     var swap = function () {
       hide.hidden = true;
       hide.style.display = 'none';
@@ -2459,11 +2469,15 @@
       p.style.opacity = '0.15';
     }
     setTimeout(function () {
-      // Restore the dimmed paths before hiding, so flipping back finds them intact.
+      // Restore the dimmed paths ALWAYS -- even when superseded, or a reverse-click during
+      // the dim would leave the variable glyphs stuck at 0.15 opacity.
       for (var j = 0; j < vars.length; j++) {
         var q = paths[vars[j]];
         if (q) { q.style.opacity = ''; q.style.transition = ''; }
       }
+      // Superseded by a later click: that click already performed its own swap and owns
+      // the state. Doing ours now would invert visuals against __lxSubstituted.
+      if (el.__lxSubstituteGen !== generation) { return; }
       swap();
     }, 150);
   }

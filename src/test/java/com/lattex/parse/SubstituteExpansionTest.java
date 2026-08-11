@@ -1,6 +1,7 @@
 package com.lattex.parse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
@@ -108,6 +109,43 @@ class SubstituteExpansionTest {
         // walk refuses it identically, so a variable can never hide in an untraversed
         // subtree and come back un-substituted.
         assertInert("\\sum_{i=1}^{3} i", 3);
+    }
+
+
+    @Test
+    void aSubstitutedSupSubBaseStillNeedsTheExplicitProduct() {
+        // Lattice, lattex/851 (BLOCKING): the juxtaposition guard was ATOM-level, so a
+        // compound node whose BASE became digits slipped past it. `2x^2` with x=3 produced a
+        // tree byte-identical to the parse of `23^2` -- twenty-three squared, not two times
+        // three squared. Silent, meaning-changing, and green under 956 tests because no case
+        // put a coefficient in front of a POWERED variable.
+        assertEquals(parse("2 \\cdot 3^2"), expand("2x^2", 3).get().substituted(),
+            "a coefficient before a powered variable stays a PRODUCT");
+        assertNotEquals(parse("23^2"), expand("2x^2", 3).get().substituted(),
+            "revert-provable: without boundary facts this equals the parse of 23^2");
+    }
+
+    @Test
+    void boundaryFactsTravelOnlyWhereGroupingIsInvisible() {
+        // The fix carries boundary facts out of the transform rather than wrapping every
+        // nested node in \cdot. Fences, fractions and radicals already DRAW a boundary, so a
+        // digit inside them cannot be misread as positional notation with an outside sibling
+        // -- inserting a dot there would be noise. A SupSub base has no such boundary: 3^2
+        // sits on the baseline exactly where a digit would.
+        assertEquals(parse("2(3)"), expand("2(x)", 3).get().substituted(),
+            "parenthesised: visible grouping, no dot added");
+        assertEquals(parse("2\\frac{3}{4}"), expand("2\\frac{x}{4}", 3).get().substituted(),
+            "fraction: visible grouping, no dot added");
+        assertEquals(parse("2\\sqrt{3}"), expand("2\\sqrt{x}", 3).get().substituted(),
+            "radical: visible grouping, no dot added");
+    }
+
+    @Test
+    void aSupSubWithNoScriptsStillTrailsIntoAFollowingDigit() {
+        // The trailing edge only concatenates when nothing is raised after it. With a sup
+        // present the last glyph is lifted off the baseline and cannot run into a digit.
+        assertEquals(parse("3 \\cdot 2"), expand("x2", 3).get().substituted(),
+            "substituted digit followed by a source digit still needs the product");
     }
 
     // ---- helpers -----------------------------------------------------------
