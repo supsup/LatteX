@@ -2,6 +2,9 @@
 set -eu
 
 image=${1:-lattex:local}
+# The source of truth for the expected version. Second argument so a caller can
+# point at another checkout; defaults to the build file beside this script's repo.
+gradle_build_file=${2:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/build.gradle.kts}
 tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/lattex-docker-smoke.XXXXXX")
 name_suffix=$$
 watch_one="lattex-smoke-one-$name_suffix"
@@ -59,6 +62,32 @@ assert_svg() {
     grep -q '</svg>' "$target"
 }
 
+# The image's `cli --version` must name the version the SOURCE declares. Derived
+# from build.gradle.kts rather than written here as a literal: a hard-coded
+# `0.11.0` sat in this script and went stale the moment main declared 0.12.0,
+# so a correct image failed its own smoke test for eight days. A pin that must
+# be hand-edited on every release is a pin that will be wrong between releases.
+#
+# It also REPORTS both sides. The old line was `... | grep -q '^lattex 0\.11\.0$'`,
+# which prints nothing and, under `set -e`, aborted the whole script with exit 1
+# and NO output — a smoke failure that named neither the check nor the mismatch.
+assert_version() {
+    image_ref=$1
+    gradle_file=$2
+    expected=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$gradle_file" | head -1)
+    if [ -z "$expected" ]; then
+        echo "smoke: could not read the declared version from $gradle_file" >&2
+        return 1
+    fi
+    actual=$(docker run --rm "$image_ref" cli --version)
+    if [ "$actual" != "lattex $expected" ]; then
+        echo "smoke: version mismatch" >&2
+        echo "  expected: lattex $expected   (declared in $gradle_file)" >&2
+        echo "  actual:   $actual            (reported by $image_ref)" >&2
+        return 1
+    fi
+}
+
 # Runtime shape: non-root, immutable jars, and fixed mount roots. The CLI
 # renders immediately below, which also proves the bundled font is present and
 # readable without requiring JDK-only `jar` tooling in the JRE image.
@@ -95,7 +124,7 @@ printf '%s\n' '\sqrt{2}' \
     | docker run --rm -i "$image" cli > "$tmp_root/explicit-stdin.svg"
 cmp "$tmp_root/legacy-stdin.svg" "$tmp_root/explicit-stdin.svg"
 docker run --rm "$image" cli --help | grep -q 'USAGE:'
-docker run --rm "$image" cli --version | grep -q '^lattex 0\.11\.0$'
+assert_version "$image" "$gradle_build_file"
 
 printf '%s\n' 'x^2' '\frac{a}{b}' \
     | docker run --rm -i "$image" cli --batch > "$tmp_root/batch.bin"
