@@ -44,7 +44,16 @@ class ContainerDriftTest {
         // is a code-owned exact member, NOT the identifier lane (mirrors the fx-*/graph-*
         // policy). Stamped only when the double-gated expansion pass produced a payload;
         // its value shape is pinned by unfoldExpandMarkerRidesTheAllowList below.
-        "data-lx-fx-expand");
+        "data-lx-fx-expand",
+        // The fx.substitute pair. `data-lx-fx-substitute` is hyphenated, so like the
+        // fx-*/graph-*/expand attrs it can only be a code-owned exact member. `data-lx-var`
+        // is IDENTIFIER-shaped and would therefore be admitted silently by the DATA_ATTR
+        // lane below — it is listed here anyway, for exactly the reason glyphmap/groupmap
+        // are: that lane exists for AUTHOR data, and a renderer-derived sidecar riding it
+        // would be indistinguishable from a legitimate `data.var=…`. Listing it keeps the
+        // code-owned set honest about what the renderer actually stamps. Both value shapes
+        // are pinned by substituteMarkerAndVarmapRideTheAllowList below.
+        "data-lx-fx-substitute", "data-lx-var");
 
     /// The open data-attr lane: `data.<key>` / `intent` / `concept` stamp
     /// `data-lx-<identifier>` (keys are parse-time-validated identifiers, no hyphens).
@@ -192,6 +201,35 @@ class ContainerDriftTest {
             assertTrue(isAllowed(name), "unfold marker drift: '" + name + "' — tag: " + tag);
         }
         assertNoInjection(tag, "unfold marker");
+    }
+
+    /// The fx.substitute contract, made NON-VACUOUS the same way the unfold one is: with
+    /// both gates open the container stamps `data-lx-fx-substitute=<target>` AND
+    /// `data-lx-var=<hexcp>:<idx>…`. The marker is hyphenated, so its exact entry is
+    /// load-bearing — remove it and this drift-fails. The varmap is identifier-shaped, so
+    /// its entry is NOT load-bearing against the lane (DATA_ATTR would admit it); what is
+    /// asserted instead is that the renderer really stamps it and that its value obeys the
+    /// pinned grammar, so a future widening of the value cannot pass unnoticed.
+    @Test
+    void substituteMarkerAndVarmapRideTheAllowList() {
+        RenderOptions flagOn = RenderOptions.defaults().withInteractiveExpansion(true);
+        String tag = openTagOf(LatteX.renderStyledHtml(
+            "\\lx[fx.click=substitute, fx.substitute-to=3]{x^2 + 2x + 1}", flagOn));
+        List<String> names = attrNames(tag);
+        assertTrue(names.contains("data-lx-fx-substitute"),
+            "fx.substitute (flag ON) must stamp the target marker (non-vacuity) — tag: " + tag);
+        assertTrue(names.contains("data-lx-var"),
+            "fx.substitute (flag ON) must stamp the varmap (non-vacuity) — tag: " + tag);
+        assertTrue(ALLOWED_EXACT.contains("data-lx-fx-substitute"),
+            "data-lx-fx-substitute must be a code-owned ALLOWED_EXACT member (hyphenated)");
+        assertTrue(!DATA_ATTR.matcher("data-lx-fx-substitute").matches(),
+            "data-lx-fx-substitute is hyphenated and must NOT ride the identifier-only lane");
+        assertValue(tag, "data-lx-fx-substitute", "-?[0-9]+");
+        assertValue(tag, "data-lx-var", "[0-9a-f]+:[0-9]+(,[0-9]+)*");
+        for (String name : names) {
+            assertTrue(isAllowed(name), "substitute drift: '" + name + "' — tag: " + tag);
+        }
+        assertNoInjection(tag, "substitute marker");
     }
 
     // ---- battery -----------------------------------------------------------------------

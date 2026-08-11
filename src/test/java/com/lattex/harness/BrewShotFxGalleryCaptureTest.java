@@ -21,8 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * BrewShot capture lane for the four production effects that had no committed
- * gallery specimen: inkdrop, refraction, cancel, and unfold.
+ * BrewShot capture lane for the production effects that had no committed gallery
+ * specimen: inkdrop, refraction, cancel, unfold, and substitute.
  *
  * <p>Ordinary {@code test} runs write into {@code build/brewshot-refs}; the
  * explicit {@code generateExamples} task sets {@code lattex.examples.write} and
@@ -38,6 +38,7 @@ class BrewShotFxGalleryCaptureTest {
     private static final String REFRACTION = "[data-lx-fx-hover=\"refraction\"]";
     private static final String CANCEL = "[data-lx-fx-enter=\"cancel\"]";
     private static final String UNFOLD = "[data-lx-fx-click=\"unfold\"]";
+    private static final String SUBSTITUTE = "[data-lx-fx-click=\"substitute\"]";
 
     @TempDir
     static Path fixturesDir;
@@ -52,6 +53,10 @@ class BrewShotFxGalleryCaptureTest {
             LatteX.renderStyledHtml("\\lx[fx.enter=cancel]{\\frac{x}{x}}"));
         writeFixture("unfold.html", "fx.click=unfold",
             LatteX.renderStyledHtml("\\lx[fx.click=unfold]{\\sum_{i=1}^{4} f(i)}",
+                RenderOptions.defaults().withInteractiveExpansion(true)));
+        writeFixture("substitute.html", "fx.click=substitute",
+            LatteX.renderStyledHtml(
+                "\\lx[fx.click=substitute, fx.substitute-to=3]{x^2 + 2x + 1}",
                 RenderOptions.defaults().withInteractiveExpansion(true)));
     }
 
@@ -214,6 +219,51 @@ class BrewShotFxGalleryCaptureTest {
             assertTrue(collapsedAgainObserved.get(),
                 "the second trusted click must collapse back to the bounded sum");
             assertEquals(List.of(), chrome.errors(), "unfold capture threw in the browser");
+        }
+        assertArtifact(out);
+    }
+
+    @Test
+    void substituteRecordsTheVariableFlippingToItsValueAndBack() throws Exception {
+        BrowserGate.browserPin();
+        Path out = refsOut().resolve("substitute.gif");
+        AtomicBoolean substitutedObserved = new AtomicBoolean();
+        AtomicBoolean variableFormAgainObserved = new AtomicBoolean();
+
+        try (BrewShot chrome = BrewShot.launch(900, 600)) {
+            chrome.reducedMotion("no-preference");
+            chrome.open(fixturesDir.resolve("substitute.html").toUri().toString());
+            chrome.eval("window.startLatteXFx(); true");
+            chrome.settle(150);
+            assertEquals(2.0,
+                chrome.eval("document.querySelectorAll('" + SUBSTITUTE + " svg').length"),
+                "the capture fixture must have the flag-enabled pre-rendered payload");
+            // The sidecar is what makes this a substitution rather than a swap; if it were
+            // missing the capture would still LOOK fine, so assert it before recording.
+            assertEquals(true,
+                chrome.eval("!!document.querySelector('" + SUBSTITUTE + "')"
+                    + ".getAttribute('data-lx-var')"),
+                "the fixture must carry the varmap the effect dims through");
+
+            chrome.recordGifElement(".capture-stage", 42, 30, 80, 650, 0.8,
+                frame -> {
+                    if (frame == 3 || frame == 23) {
+                        chrome.click(SUBSTITUTE);
+                    } else if (frame == 14) {
+                        substitutedObserved.set(Boolean.TRUE.equals(chrome.eval(
+                            "!document.querySelector('" + SUBSTITUTE
+                                + " > .lx-fx-substituted').hidden")));
+                    } else if (frame == 34) {
+                        variableFormAgainObserved.set(Boolean.TRUE.equals(chrome.eval(
+                            "!document.querySelector('" + SUBSTITUTE + " > svg').hidden")));
+                    }
+                }, out);
+
+            assertTrue(substitutedObserved.get(),
+                "the first trusted click must reveal the pre-rendered substituted form");
+            assertTrue(variableFormAgainObserved.get(),
+                "the second trusted click must return to the variable form");
+            assertEquals(List.of(), chrome.errors(), "substitute capture threw in the browser");
         }
         assertArtifact(out);
     }

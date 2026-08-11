@@ -6,7 +6,59 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
-_Nothing yet._
+### `unfold` no longer expands a coefficient summand into the wrong number (bug fix)
+
+**A `\sum` with a coefficient unfolded to a false sum.** Implicit multiplication in
+maths is written by *adjacency* — `2i` is a product — but adjacency between two *digits*
+is positional notation. The expansion pass spliced the index value in with no guard, so
+`\sum_{i=1}^{3} 2i` expanded to a tree byte-identical to the parse of `21 + 22 + 23`
+rather than `2·1 + 2·2 + 2·3`. Nothing looked broken: the interaction ran, the terms
+typeset cleanly, and the sum was simply wrong.
+
+Substituting now inserts an explicit `\cdot` wherever a substituted digit run would land
+against a digit, and **only** at a substitution boundary — `12i` remains twelve times `i`
+and never becomes `1 · 2 · i`.
+
+If a page relied on the old output, it was displaying an incorrect expansion; the new
+output is the correct one.
+
+### `fx.substitute` — a variable flips to its value (new effect)
+
+The second member of the **numeric-substitution family**, alongside `unfold`, and gated
+exactly the same way: the host's `RenderOptions.interactiveExpansion` (default **off**)
+plus a per-equation `fx.*=substitute` directive. One flag covers the family — the
+capability is "LatteX pre-renders computed material", not a switch per effect.
+
+```
+\lx[fx.click=substitute, fx.substitute-to=3]{ x^2 + 2x + 1 }
+```
+
+Click, and every `x` becomes `3` at once: `3^2 + 2 \cdot 3 + 1`. The substituted form is
+pre-rendered by LatteX into a hidden sibling `<svg>` (the page-side runtime cannot lay
+out LaTeX) and is laid out *without* the variable's widths, so the constants arrive
+already closed up around the gap. The runtime dims the variable's own glyphs a beat
+before the swap, located through a new renderer-derived `data-lx-var` sidecar, so the eye
+sees the `x`s leave and the value arrive in their place.
+
+- **Which variable:** auto-detected when the body holds exactly one distinct letter;
+  otherwise name it with `fx.substitute-var=x`. Letters inside `\sin`/`\lim` are
+  `OperatorName` nodes rather than atoms, so they are structurally immune — the `i` in
+  `\sin` can never be substituted.
+- **Fail-inert, never a silent no-op:** no variable, an ambiguous unnamed variable, a
+  named variable the body does not contain, an unsupported node kind, or a payload that
+  would exceed the emitter's output cap all degrade to a plain typeset formula with no
+  payload and no marker. Naming an absent variable is inert *deliberately* — the payload
+  would otherwise be identical to the source, presenting an author typo as a working
+  effect.
+- **Reduced motion** snaps instantly, and a page with no JS runtime shows the variable
+  form only, never both states at once.
+- Scope for this first slice: one variable, one literal-integer target (at most six
+  digits, optionally negative). Live/scrubbable targets, several variables at once,
+  symbolic targets, and the neighbour-slide FLIP animation are deferred.
+
+Internals: `SubstituteExpansion` joins `SumExpansion`, and the tree transform both use is
+now one shared `AtomSubstitution` rather than a copy each — that traversal's safety comes
+from refusing node kinds it does not know, and coverage that exists twice drifts.
 
 ---
 
