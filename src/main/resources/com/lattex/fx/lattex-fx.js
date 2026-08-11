@@ -2458,7 +2458,7 @@
       p.style.transition = 'opacity 140ms ease';
       p.style.opacity = '0.15';
     }
-    window.setTimeout(function () {
+    setTimeout(function () {
       // Restore the dimmed paths before hiding, so flipping back finds them intact.
       for (var j = 0; j < vars.length; j++) {
         var q = paths[vars[j]];
