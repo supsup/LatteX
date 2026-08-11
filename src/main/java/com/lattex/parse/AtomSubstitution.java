@@ -35,6 +35,9 @@ import java.util.List;
  */
 final class AtomSubstitution {
 
+    /** {@code \cdot} (U+22C5), the explicit product inserted at a juxtaposition boundary. */
+    private static final int CDOT_CODEPOINT = 0x22C5;
+
     private AtomSubstitution() { }
 
     /** Signals that a subtree holds a node kind this pass does not traverse. */
@@ -45,23 +48,67 @@ final class AtomSubstitution {
     }
 
     /**
-     * Deep-copy {@code node} into {@code out}, substituting every {@link Atom} whose code
-     * point equals {@code varCodePoint} with the digit atom(s) of {@code value}. A matched
-     * atom at the top level SPLICES (so {@code 10} contributes two sibling atoms rather
-     * than a nested list).
+     * Deep-copy a sequence of sibling nodes into {@code out}, substituting the variable.
+     * A matched atom SPLICES (so {@code 10} contributes two sibling atoms rather than a
+     * nested list).
+     *
+     * <p><strong>The juxtaposition guard.</strong> Implicit multiplication is written by
+     * ADJACENCY in maths — {@code 2x} is a product — but adjacency between two DIGITS is
+     * positional notation, so a naive splice turns {@code 2x} with {@code x=3} into
+     * {@code 23}: not a rendering glitch but a different, false number. Whenever a
+     * substituted digit run would land against a digit on either side, an explicit
+     * {@code \cdot} is inserted so the product stays a product.
+     *
+     * <p>The guard fires ONLY at a substitution boundary, never between two digits that
+     * were already adjacent in the source — {@code 12} must stay twelve, not become
+     * {@code 1 \cdot 2}. That is why the splice flag is tracked here, on the sibling walk,
+     * rather than inferred afterwards from the shape of the result.
+     *
+     * @throws UnsupportedNode on any node kind not traversed (caller degrades inert)
+     */
+    static void replaceList(List<MathNode> out, List<MathNode> items, int varCodePoint,
+                            int value) {
+        boolean previousWasSubstituted = false;
+        for (MathNode item : items) {
+            if (item instanceof Atom a && a.codePoint() == varCodePoint) {
+                if (endsWithDigit(out)) {
+                    out.add(new Atom(CDOT_CODEPOINT, MathClass.BIN));
+                }
+                out.addAll(digitAtoms(value));      // splice: 10 -> [Atom(1), Atom(0)]
+                previousWasSubstituted = true;
+                continue;
+            }
+            if (previousWasSubstituted && item instanceof Atom a && isDigit(a)) {
+                out.add(new Atom(CDOT_CODEPOINT, MathClass.BIN));
+            }
+            if (item instanceof Atom a) {
+                out.add(a);                         // records are immutable - share
+            } else {
+                out.add(replace(item, varCodePoint, value));
+            }
+            previousWasSubstituted = false;
+        }
+    }
+
+    /**
+     * Deep-copy ONE node into {@code out}, substituting the variable. Prefer
+     * {@link #replaceList} when the node has siblings — a lone call cannot see its
+     * neighbours, so it cannot apply the juxtaposition guard.
      *
      * @throws UnsupportedNode on any node kind not traversed (caller degrades inert)
      */
     static void replaceInto(List<MathNode> out, MathNode node, int varCodePoint, int value) {
-        if (node instanceof Atom a) {
-            if (a.codePoint() == varCodePoint) {
-                out.addAll(digitAtoms(value));      // splice: 10 -> [Atom(1), Atom(0)]
-            } else {
-                out.add(a);                         // records are immutable - share
-            }
-            return;
-        }
-        out.add(replace(node, varCodePoint, value));
+        replaceList(out, List.of(node), varCodePoint, value);
+    }
+
+    private static boolean endsWithDigit(List<MathNode> out) {
+        return !out.isEmpty()
+            && out.get(out.size() - 1) instanceof Atom last
+            && isDigit(last);
+    }
+
+    private static boolean isDigit(Atom a) {
+        return a.codePoint() >= '0' && a.codePoint() <= '9';
     }
 
     /**
@@ -74,9 +121,7 @@ final class AtomSubstitution {
             case Atom a -> a.codePoint() == varCodePoint ? asNode(digitAtoms(value)) : a;
             case MathList ml -> {
                 List<MathNode> items = new ArrayList<>();
-                for (MathNode item : ml.items()) {
-                    replaceInto(items, item, varCodePoint, value);
-                }
+                replaceList(items, ml.items(), varCodePoint, value);
                 yield new MathList(items);
             }
             case SupSub s -> new SupSub(
@@ -113,15 +158,19 @@ final class AtomSubstitution {
     }
 
     /**
-     * The decimal digits of an int as ORD atoms (parser-identical class). A negative value
-     * leads with a {@code -} carrying {@link MathClass#ORD} rather than {@code BIN}: it is
-     * the sign of a literal, not a binary minus between two operands, and the distinction
-     * is visible in the spacing the layout engine applies.
+     * The decimal digits of an int as atoms, with the SAME {@link MathClass} the parser
+     * gives the hand-written literal: {@link MathClass#ORD} digits, and a leading
+     * {@code -} as {@link MathClass#BIN}. Matching the parser is not cosmetic — the
+     * structural-identity oracle in the tests asserts that a substituted tree equals the
+     * parse of the hand-written form, and math class is part of that equality (it drives
+     * the spacing the layout engine applies).
      */
     static List<MathNode> digitAtoms(int value) {
         List<MathNode> digits = new ArrayList<>();
-        for (char c : Integer.toString(value).toCharArray()) {
-            digits.add(new Atom(c, MathClass.ORD));
+        String text = Integer.toString(value);
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            digits.add(new Atom(c, c == '-' ? MathClass.BIN : MathClass.ORD));
         }
         return digits;
     }

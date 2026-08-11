@@ -117,9 +117,9 @@ public final class SumExpansion {
                 if (k > start) {
                     out.add(new Atom('+', MathClass.BIN));
                 }
-                for (MathNode item : summand) {
-                    AtomSubstitution.replaceInto(out, item, indexVar, k);
-                }
+                // The whole summand in ONE sibling walk, so the juxtaposition guard can
+                // see across items: `\sum 2i` must expand to 2·1 + 2·2, never 21 + 22.
+                AtomSubstitution.replaceList(out, summand, indexVar, k);
             }
         } catch (AtomSubstitution.UnsupportedNode unsupported) {
             return Optional.empty();

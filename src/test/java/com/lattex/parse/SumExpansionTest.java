@@ -1,6 +1,7 @@
 package com.lattex.parse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
@@ -72,6 +73,37 @@ class SumExpansionTest {
         assertTrue(SumExpansion.expand(parse("\\sum_{i=1}^{12} i")).isPresent());
         assertInert("\\sum_{i=1}^{13} i");
         assertInert("\\sum_{i=1}^{99999} i");      // hostile — resource guard
+    }
+
+    @Test
+    void coefficientSummandKeepsTheProductExplicit() {
+        // REGRESSION (found 2026-08-11 while building fx.substitute, which shares this
+        // pass). A coefficient makes the summand an implicit PRODUCT written by adjacency:
+        // `2i` with i=1 spliced naively is `21`. The whole expansion then read
+        // "21 + 22 + 23" — byte-identical to the parse of that literal digit string, and a
+        // plausible-looking sum that is simply false. It shipped green because no case in
+        // this file had a coefficient. The guard inserts an explicit \cdot at the boundary.
+        Optional<SumExpansion.Result> r = SumExpansion.expand(parse("\\sum_{i=1}^{3} 2i"));
+        assertTrue(r.isPresent(), "a coefficient summand still expands");
+        assertEquals(parse("2\\cdot 1 + 2\\cdot 2 + 2\\cdot 3"), r.get().expanded(),
+            "the terms are PRODUCTS, not the digit strings 21/22/23");
+        // Revert-provable: without the guard this expansion equals the parse of "21+22+23".
+        assertNotEquals(parse("21+22+23"), r.get().expanded());
+    }
+
+    @Test
+    void multiDigitIndexAgainstACoefficientAlsoStaysAProduct() {
+        // The boundary the guard has to get right when the spliced run is two digits wide.
+        assertEquals(parse("2\\cdot 9 + 2\\cdot 10"),
+            SumExpansion.expand(parse("\\sum_{i=9}^{10} 2i")).get().expanded());
+    }
+
+    @Test
+    void adjacentSourceDigitsAreOneLiteralAndAreNeverSplit() {
+        // The guard must fire ONLY at a substitution boundary. `12i` is twelve times i,
+        // not one-times-two-times-i, so the 1 and 2 stay a single literal.
+        assertEquals(parse("12\\cdot 1 + 12\\cdot 2"),
+            SumExpansion.expand(parse("\\sum_{i=1}^{2} 12i")).get().expanded());
     }
 
     @Test
