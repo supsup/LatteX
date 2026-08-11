@@ -6,7 +6,43 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
-_Nothing yet._
+### The Docker smoke test stopped failing correct images, and started saying why
+
+`docker/smoke-test.sh` hard-coded `grep -q '^lattex 0\.11\.0$'` as its version check.
+Once main declared `0.12.0`, a **correct** image failed its own smoke test — and failed
+*silently*: `grep -q` prints nothing and `set -e` aborts, so the run exited `1` with no
+output naming either the failing check or the mismatch. Diagnosing it meant re-running
+under `sh -x`.
+
+The expected version is now derived from `build.gradle.kts`, and a mismatch prints both
+sides and the file each came from:
+
+```
+smoke: version mismatch
+  expected: lattex 0.13.0-SNAPSHOT   (declared in build.gradle.kts)
+  actual:   lattex 0.11.0            (reported by lattex:dogfood)
+```
+
+A pin that must be hand-edited every release is a pin that is wrong between releases.
+
+### New: `dockerDogFoodflow.md`, the container flow end to end
+
+A detailed walkthrough of running LatteX in a box: the three build stages setting by
+setting, verification in widening circles, the tag convention (throwaway `local`,
+immutable `main-<sha>`, the moving `dogfood` alias), how to tell your image has gone
+stale, the watch-mode job lifecycle, one-shot mode, and troubleshooting. `README.md`
+gains a matching setup section.
+
+Two things in there are worth knowing even if you never read the rest:
+
+- **A version string names what someone *declared*; only a tag names what was *built*.**
+  `0.11.1` is the standing proof — a jar declaring it circulated widely, `0.12.0`'s notes
+  withdrew it, and no such tag exists in this repository at all.
+- **Re-pointing `lattex:dogfood` does not update a running container.** A container binds
+  to the image *ID* it was created from, so `docker restart` keeps serving the old build.
+  The tell is a bare hex ID where the tag name belongs in `docker ps`; the fix is to
+  recreate the container, and the check that describes what is actually serving you is
+  `docker exec <name> java -jar /opt/lattex/lattex.jar --version`.
 
 ---
 
