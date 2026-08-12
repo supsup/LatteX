@@ -52,8 +52,8 @@ So the rule this whole document is built on:
 
 (If you also work on Sirentide: its jars stamp `Sirentide-Source-Revision`, a full 40-hex
 commit, directly into the manifest. LatteX does not. That is a real asymmetry, and it is
-why LatteX's staleness check below has to lean on tags and mtimes rather than simply asking
-the artifact.)
+why LatteX's staleness check below has to lean on tags, repository reachability, a fresh fetch
+and ancestry rather than simply asking the artifact.)
 
 ---
 

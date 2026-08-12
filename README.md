@@ -124,16 +124,26 @@ lying in your working tree.
 | tag | meaning |
 |---|---|
 | `lattex:local` | your throwaway working build — what the examples below use |
-| `lattex:main-<shortsha>` | an immutable build of a specific commit; never re-pointed |
+| `lattex:main-<shortsha>` | the commit a build came from — not re-pointed **by convention**, not by Docker |
 | `lattex:dogfood` | the **moving** tag for "the image I actually use day to day" |
 
-`lattex:dogfood` is an alias you re-point deliberately. Build the immutable tag
+`lattex:dogfood` is an alias you re-point deliberately. Build the commit-named tag
 first, verify it, and only then promote:
 
 ```bash
-git -C . fetch origin && git -C . log -1 --format='building %h %s' origin/main
-docker build -t "lattex:main-$(git rev-parse --short origin/main)" .
+git fetch origin main || { echo 'refusing: fetch failed, origin/main may be stale'; exit 1; }
+test -z "$(git status --porcelain)" || { echo 'refusing: working tree is dirty'; exit 1; }
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" \
+  || { echo 'refusing: HEAD is not origin/main'; exit 1; }
+
+docker build -t "lattex:main-$(git rev-parse --short HEAD)" .
 ```
+
+The fence is not ceremony: `docker build .` ships your **working tree**, so a name derived
+from `origin/main` is a claim about a commit that may be nothing like what you built. The
+`||` on the fetch is the load-bearing one — without it a failed fetch leaves `origin/main`
+at its last value, `HEAD` still equals it, and the build is blessed by the very check meant
+to catch an unfetched remote.
 
 **Verify before you trust it.** Three checks, cheapest first:
 
@@ -167,22 +177,35 @@ days behind main, and the symptom was `50\% \& 3\_4` returning `error: invalid L
 docker run --rm lattex:dogfood cli --version
 sed -n 's/^version = "\(.*\)"$/declared in source: \1/p' build.gradle.kts
 
-# How far behind is the commit the image was built from? This reads the immutable
-# lattex:main-<sha> tag riding the same image, and says so when there isn't one —
-# never index RepoTags positionally, the order is not guaranteed.
-built_from=$(docker inspect -f '{{join .RepoTags "\n"}}' lattex:dogfood \
-  | sed -n 's/^lattex:main-//p' | head -1)
-if [ -z "$built_from" ]; then
+# How far behind is the commit the image was built from? This reads the
+# lattex:main-<sha> tag riding the same image. An earlier version of this block
+# carried the words "never index RepoTags positionally" directly above a `head -1`,
+# which is exactly that — an arbitrary pick reads just like a correct one. Each arm
+# below reports a distinct way of NOT knowing, rather than resolving it by luck.
+tags=$(docker inspect -f '{{join .RepoTags "\n"}}' lattex:dogfood | sed -n 's/^lattex:main-//p')
+n=$(printf '%s' "$tags" | grep -c . || true)
+
+if [ "$n" -eq 0 ]; then
   echo "provenance unknown: dogfood carries no lattex:main-<sha> tag — rebuild"
+elif [ "$n" -gt 1 ]; then
+  echo "provenance AMBIGUOUS: $n main-<sha> tags on this image — refusing to guess:"
+  printf '  %s\n' $tags
+elif ! git cat-file -e "${tags}^{commit}" 2>/dev/null; then
+  echo "provenance unverifiable: '$tags' is not a commit in this repository"
+elif ! git fetch -q origin main; then
+  echo "provenance uncomparable: fetch failed, 'behind main' has no meaning right now"
+elif ! git merge-base --is-ancestor "$tags" origin/main; then
+  echo "provenance DIVERGENT: $tags is a real commit but not an ancestor of origin/main"
 else
-  echo "built from $built_from, $(git log --oneline "$built_from"..origin/main \
-    | wc -l | tr -d ' ') commit(s) behind main"
+  echo "built from $tags, $(git rev-list --count "$tags"..origin/main) commit(s) behind main"
 fi
 ```
 
 That last check is why the promote step above builds `lattex:main-<sha>` *first* and
-tags `dogfood` as an alias onto it: the immutable tag is the image's only durable
-record of which commit it came from. A `dogfood` built directly, with no sibling
+tags `dogfood` as an alias onto it: that tag is the only thing linking the image to a
+commit — a label you apply honestly, not one Docker enforces, since any tag can be
+re-pointed at any image afterwards. The genuinely immutable identity is the image ID,
+which cannot tell you the commit. A `dogfood` built directly, with no sibling
 tag, can still be version-checked but cannot be placed in history.
 
 If the two version strings disagree, the image predates the current source and the
@@ -236,15 +259,22 @@ the container-only `cli --input FILE` adapter feeds that file to the same CLI's
 stdin. The input mount can therefore be read-only while output stays writable:
 
 ```bash
-printf '%s\n' '\int_0^1 x^2\,dx' > 'Input/integral.tex'
+DOGFOOD_ROOT="$PWD"                       # one explicit root; every command below reuses it
+printf '%s\n' '\int_0^1 x^2\,dx' > "$DOGFOOD_ROOT/Input/integral.tex"
 
 docker run --rm \
   --user "$(id -u):$(id -g)" \
-  -v "$PWD/Input:/lattex/input:ro" \
-  -v "$PWD/Output:/lattex/output" \
+  -v "$DOGFOOD_ROOT/Input:/lattex/input:ro" \
+  -v "$DOGFOOD_ROOT/Output:/lattex/output" \
   lattex:local cli --input '/lattex/input/integral.tex' \
   -o '/lattex/output/integral.svg'
 ```
+
+> 📎 **Name the root once.** Mounting an absolute path and then writing a *relative* `Input/`
+> is how a job vanishes: run the two commands from different directories and the file lands
+> in a tree nobody is watching. Nothing errors — it looks exactly like the worker ignoring
+> your job. `$DOGFOOD_ROOT` is here so "Input/" means one directory in every command on this
+> page.
 
 ### Long-running watch flow
 
@@ -256,8 +286,8 @@ image's non-root `10001:10001` identity instead.
 ```bash
 docker run -d --name lattex-watch \
   --user "$(id -u):$(id -g)" \
-  -v "$PWD/Input:/lattex/input" \
-  -v "$PWD/Output:/lattex/output" \
+  -v "$DOGFOOD_ROOT/Input:/lattex/input" \
+  -v "$DOGFOOD_ROOT/Output:/lattex/output" \
   lattex:local watch
 
 docker logs -f lattex-watch
@@ -286,8 +316,8 @@ root when complete:
 
 ```bash
 printf '%s\n' '\begin{aligned}' 'a &= b + c \\' 'd &= e' '\end{aligned}' \
-  > 'Input/.derivation.tex.tmp'
-mv 'Input/.derivation.tex.tmp' 'Input/derivation.tex'
+  > "$DOGFOOD_ROOT/Input/.derivation.tex.tmp"
+mv "$DOGFOOD_ROOT/Input/.derivation.tex.tmp" "$DOGFOOD_ROOT/Input/derivation.tex"
 ```
 
 Claims are atomic moves into `processing/<job-id>/<original-name>`; keeping the

@@ -97,8 +97,11 @@ Two things in there are worth knowing even if you never read the rest:
   ships your working tree, and any tag can be re-pointed at any image afterwards.
 - **Re-pointing `lattex:dogfood` does not update a running container.** A container binds
   to the image *ID* it was created from, so `docker restart` keeps serving the old build.
-  The tell is a bare hex ID where the tag name belongs in `docker ps`; the fix is to
-  recreate the container, and the check that describes what is actually serving you is
+  There is no visual tell: a container keeps the image *reference string* it was created
+  with, so `docker ps` goes on printing `lattex:dogfood` however far the tag has moved.
+  Compare the IDs instead — `docker inspect -f '{{.Image}}' <name>` against
+  `docker image inspect lattex:dogfood --format '{{.Id}}'` — and recreate the container when
+  they differ. The check that describes what is actually serving you is
   `docker exec <name> java -jar /opt/lattex/lattex.jar --version`.
 
 ---
