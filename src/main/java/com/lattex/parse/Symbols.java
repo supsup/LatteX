@@ -842,5 +842,20 @@ final class Symbols {
         // flush-right, middle centred (applied per-row in layout). The starred form differs
         // only in numbering, which LatteX does not render.
         Map.entry("multline", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MULTLINE, ColumnAlign.CENTER)),
-        Map.entry("multline*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MULTLINE, ColumnAlign.CENTER)));
+        Map.entry("multline*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MULTLINE, ColumnAlign.CENTER)),
+        // equation*/displaymath: a single centred display line — structurally a one-row gather,
+        // which is why they reuse GATHER rather than earning a kind (plan 4f1ffc87).
+        //
+        // WHY THESE TWO AND NOT `equation`. Both are EXPLICITLY UNNUMBERED: neither spelling
+        // promises a number, so rendering them carries no omission and needs no caveat. The
+        // NUMBERED `equation` is deliberately absent here and still throws Unknown environment,
+        // pending a crew ruling (lattex/865): the crew made it binding that a numbered form must
+        // state or implement its numbering rather than drop it silently — and the measurement
+        // that complicates it is that `align`, `gather`, `multline` and `eqnarray` ALREADY drop
+        // it silently today (render of `align` is byte-identical to `align*`). Adding `equation`
+        // silently would deepen that; adding it with a caveat while its five siblings stay quiet
+        // would be arbitrary. Neither is mine to choose, so this commit closes only the half
+        // that is uncontested under every option.
+        Map.entry("equation*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
+        Map.entry("displaymath", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)));
 }
