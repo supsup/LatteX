@@ -6,6 +6,22 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### `./gradlew test` no longer launches a browser
+
+The core suite ran the six real-browser BrewShot pins inline, so every `test` invocation started
+host Chrome — slow on a developer machine, and on a Chrome-less one indistinguishable from a
+failing build. The pins now carry `@Tag("capture")` and run in a dedicated **`browserTest`** task.
+
+`check` depends on `browserTest`, so the browser assertions are **never optional in CI** — the
+split is about *where* they run, not *whether*. A browser pin that becomes opt-in is a browser pin
+nobody runs.
+
+Measured on this change: core `test` went from ~65s to **8s** (973 tests), `browserTest` runs the
+remaining **17** in 56s. 973 + 17 = 990, the same total as before — the split moves tests, it does
+not drop them. `LATTEX_REQUIRE_BROWSER=1` still turns a missing browser into a loud failure rather
+than a skip.
+
+
 ### `unfold` no longer expands a coefficient summand into the wrong number (bug fix)
 
 **A `\sum` with a coefficient unfolded to a false sum.** Implicit multiplication in

@@ -73,7 +73,15 @@ dependencies {
 // below (which sets -Dlattex.examples.write=true) writes the tracked examples/
 // dir. Verify: run `test`, then `git status --porcelain` must be empty.
 tasks.test {
-    useJUnitPlatform()
+    // THE CORE SUITE NEVER LAUNCHES A BROWSER (plan 8b7596e0 revived). Six real-browser BrewShot
+    // pins carry @Tag("capture"); they run in `browserTest` below, which `check` still depends on
+    // — so the assertions are never optional in CI, only separated from the fast core run.
+    //
+    // Excluded rather than deleted, and `check` still requires them, because a browser pin that
+    // becomes opt-in is a browser pin nobody runs. The split is about WHERE they run, not whether.
+    useJUnitPlatform {
+        excludeTags("capture")
+    }
     // Input for ReadmeCorpusFigureTest: the README itself. It is not a source file, so without
     // this Gradle holds :test UP-TO-DATE after a README-only edit and the guard never runs —
     // inert precisely when the prose it guards is being changed. (Observed on the sibling
@@ -131,6 +139,26 @@ tasks.test {
 // PNG/GIF output lands beside the pages; references, not byte-goldens — animation
 // frames differ run to run). NOT wired into `check`/`build`; run explicitly, review
 // the diff, commit.
+// The real-browser BrewShot pins (effects page, fx lifecycle, GIF liveness, fx gallery,
+// rendered-error blob, interactive-math runtime) — everything tagged "capture". Split out of the
+// core suite so `./gradlew test` never launches host Chrome, which made the fast path slow and
+// made a Chrome-less machine look like a failing one. Honors the existing LATTEX_REQUIRE_BROWSER
+// convention: without a browser these skip, with LATTEX_REQUIRE_BROWSER=1 they fail loud.
+val browserTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Real-browser BrewShot pins (tag \"capture\"); launches host Chrome."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    shouldRunAfter(tasks.test)
+    useJUnitPlatform {
+        includeTags("capture")
+    }
+}
+
+tasks.check {
+    dependsOn(browserTest)
+}
+
 val generateExamples by tasks.registering(Test::class) {
     group = "documentation"
     description = "Regenerates the tracked examples/ pages + BrewShot visual references."
