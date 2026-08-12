@@ -45,8 +45,10 @@ circulating, declaring a version, and the version named nothing you could check 
 
 So the rule this whole document is built on:
 
-> **A version string tells you what someone declared. Only a tag tells you what was built.**
-> Pin tagged releases. Treat a bare version on an untagged build as a label, not evidence.
+> **A version string tells you what someone declared. A tag is the only thing that links an
+> image to a commit — and it is a label applied by discipline, not evidence Docker enforces.**
+> Pin tagged releases. Treat a bare version on an untagged build as a label, not evidence, and
+> treat the tag itself as a claim that is only as good as the fence that produced it (Act I).
 
 (If you also work on Sirentide: its jars stamp `Sirentide-Source-Revision`, a full 40-hex
 commit, directly into the manifest. LatteX does not. That is a real asymmetry, and it is
@@ -58,7 +60,7 @@ the artifact.)
 ## Act I — The Dockerfile, setting by setting
 
 ```sh
-git fetch -q origin main
+git fetch -q origin main || { echo 'refusing: fetch failed, origin/main may be stale'; exit 1; }
 test -z "$(git status --porcelain)" || { echo 'refusing: working tree is dirty'; exit 1; }
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" \
   || { echo 'refusing: HEAD is not origin/main'; exit 1; }
@@ -67,12 +69,19 @@ SHA=$(git rev-parse --short HEAD)           # every example below reuses this
 docker build -t "lattex:main-$SHA" .
 ```
 
-**Why three lines of fence before one line of build.** `docker build .` sends *your working
+**Why four lines of fence before one line of build.** `docker build .` sends *your working
 tree* as the context, so a name derived from `origin/main` is a claim about a commit that may
 be nothing like what you just built. Dirty tree, wrong branch, unfetched remote — each one
 produces an image confidently labelled with a commit it does not contain. The fence makes the
 tag's claim true at the moment it is made, and `--short HEAD` names the thing actually built
 rather than the thing you hoped was checked out.
+
+**The `||` on the fetch is the load-bearing one, and an earlier draft of this section left it
+off.** Without it a failed fetch is just a message on the way past: `origin/main` keeps whatever
+value it had from your last successful fetch, `HEAD` still equals that stale ref, both remaining
+tests pass, and the build is blessed. The check that exists to catch an unfetched remote is
+precisely the one that fails open when the remote is unfetched. A guard whose first step can
+fail silently is not a guard.
 
 No build arguments. Nothing to forget. Prerequisite: **Docker, and nothing else** — no host
 JDK, no Gradle, no Chrome. Roughly a few minutes cold, ~227 MB final.
@@ -145,7 +154,10 @@ docker run --rm lattex:main-$SHA cli --version
 sed -n 's/^version = "\(.*\)"$/source declares: \1/p' build.gradle.kts
 ```
 
-Both sides, compared. Not one side trusted.
+Both sides *printed*, for you to compare. Nothing here compares them — an earlier draft said
+"both sides, compared", which credited these two commands with a check neither performs. If you
+want the comparison made rather than displayed, that is what `assert_version` in
+`docker/smoke-test.sh` does, and Circle 3 runs it.
 
 **Circle 3 — the full contract:**
 
@@ -215,19 +227,28 @@ elif [ "$n" -gt 1 ]; then
   printf '  %s\n' $tags
 elif ! git cat-file -e "${tags}^{commit}" 2>/dev/null; then
   echo "provenance unverifiable: '$tags' is not a commit in this repository"
+elif ! git fetch -q origin main; then
+  echo "provenance uncomparable: fetch failed, cannot say what 'behind main' means right now"
+elif ! git merge-base --is-ancestor "$tags" origin/main; then
+  echo "provenance DIVERGENT: $tags is a real commit but not an ancestor of origin/main —"
+  echo "  this image was built from a branch, not from main. 'behind' does not apply."
 else
-  git fetch -q origin main
   echo "built from $tags, $(git rev-list --count "$tags"..origin/main) commit(s) behind main"
 fi
 ```
 
-**Three refusals, and none of them used to be here.** The first version of this block ended with
+**Five refusals, and none of them used to be here.** The first version of this block ended with
 `head -1`, which turns "this image has several `main-<sha>` tags" into a silent arbitrary pick —
 and an arbitrary pick is indistinguishable from a correct one in the output. Verified against a
-real image carrying two such tags: `head -1` chose one and said nothing about the other. It never
-checked that the string was a commit either, so a hand-applied or typo'd tag would flow straight
-into `git log` and produce a confident count from a bad premise. Ambiguous provenance and
-unverifiable provenance are now *reported as themselves* rather than resolved by luck.
+real image carrying two such tags: `head -1` chose one and said nothing about the other.
+
+Each later arm closes a *different* way of producing a confident sentence from a bad premise, and
+the divergence arm is the subtlest: `git rev-list --count X..origin/main` returns a perfectly
+plausible integer for a commit that lives on some other branch entirely, so an image built from a
+feature branch reports as merely "3 commits behind main" rather than as not-on-main-at-all. The
+ancestry check is what makes "behind" mean what the word implies. The fetch arm is here for the
+same reason the build fence has one: a comparison against a stale `origin/main` is not a
+comparison, and silence is the wrong way to say so.
 
 Never read `RepoTags` positionally (`{{index .RepoTags 1}}`). The order is not guaranteed;
 it works until the day it silently doesn't.
@@ -257,16 +278,32 @@ from a genuine syntax error.
 ## Act V — The dogfood watcher
 
 ```sh
-mkdir -p ~/projects/dogfood/lattex/{Input,Output}
+DOGFOOD_ROOT="$HOME/projects/dogfood/lattex"   # every Act V command reuses this
+mkdir -p "$DOGFOOD_ROOT/Input" "$DOGFOOD_ROOT/Output"
 
 docker run -d --name lattex-dogfood --restart unless-stopped \
   --user "$(id -u):$(id -g)" \
-  -v ~/projects/dogfood/lattex/Input:/lattex/input \
-  -v ~/projects/dogfood/lattex/Output:/lattex/output \
+  -v "$DOGFOOD_ROOT/Input:/lattex/input" \
+  -v "$DOGFOOD_ROOT/Output:/lattex/output" \
   lattex:dogfood watch
 
 docker logs -f lattex-dogfood
 ```
+
+> 📎 **`$DOGFOOD_ROOT` is not tidiness — it is the difference between a job running and a job
+> vanishing.** Earlier drafts mounted an absolute path here and then wrote jobs to a *relative*
+> `Input/`, so a reader following along from the repository root created `./Input/q.tex`, which
+> the watcher never sees. Nothing errors: the file sits in a directory nobody is watching, and
+> the failure looks exactly like "the watcher ignored my job". Two mounted absolute paths and
+> two relative ones spelled the same way is a trap the document laid itself.
+>
+> Both directories are also spelled out rather than written `{Input,Output}`, because brace
+> expansion is a *bash* feature and this is an `sh` block. Measured both ways rather than
+> assumed: macOS `/bin/sh` (bash in POSIX mode) expands it and creates the two directories,
+> while busybox `ash` on Linux creates one literal directory named `{Input,Output}` — so the
+> watcher mounts paths that do not exist, and the reader who wrote the doc on a Mac never sees
+> it. A portability bug that only appears off the author's machine is the kind worth spending
+> two extra words on.
 
 Jobs are **visible, regular, direct-child `*.tex` files**. Not nested, not hidden, not
 symlinks, not other extensions.
@@ -274,8 +311,8 @@ symlinks, not other extensions.
 **Write hidden, then rename.** Always:
 
 ```sh
-printf '%s\n' '\int_0^1 x^2\,dx' > Input/.q.tex.tmp
-mv Input/.q.tex.tmp Input/q.tex
+printf '%s\n' '\int_0^1 x^2\,dx' > "$DOGFOOD_ROOT/Input/.q.tex.tmp"
+mv "$DOGFOOD_ROOT/Input/.q.tex.tmp" "$DOGFOOD_ROOT/Input/q.tex"
 ```
 
 The rename is atomic; a slow redirect is not. Polling defaults to 500 ms
@@ -290,25 +327,34 @@ build — restart restarts the same container, it does not re-resolve the tag. R
 
 > ⚠️ **`docker rm -f` destroys the named container, not just its process.** Anything living in
 > that container's writable layer — a partially processed job, an in-flight claim directory —
-> goes with it. Your Input/Output are bind mounts and survive; nothing else does. If a job may be
-> mid-flight, stop it gracefully first (`docker stop -t 30 lattex-dogfood`) and recreate only
-> once it has exited.
+> goes with it. `$DOGFOOD_ROOT/Input` and `Output` are bind mounts and survive, holding whatever
+> host-side ownership they already had; nothing else does. So graceful stop is the default here
+> and `-f` is the exception, not the other way round.
 
 ```sh
-docker rm -f lattex-dogfood
+docker stop -t 30 lattex-dogfood && docker rm lattex-dogfood
+# `docker rm -f` only when the graceful stop has already failed — it kills a job mid-flight.
 docker run -d --name lattex-dogfood --restart unless-stopped \
   --user "$(id -u):$(id -g)" \
-  -v ~/projects/dogfood/lattex/Input:/lattex/input \
-  -v ~/projects/dogfood/lattex/Output:/lattex/output \
+  -v "$DOGFOOD_ROOT/Input:/lattex/input" \
+  -v "$DOGFOOD_ROOT/Output:/lattex/output" \
   lattex:dogfood watch
 ```
 
-**`docker ps` shows the tell.** A bare hex ID in the image column instead of a tag name
-means the tag moved on without this container:
+**Ask for the two IDs; do not read the `docker ps` image column.** An earlier version of this
+section claimed a bare hex ID appears there when the tag has moved. That is false, and it is
+false in the direction that matters: a container keeps the image *reference string* it was
+created with, so `docker ps` goes on printing `lattex:dogfood` however far the tag has moved.
+Confirmed by read-only inspection of a real dogfood container — configured image
+`lattex:dogfood`, pinned `.Image` an ID. The tell that was supposed to reveal staleness is
+exactly as reassuring when stale as when current. Compare the IDs instead:
 
-```text
-lattex-dogfood   06950eb9bfbb     <- STALE: tag moved, container did not
-lattex-dogfood   lattex:dogfood   <- current
+```sh
+pinned=$(docker inspect -f '{{.Image}}' lattex-dogfood)
+current=$(docker image inspect lattex:dogfood --format '{{.Id}}')
+test "$pinned" = "$current" \
+  && echo "container is running the current lattex:dogfood" \
+  || echo "STALE: tag moved to ${current%%:*}… without this container — recreate it"
 ```
 
 Then ask the *running container* what it is, which is the only check that describes what is
@@ -344,12 +390,25 @@ docker run --rm lattex:dogfood cli '\frac{a}{b}' > eq.svg
 printf '%s\n' '\sqrt{2}' | docker run --rm -i lattex:dogfood cli > root.svg
 
 docker run --rm --user "$(id -u):$(id -g)" \
-  -v "$PWD/Input:/lattex/input:ro" -v "$PWD/Output:/lattex/output" \
+  -v "$DOGFOOD_ROOT/Input:/lattex/input:ro" -v "$DOGFOOD_ROOT/Output:/lattex/output" \
   lattex:dogfood cli --input /lattex/input/eq.tex -o /lattex/output/eq.svg
 ```
 
+(Same `$DOGFOOD_ROOT` as Act V, deliberately. This example used `$PWD`, which quietly made it a
+*third* root in one document — the watcher's absolute mounts, Act V's relative writes, and this.
+Each was defensible alone; together they meant "Input/" named a different directory in three
+places.)
+
 Note the input mount is **read-only** here — one-shot mode never needs to write to it. Only
 watch mode requires a writable input, because claiming is a move.
+
+**What makes the output writable is the `--user` override, not the mount.** A bind mount does not
+confer ownership: the host directory keeps the uid/gid it already had, and the container writes as
+whatever user it runs as. LatteX's image runs as its own fixed non-root uid, so without
+`--user "$(id -u):$(id -g)"` the output lands owned by that uid and a host reader can find a file
+that exists, is correct, and refuses to open. That is the same shape as the `output owned by
+10001` row in troubleshooting below — one cause, two symptoms, and the override is the fix for
+both.
 
 ---
 

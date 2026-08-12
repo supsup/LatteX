@@ -83,7 +83,7 @@ A pin that must be hand-edited every release is a pin that is wrong between rele
 
 A detailed walkthrough of running LatteX in a box: the three build stages setting by
 setting, verification in widening circles, the tag convention (throwaway `local`,
-immutable `main-<sha>`, the moving `dogfood` alias), how to tell your image has gone
+`main-<sha>` which by convention is not re-pointed, the moving `dogfood` alias), how to tell your image has gone
 stale, the watch-mode job lifecycle, one-shot mode, and troubleshooting. `README.md`
 gains a matching setup section.
 
