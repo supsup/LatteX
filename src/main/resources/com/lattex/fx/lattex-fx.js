@@ -2384,6 +2384,104 @@
     raf(function () { show.style.opacity = '1'; });
   }
 
+  // ---- substitute: every occurrence of a variable flips to a literal value ----
+  // The substituted form is PRE-RENDERED by LatteX into a hidden sibling <svg> wrapped
+  // in `.lx-fx-substituted` (same machinery as unfold — the runtime cannot lay out
+  // LaTeX). The payload was laid out WITHOUT the variable's widths, so the constants
+  // arrive already closed up around the gap; the runtime only has to swap.
+  //
+  // What makes it read as a SUBSTITUTION rather than a plain swap: the variable's own
+  // glyphs are addressed through the data-lx-var sidecar and dimmed a beat BEFORE the
+  // swap, so the eye sees the x's leave and the number arrive in their place. That is
+  // the whole reason the sidecar exists — without it this would be unfold with a
+  // different payload.
+  //
+  // ELEMENT-ANCHORED like unfold: the payload is a sibling INSIDE the span, so it rides
+  // scroll/reflow for free. NO position:fixed overlay, so NO scrollKillable — do not
+  // bolt one on.
+  //
+  // Idempotent via el.__lxSubstituted, so re-click / LatteXFx.play re-entry cannot
+  // desync. No payload (host flag off, or the body was unsupported → inert) is a no-op.
+  //
+  // The true FLIP neighbour-slide (easing the surviving constants from their collapsed
+  // positions to their payload positions) is DEFERRED: it needs a glyph-to-glyph
+  // correspondence between two independent layouts, and shipping the honest swap beats
+  // holding the effect for an animation.
+  var VARMAP_RE = /^[0-9a-f]+:[0-9]+(,[0-9]+)*$/;
+
+  function parseVarmap(el, pathCount) {
+    var raw = el.getAttribute('data-lx-var');
+    if (!raw || !VARMAP_RE.test(raw)) { return null; }
+    var idx = raw.split(':')[1].split(',').map(Number);
+    for (var i = 0; i < idx.length; i++) {
+      if (idx[i] >= pathCount) { return null; } // out-of-bounds map: refuse whole
+    }
+    return idx;
+  }
+
+  function substitute(el) {
+    var collapsed = el.querySelector(':scope > svg');
+    var payload = el.querySelector(':scope > .lx-fx-substituted');
+    if (!collapsed || !payload) { return; } // inert: no payload to arm
+
+    var toSubstituted = !el.__lxSubstituted;
+    var show = toSubstituted ? payload : collapsed;
+    var hide = toSubstituted ? collapsed : payload;
+    el.__lxSubstituted = toSubstituted;
+
+    // GENERATION GUARD (Lattice, lattex/851 P1). The dim below defers the swap behind a
+    // timer. A second click before that callback fires flips the state back, but the FIRST
+    // timer was still pending: its stale callback then revealed the payload while
+    // __lxSubstituted was already false, leaving visuals and state inverted. Bumping a
+    // generation on every entry lets the stale callback recognise that it has been
+    // superseded and do nothing. A generation counter beats clearTimeout here because it
+    // also invalidates a callback that has already been dequeued and is about to run.
+    var generation = (el.__lxSubstituteGen || 0) + 1;
+    el.__lxSubstituteGen = generation;
+
+    var swap = function () {
+      hide.hidden = true;
+      hide.style.display = 'none';
+      show.hidden = false;
+      show.style.display = 'inline-block';
+      if (reduced) { show.style.opacity = '1'; return; }
+      show.style.opacity = '0';
+      show.style.transition = 'opacity 200ms ease';
+      var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+      raf(function () { show.style.opacity = '1'; });
+    };
+
+    // Reduced motion snaps: no dim, no fade, just the swap.
+    if (reduced) { swap(); return; }
+
+    // Flipping BACK to the variable form has nothing to dim (the payload holds digits,
+    // not the variable), so it is a plain swap.
+    if (!toSubstituted) { swap(); return; }
+
+    var paths = Array.prototype.slice.call(collapsed.querySelectorAll('path'));
+    var vars = parseVarmap(el, paths.length);
+    if (!vars) { swap(); return; } // no/invalid sidecar: the swap still works
+
+    for (var i = 0; i < vars.length; i++) {
+      var p = paths[vars[i]];
+      if (!p) { continue; }
+      p.style.transition = 'opacity 140ms ease';
+      p.style.opacity = '0.15';
+    }
+    setTimeout(function () {
+      // Restore the dimmed paths ALWAYS -- even when superseded, or a reverse-click during
+      // the dim would leave the variable glyphs stuck at 0.15 opacity.
+      for (var j = 0; j < vars.length; j++) {
+        var q = paths[vars[j]];
+        if (q) { q.style.opacity = ''; q.style.transition = ''; }
+      }
+      // Superseded by a later click: that click already performed its own swap and owns
+      // the state. Doing ours now would invert visuals against __lxSubstituted.
+      if (el.__lxSubstituteGen !== generation) { return; }
+      swap();
+    }, 150);
+  }
+
   // CASCADE: an ENTER effect for a STACKED, multi-row block (aligned / cases /
   // matrix / an array of equations) — the rows REVEAL one at a time, top to
   // bottom, a beat between them, so a derivation reads as reasoning unfolding line
@@ -2544,6 +2642,7 @@
     if (name === 'precedence') { precedence(el); return; } // arming: binds the hover cascade
     if (name === 'cancel') { cancel(el); return; } // semantic: strike + puff the exactly-twice pair
     if (name === 'unfold') { unfold(el); return; } // semantic: toggle \sum ⇄ pre-rendered terms
+    if (name === 'substitute') { substitute(el); return; } // semantic: flip a variable ⇄ its value
     if (!VOCAB[name] || name === 'none') { return; }
     if (reduced) { return; }
     el.style.animation = 'none';
@@ -2650,6 +2749,8 @@
       scrollKillable: scrollKillable,
       cancel: cancel,
       unfold: unfold,
+      substitute: substitute,
+      parseVarmap: parseVarmap,
       cascade: cascade,
       play: play,
       init: init

@@ -380,10 +380,16 @@ class FxRuntimeCascadeTest {
     void runtimeAddsNoNewDataLxAttributeFamilyForCascade() {
         // Enumerate every data-lx-* name the runtime SOURCE references (not a hand-kept
         // list), and require each to belong to a family main already knew at 8b2ff899:
-        // the fx.* config attributes (data-lx-fx-*), or the two renderer sidecars
-        // (data-lx-glyphmap / data-lx-groupmap). A cascade row/band sidecar would be a
-        // NEW family and fail here; the explicit forbidden-name checks name the scope's
-        // prohibitions directly so a differently-named sidecar cannot slip by.
+        // the fx.* config attributes (data-lx-fx-*), or a renderer sidecar
+        // (data-lx-glyphmap / data-lx-groupmap / data-lx-var). A cascade row/band sidecar
+        // would be a NEW family and fail here; the explicit forbidden-name checks name the
+        // scope's prohibitions directly so a differently-named sidecar cannot slip by.
+        //
+        // data-lx-var joined the known set with fx.substitute (plan ba7a7931): it is a
+        // renderer-derived sidecar of exactly the glyphmap/groupmap kind — emitted by
+        // SvgEmitter off the shared emit-order traversal, value-constrained, read-only to
+        // the runtime. This guard is about the runtime not INVENTING attribute families,
+        // and the widening is deliberate and reviewed, not incidental.
         String runtime = LatteX.fxRuntimeJs();
         Matcher m = Pattern.compile("data-lx-[a-z0-9-]+").matcher(runtime);
         Set<String> names = new TreeSet<>();
@@ -393,11 +399,11 @@ class FxRuntimeCascadeTest {
         assertTrue(names.contains("data-lx-glyphmap") && names.contains("data-lx-groupmap"),
             "sanity: the known renderer sidecars must still be present (enumeration works)");
         Pattern known = Pattern.compile(
-            "^data-lx-fx-[a-z-]*$|^data-lx-glyphmap$|^data-lx-groupmap$");
+            "^data-lx-fx-[a-z-]*$|^data-lx-glyphmap$|^data-lx-groupmap$|^data-lx-var$");
         for (String n : names) {
             assertTrue(known.matcher(n).matches(),
                 "runtime references a data-lx-* attribute outside the known families "
-                    + "(fx.* config / glyphmap / groupmap): " + n);
+                    + "(fx.* config / glyphmap / groupmap / var): " + n);
             assertFalse(n.contains("cascade") || n.contains("row") || n.contains("band"),
                 "cascade must add NO row/band/cascade sidecar attribute: " + n);
         }

@@ -2,15 +2,8 @@ package com.lattex.parse;
 
 import com.lattex.parse.MathNode.Atom;
 import com.lattex.parse.MathNode.BigOperator;
-import com.lattex.parse.MathNode.Boxed;
-import com.lattex.parse.MathNode.Colored;
-import com.lattex.parse.MathNode.Fenced;
-import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.MathClass;
 import com.lattex.parse.MathNode.MathList;
-import com.lattex.parse.MathNode.Phantom;
-import com.lattex.parse.MathNode.Radical;
-import com.lattex.parse.MathNode.SupSub;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -65,12 +58,8 @@ public final class SumExpansion {
      */
     public record Result(MathNode expanded, int termCount) { }
 
-    /** Signals that a summand subtree holds a node kind the pass does not traverse. */
-    private static final class UnsupportedSummand extends RuntimeException {
-        UnsupportedSummand() {
-            super(null, null, false, false);
-        }
-    }
+    // The index substitution itself lives in AtomSubstitution, shared with
+    // SubstituteExpansion — see that class for why it is one producer and not two copies.
 
     /**
      * Expand a parsed expression into its explicit terms, or {@link Optional#empty()}
@@ -128,11 +117,11 @@ public final class SumExpansion {
                 if (k > start) {
                     out.add(new Atom('+', MathClass.BIN));
                 }
-                for (MathNode item : summand) {
-                    substituteInto(out, item, indexVar, k);
-                }
+                // The whole summand in ONE sibling walk, so the juxtaposition guard can
+                // see across items: `\sum 2i` must expand to 2·1 + 2·2, never 21 + 22.
+                AtomSubstitution.replaceList(out, summand, indexVar, k);
             }
-        } catch (UnsupportedSummand unsupported) {
+        } catch (AtomSubstitution.UnsupportedNode unsupported) {
             return Optional.empty();
         }
         return Optional.of(new Result(new MathList(out), termCount));
@@ -191,73 +180,4 @@ public final class SumExpansion {
         return Character.isLetter(a.codePoint());
     }
 
-    /**
-     * Deep-copy {@code node} into {@code out}, substituting every {@link Atom} whose
-     * code point equals the index with the digit atom(s) of {@code k}. Throws
-     * {@link UnsupportedSummand} on any node kind not traversed (→ inert expansion).
-     */
-    private static void substituteInto(List<MathNode> out, MathNode node, int indexVar, int k) {
-        if (node instanceof Atom a) {
-            if (a.codePoint() == indexVar) {
-                out.addAll(digitAtoms(k));      // splice: 10 → [Atom(1), Atom(0)]
-            } else {
-                out.add(a);                     // records are immutable — share
-            }
-            return;
-        }
-        out.add(substitute(node, indexVar, k));
-    }
-
-    /** Deep-copy a single (non-spliced) node with the index substituted. */
-    private static MathNode substitute(MathNode node, int indexVar, int k) {
-        return switch (node) {
-            case Atom a -> a.codePoint() == indexVar ? asNode(digitAtoms(k)) : a;
-            case MathList ml -> {
-                List<MathNode> items = new ArrayList<>();
-                for (MathNode item : ml.items()) {
-                    substituteInto(items, item, indexVar, k);
-                }
-                yield new MathList(items);
-            }
-            case SupSub s -> new SupSub(
-                substitute(s.base(), indexVar, k),
-                s.sup() == null ? null : substitute(s.sup(), indexVar, k),
-                s.sub() == null ? null : substitute(s.sub(), indexVar, k));
-            case Fraction f -> new Fraction(
-                substitute(f.numerator(), indexVar, k),
-                substitute(f.denominator(), indexVar, k),
-                f.hasRule(), f.fractionStyle());
-            case Radical r -> new Radical(
-                substitute(r.radicand(), indexVar, k),
-                r.index() == null ? null : substitute(r.index(), indexVar, k));
-            case Fenced fe -> new Fenced(
-                fe.leftDelim(), substitute(fe.body(), indexVar, k), fe.rightDelim());
-            case Colored c -> new Colored(substitute(c.body(), indexVar, k), c.color());
-            case Boxed b -> new Boxed(substitute(b.body(), indexVar, k));
-            case Phantom p -> new Phantom(
-                substitute(p.content(), indexVar, k), p.keepWidth(), p.keepVertical());
-            // Leaves that structurally cannot hold an index atom — pass through as-is.
-            case MathNode.Spacing sp -> sp;
-            case MathNode.MiddleDelim md -> md;
-            case MathNode.SizedDelim sd -> sd;
-            case MathNode.OperatorName on -> on;
-            case MathNode.TextRun tr -> tr;
-            // Any other kind: degrade INERT rather than risk a silent mis-render.
-            default -> throw new UnsupportedSummand();
-        };
-    }
-
-    /** A digit run as a single node: one Atom, or a MathList for multi-digit. */
-    private static MathNode asNode(List<MathNode> digits) {
-        return digits.size() == 1 ? digits.get(0) : new MathList(digits);
-    }
-
-    /** The decimal digits of a non-negative int as ORD atoms (parser-identical class). */
-    private static List<MathNode> digitAtoms(int k) {
-        List<MathNode> digits = new ArrayList<>();
-        for (char c : Integer.toString(k).toCharArray()) {
-            digits.add(new Atom(c, MathClass.ORD));
-        }
-        return digits;
-    }
 }

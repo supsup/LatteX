@@ -266,6 +266,25 @@ real production `/docs` integration ran, minus its framework:
    sanitizer allow-list slice; a LatteX-standalone host that adds the extra
    attributes/class above gets full `unfold` now.
 
+   `substitute` has the SAME shape and the same dependency, so its allow-list is
+   worth stating rather than inferring from unfold's. Beyond the base five it
+   needs: the `substitute` value on `fx.click`/`fx.enter`/`fx.hover`, the
+   `data-lx-fx-substitute` marker (the literal target), the `data-lx-var`
+   sidecar (the variable's `<path>` addresses — what the runtime dims), the
+   nested `lx-fx-substituted` class on the payload `span`, and that payload's
+   pre-JS `hidden` attribute.
+
+   **What breaks if each is stripped**, because they fail differently and the
+   failures are not equally visible:
+   - `hidden` or `lx-fx-substituted` → **both** forms render at once, stacked.
+     Looks like a rendering bug rather than a policy decision.
+   - `data-lx-fx-substitute` → the effect never arms; the equation typesets
+     normally and the click does nothing.
+   - `data-lx-var` → the swap still works, silently losing only the dim. This is
+     the one that degrades QUIETLY: a host stripping it sees a working-but-duller
+     effect and no error anywhere.
+   Same `/docs` caveat as `unfold`: the Stafficy host does not allow these today.
+
 Skip all four and Sam's original promise holds: static math, zero runtime. Do
 them and the same pages get the full catalogue — with JavaScript off, readers
 still get perfect static math.

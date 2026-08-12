@@ -146,6 +146,8 @@ final class LxOptionsParser {
         Map<Trigger, Effect> effects = new EnumMap<>(Trigger.class);
         String duration = null;
         Color glowColor = null;
+        String substituteTo = null;
+        String substituteVar = null;
         String intent = null;
         String concept = null;
         String a11yLabel = null;
@@ -245,6 +247,11 @@ final class LxOptionsParser {
                                     "invalid \\lx option \"" + key + "\": " + e.getMessage());
                             }
                         }
+                        // The substitute target and (optional) variable. Both are
+                        // validated in EffectSpec, like fx.duration — one validator,
+                        // so the parser and a directly-constructed spec cannot disagree.
+                        case "fx.substitute-to" -> substituteTo = value;
+                        case "fx.substitute-var" -> substituteVar = value;
                         default -> throw unknownKey(key);
                     }
                 }
@@ -331,7 +338,7 @@ final class LxOptionsParser {
 
         return new LxOptions(
             new RenderOptions(scale, color, mathStyle),
-            new EffectSpec(effects, duration, glowColor),
+            new EffectSpec(effects, duration, glowColor, substituteTo, substituteVar),
             new Semantics(intent, concept, a11yLabel, data));
     }
 

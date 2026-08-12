@@ -6,6 +6,7 @@ import com.lattex.layout.LayoutContext;
 import com.lattex.layout.LayoutEngine;
 import com.lattex.layout.PositionedGlyph;
 import com.lattex.parse.MathNode;
+import com.lattex.parse.SubstituteExpansion;
 import com.lattex.parse.SumExpansion;
 import com.lattex.parse.MathNode.Accent;
 import com.lattex.parse.MathNode.Atom;
@@ -563,6 +564,8 @@ public final class LatteX {
             // and the sum typesets inert (no payload, no marker). See RenderOptions#interactiveExpansion.
             String payload = "";
             String expandMarker = "";
+            String substituteMarker = "";
+            String varmap = "";
             if (opts.interactiveExpansion() && usesUnfold(fx)) {
                 // FAIL-INERT BOUNDARY (review lattex-308 blocker 1): the unfold payload is
                 // OPTIONAL decoration — arming it must never break an already-valid collapsed
@@ -597,7 +600,52 @@ public final class LatteX {
                     expandMarker = "";
                 }
             }
-            return openTag(fx, sem, glyphmap, groupmap, expandMarker) + svg + payload + "</span>";
+
+            // fx.*=substitute — the second member of the numeric-substitution family, on the
+            // SAME double gate and the SAME pre-render-into-a-hidden-sibling machinery. The
+            // payload is laid out WITHOUT the variable's widths, so the constants arrive
+            // already closed up around the gap; the runtime only has to swap.
+            if (opts.interactiveExpansion() && usesSubstitute(fx) && payload.isEmpty()) {
+                // Same FAIL-INERT boundary as unfold: an optional payload must never break
+                // an already-valid collapsed formula. RuntimeException (incl. the emitter
+                // cap throw) degrades inert; JVM-fatal Errors still propagate.
+                try {
+                    java.util.Optional<Integer> target = substituteTarget(fx);
+                    if (target.isPresent()) {
+                        java.util.Optional<SubstituteExpansion.Result> sub =
+                            SubstituteExpansion.expand(body, target.get(),
+                                fx.substituteVarCodePoint().orElse(null));
+                        if (sub.isPresent()) {
+                            MathNode substitutedBody = sub.get().substituted();
+                            LayoutContext sctx = new LayoutContext(font, font.mathConstants(),
+                                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+                            Layout slayout = LayoutEngine.layout(substitutedBody, sctx);
+                            String ssvg = SvgEmitter.emit(slayout, font, describe(substitutedBody),
+                                style.color(), opts.fluid());
+                            // The variable's path indices in the COLLAPSED layout — the
+                            // addresses the runtime cross-fades in place. Emitted from the
+                            // collapsed `layout`, never the payload's, because that is the
+                            // SVG whose paths the sidecar's indices have to address.
+                            String vm = SvgEmitter.varmap(layout, font, sub.get().variableCodePoint());
+                            // A payload with no addressable variable would swap with no
+                            // correspondence to animate; keep the whole thing inert instead
+                            // of stamping a marker the runtime cannot honour.
+                            if (!vm.isEmpty()) {
+                                payload = "<span class=\"lx-fx-substituted\" hidden>"
+                                    + ssvg + "</span>";
+                                substituteMarker = Integer.toString(target.get());
+                                varmap = vm;
+                            }
+                        }
+                    }
+                } catch (RuntimeException degradeInert) {
+                    payload = "";
+                    substituteMarker = "";
+                    varmap = "";
+                }
+            }
+            return openTag(fx, sem, glyphmap, groupmap, expandMarker, substituteMarker, varmap)
+                + svg + payload + "</span>";
         });
     }
 
@@ -608,6 +656,34 @@ public final class LatteX {
      */
     private static boolean usesUnfold(EffectSpec fx) {
         return fx.effects().containsValue(Effect.UNFOLD);
+    }
+
+    /**
+     * Whether {@code fx} carries a {@code substitute} effect on any trigger — the
+     * per-equation author opt-in half of the double gate, the same shape
+     * {@link #usesUnfold} has. The host-flag half is the SHARED
+     * {@link RenderOptions#interactiveExpansion()}: one capability, "LatteX pre-renders
+     * computed material", rather than a flag per effect.
+     */
+    private static boolean usesSubstitute(EffectSpec fx) {
+        return fx.effects().containsValue(Effect.SUBSTITUTE);
+    }
+
+    /**
+     * The validated {@code fx.substitute-to} target as an int, or empty when the author
+     * gave none. The grammar was already enforced in {@link EffectSpec} (at parse time, one
+     * validator); this only re-reads it, and still refuses rather than throwing if the
+     * value somehow does not parse — a directive missing its target degrades INERT, it does
+     * not break the formula.
+     */
+    private static java.util.Optional<Integer> substituteTarget(EffectSpec fx) {
+        return fx.substituteToValue().flatMap(raw -> {
+            try {
+                return java.util.Optional.of(Integer.valueOf(raw));
+            } catch (NumberFormatException notANumber) {
+                return java.util.Optional.empty();
+            }
+        });
     }
 
     /**
@@ -642,7 +718,7 @@ public final class LatteX {
      * escaping, applied exactly once), so no raw author string reaches the attribute.
      */
     private static String openTag(EffectSpec fx, Semantics sem, String glyphmap, String groupmap,
-                                  String expandMarker) {
+                                  String expandMarker, String substituteMarker, String varmap) {
         StringBuilder sb = new StringBuilder("<span class=\"lx-math\"");
         sem.intentValue().ifPresent(v -> sb.append(" data-lx-intent=\"").append(v).append('"'));
         sem.conceptValue().ifPresent(v -> sb.append(" data-lx-concept=\"").append(v).append('"'));
@@ -664,6 +740,16 @@ public final class LatteX {
         // staggered-sprout addressing.
         if (!expandMarker.isEmpty()) {
             sb.append(" data-lx-fx-expand=\"").append(expandMarker).append('"');
+        }
+        // Substitute target marker (renderer-derived, -?[0-9]+) and the variable's path
+        // addresses (renderer-derived, [0-9a-f]+:[0-9,]+). Both are stamped only when the
+        // double-gated substitution pass produced a payload, and they are stamped together
+        // — the marker without the varmap would name a flip the runtime cannot locate.
+        if (!substituteMarker.isEmpty()) {
+            sb.append(" data-lx-fx-substitute=\"").append(substituteMarker).append('"');
+        }
+        if (!varmap.isEmpty()) {
+            sb.append(" data-lx-var=\"").append(varmap).append('"');
         }
         // data.* attributes (keys already identifier-validated) — iterated in sorted
         // key order so the generated HTML is deterministic regardless of the source

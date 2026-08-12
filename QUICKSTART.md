@@ -153,8 +153,10 @@ The key set:
 | `style.scale` | `sm` (0.8), `md` (1.0), `lg` (1.4), or a bounded number like `1.4` |
 | `style.color` | `currentColor`, or a `#rgb` / `#rrggbb` hex literal |
 | `style.mathstyle` | `display` \| `text` \| `script` \| `scriptscript` |
-| `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `constellation` \| `thread` \| `precedence` \| `cancel` \| `unfold` \| `none` — see `examples/effects.html` live (`unfold` is opt-in/flag-gated and not shown there — see its own preview and the callout below) |
+| `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `constellation` \| `thread` \| `precedence` \| `cancel` \| `unfold` \| `substitute` \| `none` — see `examples/effects.html` live (`unfold` and `substitute` are opt-in/flag-gated and not shown there — see their own previews and the callout below) |
 | `fx.duration` | a `<n>ms` value, e.g. `250ms` |
+| `fx.substitute-to` | the literal integer `substitute` flips to, e.g. `3` or `-12` (at most 6 digits). The substituted form is grouped where adjacency would change the meaning: `2x` with `3` renders `2 \cdot 3`, never `23`; a negative after any operand keeps its product, so `ax` with `-3` renders `a \cdot -3`, never `a-3`; and a negative under a power or subscript is parenthesised, so `2x^2` with `-3` renders `2(-3)^2`, never `2-3^2`. `\textcolor` is transparent to both guards |
+| `fx.substitute-var` | the single letter to replace, e.g. `x` — optional; omit it and the body's one distinct letter is used |
 | `intent` / `concept` | a lowercase identifier (`^[a-z][a-z0-9_]*$`), e.g. `function` |
 | `a11y.label` | free-text accessibility label — stored raw; illegal control characters are stripped and it is HTML-escaped once when stamped onto the container (an unpaired surrogate fails loud) |
 | `data.<name>` | an identifier key + identifier value, e.g. `data.graph=true` |
@@ -165,13 +167,26 @@ is insignificant. This is the quickstart view — the full option grammar and ra
 live in the **`lattex-render-styling-options`** design plan. See
 [examples/showcase.html](examples/showcase.html) for the macro end-to-end.
 
-> **`unfold` is doubly gated.** It is the one effect that needs LatteX to *compute*
-> (pre-render a bounded `\sum` into its explicit terms), so it stays off unless BOTH
-> the host opts in — `RenderOptions.defaults().withInteractiveExpansion(true)`, passed
-> to `LatteX.renderStyledHtml(latex, opts)` (default **off**) — AND the equation carries
-> the `fx.*=unfold` directive. With the flag off, an `unfold` directive typesets the sum
-> normally and simply never arms. Scope: `\sum` with literal-integer bounds, a single
-> letter index, a bare summand, up to 12 terms; anything else degrades inert.
+> **`unfold` and `substitute` are doubly gated.** They are the numeric-substitution
+> family — the effects that need LatteX to *compute* (pre-render a bounded `\sum` into
+> its explicit terms, or an expression with its variable replaced by a value). They stay
+> off unless BOTH the host opts in — `RenderOptions.defaults().withInteractiveExpansion(true)`,
+> passed to `LatteX.renderStyledHtml(latex, opts)` (default **off**) — AND the equation
+> carries the matching directive. ONE flag covers both: the capability is "LatteX
+> pre-renders computed material", not a switch per effect. With the flag off, the
+> directive typesets normally and simply never arms.
+>
+> - `unfold` scope: `\sum` with literal-integer bounds, a single letter index, a bare
+>   summand, up to 12 terms.
+> - `substitute` scope: a literal-integer `fx.substitute-to` target, and ONE variable —
+>   auto-detected when the body has exactly one distinct letter, otherwise named with
+>   `fx.substitute-var`. Naming a variable the body does not contain is inert too,
+>   deliberately: a payload identical to the source would present an author typo as a
+>   working effect.
+>
+> Anything outside those scopes degrades inert rather than guessing. Note that
+> substituting into an implicit product inserts an explicit `\cdot` — `2x` with `x=3`
+> renders `2 \cdot 3`, because `23` would be a different number.
 
 ## 3.5 User macros — `\newcommand` and notation packs
 
