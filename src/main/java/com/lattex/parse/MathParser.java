@@ -360,6 +360,7 @@ public final class MathParser {
         if (latex == null) {
             throw new MathSyntaxException("input must not be null");
         }
+        latex = stripWholeInputMathWrapper(latex);
         if (macros == null) {
             throw new MathSyntaxException("macros must not be null (use Map.of())");
         }
@@ -2051,6 +2052,75 @@ public final class MathParser {
      * path was unreachable (Conf review lattex/210 F2). A plain {@code {…}} group
      * is NOT opaque: {@code $} inside it still toggles, as in LaTeX.
      */
+
+    /**
+     * Strips a WHOLE-INPUT math wrapper — a matched outer {@code $…$} or {@code \(…\)} pair —
+     * so a caller who pastes real LaTeX gets the maths rather than the delimiters (plan
+     * 467f691d; crew RFC stafficy/16752, unanimous).
+     *
+     * <p><strong>The defect this closes.</strong> A top-level {@code $} is only a math toggle
+     * inside a {@code \text{…}} argument; at top level it lexed as an ordinary character, so
+     * {@code render("$x^2$")} SUCCEEDED and drew literal dollar glyphs — 2587 bytes against 1247
+     * for the bare body. The most common way anyone writes inline maths rendered silently wrong,
+     * while {@code \begin{equation}} correctly threw. The wrapper failed loud; the delimiter
+     * failed silent.
+     *
+     * <p><strong>WHOLE-INPUT AND MATCHED ONLY.</strong> The closer must be the LAST character:
+     * {@code $a$ + $b$} opens and closes with {@code $} but those two are not a pair, and
+     * stripping them would yield {@code a$ + $b} — normalization eating content, which is the
+     * failure mode this method must never have. The scan therefore finds the MATCH for the
+     * opening delimiter and strips only if that match ends the input.
+     *
+     * <p>Reuses {@link #indexOfUnescapedDollar}, the same scanner the {@code \text{…}} toggle
+     * uses, so "what is an unescaped dollar" cannot mean two different things in one parser —
+     * escapes and nested text-family arguments are handled identically by construction. An
+     * escaped {@code \$} is therefore never a delimiter and still draws a literal glyph.
+     *
+     * <p>OUT OF SCOPE, deliberately: {@code $$…$$} (display maths) and {@code \[…\]} are NOT
+     * stripped. The crew agreed the inline pair only; accepting a display delimiter and then
+     * rendering it inline would be accepting a notation whose meaning is dropped, which is the
+     * shape the same RFC rejected for unnumbered {@code equation}.
+     */
+    private static String stripWholeInputMathWrapper(String latex) {
+        String t = latex.strip();
+        if (t.length() < 2) {
+            return latex;
+        }
+        if (t.charAt(0) == '$') {
+            // `$$…$$` is display maths, out of scope — a second `$` at index 1 is not our pair.
+            if (t.charAt(1) == '$') {
+                return latex;
+            }
+            int close = indexOfUnescapedDollar(t, 1);
+            return close == t.length() - 1 ? t.substring(1, close) : latex;
+        }
+        if (t.startsWith("\\(")) {
+            int close = indexOfUnescapedParenClose(t, 2);
+            return close == t.length() - 2 ? t.substring(2, close) : latex;
+        }
+        return latex;
+    }
+
+    /**
+     * The first {@code \)} at or after {@code from} that is not itself escaped, or -1. Mirrors
+     * {@link #indexOfUnescapedDollar}'s contract for the {@code \(…\)} spelling: a preceding
+     * backslash-run of EVEN length leaves the {@code \)} live, an odd one escapes it.
+     */
+    private static int indexOfUnescapedParenClose(String s, int from) {
+        for (int i = from; i + 1 < s.length(); i++) {
+            if (s.charAt(i) == '\\' && s.charAt(i + 1) == ')') {
+                int back = 0;
+                for (int j = i - 1; j >= 0 && s.charAt(j) == '\\'; j--) {
+                    back++;
+                }
+                if (back % 2 == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
     private static int indexOfUnescapedDollar(String s, int from) {
         int i = from;
         int n = s.length();
