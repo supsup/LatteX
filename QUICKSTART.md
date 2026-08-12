@@ -155,7 +155,7 @@ The key set:
 | `style.mathstyle` | `display` \| `text` \| `script` \| `scriptscript` |
 | `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `constellation` \| `thread` \| `precedence` \| `cancel` \| `unfold` \| `substitute` \| `none` — see `examples/effects.html` live (`unfold` and `substitute` are opt-in/flag-gated and not shown there — see their own previews and the callout below) |
 | `fx.duration` | a `<n>ms` value, e.g. `250ms` |
-| `fx.substitute-to` | the literal integer `substitute` flips to, e.g. `3` or `-12` (at most 6 digits) |
+| `fx.substitute-to` | the literal integer `substitute` flips to, e.g. `3` or `-12` (at most 6 digits). The substituted form is grouped where adjacency would change the meaning: `2x` with `3` renders `2 \cdot 3`, never `23`, and a negative value under a power or subscript is parenthesised, so `2x^2` with `-3` renders `2(-3)^2`, never `2-3^2` |
 | `fx.substitute-var` | the single letter to replace, e.g. `x` — optional; omit it and the body's one distinct letter is used |
 | `intent` / `concept` | a lowercase identifier (`^[a-z][a-z0-9_]*$`), e.g. `function` |
 | `a11y.label` | free-text accessibility label — stored raw; illegal control characters are stripped and it is HTML-escaped once when stamped onto the container (an unpaired surrogate fails loud) |

@@ -50,6 +50,18 @@ sees the `x`s leave and the value arrive in their place.
   payload and no marker. Naming an absent variable is inert *deliberately* — the payload
   would otherwise be identical to the source, presenting an author typo as a working
   effect.
+- **The substituted form keeps the meaning the author wrote.** Substitution is a splice
+  into a rendered expression, and two adjacencies change meaning rather than merely
+  looking odd. Adjacency between *digits* is positional notation, so `2x` with `x=3` must
+  not become `23`; an explicit `\cdot` is inserted at a substitution boundary, and only
+  there — a literal `12` in the source stays twelve. Adjacency against a *negative* value
+  is the same problem wearing a minus sign: a newly negative base under a power or a
+  subscript is parenthesised, so `2x^2` with `x=-3` gives `2(-3)^2` rather than `2-3^2`
+  (a subtraction, and `-(3^2)` under ordinary precedence), and `2x_2` gives `2(-3)_2`
+  rather than `2-3_2` — which additionally matters because a subscript on a numeral
+  commonly denotes a radix, making `-3_2` and `(-3)_2` different values that render
+  identically. Grouping is applied only to a sign this pass introduced; a minus already
+  in the source already meant what it says.
 - **Reduced motion** snaps instantly, and a page with no JS runtime shows the variable
   form only, never both states at once.
 - Scope for this first slice: one variable, one literal-integer target (at most six
