@@ -289,6 +289,42 @@ class SubstituteExpansionTest {
             "revert-provable: untreated the coloured form is a subtraction");
     }
 
+    @Test
+    void aChangeAWAYFromTheEdgeIsNotAnEdgeBoundary() {
+        // Lattice, lattex/887 finding 1 (BLOCKING). Provenance was derived from `substituted`
+        // — "did ANY descendant change" — which is a different question from "did the EDGE
+        // glyph change". Substituting x=4 in 2\textcolor{red}{3+x} leaves the leading glyph as
+        // the SOURCE digit 3, yet the coarse test reported a substituted leading digit and
+        // inserted a product before the wrapper.
+        //
+        // THIS IS THE 861 DEFECT, REPRODUCED BY ME. The SupSub arm was corrected for exactly
+        // this ("a boundary invented where none exists changes meaning as surely as a boundary
+        // missed") and I copied the neighbouring MathList arm's older shape into the new
+        // Colored one. The fix is now uniform across all three wrappers rather than per-arm.
+        assertEquals(parse("2\\textcolor{red}{3+4}"), sub("2\\textcolor{red}{3+x}", 4, 'x'),
+            "a change away from the leading edge invents no boundary");
+        assertEquals(parse("2\\textcolor{red}{3+4}"), sub("2\\textcolor{red}{3+x}", 4, 'x'),
+            "...and the leading 3 stays a source digit, so no product is inserted");
+        assertNotEquals(parse("2 \\cdot \\textcolor{red}{3+4}"), sub("2\\textcolor{red}{3+x}", 4, 'x'),
+            "revert-provable: subtree-wide provenance inserts a spurious product here");
+    }
+
+    @Test
+    void aTransparentWrapperEndingInANOPERATORIsNotAMultiplicand() {
+        // Lattice, lattex/887 finding 2 (BLOCKING). endsWithMultiplicand tested for a bare
+        // Atom, so every Colored/MathList tail counted as an operand — and those wrappers are
+        // transparent, so they can end in an operator. \textcolor{red}{+} followed by a
+        // substituted -3 produced `+ \cdot -3`.
+        //
+        // MY OWN ASYMMETRY: I had just made Colored see-through for the LEADING edge (does it
+        // start with a digit or a minus) and left it opaque for the TRAILING math class.
+        // Transparency is a property of the wrapper, not of the direction you look through it.
+        assertEquals(parse("\\textcolor{red}{+}-3"), sub("\\textcolor{red}{+}x", -3, 'x'),
+            "a coloured operator is still an operator: the minus is a sign, not a seam");
+        assertNotEquals(parse("\\textcolor{red}{+} \\cdot -3"), sub("\\textcolor{red}{+}x", -3, 'x'),
+            "revert-provable: an opaque tail test yields the nonsensical `+ \\cdot -3`");
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     private static MathNode parse(String latex) {

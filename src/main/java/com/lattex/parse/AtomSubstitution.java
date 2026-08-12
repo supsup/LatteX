@@ -149,20 +149,20 @@ final class AtomSubstitution {
                 boolean baseSubstituted = node instanceof SupSub original
                     && !s.base().equals(original.base());
                 yield new Replacement(replaced,
-                    baseSubstituted && leadsWithDigit(s.base()),
-                    baseSubstituted && s.sup() == null && s.sub() == null
-                        && trailsWithDigit(s.base()),
+                    baseSubstituted && leadingEdgeChanged(node, replaced) && leadsWithDigit(s.base()),
+                    baseSubstituted && trailingEdgeChanged(node, replaced)
+                        && s.sup() == null && s.sub() == null && trailsWithDigit(s.base()),
                     leadsWithDigit(s.base()),
-                    baseSubstituted && leadsWithMinus(s.base()));
+                    baseSubstituted && leadingEdgeChanged(node, replaced) && leadsWithMinus(s.base()));
             }
             case MathList ml -> {
                 MathNode first = ml.items().isEmpty() ? null : ml.items().get(0);
                 MathNode last = ml.items().isEmpty() ? null : ml.items().get(ml.items().size() - 1);
                 yield new Replacement(replaced,
-                    substituted && first != null && leadsWithDigit(first),
-                    substituted && last != null && trailsWithDigit(last),
+                    leadingEdgeChanged(node, replaced) && first != null && leadsWithDigit(first),
+                    trailingEdgeChanged(node, replaced) && last != null && trailsWithDigit(last),
                     first != null && leadsWithDigit(first),
-                    substituted && first != null && leadsWithMinus(first));
+                    leadingEdgeChanged(node, replaced) && first != null && leadsWithMinus(first));
             }
             // COLOUR IS PAINT, NOT GROUPING, so a Colored wrapper reports the facts of its
             // body rather than the silence of a boundary-drawing node (Lattice, lattex/883).
@@ -172,10 +172,10 @@ final class AtomSubstitution {
                 boolean bodySubstituted = node instanceof Colored original
                     && !c.body().equals(original.body());
                 yield new Replacement(replaced,
-                    bodySubstituted && leadsWithDigit(c.body()),
-                    bodySubstituted && trailsWithDigit(c.body()),
+                    bodySubstituted && leadingEdgeChanged(node, replaced) && leadsWithDigit(c.body()),
+                    bodySubstituted && trailingEdgeChanged(node, replaced) && trailsWithDigit(c.body()),
                     leadsWithDigit(c.body()),
-                    bodySubstituted && leadsWithMinus(c.body()));
+                    bodySubstituted && leadingEdgeChanged(node, replaced) && leadsWithMinus(c.body()));
             }
             // Fenced/Fraction/Radical/Boxed/Phantom and the pass-through leaves all draw their
             // own visible boundary; a digit inside them cannot be misread as positional
@@ -224,6 +224,60 @@ final class AtomSubstitution {
     }
 
     /**
+     * The first leaf {@link Atom} on the node's rendered edge, or {@code null} if it has none.
+     *
+     * <p>EDGE, not subtree (Lattice, lattex/887 finding 1). Provenance was derived from
+     * "did any descendant change", which is a different question: substituting {@code x=4} in
+     * {@code 2\textcolor{red}{3+x}} changes the body while the leading glyph stays the SOURCE
+     * digit {@code 3}, and the coarse test inserted a product before it. That is the same
+     * mistake the {@code SupSub} arm was corrected for at lattex/861 — a boundary INVENTED
+     * where none exists — and I reproduced it by copying the neighbouring arm's shape into the
+     * new {@code Colored} one. Comparing the edge atom before and after answers the question
+     * actually being asked, and does so uniformly for all three wrappers.
+     */
+    private static Atom leadingAtom(MathNode n) {
+        return switch (n) {
+            case Atom a -> a;
+            case SupSub s -> leadingAtom(s.base());
+            case Colored c -> leadingAtom(c.body());
+            case MathList ml -> ml.items().isEmpty() ? null : leadingAtom(ml.items().get(0));
+            default -> null;
+        };
+    }
+
+    /**
+     * The last leaf {@link Atom} on the node's BASELINE edge, or {@code null}.
+     *
+     * <p>A {@link SupSub} carrying a script contributes nothing here: the script is raised or
+     * lowered, so the node's last rendered glyph is not on the baseline and cannot collide with
+     * a following one.
+     */
+    private static Atom trailingAtom(MathNode n) {
+        return switch (n) {
+            case Atom a -> a;
+            case SupSub s -> s.sup() == null && s.sub() == null ? trailingAtom(s.base()) : null;
+            case Colored c -> trailingAtom(c.body());
+            case MathList ml -> ml.items().isEmpty() ? null
+                : trailingAtom(ml.items().get(ml.items().size() - 1));
+            default -> null;
+        };
+    }
+
+    /** Whether this pass changed the node's LEADING edge atom, rather than anything inside it. */
+    private static boolean leadingEdgeChanged(MathNode before, MathNode after) {
+        Atom b = leadingAtom(before);
+        Atom a = leadingAtom(after);
+        return a != null && !a.equals(b);
+    }
+
+    /** Whether this pass changed the node's TRAILING baseline edge atom. */
+    private static boolean trailingEdgeChanged(MathNode before, MathNode after) {
+        Atom b = trailingAtom(before);
+        Atom a = trailingAtom(after);
+        return a != null && !a.equals(b);
+    }
+
+    /**
      * Whether {@code out} ends with something a following factor would MULTIPLY — an operand
      * rather than an operator or an empty list.
      *
@@ -241,10 +295,16 @@ final class AtomSubstitution {
         if (out.isEmpty()) {
             return false;
         }
-        return !(out.get(out.size() - 1) instanceof Atom a
-            && (a.mathClass() == MathClass.BIN || a.mathClass() == MathClass.REL
-                || a.mathClass() == MathClass.OPEN || a.mathClass() == MathClass.PUNCT
-                || a.mathClass() == MathClass.OP));
+        // THROUGH transparent wrappers (Lattice, lattex/887 finding 2). Testing for a bare Atom
+        // treated every Colored/MathList tail as an operand, so `\textcolor{red}{+}x` with
+        // x=-3 produced the nonsensical `+ \cdot -3`. Colour being transparent to the LEADING
+        // edge and opaque to the TRAILING class was my own asymmetry: I made the wrapper see-
+        // through in one direction only.
+        Atom tail = trailingAtom(out.get(out.size() - 1));
+        return tail != null
+            && tail.mathClass() != MathClass.BIN && tail.mathClass() != MathClass.REL
+            && tail.mathClass() != MathClass.OPEN && tail.mathClass() != MathClass.PUNCT
+            && tail.mathClass() != MathClass.OP;
     }
 
     /**

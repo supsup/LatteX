@@ -61,10 +61,14 @@ sees the `x`s leave and the value arrive in their place.
   `2(-3)^2` rather than `2-3^2` (a subtraction, and `-(3^2)` under ordinary precedence),
   and `2x_2` gives `2(-3)_2` rather than `2-3_2` — which additionally matters because a
   subscript on a numeral commonly denotes a radix, making `-3_2` and `(-3)_2` different
-  values that render identically. Both guards see **through `\textcolor`**: colour is
-  paint, not grouping, so a coloured digit still counts at a seam and a coloured negative
-  base is still fenced. Neither guard fires after a binary operator or a relation, where a
-  minus is a sign rather than a seam, nor for a sign already present in the source.
+  values that render identically. Both guards see **through `\textcolor`** in both
+  directions: colour is paint, not grouping, so a coloured digit counts at a seam, a coloured
+  negative base is fenced, and a coloured *operator* is still an operator — `\textcolor{red}{+}x`
+  with `-3` keeps its sign rather than gaining a product. Neither guard fires after a binary
+  operator or a relation, where a minus is a sign rather than a seam, nor for a sign already
+  present in the source, nor when the substitution happened **away from the edge**: changing
+  `x` inside `2\textcolor{red}{3+x}` leaves the leading `3` a source digit, so no boundary is
+  invented there.
 - **Reduced motion** snaps instantly, and a page with no JS runtime shows the variable
   form only, never both states at once.
 - Scope for this first slice: one variable, one literal-integer target (at most six
