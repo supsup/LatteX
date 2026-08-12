@@ -59,6 +59,58 @@ sees the `x`s leave and the value arrive in their place.
 Internals: `SubstituteExpansion` joins `SumExpansion`, and the tree transform both use is
 now one shared `AtomSubstitution` rather than a copy each — that traversal's safety comes
 from refusing node kinds it does not know, and coverage that exists twice drifts.
+### `$x^2$` renders the maths, not the dollar signs
+
+**Behaviour change — read this if you render user-supplied LaTeX.** A whole-input `$…$` or
+`\(…\)` pair is now stripped and its body rendered. Previously `render("$x^2$")` **succeeded
+and drew the dollar signs as literal glyphs** — 2587 bytes against 1247 for the bare body. The
+most common way anyone writes inline maths produced a silently wrong picture.
+
+The contrast that made it a defect rather than a gap: `\begin{equation}` correctly *threw*
+`Unknown environment`. The wrapper failed loud, the delimiter failed silent — and the delimiter
+is the one everybody types.
+
+```
+render("$x^2$")     now byte-identical to  render("x^2")
+render("\(x^2\)")   now byte-identical to  render("x^2")
+```
+
+**If you were relying on visible dollar signs** — a tutorial about LaTeX syntax, say — escape
+them: `\$` still draws a literal glyph and always did. That is the migration path, and it is
+pinned by a test.
+
+**Deliberately narrow**, because a normalization that is too eager eats content:
+
+- **Whole input only, and the pair must match.** `$a$ + $b$` begins and ends with `$`, but
+  those two are not a pair — a naive strip would yield `a$ + $b`. Untouched.
+- **Unclosed delimiters do not strip.** `$x^2` renders as before; `\(x^2` throws, naming the
+  delimiter.
+- **`$$…$$` and `\[…\]` are unchanged.** They are *display* maths; accepting them and then
+  rendering inline would accept a notation and drop its meaning.
+- A bad body inside a wrapper still fails, for the body's own reason.
+
+### `\begin{equation*}` and `\begin{displaymath}` are accepted
+
+Pasting real LaTeX from a paper used to throw `Unknown environment` on the outermost wrapper,
+even though LatteX already rendered every construct *inside* it. Both explicitly-unnumbered
+display spellings now render their body:
+
+```
+\begin{equation*} E = mc^2 \end{equation*}
+\begin{displaymath} E = mc^2 \end{displaymath}
+```
+
+They are implemented as a one-row `gather`, so each is **byte-identical to `gather*`** — this
+introduces no new layout dialect. Against the bare body the glyphs and the rendered size are
+identical; the viewBox y-origin shifts by 5.696 units, which is the one-row display container
+doing what it already does for `gather*`.
+
+**The numbered `\begin{equation}` is deliberately still refused.** It *means* numbered, and
+LatteX does not render equation numbers, so accepting it silently would drop meaning the author
+wrote. Resolving it properly is complicated by something worth stating plainly: `align`,
+`gather`, `multline` and `eqnarray` **already** accept their numbered forms and render them
+identically to the starred ones, with a clean verdict and no caveat. That inconsistency predates
+this change and is under review rather than settled here.
 
 ---
 
