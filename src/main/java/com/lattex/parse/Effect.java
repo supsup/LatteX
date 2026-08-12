@@ -267,6 +267,32 @@ public enum Effect {
      * term-by-term sprout, {@code \prod}/{@code \int}, and symbolic bounds are deferred.
      */
     UNFOLD,
+    /**
+     * Every occurrence of a variable flips at once to a literal value:
+     * {@code x^2 + 2x + 1} with {@code fx.substitute-to=3} swaps to {@code 3^2 + 2 \cdot 3 + 1}
+     * on click, and back on the next click. The second member of the numeric-substitution
+     * family (with {@code unfold}), and it shares that family's machinery: LatteX
+     * PRE-RENDERS the substituted form into a hidden sibling {@code <svg>} inside the
+     * {@code .lx-math} span, because the page-side runtime cannot lay out LaTeX. The
+     * payload is laid out WITHOUT the variable's widths, so the constants arrive already
+     * closed up around the gap. Element-anchored, so it rides scroll for free (no fixed
+     * overlay, no scrollKillable teardown).
+     *
+     * <p><strong>Double gated, opt-out by default.</strong> The substitution pass
+     * ({@link SubstituteExpansion}) runs ONLY when the host enabled
+     * {@link com.lattex.api.RenderOptions#interactiveExpansion()} (default OFF) AND the
+     * equation carries this directive. With the flag off, {@code substitute} degrades
+     * INERT: the expression typesets normally and the interaction never arms.
+     *
+     * <p><strong>Slice-1 scope</strong> (fail-INERT everywhere else): a LITERAL INTEGER
+     * target via {@code fx.substitute-to}; ONE variable, auto-detected as the single
+     * distinct ORD letter atom in the body, or named explicitly with
+     * {@code fx.substitute-var} when the body holds more than one. Substitution is by atom
+     * code point on the parsed tree, so the {@code i} in {@code \sin} is never touched.
+     * Reduced motion snaps instantly. Live/scrubbable targets, enumerated multi-target
+     * payloads, several variables at once, and symbolic targets are deferred.
+     */
+    SUBSTITUTE,
     /** Explicitly no effect. */
     NONE;
 
@@ -312,6 +338,7 @@ public enum Effect {
             case "precedence" -> PRECEDENCE;
             case "cancel" -> CANCEL;
             case "unfold" -> UNFOLD;
+            case "substitute" -> SUBSTITUTE;
             case "none" -> NONE;
             default -> throw new MathSyntaxException(
                 "invalid fx effect: \"" + raw
@@ -319,7 +346,7 @@ public enum Effect {
                     + "|hologram|neonsign|crystallize|blueprint|wobble|gravwell"
                     + "|matrixrain|supernova|inkdrop|diffusion|refraction|teleport"
                     + "|shatter|glitch|sparkler|quantum|typeset|constellation|thread"
-                    + "|precedence|cancel|unfold|none)");
+                    + "|precedence|cancel|unfold|substitute|none)");
         };
     }
 

@@ -139,6 +139,131 @@ class FxRuntimeJsHarnessTest {
         assertFalse(el.hasMember("__lxUnfolded"), "inert unfold sets no toggle state");
     }
 
+    // ---- pin 0c: fx.substitute toggle (element-anchored, idempotent) -------------
+
+    @Test
+    void substituteTogglesBetweenVariableFormAndPayloadAndIsIdempotent() {
+        // A .lx-math with a visible <svg> child (carrying two <path>s, the x glyphs the
+        // varmap addresses) and a hidden .lx-fx-substituted payload.
+        context.eval(Source.create("js",
+            "globalThis.__lxP0 = __lxMakeEl({}); globalThis.__lxP1 = __lxMakeEl({});"
+            + "globalThis.__lxVisible = __lxMakeEl({});"
+            + "globalThis.__lxVisible.querySelectorAll = function () {"
+            + "  return [globalThis.__lxP0, globalThis.__lxP1]; };"
+            + "globalThis.__lxSubPayload = __lxMakeEl({});"
+            + "globalThis.__lxSubPayload.hidden = true;"
+            + "globalThis.__lxSubEl = __lxMakeEl({'data-lx-var': '78:0,1'});"
+            + "globalThis.__lxSubEl.querySelector = function (sel) {"
+            + "  if (sel === ':scope > svg') return globalThis.__lxVisible;"
+            + "  if (sel === ':scope > .lx-fx-substituted') return globalThis.__lxSubPayload;"
+            + "  return null; };"));
+        Value el = context.getBindings("js").getMember("__lxSubEl");
+        Value visible = context.getBindings("js").getMember("__lxVisible");
+        Value payload = context.getBindings("js").getMember("__lxSubPayload");
+        Value p0 = context.getBindings("js").getMember("__lxP0");
+
+        // First trigger: the variable's paths dim FIRST — the swap is deferred behind a
+        // timer, which is what makes it read as a substitution rather than a plain swap.
+        fx.getMember("substitute").execute(el);
+        assertTrue(el.getMember("__lxSubstituted").asBoolean(), "first trigger flips");
+        assertEquals("0.15", p0.getMember("style").getMember("opacity").asString(),
+            "the addressed variable path dims before the swap");
+        assertTrue(payload.getMember("hidden").asBoolean(),
+            "the payload is still hidden while the variable dims");
+
+        // Run the deferred swap.
+        context.eval(Source.create("js", "__lxRunTimeouts(4)"));
+        assertFalse(payload.getMember("hidden").asBoolean(), "payload revealed after the dim");
+        assertEquals("inline-block", payload.getMember("style").getMember("display").asString());
+        assertTrue(visible.getMember("hidden").asBoolean(), "variable form hidden");
+        assertEquals("", p0.getMember("style").getMember("opacity").asString(),
+            "the dim is RESTORED before hiding, so flipping back finds the paths intact");
+        context.eval(Source.create("js", "__lxFlushRaf(4)"));
+        assertEquals("1", payload.getMember("style").getMember("opacity").asString(),
+            "payload fades in");
+
+        // Second trigger: back to the variable form, immediately (nothing to dim there).
+        fx.getMember("substitute").execute(el);
+        assertFalse(el.getMember("__lxSubstituted").asBoolean(), "second trigger flips back");
+        assertFalse(visible.getMember("hidden").asBoolean(), "variable form shown again");
+        assertTrue(payload.getMember("hidden").asBoolean(), "payload hidden again");
+    }
+
+    @Test
+    void substituteWithNoPayloadIsAnInertNoOp() {
+        // Host flag off / unsupported body → no payload sibling. substitute must no-op
+        // (and never throw), leaving no state on the element.
+        Value el = makeEl("__lxMakeEl({})"); // querySelector returns null (no payload)
+        fx.getMember("substitute").execute(el);
+        assertFalse(el.hasMember("__lxSubstituted"), "inert substitute sets no toggle state");
+    }
+
+    @Test
+    void substituteWithAnUnusableVarmapStillSwaps() {
+        // The sidecar is an ENHANCEMENT, not a precondition. A missing, malformed, or
+        // out-of-bounds varmap costs the dim, never the swap — otherwise a sidecar bug
+        // would silently disable a working effect.
+        context.eval(Source.create("js",
+            "globalThis.__lxV2 = __lxMakeEl({});"
+            + "globalThis.__lxV2.querySelectorAll = function () { return [__lxMakeEl({})]; };"
+            + "globalThis.__lxPay2 = __lxMakeEl({}); globalThis.__lxPay2.hidden = true;"
+            // index 9 is past the single path above -> parseVarmap refuses the whole map
+            + "globalThis.__lxSubEl2 = __lxMakeEl({'data-lx-var': '78:9'});"
+            + "globalThis.__lxSubEl2.querySelector = function (sel) {"
+            + "  if (sel === ':scope > svg') return globalThis.__lxV2;"
+            + "  if (sel === ':scope > .lx-fx-substituted') return globalThis.__lxPay2;"
+            + "  return null; };"));
+        Value el = context.getBindings("js").getMember("__lxSubEl2");
+        Value payload = context.getBindings("js").getMember("__lxPay2");
+
+        fx.getMember("substitute").execute(el);
+        assertFalse(payload.getMember("hidden").asBoolean(),
+            "an out-of-bounds varmap must still swap (immediately, with no dim)");
+    }
+
+
+    @Test
+    void rapidReverseClickDoesNotLetAStaleTimerInvertStateAndVisuals() {
+        // Lattice, lattex/851 P1 (BLOCKING). The dim defers the swap behind a 150ms timer.
+        // A second click BEFORE that callback fired flipped state back but left the first
+        // timer pending; its stale callback then revealed the payload while __lxSubstituted
+        // was already false -- visuals and state inverted. The existing pins reverse only
+        // AFTER the first timer completes, so they never entered the window.
+        context.eval(Source.create("js",
+            "globalThis.__lxRP0 = __lxMakeEl({});"
+            + "globalThis.__lxRVis = __lxMakeEl({});"
+            + "globalThis.__lxRVis.querySelectorAll = function () { return [globalThis.__lxRP0]; };"
+            + "globalThis.__lxRPay = __lxMakeEl({}); globalThis.__lxRPay.hidden = true;"
+            + "globalThis.__lxREl = __lxMakeEl({'data-lx-var': '78:0'});"
+            + "globalThis.__lxREl.querySelector = function (sel) {"
+            + "  if (sel === ':scope > svg') return globalThis.__lxRVis;"
+            + "  if (sel === ':scope > .lx-fx-substituted') return globalThis.__lxRPay;"
+            + "  return null; };"));
+        Value el = context.getBindings("js").getMember("__lxREl");
+        Value visible = context.getBindings("js").getMember("__lxRVis");
+        Value payload = context.getBindings("js").getMember("__lxRPay");
+        Value p0 = context.getBindings("js").getMember("__lxRP0");
+
+        // Click 1: dims, defers the swap. Click 2 lands INSIDE that window.
+        fx.getMember("substitute").execute(el);
+        assertTrue(el.getMember("__lxSubstituted").asBoolean(), "click 1 sets substituted");
+        fx.getMember("substitute").execute(el);
+        assertFalse(el.getMember("__lxSubstituted").asBoolean(), "click 2 flips back");
+
+        // Now let EVERY pending timer run, including the superseded one.
+        context.eval(Source.create("js", "__lxRunTimeouts(6)"));
+        context.eval(Source.create("js", "__lxFlushRaf(6)"));
+
+        assertFalse(el.getMember("__lxSubstituted").asBoolean(),
+            "state must still say NOT substituted");
+        assertTrue(payload.getMember("hidden").asBoolean(),
+            "the stale callback must NOT reveal the payload after a reverse-click");
+        assertFalse(visible.getMember("hidden").asBoolean(),
+            "the variable form must be the one on screen, matching the state");
+        assertEquals("", p0.getMember("style").getMember("opacity").asString(),
+            "and the dimmed glyph must be restored, not stranded at 0.15");
+    }
+
     // ---- pin 1: placement compose + transform-origin ---------------------------
 
     @Test

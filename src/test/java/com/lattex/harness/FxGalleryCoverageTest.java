@@ -80,6 +80,8 @@ class FxGalleryCoverageTest {
         add(m, Effect.CANCEL, "fx.enter=cancel", "deterministic semantic entry", "cancel.gif");
         add(m, Effect.UNFOLD, "fx.click=unfold", "host flag plus trusted click toggle",
             "unfold.gif");
+        add(m, Effect.SUBSTITUTE, "fx.click=substitute", "host flag plus trusted click toggle",
+            "substitute.gif");
         return Map.copyOf(m);
     }
 

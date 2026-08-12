@@ -343,6 +343,49 @@ public final class SvgEmitter {
     }
 
     /**
+     * Serializes the {@code data-lx-var} sidecar: {@code <hexcp>:<idx>,<idx>}, the emitted
+     * {@code <path>} positions of ONE code point — the variable the {@code substitute}
+     * effect flips. A single run, so the value grammar is a strict subset of
+     * {@link #glyphmap}'s.
+     *
+     * <p>Keys off the SAME {@link #forEachInkedGlyph} traversal {@link #emitInner} writes,
+     * for the same reason glyphmap does: an index here is a {@code <path>}'s position by
+     * construction rather than a mirrored predicate that could drift out of step.
+     *
+     * <p><strong>Why this is not just glyphmap.</strong> glyphmap deliberately drops any
+     * code point occurring fewer than twice — a unique glyph has nothing to thread. But
+     * {@code substitute} must address a lone {@code x} exactly as readily as three of them,
+     * so this emits a one-element run. Reusing glyphmap would have made single-variable
+     * expressions — the commonest case the effect exists for — silently inert.
+     *
+     * @param variableCodePoint the code point to address
+     * @return the sidecar, or the empty string when the variable inked no glyph (the
+     *     runtime treats that as no map, and the effect stays inert)
+     */
+    public static String varmap(Layout layout, SfntFont font, int variableCodePoint) {
+        java.util.List<Integer> indices = new java.util.ArrayList<>();
+        forEachInkedGlyph(layout, font, (idx, g, d) -> {
+            if (g.sourceCodePoint() == variableCodePoint) {
+                indices.add(idx);
+            }
+        });
+        if (indices.isEmpty()) {
+            return "";
+        }
+        // Capped like every other emitted artifact (plan b2ae72fe), so a runaway index run
+        // fails closed on the same typed channel the SVG does.
+        CappedBuilder sb = new CappedBuilder();
+        sb.append(Integer.toHexString(variableCodePoint)).append(':');
+        for (int i = 0; i < indices.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(Integer.toString(indices.get(i)));
+        }
+        return sb.checked();
+    }
+
+    /**
      * Serializes the precedence-group {@code data-lx-groupmap} sidecar for a laid-out
      * formula: {@code <rank>:<idx>,<idx>;<rank>:...}, where each index addresses an
      * emitted {@code <path>} in EMIT ORDER (the SAME {@link #forEachInkedGlyph} traversal

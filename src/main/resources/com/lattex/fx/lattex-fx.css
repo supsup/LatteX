@@ -23,6 +23,14 @@ html.lx-fx .lx-math[data-lx-fx-enter="constellation"] { opacity: 0; }
    sum, effect inert — never both states at once). The runtime toggles it on click. */
 .lx-math > .lx-fx-expanded { display: none; }
 
+/* fx.*=substitute payload: the pre-rendered substituted <svg> rides a
+   `.lx-fx-substituted` wrapper span, on exactly the same terms as the unfold payload
+   above — hidden by default, NOT keyed on html.lx-fx, so a page with no runtime shows
+   the variable form only and the effect is simply inert. A dedicated class rather than
+   a shared `.lx-fx-payload`: sharing one would mean refactoring unfold's just-landed
+   CSS/JS/test surface, and perturbing a landed lane for tidiness is a poor trade. */
+.lx-math > .lx-fx-substituted { display: none; }
+
 @keyframes lx-boom {
   0%   { transform: scale(1); }
   30%  { transform: scale(1.45); }

@@ -6,6 +6,78 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### `unfold` no longer expands a coefficient summand into the wrong number (bug fix)
+
+**A `\sum` with a coefficient unfolded to a false sum.** Implicit multiplication in
+maths is written by *adjacency* — `2i` is a product — but adjacency between two *digits*
+is positional notation. The expansion pass spliced the index value in with no guard, so
+`\sum_{i=1}^{3} 2i` expanded to a tree byte-identical to the parse of `21 + 22 + 23`
+rather than `2·1 + 2·2 + 2·3`. Nothing looked broken: the interaction ran, the terms
+typeset cleanly, and the sum was simply wrong.
+
+Substituting now inserts an explicit `\cdot` wherever a substituted digit run would land
+against a digit, and **only** at a substitution boundary — `12i` remains twelve times `i`
+and never becomes `1 · 2 · i`.
+
+If a page relied on the old output, it was displaying an incorrect expansion; the new
+output is the correct one.
+
+### `fx.substitute` — a variable flips to its value (new effect)
+
+The second member of the **numeric-substitution family**, alongside `unfold`, and gated
+exactly the same way: the host's `RenderOptions.interactiveExpansion` (default **off**)
+plus a per-equation `fx.*=substitute` directive. One flag covers the family — the
+capability is "LatteX pre-renders computed material", not a switch per effect.
+
+```
+\lx[fx.click=substitute, fx.substitute-to=3]{ x^2 + 2x + 1 }
+```
+
+Click, and every `x` becomes `3` at once: `3^2 + 2 \cdot 3 + 1`. The substituted form is
+pre-rendered by LatteX into a hidden sibling `<svg>` (the page-side runtime cannot lay
+out LaTeX) and is laid out *without* the variable's widths, so the constants arrive
+already closed up around the gap. The runtime dims the variable's own glyphs a beat
+before the swap, located through a new renderer-derived `data-lx-var` sidecar, so the eye
+sees the `x`s leave and the value arrive in their place.
+
+- **Which variable:** auto-detected when the body holds exactly one distinct letter;
+  otherwise name it with `fx.substitute-var=x`. Letters inside `\sin`/`\lim` are
+  `OperatorName` nodes rather than atoms, so they are structurally immune — the `i` in
+  `\sin` can never be substituted.
+- **Fail-inert, never a silent no-op:** no variable, an ambiguous unnamed variable, a
+  named variable the body does not contain, an unsupported node kind, or a payload that
+  would exceed the emitter's output cap all degrade to a plain typeset formula with no
+  payload and no marker. Naming an absent variable is inert *deliberately* — the payload
+  would otherwise be identical to the source, presenting an author typo as a working
+  effect.
+- **The substituted form keeps the meaning the author wrote.** Substitution is a splice
+  into a rendered expression, and two adjacencies change meaning rather than merely
+  looking odd. Adjacency between *digits* is positional notation, so `2x` with `x=3` must
+  not become `23`; an explicit `\cdot` is inserted at a substitution boundary, and only
+  there — a literal `12` in the source stays twelve. Adjacency against a *negative* value
+  is the same problem wearing a minus sign, and it applies after **any** operand rather
+  than only after a digit: `ax` with `x=-3` renders `a \cdot -3`, not `a-3`. A newly
+  negative base under a power or a subscript is parenthesised, so `2x^2` with `x=-3` gives
+  `2(-3)^2` rather than `2-3^2` (a subtraction, and `-(3^2)` under ordinary precedence),
+  and `2x_2` gives `2(-3)_2` rather than `2-3_2` — which additionally matters because a
+  subscript on a numeral commonly denotes a radix, making `-3_2` and `(-3)_2` different
+  values that render identically. Both guards see **through `\textcolor`** in both
+  directions: colour is paint, not grouping, so a coloured digit counts at a seam, a coloured
+  negative base is fenced, and a coloured *operator* is still an operator — `\textcolor{red}{+}x`
+  with `-3` keeps its sign rather than gaining a product. Neither guard fires after a binary
+  operator or a relation, where a minus is a sign rather than a seam, nor for a sign already
+  present in the source, nor when the substitution happened **away from the edge**: changing
+  `x` inside `2\textcolor{red}{3+x}` leaves the leading `3` a source digit, so no boundary is
+  invented there.
+- **Reduced motion** snaps instantly, and a page with no JS runtime shows the variable
+  form only, never both states at once.
+- Scope for this first slice: one variable, one literal-integer target (at most six
+  digits, optionally negative). Live/scrubbable targets, several variables at once,
+  symbolic targets, and the neighbour-slide FLIP animation are deferred.
+
+Internals: `SubstituteExpansion` joins `SumExpansion`, and the tree transform both use is
+now one shared `AtomSubstitution` rather than a copy each — that traversal's safety comes
+from refusing node kinds it does not know, and coverage that exists twice drifts.
 ### `$x^2$` renders the maths, not the dollar signs
 
 **Behaviour change — read this if you render user-supplied LaTeX.** A whole-input `$…$` or

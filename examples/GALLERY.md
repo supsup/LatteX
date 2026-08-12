@@ -281,10 +281,27 @@ collapses it back to the sum ([source page](unfold-preview.html)).
 
 ![flag-enabled unfold toggle](unfold.gif)
 
+`fx.click=substitute` — the double-gated variable flip, and unfold's sibling in the
+numeric-substitution family. Rendered with `RenderOptions.interactiveExpansion`
+enabled, it receives two trusted clicks: the first dims the `x` glyphs (located
+through the `data-lx-var` sidecar) and reveals the pre-rendered `3^2 + 2 \cdot 3 + 1`
+payload, already closed up around the gap the variable left; the second returns to the
+variable form.
+
+Note the `\cdot`. Implicit multiplication is written by adjacency, but adjacency
+between two digits is positional notation — so substituting `3` into `2x` has to
+produce a product and not the number twenty-three.
+
+```
+\lx[fx.click=substitute, fx.substitute-to=3]{ x^2 + 2x + 1 }
+```
+
+![flag-enabled substitute flip](substitute.gif)
+
 ---
 
 *Regenerate through `./gradlew generateExamples`. The BrewShot capture harness uses
 compositor streaming for `inkdrop`, trusted moving-pointer input for `refraction`, the
 deterministic semantic entry path for `cancel`, and the host-flagged trusted click toggle
-for `unfold`. The headless gallery coverage test fails if a future production effect has no
-declared artifact or if this document points at a missing file.*
+for `unfold` and `substitute`. The headless gallery coverage test fails if a future
+production effect has no declared artifact or if this document points at a missing file.*
