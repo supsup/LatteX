@@ -58,9 +58,21 @@ the artifact.)
 ## Act I — The Dockerfile, setting by setting
 
 ```sh
-SHA=$(git rev-parse --short origin/main)   # every example below reuses this
+git fetch -q origin main
+test -z "$(git status --porcelain)" || { echo 'refusing: working tree is dirty'; exit 1; }
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" \
+  || { echo 'refusing: HEAD is not origin/main'; exit 1; }
+
+SHA=$(git rev-parse --short HEAD)           # every example below reuses this
 docker build -t "lattex:main-$SHA" .
 ```
+
+**Why three lines of fence before one line of build.** `docker build .` sends *your working
+tree* as the context, so a name derived from `origin/main` is a claim about a commit that may
+be nothing like what you just built. Dirty tree, wrong branch, unfetched remote — each one
+produces an image confidently labelled with a commit it does not contain. The fence makes the
+tag's claim true at the moment it is made, and `--short HEAD` names the thing actually built
+rather than the thing you hoped was checked out.
 
 No build arguments. Nothing to forget. Prerequisite: **Docker, and nothing else** — no host
 JDK, no Gradle, no Chrome. Roughly a few minutes cold, ~227 MB final.
@@ -108,8 +120,13 @@ jar (the legacy shape). So if your *expression* is literally `watch` or `cli`, y
 `cli` first:
 
 ```sh
-docker run --rm lattex:dogfood cli watch > watch-expression.svg
+docker run --rm lattex:main-$SHA cli watch > watch-expression.svg
 ```
+
+(Every one-shot in Acts I and II names `lattex:main-$SHA`, the image you just built. `dogfood`
+does not exist yet at this point in the story — it is promoted in Act III, *after* verification,
+which is the whole ordering this document argues for. Act IV onward uses `dogfood`, by then
+correctly.)
 
 ---
 
@@ -156,16 +173,29 @@ claims, restart recovery, collisions, races.
 | tag | mutability | meaning |
 |---|---|---|
 | `lattex:local` | scratch | throwaway working build |
-| `lattex:main-<sha>` | **immutable** | one commit, never re-pointed |
+| `lattex:main-<sha>` | **by convention, not re-pointed** | the commit this image was built from |
 | `lattex:dogfood` | **moving** | "the one I actually use today" |
 
 ```sh
 docker tag "lattex:main-$SHA" lattex:dogfood
 ```
 
-Build immutable → verify → promote. In that order, always. Because LatteX has no
-source-revision stamp, **the `main-<sha>` tag is the only durable record of which commit an
-image came from.** Skip it and you have an image whose provenance is genuinely unrecoverable.
+Build → verify → promote. In that order, always.
+
+> ⚠️ **A `main-<sha>` tag is a convention you keep, not a property Docker enforces.** An earlier
+> version of this table called it *immutable*, and that was wrong in a way worth spelling out,
+> because the whole staleness check below rests on it. Docker tags are mutable pointers: nothing
+> stops `docker tag <anything> lattex:main-abc1234`. Demonstrated, not assumed — pointing
+> `lattex:main-deadbee` at `alpine`, then re-pointing the same tag at a LatteX image, both
+> succeeded silently, and the second image now answered to a `main-<sha>` name for a commit it
+> had no relationship to. Short SHAs can also collide as history grows.
+>
+> So the tag is a *label you are trusted to apply honestly*, which is exactly why the build fence
+> in Act I matters. The genuinely immutable identity is the image ID
+> (`docker inspect -f '{{.Id}}' lattex:dogfood`) — that names bytes and cannot be re-pointed.
+> It just cannot tell you which commit produced them, because LatteX stamps no source revision
+> into the artifact. That gap is the real subject of this section: the tag is the only thing
+> *connecting bytes to a commit*, and it holds only as well as your discipline does.
 
 ---
 
@@ -175,14 +205,29 @@ image came from.** Skip it and you have an image whose provenance is genuinely u
 docker run --rm lattex:dogfood cli --version
 sed -n 's/^version = "\(.*\)"$/declared in source: \1/p' build.gradle.kts
 
-built_from=$(docker inspect -f '{{join .RepoTags "\n"}}' lattex:dogfood \
-  | sed -n 's/^lattex:main-//p' | head -1)
-if [ -z "$built_from" ]; then
+tags=$(docker inspect -f '{{join .RepoTags "\n"}}' lattex:dogfood | sed -n 's/^lattex:main-//p')
+n=$(printf '%s' "$tags" | grep -c . || true)
+
+if [ "$n" -eq 0 ]; then
   echo "provenance unknown: no lattex:main-<sha> tag — rebuild"
+elif [ "$n" -gt 1 ]; then
+  echo "provenance AMBIGUOUS: this image answers to $n main-<sha> tags — refusing to guess:"
+  printf '  %s\n' $tags
+elif ! git cat-file -e "${tags}^{commit}" 2>/dev/null; then
+  echo "provenance unverifiable: '$tags' is not a commit in this repository"
 else
-  echo "built from $built_from, $(git log --oneline "$built_from"..origin/main | wc -l | tr -d ' ') commit(s) behind main"
+  git fetch -q origin main
+  echo "built from $tags, $(git rev-list --count "$tags"..origin/main) commit(s) behind main"
 fi
 ```
+
+**Three refusals, and none of them used to be here.** The first version of this block ended with
+`head -1`, which turns "this image has several `main-<sha>` tags" into a silent arbitrary pick —
+and an arbitrary pick is indistinguishable from a correct one in the output. Verified against a
+real image carrying two such tags: `head -1` chose one and said nothing about the other. It never
+checked that the string was a commit either, so a hand-applied or typo'd tag would flow straight
+into `git log` and produce a confident count from a bad premise. Ambiguous provenance and
+unverifiable provenance are now *reported as themselves* rather than resolved by luck.
 
 Never read `RepoTags` positionally (`{{index .RepoTags 1}}`). The order is not guaranteed;
 it works until the day it silently doesn't.
@@ -242,6 +287,12 @@ custom images, but `/lattex/input` and `/lattex/output` are the documented contr
 A container is bound to the image **ID** it was created from, not to the tag name. After you
 promote a new `lattex:dogfood`, `docker restart lattex-dogfood` keeps serving the **old**
 build — restart restarts the same container, it does not re-resolve the tag. Recreate it:
+
+> ⚠️ **`docker rm -f` destroys the named container, not just its process.** Anything living in
+> that container's writable layer — a partially processed job, an in-flight claim directory —
+> goes with it. Your Input/Output are bind mounts and survive; nothing else does. If a job may be
+> mid-flight, stop it gracefully first (`docker stop -t 30 lattex-dogfood`) and recreate only
+> once it has exited.
 
 ```sh
 docker rm -f lattex-dogfood
@@ -329,9 +380,12 @@ staleness: this image, and that vendored jar. Updating one says nothing about th
 
 ## The short version
 
-1. `docker build -t lattex:main-$SHA .` — no build args needed.
+1. Fence first (clean tree, `HEAD` == `origin/main`), then
+   `docker build -t lattex:main-$SHA .` — no build args needed. The fence is what makes the
+   tag's claim true; `docker build .` ships your working tree, not the commit you named.
 2. Verify: renders → version matches source → smoke passes.
-3. Tag `main-<sha>` **first**; promote `dogfood` second. It is your only provenance.
+3. Tag `main-<sha>` **first**; promote `dogfood` second. It is your only link from bytes to a
+   commit — and a convention you keep, not one Docker enforces, since any tag can be re-pointed.
 4. Pin **tagged** releases. `0.11.1` is the standing proof that a version string can name
    nothing at all.
 5. Rename files into `Input/`; never write them in place.

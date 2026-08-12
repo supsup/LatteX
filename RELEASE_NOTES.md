@@ -89,9 +89,12 @@ gains a matching setup section.
 
 Two things in there are worth knowing even if you never read the rest:
 
-- **A version string names what someone *declared*; only a tag names what was *built*.**
-  `0.11.1` is the standing proof — a jar declaring it circulated widely, `0.12.0`'s notes
-  withdrew it, and no such tag exists in this repository at all.
+- **A version string names what someone *declared*; a `main-<sha>` tag is the only thing
+  linking an image back to a *commit* — and it is a convention you keep, not one Docker
+  enforces.** `0.11.1` is the standing proof of the first half: a jar declaring it circulated
+  widely, `0.12.0`'s notes withdrew it, and no such tag exists in this repository at all. The
+  second half is why the document fences the build before naming the tag: `docker build .`
+  ships your working tree, and any tag can be re-pointed at any image afterwards.
 - **Re-pointing `lattex:dogfood` does not update a running container.** A container binds
   to the image *ID* it was created from, so `docker restart` keeps serving the old build.
   The tell is a bare hex ID where the tag name belongs in `docker ps`; the fix is to
