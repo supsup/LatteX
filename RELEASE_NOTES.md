@@ -6,6 +6,31 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### `\begin{equation*}` and `\begin{displaymath}` are accepted
+
+Pasting real LaTeX from a paper used to throw `Unknown environment` on the outermost wrapper,
+even though LatteX already rendered every construct *inside* it. Both explicitly-unnumbered
+display spellings now render their body:
+
+```
+\begin{equation*} E = mc^2 \end{equation*}
+\begin{displaymath} E = mc^2 \end{displaymath}
+```
+
+They are implemented as a one-row `gather`, so each is **byte-identical to `gather*`** — this
+introduces no new layout dialect. Against the bare body the glyphs and the rendered size are
+identical; the viewBox y-origin shifts by 5.696 units, which is the one-row display container
+doing what it already does for `gather*`.
+
+**The numbered `\begin{equation}` is deliberately still refused.** It *means* numbered, and
+LatteX does not render equation numbers, so accepting it silently would drop meaning the author
+wrote. Resolving it properly is complicated by something worth stating plainly: `align`,
+`gather`, `multline` and `eqnarray` **already** accept their numbered forms and render them
+identically to the starred ones, with a clean verdict and no caveat. That inconsistency predates
+this change and is under review rather than settled here.
+
+
+
 _Nothing yet._
 
 ---
