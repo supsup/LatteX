@@ -173,6 +173,44 @@ class SubstituteExpansionTest {
     }
 
     @Test
+    void aNegativeSubstitutionUnderASUBSCRIPTStillNeedsTheProductMarker() {
+        // Lattice, lattex/863 (BLOCKING). `2x_2` with x=-3 rendered `2-3_2` — a SUBTRACTION
+        // where a product was meant.
+        //
+        // The bug lived in my own comment as much as my code. I wrote that "a subscript
+        // carries no precedence hazard", and scoped the remedy to `sup != null` on the
+        // strength of it. That sentence is TRUE and IRRELEVANT: there is no precedence
+        // hazard INSIDE the SupSub — `-3_2` really is negative-three-sub-two — but the
+        // hazard is the juxtaposition OUTSIDE it, where the coefficient `2` now abuts a
+        // leading minus. Reasoning about the subtree, I never looked at the seam.
+        //
+        // Note what the control above could not catch: `2x` and `2x_2` differ only in
+        // whether the substituted atom is bare or wears a subscript, and only the bare form
+        // was tested. A control that stops one structural step short of the defect passes
+        // for the same reason the defect survives.
+        // The remedy is a FENCE rather than an inserted product, and the reason is the
+        // second hazard: `-3_2` and `(-3)_2` are not the same value. A subscript on a
+        // numeral commonly denotes a RADIX, so `-3_2` binds the subscript to the 3 and
+        // negates the result, while the substitution means the whole -3 carries it. They
+        // render identically. A `\cdot` would fix the subtraction reading and leave that
+        // one standing — I tried exactly that first, and the tree it produced disagreed
+        // with the parse of its own rendering, which is what surfaced the radix reading.
+        assertEquals(parse("2\\left(-3\\right)_2"), expand("2x_2", -3).get().substituted(),
+            "a newly negative SUBSCRIPTED base is fenced: product preserved, radix unambiguous");
+        assertNotEquals(parse("2-3_2"), expand("2x_2", -3).get().substituted(),
+            "revert-provable: ungrouped, `2-3_2` reads as a subtraction");
+    }
+
+    @Test
+    void aPositiveSubstitutionUnderASubscriptKeepsItsDigitSeamGuard() {
+        // The POSITIVE CONTROL for the test above, and it is the one that proves the new
+        // arm is about the MINUS rather than about subscripts in general: the digit-leading
+        // seam was already handled here and must stay handled.
+        assertEquals(parse("2 \\cdot 3_2"), expand("2x_2", 3).get().substituted(),
+            "a digit-leading subscripted base was already a product and stays one");
+    }
+
+    @Test
     void boundaryFactsTravelOnlyWhereGroupingIsInvisible() {
         // The fix carries boundary facts out of the transform rather than wrapping every
         // nested node in \cdot. Fences, fractions and radicals already DRAW a boundary, so a

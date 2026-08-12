@@ -234,11 +234,27 @@ final class AtomSubstitution {
                 // both — the fence ends the subtraction reading AND binds the sign into the
                 // base — which is why it is the remedy rather than only inserting a product.
                 //
-                // Scoped to sup, and to a sign THIS pass introduced. A subscript carries no
-                // precedence hazard (`-3_2` is just negative three sub two), and a minus
-                // already in the source was already grouped or already meant what it says.
-                // A remedy applied wider than its hazard becomes the next silent edit.
-                if (sup != null && !base.equals(s.base()) && leadsWithMinus(base)) {
+                // A SUBSCRIPT needs the same fence, for a different reason (Lattice,
+                // lattex/863). An earlier version of this code scoped the remedy to `sup`
+                // alone, on the strength of a comment claiming "a subscript carries no
+                // precedence hazard". That claim is true and was the wrong thing to be true:
+                // there is no PRECEDENCE hazard inside the node, and there are two other
+                // hazards it says nothing about.
+                //
+                // `2x_2` with x=-3 produced `2-3_2`. First, the seam: the coefficient now
+                // abuts a leading minus, so a product reads as a SUBTRACTION. Second, and
+                // the reason a fence beats an inserted `\cdot` here — `-3_2` and `(-3)_2`
+                // are not the same value. A subscript on a numeral commonly denotes a radix,
+                // so `-3_2` binds the subscript to the 3 and negates the result, while the
+                // substitution means the whole -3 carries the subscript. The two render
+                // identically and differ in value, which is the worst pair of properties a
+                // defect can have. The fence closes both readings at once.
+                //
+                // Still scoped to a sign THIS pass introduced: a minus already in the source
+                // was already grouped or already meant what it says, and a remedy applied
+                // wider than its hazard becomes the next silent edit.
+                if ((sup != null || sub != null) && !base.equals(s.base())
+                        && leadsWithMinus(base)) {
                     base = new Fenced('(', base, ')');
                 }
                 yield new SupSub(base, sup, sub);
