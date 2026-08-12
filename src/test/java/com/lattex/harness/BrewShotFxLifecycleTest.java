@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.io.TempDir;
  * behavioral test at all. Pinned end-to-end: mouseenter on a mapped glyph
  * bolds exactly its codepoint-group mates; mouseleave restores every path.
  */
+@Tag("capture") // real-browser pin (fx lifecycle): runs in `browserTest`, not the core suite
 class BrewShotFxLifecycleTest {
 
     /**

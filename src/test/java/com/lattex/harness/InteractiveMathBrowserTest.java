@@ -12,10 +12,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Real-browser contract for the separate trusted equation-transition runtime. */
+@Tag("capture") // real-browser pin (interactive-math runtime): runs in `browserTest`, not the core suite
 class InteractiveMathBrowserTest {
     @TempDir
     Path fixtures;
