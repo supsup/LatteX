@@ -233,6 +233,62 @@ class SubstituteExpansionTest {
             "substituted digit followed by a source digit still needs the product");
     }
 
+    @Test
+    void aNegativeSubstitutionAfterANONDIGITOperandStillNeedsTheProduct() {
+        // Lattice, lattex/883 finding 1 (BLOCKING). The seam guard fired on endsWithDigit()
+        // alone, so a negative value was guarded after `2` and unguarded after everything
+        // else: `ax` with x=-3 produced atoms structurally identical to the parse of `a-3`.
+        // The source adjacency means multiplication; the payload showed subtraction.
+        //
+        // The existing `2x` control could not expose this precisely BECAUSE its neighbour is
+        // a digit — it takes the endsWithDigit branch and inserts the product for the wrong
+        // reason. A control whose subject reaches the right answer down the wrong path is
+        // worse than no control: it reports the guard working when the guard is not involved.
+        assertEquals(parse("a \\cdot -3"), sub("ax", -3, 'x'),
+            "a negative after a VARIABLE is still a product, not a subtraction");
+        assertEquals(parse("(a) \\cdot -3"), sub("(a)x", -3, 'x'),
+            "...and after a fenced operand");
+        assertNotEquals(parse("a-3"), sub("ax", -3, 'x'),
+            "revert-provable: unguarded this equals the parse of `a-3`");
+    }
+
+    @Test
+    void theProductIsNOTInsertedAfterAnOperatorOrAtTheStart() {
+        // THE OVER-APPLICATION CONTROL, and the reason the guard tests the math CLASS of the
+        // left neighbour rather than merely "is something there". After a BIN or REL the minus
+        // is a SIGN, not a seam, and `1 + \cdot -3` is not mathematics. Widening a remedy past
+        // its hazard is how the previous fix in this file became the next bug.
+        assertEquals(parse("1+-3"), sub("1+x", -3, 'x'), "after `+` the minus is a sign");
+        assertEquals(parse("-3"), sub("x", -3, 'x'), "at the start there is no seam at all");
+    }
+
+    @Test
+    void colourIsPaintAndDoesNotHideASeam() {
+        // Lattice, lattex/883 finding 2 (BLOCKING). Colored sat with Fenced/Fraction/Radical
+        // in the "draws its own boundary" arm. It draws no boundary — \textcolor{red}{2} puts
+        // a 2 on the baseline exactly where any 2 would be — so the 851 digit-string defect
+        // reappeared behind a colour, and a coloured negative base earned neither seam nor
+        // fence.
+        assertEquals(parse("\\textcolor{red}{2} \\cdot 3"), sub("\\textcolor{red}{2}x", 3, 'x'),
+            "a coloured digit is still a digit at the seam");
+        assertNotEquals(parse("\\textcolor{red}{2}3"), sub("\\textcolor{red}{2}x", 3, 'x'),
+            "revert-provable: untreated this is the digit string 23, wearing a colour");
+        assertEquals(parse("2 \\cdot \\textcolor{red}{3}^2"), sub("2\\textcolor{red}{x}^2", 3, 'x'),
+            "a coloured substituted base exports its digit seam");
+    }
+
+    @Test
+    void aColouredNegativeBaseUnderAPowerIsFencedLikeAnUncolouredOne() {
+        // The wrapper half of the 861/863 fence. Same expression, same value, one \textcolor
+        // apart — and before this fix the coloured form silently produced `2-3^2` while the
+        // bare form produced `2(-3)^2`. THE PAIR IS THE POINT: neither assertion alone shows
+        // that colour was the variable, which is what Lattice asked the control to prove.
+        assertEquals(sub("2x^2", -3, 'x'), stripColour(sub("2\\textcolor{red}{x}^2", -3, 'x')),
+            "with the colour removed, the coloured result is the uncoloured result");
+        assertNotEquals(parse("2-3^2"), sub("2\\textcolor{red}{x}^2", -3, 'x'),
+            "revert-provable: untreated the coloured form is a subtraction");
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     private static MathNode parse(String latex) {
@@ -241,6 +297,25 @@ class SubstituteExpansionTest {
 
     private static Optional<SubstituteExpansion.Result> expand(String latex, int target) {
         return SubstituteExpansion.expand(parse(latex), target, null);
+    }
+
+    private static MathNode sub(String latex, int target, char var) {
+        return SubstituteExpansion.expand(parse(latex), target, (int) var).get().substituted();
+    }
+
+    /** Drop every Colored wrapper so a coloured tree can be compared to its bare twin. */
+    private static MathNode stripColour(MathNode n) {
+        return switch (n) {
+            case MathNode.Colored c -> stripColour(c.body());
+            case MathNode.MathList ml -> new MathNode.MathList(
+                ml.items().stream().map(SubstituteExpansionTest::stripColour).toList());
+            case MathNode.SupSub s -> new MathNode.SupSub(stripColour(s.base()),
+                s.sup() == null ? null : stripColour(s.sup()),
+                s.sub() == null ? null : stripColour(s.sub()));
+            case MathNode.Fenced f -> new MathNode.Fenced(
+                f.leftDelim(), stripColour(f.body()), f.rightDelim());
+            default -> n;
+        };
     }
 
     private static void assertInert(String latex, int target) {

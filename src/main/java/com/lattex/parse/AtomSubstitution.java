@@ -71,7 +71,10 @@ final class AtomSubstitution {
         boolean previousTrailsSubstitutedDigit = false;
         for (MathNode item : items) {
             if (item instanceof Atom a && a.codePoint() == varCodePoint) {
-                if (endsWithDigit(out)) {
+                // A digit neighbour would CONCATENATE; a negative value after any operand
+                // would re-read as SUBTRACTION. The second condition is the wider one and was
+                // missing: `ax` with x=-3 produced the parse of `a-3`.
+                if (endsWithDigit(out) || (value < 0 && endsWithMultiplicand(out))) {
                     out.add(new Atom(CDOT_CODEPOINT, MathClass.BIN));
                 }
                 out.addAll(digitAtoms(value));      // splice: 10 -> [Atom(1), Atom(0)]
@@ -92,7 +95,8 @@ final class AtomSubstitution {
             // lattex/851: `2x^2` produced a tree byte-identical to the parse of `23^2`.
             Replacement r = replaceNode(item, varCodePoint, value);
             if ((previousTrailsSubstitutedDigit && r.leadsWithDigit())
-                    || (r.leadsWithSubstitutedDigit() && endsWithDigit(out))) {
+                    || (r.leadsWithSubstitutedDigit() && endsWithDigit(out))
+                    || (r.leadsWithSubstitutedMinus() && endsWithMultiplicand(out))) {
                 out.add(new Atom(CDOT_CODEPOINT, MathClass.BIN));
             }
             out.add(r.node());
@@ -118,9 +122,14 @@ final class AtomSubstitution {
      *     substituted (so a following digit would concatenate)
      * @param leadsWithDigit its first rendered glyph is a digit from any source — used when
      *     the PRECEDING sibling was substituted, where the collision is symmetric
+     * @param leadsWithSubstitutedMinus its first rendered glyph is a MINUS this pass
+     *     substituted. Needed for a compound that draws no grouping and carries no script —
+     *     a {@link Colored} wrapper — where neither the fence nor the digit seam applies but
+     *     the subtraction re-reading still does
      */
     private record Replacement(MathNode node, boolean leadsWithSubstitutedDigit,
-                               boolean trailsWithSubstitutedDigit, boolean leadsWithDigit) { }
+                               boolean trailsWithSubstitutedDigit, boolean leadsWithDigit,
+                               boolean leadsWithSubstitutedMinus) { }
 
     /** Transform a compound node and report its substitution boundary facts. */
     private static Replacement replaceNode(MathNode node, int varCodePoint, int value) {
@@ -143,7 +152,8 @@ final class AtomSubstitution {
                     baseSubstituted && leadsWithDigit(s.base()),
                     baseSubstituted && s.sup() == null && s.sub() == null
                         && trailsWithDigit(s.base()),
-                    leadsWithDigit(s.base()));
+                    leadsWithDigit(s.base()),
+                    baseSubstituted && leadsWithMinus(s.base()));
             }
             case MathList ml -> {
                 MathNode first = ml.items().isEmpty() ? null : ml.items().get(0);
@@ -151,20 +161,42 @@ final class AtomSubstitution {
                 yield new Replacement(replaced,
                     substituted && first != null && leadsWithDigit(first),
                     substituted && last != null && trailsWithDigit(last),
-                    first != null && leadsWithDigit(first));
+                    first != null && leadsWithDigit(first),
+                    substituted && first != null && leadsWithMinus(first));
             }
-            // Fenced/Fraction/Radical/Boxed/Phantom/Colored and the pass-through leaves all
-            // draw their own visible boundary; a digit inside them cannot be misread as
-            // positional notation with a sibling outside them.
-            default -> new Replacement(replaced, false, false, false);
+            // COLOUR IS PAINT, NOT GROUPING, so a Colored wrapper reports the facts of its
+            // body rather than the silence of a boundary-drawing node (Lattice, lattex/883).
+            // It sat in the default arm below and produced `\textcolor{red}{2}` immediately
+            // followed by a substituted `3` — the digit string 23.
+            case Colored c -> {
+                boolean bodySubstituted = node instanceof Colored original
+                    && !c.body().equals(original.body());
+                yield new Replacement(replaced,
+                    bodySubstituted && leadsWithDigit(c.body()),
+                    bodySubstituted && trailsWithDigit(c.body()),
+                    leadsWithDigit(c.body()),
+                    bodySubstituted && leadsWithMinus(c.body()));
+            }
+            // Fenced/Fraction/Radical/Boxed/Phantom and the pass-through leaves all draw their
+            // own visible boundary; a digit inside them cannot be misread as positional
+            // notation with a sibling outside them, and a minus inside one is unambiguous.
+            default -> new Replacement(replaced, false, false, false, false);
         };
     }
+
+    // COLORED IS TRANSPARENT TO EVERY EDGE QUESTION BELOW (Lattice, lattex/883 finding 2).
+    // It sat in the `default -> false` arm alongside Fenced/Fraction/Radical, and the grouping
+    // those draw is exactly what it does NOT draw: `\textcolor{red}{2}` paints a 2 and puts it
+    // on the baseline where any other 2 would be. Treating paint as grouping meant
+    // `\textcolor{red}{2}x` with x=3 rendered the digit string `23`, and a coloured negative
+    // base neither exported a seam nor earned its fence. Colour changes paint, not adjacency.
 
     /** Whether the node's first rendered glyph is a minus sign — the negative-value shape. */
     private static boolean leadsWithMinus(MathNode n) {
         return switch (n) {
             case Atom a -> a.codePoint() == '-';
             case SupSub s -> leadsWithMinus(s.base());
+            case Colored c -> leadsWithMinus(c.body());
             case MathList ml -> !ml.items().isEmpty() && leadsWithMinus(ml.items().get(0));
             default -> false;
         };
@@ -174,6 +206,7 @@ final class AtomSubstitution {
         return switch (n) {
             case Atom a -> isDigit(a);
             case SupSub s -> leadsWithDigit(s.base());
+            case Colored c -> leadsWithDigit(c.body());
             case MathList ml -> !ml.items().isEmpty() && leadsWithDigit(ml.items().get(0));
             default -> false;
         };
@@ -183,10 +216,35 @@ final class AtomSubstitution {
         return switch (n) {
             case Atom a -> isDigit(a);
             case SupSub s -> s.sup() == null && s.sub() == null && trailsWithDigit(s.base());
+            case Colored c -> trailsWithDigit(c.body());
             case MathList ml -> !ml.items().isEmpty()
                 && trailsWithDigit(ml.items().get(ml.items().size() - 1));
             default -> false;
         };
+    }
+
+    /**
+     * Whether {@code out} ends with something a following factor would MULTIPLY — an operand
+     * rather than an operator or an empty list.
+     *
+     * <p>Needed because {@link #endsWithDigit} is too narrow for a negative value (Lattice,
+     * lattex/883 finding 1). A substituted {@code -3} after a digit was already guarded, but
+     * after any other operand it was not: {@code ax} with {@code x=-3} produced atoms
+     * structurally identical to the parse of {@code a-3}, a subtraction. The source adjacency
+     * meant multiplication.
+     *
+     * <p>The operator exclusion is what keeps this from becoming its own defect: after a BIN or
+     * REL the minus is a SIGN, not a seam, and {@code 1+x} must stay {@code 1+-3} rather than
+     * gaining a nonsensical {@code 1+\cdot-3}.
+     */
+    private static boolean endsWithMultiplicand(List<MathNode> out) {
+        if (out.isEmpty()) {
+            return false;
+        }
+        return !(out.get(out.size() - 1) instanceof Atom a
+            && (a.mathClass() == MathClass.BIN || a.mathClass() == MathClass.REL
+                || a.mathClass() == MathClass.OPEN || a.mathClass() == MathClass.PUNCT
+                || a.mathClass() == MathClass.OP));
     }
 
     /**
@@ -200,10 +258,17 @@ final class AtomSubstitution {
         replaceList(out, List.of(node), varCodePoint, value);
     }
 
+    /**
+     * Whether the last thing already emitted ends in a digit ON THE BASELINE.
+     *
+     * <p>Delegates to {@link #trailsWithDigit} rather than testing for a bare {@link Atom},
+     * so a digit inside a transparent wrapper counts (Lattice, lattex/883). The bare-Atom
+     * test made {@code \textcolor{red}{2}} invisible as a left neighbour, and
+     * {@code \textcolor{red}{2}x} with {@code x=3} rendered the digit string {@code 23} —
+     * the original 851 defect, reappearing behind a colour.
+     */
     private static boolean endsWithDigit(List<MathNode> out) {
-        return !out.isEmpty()
-            && out.get(out.size() - 1) instanceof Atom last
-            && isDigit(last);
+        return !out.isEmpty() && trailsWithDigit(out.get(out.size() - 1));
     }
 
     private static boolean isDigit(Atom a) {

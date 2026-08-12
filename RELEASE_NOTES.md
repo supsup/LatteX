@@ -55,13 +55,16 @@ sees the `x`s leave and the value arrive in their place.
   looking odd. Adjacency between *digits* is positional notation, so `2x` with `x=3` must
   not become `23`; an explicit `\cdot` is inserted at a substitution boundary, and only
   there — a literal `12` in the source stays twelve. Adjacency against a *negative* value
-  is the same problem wearing a minus sign: a newly negative base under a power or a
-  subscript is parenthesised, so `2x^2` with `x=-3` gives `2(-3)^2` rather than `2-3^2`
-  (a subtraction, and `-(3^2)` under ordinary precedence), and `2x_2` gives `2(-3)_2`
-  rather than `2-3_2` — which additionally matters because a subscript on a numeral
-  commonly denotes a radix, making `-3_2` and `(-3)_2` different values that render
-  identically. Grouping is applied only to a sign this pass introduced; a minus already
-  in the source already meant what it says.
+  is the same problem wearing a minus sign, and it applies after **any** operand rather
+  than only after a digit: `ax` with `x=-3` renders `a \cdot -3`, not `a-3`. A newly
+  negative base under a power or a subscript is parenthesised, so `2x^2` with `x=-3` gives
+  `2(-3)^2` rather than `2-3^2` (a subtraction, and `-(3^2)` under ordinary precedence),
+  and `2x_2` gives `2(-3)_2` rather than `2-3_2` — which additionally matters because a
+  subscript on a numeral commonly denotes a radix, making `-3_2` and `(-3)_2` different
+  values that render identically. Both guards see **through `\textcolor`**: colour is
+  paint, not grouping, so a coloured digit still counts at a seam and a coloured negative
+  base is still fenced. Neither guard fires after a binary operator or a relation, where a
+  minus is a sign rather than a seam, nor for a sign already present in the source.
 - **Reduced motion** snaps instantly, and a page with no JS runtime shows the variable
   form only, never both states at once.
 - Scope for this first slice: one variable, one literal-integer target (at most six
