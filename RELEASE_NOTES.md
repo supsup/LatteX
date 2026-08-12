@@ -37,9 +37,6 @@ pinned by a test.
 - A bad body inside a wrapper still fails, for the body's own reason.
 
 
-
-_Nothing yet._
-
 ### The Docker smoke test stopped failing correct images, and started saying why
 
 `docker/smoke-test.sh` hard-coded `grep -q '^lattex 0\.11\.0$'` as its version check.
