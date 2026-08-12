@@ -129,10 +129,22 @@ final class AtomSubstitution {
         return switch (replaced) {
             // The base renders on the baseline, first. A sup/sub is RAISED/LOWERED, so it
             // cannot concatenate with a following baseline digit — only a bare base can.
-            case SupSub s -> new Replacement(replaced,
-                substituted && leadsWithDigit(s.base()),
-                substituted && s.sup() == null && s.sub() == null && trailsWithDigit(s.base()),
-                leadsWithDigit(s.base()));
+            //
+            // The fact must come from the BASE's own substitution, not from `substituted`
+            // (Lattice, lattex/861 finding 1). `substituted` is true when ANY descendant
+            // changed, so substituting only the EXPONENT of `23^x` marked the SOURCE digit 3
+            // as a substituted boundary and split a literal twenty-three into `2 \cdot 3^2`.
+            // A boundary invented where none exists changes meaning exactly as surely as a
+            // boundary missed — the 851 defect and this one are the same error, mirrored.
+            case SupSub s -> {
+                boolean baseSubstituted = node instanceof SupSub original
+                    && !s.base().equals(original.base());
+                yield new Replacement(replaced,
+                    baseSubstituted && leadsWithDigit(s.base()),
+                    baseSubstituted && s.sup() == null && s.sub() == null
+                        && trailsWithDigit(s.base()),
+                    leadsWithDigit(s.base()));
+            }
             case MathList ml -> {
                 MathNode first = ml.items().isEmpty() ? null : ml.items().get(0);
                 MathNode last = ml.items().isEmpty() ? null : ml.items().get(ml.items().size() - 1);
@@ -145,6 +157,16 @@ final class AtomSubstitution {
             // draw their own visible boundary; a digit inside them cannot be misread as
             // positional notation with a sibling outside them.
             default -> new Replacement(replaced, false, false, false);
+        };
+    }
+
+    /** Whether the node's first rendered glyph is a minus sign — the negative-value shape. */
+    private static boolean leadsWithMinus(MathNode n) {
+        return switch (n) {
+            case Atom a -> a.codePoint() == '-';
+            case SupSub s -> leadsWithMinus(s.base());
+            case MathList ml -> !ml.items().isEmpty() && leadsWithMinus(ml.items().get(0));
+            default -> false;
         };
     }
 
@@ -201,10 +223,26 @@ final class AtomSubstitution {
                 replaceList(items, ml.items(), varCodePoint, value);
                 yield new MathList(items);
             }
-            case SupSub s -> new SupSub(
-                replace(s.base(), varCodePoint, value),
-                s.sup() == null ? null : replace(s.sup(), varCodePoint, value),
-                s.sub() == null ? null : replace(s.sub(), varCodePoint, value));
+            case SupSub s -> {
+                MathNode base = replace(s.base(), varCodePoint, value);
+                MathNode sup = s.sup() == null ? null : replace(s.sup(), varCodePoint, value);
+                MathNode sub = s.sub() == null ? null : replace(s.sub(), varCodePoint, value);
+                // A NEGATIVE value substituted into an EXPONENT's base must be parenthesised
+                // (Lattice, lattex/861 finding 2). `2x^2` with x=-3 produced `2-3^2`, which
+                // is wrong twice over: it reads as a subtraction, and `-3^2` is -(3^2) under
+                // ordinary precedence when the substitution means (-3)^2. Grouping repairs
+                // both — the fence ends the subtraction reading AND binds the sign into the
+                // base — which is why it is the remedy rather than only inserting a product.
+                //
+                // Scoped to sup, and to a sign THIS pass introduced. A subscript carries no
+                // precedence hazard (`-3_2` is just negative three sub two), and a minus
+                // already in the source was already grouped or already meant what it says.
+                // A remedy applied wider than its hazard becomes the next silent edit.
+                if (sup != null && !base.equals(s.base()) && leadsWithMinus(base)) {
+                    base = new Fenced('(', base, ')');
+                }
+                yield new SupSub(base, sup, sub);
+            }
             case Fraction f -> new Fraction(
                 replace(f.numerator(), varCodePoint, value),
                 replace(f.denominator(), varCodePoint, value),

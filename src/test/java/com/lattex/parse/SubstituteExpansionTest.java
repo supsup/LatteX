@@ -126,6 +126,53 @@ class SubstituteExpansionTest {
     }
 
     @Test
+    void aSourceDigitBaseIsNotABoundaryJustBecauseTheExponentWasSubstituted() {
+        // Lattice, lattex/861 finding 1 (BLOCKING): the first fix derived the boundary fact
+        // from "did ANY descendant change", so substituting only the EXPONENT falsely marked
+        // the SOURCE base digit as substituted. `23^x` with x=2 became `2 \cdot 3^2` -- two
+        // times three squared, where the author wrote twenty-three raised to x. The 851 fix
+        // and this defect are the same mistake pointing opposite ways: one missed a real
+        // boundary, this one invented a boundary that was never there.
+        assertEquals(parse("23^2"), expand("23^x", 2).get().substituted(),
+            "a literal 23 stays twenty-three when only the exponent is substituted");
+        assertNotEquals(parse("2 \\cdot 3^2"), expand("23^x", 2).get().substituted(),
+            "revert-provable: deriving the fact from any-descendant-changed splits the 23");
+    }
+
+    @Test
+    void aNegativeSubstitutionUnderAPowerIsGroupedNotLeftBare() {
+        // Lattice, lattex/861 finding 2 (BLOCKING): a negative replacement does not LEAD with
+        // a digit, so the seam guard stayed silent and `2x^2` with x=-3 rendered `2-3^2` --
+        // read as two MINUS three squared. Two separate meaning changes in one payload: the
+        // missing product, and `-3^2` being -(3^2) under ordinary precedence when the
+        // substitution means (-3)^2. Grouping fixes both at once, which is why it is the
+        // remedy rather than only inserting a dot.
+        // The oracle is the \left...\right form, NOT parse("2(-3)^2"), and that difference is
+        // the finding rather than a convenience. Plain parens parse to bare OPEN/CLOSE atoms
+        // with the exponent hanging off the CLOSING PAREN atom; \left...\right parses to a
+        // Fenced node with the exponent on the whole group. The two render alike, but only the
+        // second says STRUCTURALLY that the square applies to (-3) — which is the exact
+        // semantics this fix exists to preserve, so pinning the weaker shape would pin a
+        // picture of the answer. The substituted tree is byte-identical to the \left form, so
+        // this is still the suite's structural-identity oracle, aimed at the parse that means
+        // what we mean.
+        assertEquals(parse("2\\left(-3\\right)^2"), expand("2x^2", -3).get().substituted(),
+            "a negative base under a power is fenced, so the square applies to (-3)");
+        assertNotEquals(parse("2-3^2"), expand("2x^2", -3).get().substituted(),
+            "revert-provable: ungrouped, this reads as a subtraction");
+    }
+
+    @Test
+    void aNegativeSubstitutionWithNoPowerNeedsNoGrouping() {
+        // The CONTROL for the test above, and the reason the grouping is scoped to a SupSub
+        // base rather than applied to every negative: with no exponent there is no precedence
+        // to protect, so parenthesising would be noise. Narrow the remedy to the case that
+        // needs it or the fix becomes its own defect.
+        assertEquals(parse("2 \\cdot -3"), expand("2x", -3).get().substituted(),
+            "no power, no precedence hazard: the product guard alone is enough");
+    }
+
+    @Test
     void boundaryFactsTravelOnlyWhereGroupingIsInvisible() {
         // The fix carries boundary facts out of the transform rather than wrapping every
         // nested node in \cdot. Fences, fractions and radicals already DRAW a boundary, so a
