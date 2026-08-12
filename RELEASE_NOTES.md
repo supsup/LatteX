@@ -131,6 +131,51 @@ wrote. Resolving it properly is complicated by something worth stating plainly: 
 identically to the starred ones, with a clean verdict and no caveat. That inconsistency predates
 this change and is under review rather than settled here.
 
+
+### The Docker smoke test stopped failing correct images, and started saying why
+
+`docker/smoke-test.sh` hard-coded `grep -q '^lattex 0\.11\.0$'` as its version check.
+Once main declared `0.12.0`, a **correct** image failed its own smoke test — and failed
+*silently*: `grep -q` prints nothing and `set -e` aborts, so the run exited `1` with no
+output naming either the failing check or the mismatch. Diagnosing it meant re-running
+under `sh -x`.
+
+The expected version is now derived from `build.gradle.kts`, and a mismatch prints both
+sides and the file each came from:
+
+```
+smoke: version mismatch
+  expected: lattex 0.13.0-SNAPSHOT   (declared in build.gradle.kts)
+  actual:   lattex 0.11.0            (reported by lattex:dogfood)
+```
+
+A pin that must be hand-edited every release is a pin that is wrong between releases.
+
+### New: `dockerDogFoodflow.md`, the container flow end to end
+
+A detailed walkthrough of running LatteX in a box: the three build stages setting by
+setting, verification in widening circles, the tag convention (throwaway `local`,
+`main-<sha>` which by convention is not re-pointed, the moving `dogfood` alias), how to tell your image has gone
+stale, the watch-mode job lifecycle, one-shot mode, and troubleshooting. `README.md`
+gains a matching setup section.
+
+Two things in there are worth knowing even if you never read the rest:
+
+- **A version string names what someone *declared*; a `main-<sha>` tag is the only thing
+  linking an image back to a *commit* — and it is a convention you keep, not one Docker
+  enforces.** `0.11.1` is the standing proof of the first half: a jar declaring it circulated
+  widely, `0.12.0`'s notes withdrew it, and no such tag exists in this repository at all. The
+  second half is why the document fences the build before naming the tag: `docker build .`
+  ships your working tree, and any tag can be re-pointed at any image afterwards.
+- **Re-pointing `lattex:dogfood` does not update a running container.** A container binds
+  to the image *ID* it was created from, so `docker restart` keeps serving the old build.
+  There is no visual tell: a container keeps the image *reference string* it was created
+  with, so `docker ps` goes on printing `lattex:dogfood` however far the tag has moved.
+  Compare the IDs instead — `docker inspect -f '{{.Image}}' <name>` against
+  `docker image inspect lattex:dogfood --format '{{.Id}}'` — and recreate the container when
+  they differ. The check that describes what is actually serving you is
+  `docker exec <name> java -jar /opt/lattex/lattex.jar --version`.
+
 ---
 
 ## 0.12.0 — 2026-08-06
