@@ -194,14 +194,77 @@ application {
     mainClass = "com.lattex.cli.Main"
 }
 
+// ---- Build provenance (Fixpoint ruling, stafficy/18344) ------------------------
+//
+// A VERSION IS NOT A PROVENANCE. `Implementation-Version` says what we called this
+// build; it says nothing about the code it was built from. The lived failure: a jar
+// vendored into Stafficy /docs was built from a ref that existed on exactly one
+// retired tag and was never an ancestor of main. Every check anyone ran passed --
+// the file existed, the version was higher, the name looked right -- because a
+// version number was being read as delivery evidence. It was caught only because
+// someone measured the lineage by hand, which is a person having a good day, not a
+// control.
+//
+// So the artifact carries the commit it was built from, and a consumer can check it
+// WITHOUT trusting the filename, the version, or whoever handed it over.
+//
+// THE RULE, AND WHY IT IS NOT JUST `git rev-parse HEAD`:
+//
+//   <40-hex>       the tree is CLEAN *and* HEAD is an ancestor of (or equal to)
+//                  origin/main -- i.e. this code is on the line we ship
+//   unattributed   dirty, git unavailable, no origin/main to compare against, OR
+//                  clean-but-not-on-main
+//
+// The second arm is the whole point and the easy thing to get wrong. "Clean" does
+// NOT imply "on main": a feature branch with no uncommitted changes is perfectly
+// clean and produces a real, well-formed, verifiable-LOOKING sha that is not on the
+// served line. A consumer greps it against main, finds nothing, and cannot tell a
+// stale deployment from a good branch build. `unattributed` is loud and safe; a
+// real-but-unmerged sha is quiet and wrong, and quiet-and-wrong is exactly the
+// failure this stamp exists to kill.
+//
+// Never throws. Any git failure degrades to `unattributed` -- a build must not break
+// because provenance could not be established, it must simply decline to claim it.
+fun buildProvenanceSha(): String {
+    fun git(vararg args: String): String? = try {
+        val proc = ProcessBuilder(listOf("git", *args))
+            .directory(rootDir)
+            .redirectErrorStream(false)
+            .start()
+        val out = proc.inputStream.bufferedReader().readText().trim()
+        if (proc.waitFor() == 0) out else null
+    } catch (e: Exception) {
+        null
+    }
+
+    val head = git("rev-parse", "HEAD") ?: return "unattributed"
+    if (!head.matches(Regex("[0-9a-f]{40}"))) return "unattributed"
+
+    // Uncommitted changes mean the artifact does not correspond to ANY commit.
+    val status = git("status", "--porcelain") ?: return "unattributed"
+    if (status.isNotEmpty()) return "unattributed"
+
+    // On the shipped line? `merge-base --is-ancestor` exits 0 for yes, 1 for no, and
+    // something else when the question could not be answered -- which is NOT a "no".
+    val ancestor = try {
+        ProcessBuilder(listOf("git", "merge-base", "--is-ancestor", head, "origin/main"))
+            .directory(rootDir).start().waitFor()
+    } catch (e: Exception) {
+        return "unattributed"
+    }
+    return if (ancestor == 0) head else "unattributed"
+}
+
 // Make the plain library jar directly launchable: `java -jar build/libs/lattex-<ver>.jar`.
 // (module-info is present, so -jar launches via this Main-Class on the classpath.)
 tasks.jar {
+    val provenance = buildProvenanceSha()
     manifest {
         attributes(
             "Main-Class" to "com.lattex.cli.Main",
             "Implementation-Title" to "LatteX",
             "Implementation-Version" to project.version.toString(),
+            "Implementation-Build-Sha" to provenance,
         )
     }
 }
