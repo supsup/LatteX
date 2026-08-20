@@ -1,0 +1,156 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use IPC::Open3 qw(open3);
+use IO::Select;
+use Symbol qw(gensym);
+
+sub usage {
+    die "usage: lattex-markdown FILE|-\n";
+}
+
+my $source = shift @ARGV;
+usage() if !defined($source) || @ARGV;
+
+my $renderer = $ENV{LATTEX_BIN} // 'lattex';
+my $markdown;
+if ($source eq '-') {
+    binmode STDIN;
+    local $/;
+    $markdown = <STDIN> // '';
+} else {
+    open my $input, '<:raw', $source
+        or die "lattex-markdown: cannot read '$source': $!\n";
+    local $/;
+    $markdown = <$input> // '';
+    close $input
+        or die "lattex-markdown: cannot close '$source': $!\n";
+}
+
+binmode STDOUT;
+binmode STDERR;
+
+sub escaped_at {
+    my ($text, $offset) = @_;
+    my $slashes = 0;
+    for (my $i = $offset - 1; $i >= 0 && substr($text, $i, 1) eq '\\'; $i--) {
+        $slashes++;
+    }
+    return ($slashes % 2) == 1;
+}
+
+sub next_opening_delimiter {
+    my ($text, $from) = @_;
+    my $offset = $from;
+    while (1) {
+        $offset = index($text, '$', $offset);
+        return -1 if $offset < 0;
+        return $offset if !escaped_at($text, $offset);
+        $offset++;
+    }
+}
+
+sub closing_delimiter {
+    my ($text, $from) = @_;
+    my $offset = $from;
+    while (1) {
+        $offset = index($text, '$', $offset);
+        return -1 if $offset < 0;
+        if (escaped_at($text, $offset)) {
+            $offset++;
+            next;
+        }
+        my $next = substr($text, $offset + 1, 1);
+        if ($next eq '(' || $next eq '{') {
+            $offset++;
+            next;
+        }
+        return $offset;
+    }
+}
+
+sub render_expression {
+    my ($command, $expression, $span_number) = @_;
+    my $child_error = gensym;
+    my ($child_input, $child_output);
+    my $pid = open3($child_input, $child_output, $child_error, $command, '--');
+
+    binmode $child_input;
+    binmode $child_output;
+    binmode $child_error;
+
+    print {$child_input} $expression
+        or die "lattex-markdown: failed to write renderer input: $!\n";
+    close $child_input
+        or die "lattex-markdown: failed to close renderer input: $!\n";
+
+    my $output_fd = fileno($child_output);
+    my $selector = IO::Select->new($child_output, $child_error);
+    my $rendered = '';
+    while (my @ready = $selector->can_read()) {
+        for my $handle (@ready) {
+            my $count = sysread($handle, my $buffer, 8192);
+            die "lattex-markdown: failed reading renderer output: $!\n"
+                if !defined($count);
+            if ($count == 0) {
+                $selector->remove($handle);
+                close $handle;
+                next;
+            }
+            if (fileno($handle) == $output_fd) {
+                $rendered .= $buffer;
+            }
+        }
+    }
+    waitpid($pid, 0);
+
+    if ($? == -1) {
+        die "lattex-markdown: failed waiting for renderer: $!\n";
+    }
+    if (($? & 127) != 0) {
+        warn "lattex-markdown: renderer terminated for inline span $span_number; keeping source\n";
+        return (0, '');
+    }
+    my $exit = $? >> 8;
+    if ($exit != 0 || $rendered eq '') {
+        warn "lattex-markdown: renderer failed for inline span $span_number"
+            . " (exit $exit); keeping source\n";
+        return (0, '');
+    }
+    return (1, $rendered);
+}
+
+my $cursor = 0;
+my $span_number = 0;
+my $length = length($markdown);
+while ($cursor < $length) {
+    my $opening = next_opening_delimiter($markdown, $cursor);
+    if ($opening < 0) {
+        print substr($markdown, $cursor);
+        last;
+    }
+
+    print substr($markdown, $cursor, $opening - $cursor);
+
+    if (substr($markdown, $opening + 1, 1) eq '$') {
+        print '$$';
+        $cursor = $opening + 2;
+        next;
+    }
+
+    my $closing = closing_delimiter($markdown, $opening + 1);
+    if ($closing < 0) {
+        print substr($markdown, $opening);
+        last;
+    }
+
+    my $source_span = substr($markdown, $opening, $closing - $opening + 1);
+    my $expression = substr($markdown, $opening + 1, $closing - $opening - 1);
+    $span_number++;
+    my ($ok, $rendered) = render_expression($renderer, $expression, $span_number);
+    print $ok ? $rendered : $source_span;
+    $cursor = $closing + 1;
+}
+
+exit 0;
