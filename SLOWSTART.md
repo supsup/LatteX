@@ -76,8 +76,9 @@ mainline entry point is the single-argument `render(String)` shown above.
 finds each inline `$…$` span, invokes the `lattex` CLI directly, writes the math
 to the child's standard input, and pastes the returned SVG into the output. It
 never constructs a shell command from document text, so quotes, semicolons,
-backticks, `$()` text, leading dashes, and newlines remain renderer input rather
-than commands or options.
+backticks, escaped `\$()` text, leading dashes, and newlines remain renderer input
+rather than commands or options. Within an inline span, escape a literal dollar
+as `\$`; the next unescaped single dollar always closes the span.
 
 ```bash
 bin/lattex-markdown post.md > post.expanded.md

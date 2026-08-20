@@ -18,7 +18,7 @@ final class MarkdownPreprocessorTest {
     @Test
     void documentTextReachesRendererOnlyThroughStdin(@TempDir Path directory) throws Exception {
         Path marker = directory.resolve("must not exist");
-        String expression = "--leading \"quoted\"; `touch " + marker + "`; $(touch " + marker
+        String expression = "--leading \"quoted\"; `touch " + marker + "`; \\$(touch " + marker
             + ")\nnext";
         Path markdown = directory.resolve("post with spaces.md");
         Files.writeString(markdown, "before $" + expression + "$ after", StandardCharsets.UTF_8);
@@ -36,13 +36,38 @@ final class MarkdownPreprocessorTest {
     void displayAndUnmatchedDelimitersStayVerbatimWhileInlineMathRenders(@TempDir Path directory)
             throws Exception {
         Path markdown = directory.resolve("delimiters.md");
-        Files.writeString(markdown, "keep $$x+y$$, render $z$, keep $unfinished",
-            StandardCharsets.UTF_8);
+        String source = "keep $$x $y$ z$$, render $z$, keep $$cost $5$$, keep $unfinished";
+        Files.writeString(markdown, source, StandardCharsets.UTF_8);
 
         Result result = runHelper(directory, markdown.toString());
 
         assertEquals(0, result.exit(), result.error());
-        assertEquals("keep $$x+y$$, render " + rendered("z") + ", keep $unfinished",
+        assertEquals("keep $$x $y$ z$$, render " + rendered("z")
+            + ", keep $$cost $5$$, keep $unfinished", result.output());
+    }
+
+    @Test
+    void unmatchedDisplayOpeningPreservesTheRemainder(@TempDir Path directory) throws Exception {
+        Path markdown = directory.resolve("unmatched-display.md");
+        String source = "before $$x $y$ and $unfinished";
+        Files.writeString(markdown, source, StandardCharsets.UTF_8);
+
+        Result result = runHelper(directory, markdown.toString());
+
+        assertEquals(0, result.exit(), result.error());
+        assertEquals(source, result.output());
+    }
+
+    @Test
+    void ordinaryClosingDelimitersBeforePunctuationDoNotCoalesceSpans(@TempDir Path directory)
+            throws Exception {
+        Path markdown = directory.resolve("punctuation.md");
+        Files.writeString(markdown, "render $x$(next) and $y${suffix}", StandardCharsets.UTF_8);
+
+        Result result = runHelper(directory, markdown.toString());
+
+        assertEquals(0, result.exit(), result.error());
+        assertEquals("render " + rendered("x") + "(next) and " + rendered("y") + "{suffix}",
             result.output());
     }
 

@@ -61,12 +61,18 @@ sub closing_delimiter {
             $offset++;
             next;
         }
-        my $next = substr($text, $offset + 1, 1);
-        if ($next eq '(' || $next eq '{') {
-            $offset++;
-            next;
-        }
         return $offset;
+    }
+}
+
+sub closing_display_delimiter {
+    my ($text, $from) = @_;
+    my $offset = $from;
+    while (1) {
+        $offset = index($text, '$$', $offset);
+        return -1 if $offset < 0;
+        return $offset if !escaped_at($text, $offset);
+        $offset += 2;
     }
 }
 
@@ -134,8 +140,14 @@ while ($cursor < $length) {
     print substr($markdown, $cursor, $opening - $cursor);
 
     if (substr($markdown, $opening + 1, 1) eq '$') {
-        print '$$';
-        $cursor = $opening + 2;
+        my $closing = closing_display_delimiter($markdown, $opening + 2);
+        if ($closing < 0) {
+            print substr($markdown, $opening);
+            last;
+        }
+        my $display_end = $closing + 2;
+        print substr($markdown, $opening, $display_end - $opening);
+        $cursor = $display_end;
         next;
     }
 
