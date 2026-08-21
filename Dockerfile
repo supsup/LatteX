@@ -2,7 +2,10 @@
 # container-only folder worker from source, then copy only immutable artifacts
 # into a non-root Java 25 runtime.
 
+ARG LATTEX_SOURCE_REVISION
 FROM eclipse-temurin:25-jdk AS build
+ARG LATTEX_SOURCE_REVISION
+ENV LATTEX_SOURCE_REVISION=${LATTEX_SOURCE_REVISION}
 WORKDIR /src
 COPY . .
 
@@ -21,6 +24,8 @@ RUN mkdir -p /worker-classes \
         -C /worker-classes .
 
 FROM eclipse-temurin:25-jre-alpine
+ARG LATTEX_SOURCE_REVISION
+LABEL org.opencontainers.image.revision=${LATTEX_SOURCE_REVISION}
 
 RUN addgroup -S -g 10001 lattex \
     && adduser -S -D -H -u 10001 -G lattex lattex \

@@ -31,13 +31,14 @@ renderer is old"* — because from where the author stands, those two look ident
 
 ## The thing you must understand first
 
-LatteX images tell you a **version string** and nothing else:
+LatteX jars now tell you both the declared version and the exact source revision:
 
 ```
 Implementation-Version: 0.13.0-SNAPSHOT
+Implementation-SCM-Revision: <full lowercase 40-character commit>
 ```
 
-That is weaker than it looks, and LatteX has the scar to prove it. On 2026-08-11, Stafficy
+The revision stamp was added because a version alone is weaker than it looks. On 2026-08-11, Stafficy
 `/docs` was serving math from `lattex-0.11.1.jar`. That version **does not exist**. LatteX's
 own 0.12.0 notes say so outright: *"0.11.1 is not a LatteX release and must not be pinned."*
 There is no such tag in the repository — only two retired branch tips. A jar was
@@ -45,15 +46,12 @@ circulating, declaring a version, and the version named nothing you could check 
 
 So the rule this whole document is built on:
 
-> **A version string tells you what someone declared. A tag is the only thing that links an
-> image to a commit — and it is a label applied by discipline, not evidence Docker enforces.**
-> Pin tagged releases. Treat a bare version on an untagged build as a label, not evidence, and
-> treat the tag itself as a claim that is only as good as the fence that produced it (Act I).
+> **A version string tells you what someone declared. `Implementation-SCM-Revision` tells you
+> which source commit produced the jar.** Tags remain operator-friendly aliases, but they are
+> mutable pointers and are never stronger than the stamp inside the artifact.
 
-(If you also work on Sirentide: its jars stamp `Sirentide-Source-Revision`, a full 40-hex
-commit, directly into the manifest. LatteX does not. That is a real asymmetry, and it is
-why LatteX's staleness check below has to lean on tags, repository reachability, a fresh fetch
-and ancestry rather than simply asking the artifact.)
+(If you also work on Sirentide: it calls the equivalent field `Sirentide-Source-Revision`.
+Both projects now let an operator ask the artifact directly.)
 
 ---
 
@@ -66,7 +64,8 @@ test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" \
   || { echo 'refusing: HEAD is not origin/main'; exit 1; }
 
 SHA=$(git rev-parse --short HEAD)           # every example below reuses this
-docker build -t "lattex:main-$SHA" .
+docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" \
+  -t "lattex:main-$SHA" .
 ```
 
 **Why four lines of fence before one line of build.** `docker build .` sends *your working
@@ -83,8 +82,10 @@ tests pass, and the build is blessed. The check that exists to catch an unfetche
 precisely the one that fails open when the remote is unfetched. A guard whose first step can
 fail silently is not a guard.
 
-No build arguments. Nothing to forget. Prerequisite: **Docker, and nothing else** — no host
-JDK, no Gradle, no Chrome. Roughly a few minutes cold, ~227 MB final.
+One build argument is mandatory: `LATTEX_SOURCE_REVISION` carries the fenced checkout's
+exact 40-character commit into the Git-less build context. Prerequisite: **Docker and Git,
+and nothing else** — no host JDK, no Gradle, no Chrome. Roughly a few minutes cold, ~227 MB
+final.
 
 **Stage 1 — `eclipse-temurin:25-jdk AS build`**
 
@@ -162,7 +163,8 @@ want the comparison made rather than displayed, that is what `assert_version` in
 **Circle 3 — the full contract:**
 
 ```sh
-sh docker/smoke-test.sh lattex:main-$SHA     # -> "lattex Docker smoke: PASS"
+sh docker/smoke-test.sh lattex:main-$SHA build.gradle.kts "$(git rev-parse HEAD)"
+# -> "lattex Docker smoke: PASS"
 ```
 
 Modes, mounts, stdin/argv/file input, batch NUL framing, reserved-word escaping, atomic
@@ -203,11 +205,9 @@ Build → verify → promote. In that order, always.
 > had no relationship to. Short SHAs can also collide as history grows.
 >
 > So the tag is a *label you are trusted to apply honestly*, which is exactly why the build fence
-> in Act I matters. The genuinely immutable identity is the image ID
-> (`docker inspect -f '{{.Id}}' lattex:dogfood`) — that names bytes and cannot be re-pointed.
-> It just cannot tell you which commit produced them, because LatteX stamps no source revision
-> into the artifact. That gap is the real subject of this section: the tag is the only thing
-> *connecting bytes to a commit*, and it holds only as well as your discipline does.
+> in Act I matters. The image ID names immutable bytes, while the jar's
+> `Implementation-SCM-Revision` names the source commit. The tag is a readable cross-check,
+> not the provenance authority.
 
 ---
 
@@ -217,41 +217,26 @@ Build → verify → promote. In that order, always.
 docker run --rm lattex:dogfood cli --version
 sed -n 's/^version = "\(.*\)"$/declared in source: \1/p' build.gradle.kts
 
-tags=$(docker inspect -f '{{join .RepoTags "\n"}}' lattex:dogfood | sed -n 's/^lattex:main-//p')
-n=$(printf '%s' "$tags" | grep -c . || true)
+revision=$(docker run --rm --entrypoint sh lattex:dogfood -c \
+  'unzip -p /opt/lattex/lattex.jar META-INF/MANIFEST.MF' \
+  | sed -n 's/^Implementation-SCM-Revision: //p' | tr -d '\r')
 
-if [ "$n" -eq 0 ]; then
-  echo "provenance unknown: no lattex:main-<sha> tag — rebuild"
-elif [ "$n" -gt 1 ]; then
-  echo "provenance AMBIGUOUS: this image answers to $n main-<sha> tags — refusing to guess:"
-  printf '  %s\n' $tags
-elif ! git cat-file -e "${tags}^{commit}" 2>/dev/null; then
-  echo "provenance unverifiable: '$tags' is not a commit in this repository"
+if ! printf '%s\n' "$revision" | grep -Eq '^[0-9a-f]{40}$'; then
+  echo "provenance unknown: jar has no valid Implementation-SCM-Revision — rebuild"
+elif ! git cat-file -e "${revision}^{commit}" 2>/dev/null; then
+  echo "provenance unverifiable: '$revision' is not a commit in this repository"
 elif ! git fetch -q origin main; then
   echo "provenance uncomparable: fetch failed, cannot say what 'behind main' means right now"
-elif ! git merge-base --is-ancestor "$tags" origin/main; then
-  echo "provenance DIVERGENT: $tags is a real commit but not an ancestor of origin/main —"
+elif ! git merge-base --is-ancestor "$revision" origin/main; then
+  echo "provenance DIVERGENT: $revision is not an ancestor of origin/main —"
   echo "  this image was built from a branch, not from main. 'behind' does not apply."
 else
-  echo "built from $tags, $(git rev-list --count "$tags"..origin/main) commit(s) behind main"
+  echo "built from $revision, $(git rev-list --count "$revision"..origin/main) commit(s) behind main"
 fi
 ```
 
-**Five refusals, and none of them used to be here.** The first version of this block ended with
-`head -1`, which turns "this image has several `main-<sha>` tags" into a silent arbitrary pick —
-and an arbitrary pick is indistinguishable from a correct one in the output. Verified against a
-real image carrying two such tags: `head -1` chose one and said nothing about the other.
-
-Each later arm closes a *different* way of producing a confident sentence from a bad premise, and
-the divergence arm is the subtlest: `git rev-list --count X..origin/main` returns a perfectly
-plausible integer for a commit that lives on some other branch entirely, so an image built from a
-feature branch reports as merely "3 commits behind main" rather than as not-on-main-at-all. The
-ancestry check is what makes "behind" mean what the word implies. The fetch arm is here for the
-same reason the build fence has one: a comparison against a stale `origin/main` is not a
-comparison, and silence is the wrong way to say so.
-
-Never read `RepoTags` positionally (`{{index .RepoTags 1}}`). The order is not guaranteed;
-it works until the day it silently doesn't.
+Each refusal closes a different bad premise: absent stamp, unknown commit, unfetched remote,
+or branch-divergent source. The ancestry check is what makes "behind" mean what the word implies.
 
 ### Roleplay: the eight-day-old container
 
@@ -440,11 +425,12 @@ staleness: this image, and that vendored jar. Updating one says nothing about th
 ## The short version
 
 1. Fence first (clean tree, `HEAD` == `origin/main`), then
-   `docker build -t lattex:main-$SHA .` — no build args needed. The fence is what makes the
-   tag's claim true; `docker build .` ships your working tree, not the commit you named.
+   `docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" -t lattex:main-$SHA .`.
+   The fence makes both the tag and the jar stamp truthful; `docker build .` ships your working
+   tree, not the commit you named.
 2. Verify: renders → version matches source → smoke passes.
-3. Tag `main-<sha>` **first**; promote `dogfood` second. It is your only link from bytes to a
-   commit — and a convention you keep, not one Docker enforces, since any tag can be re-pointed.
+3. Tag `main-<sha>` **first**; promote `dogfood` second. Treat tags as readable aliases and the
+   jar's `Implementation-SCM-Revision` as source provenance.
 4. Pin **tagged** releases. `0.11.1` is the standing proof that a version string can name
    nothing at all.
 5. Rename files into `Input/`; never write them in place.

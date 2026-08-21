@@ -5,6 +5,7 @@ image=${1:-lattex:local}
 # The source of truth for the expected version. Second argument so a caller can
 # point at another checkout; defaults to the build file beside this script's repo.
 gradle_build_file=${2:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)/build.gradle.kts}
+expected_revision=${3:-}
 tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/lattex-docker-smoke.XXXXXX")
 name_suffix=$$
 watch_one="lattex-smoke-one-$name_suffix"
@@ -88,6 +89,26 @@ assert_version() {
     fi
 }
 
+# The jar is the artifact consumers receive, so read source identity from its
+# manifest rather than trusting only the mutable image tag or OCI label.
+assert_revision() {
+    image_ref=$1
+    expected=$2
+    actual=$(docker run --rm --entrypoint sh "$image_ref" -c \
+        'unzip -p /opt/lattex/lattex.jar META-INF/MANIFEST.MF' \
+        | sed -n 's/^Implementation-SCM-Revision: //p' | tr -d '\r')
+    if ! printf '%s\n' "$actual" | grep -Eq '^[0-9a-f]{40}$'; then
+        echo "smoke: image jar has no valid Implementation-SCM-Revision: '$actual'" >&2
+        return 1
+    fi
+    if [ -n "$expected" ] && [ "$actual" != "$expected" ]; then
+        echo "smoke: source revision mismatch" >&2
+        echo "  expected: $expected" >&2
+        echo "  actual:   $actual" >&2
+        return 1
+    fi
+}
+
 # Runtime shape: non-root, immutable jars, and fixed mount roots. The CLI
 # renders immediately below, which also proves the bundled font is present and
 # readable without requiring JDK-only `jar` tooling in the JRE image.
@@ -125,6 +146,7 @@ printf '%s\n' '\sqrt{2}' \
 cmp "$tmp_root/legacy-stdin.svg" "$tmp_root/explicit-stdin.svg"
 docker run --rm "$image" cli --help | grep -q 'USAGE:'
 assert_version "$image" "$gradle_build_file"
+assert_revision "$image" "$expected_revision"
 
 printf '%s\n' 'x^2' '\frac{a}{b}' \
     | docker run --rm -i "$image" cli --batch > "$tmp_root/batch.bin"
