@@ -196,7 +196,37 @@ application {
 
 // Make the plain library jar directly launchable: `java -jar build/libs/lattex-<ver>.jar`.
 // (module-info is present, so -jar launches via this Main-Class on the classpath.)
+val gitHead = providers.exec {
+    commandLine("git", "rev-parse", "--verify", "HEAD")
+    workingDir(rootDir)
+    isIgnoreExitValue = true
+}
+val implementationScmRevision = providers.provider {
+    val result = gitHead.result.get()
+    val revision = gitHead.standardOutput.asText.get().trim()
+    if (result.exitValue != 0) {
+        throw GradleException(
+            "Cannot stamp Implementation-SCM-Revision: " +
+                "`git rev-parse --verify HEAD` exited ${result.exitValue}."
+        )
+    }
+    if (!revision.matches(Regex("[0-9a-f]{40}"))) {
+        throw GradleException(
+            "Cannot stamp Implementation-SCM-Revision: expected one lowercase full " +
+                "40-character Git SHA, got `${revision.ifEmpty { "<empty>" }}`."
+        )
+    }
+    revision
+}
+
 tasks.jar {
+    // HEAD is source identity even when source bytes are unchanged, so it must be a task input.
+    // The lazy provider keeps unrelated Gradle tasks usable when Git is unavailable; `jar`
+    // itself fails closed instead of stamping an unknown or silently omitting provenance.
+    inputs.property("implementationScmRevision", implementationScmRevision)
+    doFirst {
+        manifest.attributes["Implementation-SCM-Revision"] = implementationScmRevision.get()
+    }
     manifest {
         attributes(
             "Main-Class" to "com.lattex.cli.Main",
