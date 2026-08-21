@@ -72,31 +72,32 @@ mainline entry point is the single-argument `render(String)` shown above.
 > `$E = mc^2$` I already type to come out as crisp math in the built HTML.
 > That's it."*
 
-**Approach: a tiny build-time preprocessor that shells out to the `lattex`
-CLI, once per math span.** You don't need the JVM in your toolchain or a plugin
-for your exact static-site setup — you need a script that finds each `$…$`, runs
-`lattex` on the inside, and pastes the SVG back in. Because the output SVG is
-sanitizer-safe, it inlines with no post-processing.
-
-A minimal shell preprocessor (replaces every `$…$` in a file with rendered SVG):
-
-```bash
-#!/usr/bin/env bash
-# md-math.sh FILE  →  prints the file with each $…$ span replaced by its SVG.
-# Uses the `lattex` native CLI (see QUICKSTART §5 for how to build it).
-perl -pe 's{\$(.+?)\$}{`lattex "$1"`}ge' "$1"
-```
+**Approach: the checked-in `bin/lattex-markdown` build-time preprocessor.** It
+finds each inline `$…$` span, invokes the `lattex` CLI directly, writes the math
+to the child's standard input, and pastes the returned SVG into the output. It
+never constructs a shell command from document text, so quotes, semicolons,
+backticks, escaped `\$()` text, leading dashes, and newlines remain renderer input
+rather than commands or options. Within an inline span, escape a literal dollar
+as `\$`; the next unescaped single dollar always closes the span.
 
 ```bash
-./md-math.sh post.md > post.expanded.md     # then feed post.expanded.md to your MD→HTML step
+bin/lattex-markdown post.md > post.expanded.md
 ```
 
-That's the "nothing more" version. The `lattex` CLI reads the expression as an
-argument (or on stdin) and prints the SVG to stdout — see Scenario 6 for the CLI
-in a real pipeline.
+The helper expects `lattex` on `PATH`; set `LATTEX_BIN=/exact/path/to/lattex`
+to select a particular binary. Pass `-` instead of a filename to read Markdown
+from standard input. A filename containing spaces is one ordinary argument.
 
-**Status: CLI = Built (S7). First-class pipeline = Planned (S8).** Shelling out
-per span works today. A *first-class* Markdown→SVG pipeline that understands
+This is deliberately a narrow helper rather than a Markdown grammar. It renders
+single-dollar inline spans, preserves `$$…$$` display source and unmatched
+delimiters verbatim, and leaves only a failed renderer span unchanged while
+continuing the rest of the page. It does not claim fenced-code awareness,
+display-math support, or the complete S8 marker grammar. Use it only where the
+site's authoring convention already reserves single-dollar spans for inline
+math. The returned SVG is sanitizer-safe and inlines with no post-processing.
+
+**Status: CLI = Built (S7). Narrow no-shell helper = Built. First-class pipeline
+= Planned (S8).** A *first-class* Markdown→SVG pipeline that understands
 `$…$` (inline), `$$…$$` (display), and `\lx[…]{…}` markers as a single build step
 is **planned** — on the JVM as a flexmark extension, with reference remark/rehype
 and Python filters as a **future** add. See
