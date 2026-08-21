@@ -248,6 +248,17 @@ val implementationScmRevision = providers.provider {
     revision
 }
 
+// Narrow verification seam for the lineage resolver itself. It evaluates the exact same lazy
+// provider used by `jar` without compiling the application, so committed tests can exercise
+// Git-present and filtered Git-less project fixtures deterministically.
+val verifyScmRevision by tasks.registering {
+    group = "verification"
+    description = "Resolves and validates the exact source revision used for jar lineage."
+    doLast {
+        println("LATTEX_SCM_REVISION=" + implementationScmRevision.get())
+    }
+}
+
 tasks.jar {
     // HEAD is source identity even when source bytes are unchanged, so it must be a task input.
     // The lazy provider keeps unrelated Gradle tasks usable when Git is unavailable; `jar`
