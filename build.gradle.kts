@@ -196,27 +196,67 @@ application {
 
 // Make the plain library jar directly launchable: `java -jar build/libs/lattex-<ver>.jar`.
 // (module-info is present, so -jar launches via this Main-Class on the classpath.)
+val configuredScmRevision = providers.environmentVariable("LATTEX_SOURCE_REVISION")
 val gitHead = providers.exec {
     commandLine("git", "rev-parse", "--verify", "HEAD")
     workingDir(rootDir)
     isIgnoreExitValue = true
 }
 val implementationScmRevision = providers.provider {
-    val result = gitHead.result.get()
-    val revision = gitHead.standardOutput.asText.get().trim()
-    if (result.exitValue != 0) {
-        throw GradleException(
-            "Cannot stamp Implementation-SCM-Revision: " +
-                "`git rev-parse --verify HEAD` exited ${result.exitValue}."
-        )
+    val configured = configuredScmRevision.orNull
+    val source: String
+    val revision: String
+    var checkoutRevision: String? = null
+    if (configured != null) {
+        source = "LATTEX_SOURCE_REVISION"
+        revision = configured.trim()
+        if (rootDir.resolve(".git").exists()) {
+            val result = gitHead.result.get()
+            checkoutRevision = gitHead.standardOutput.asText.get().trim()
+            if (result.exitValue != 0) {
+                throw GradleException(
+                    "Cannot verify LATTEX_SOURCE_REVISION against this checkout: " +
+                        "`git rev-parse --verify HEAD` exited ${result.exitValue}."
+                )
+            }
+        }
+    } else {
+        source = "`git rev-parse --verify HEAD`"
+        val result = gitHead.result.get()
+        revision = gitHead.standardOutput.asText.get().trim()
+        if (result.exitValue != 0) {
+            throw GradleException(
+                "Cannot stamp Implementation-SCM-Revision: $source exited " +
+                    "${result.exitValue}; set LATTEX_SOURCE_REVISION to the exact " +
+                    "lowercase 40-character source commit in Git-less builds."
+            )
+        }
     }
     if (!revision.matches(Regex("[0-9a-f]{40}"))) {
         throw GradleException(
             "Cannot stamp Implementation-SCM-Revision: expected one lowercase full " +
-                "40-character Git SHA, got `${revision.ifEmpty { "<empty>" }}`."
+                "40-character Git SHA from $source, got " +
+                "`${revision.ifEmpty { "<empty>" }}`."
+        )
+    }
+    if (checkoutRevision != null && checkoutRevision != revision) {
+        throw GradleException(
+            "Cannot stamp Implementation-SCM-Revision: LATTEX_SOURCE_REVISION " +
+                "`$revision` does not match checkout HEAD `$checkoutRevision`."
         )
     }
     revision
+}
+
+// Narrow verification seam for the lineage resolver itself. It evaluates the exact same lazy
+// provider used by `jar` without compiling the application, so committed tests can exercise
+// Git-present and filtered Git-less project fixtures deterministically.
+val verifyScmRevision by tasks.registering {
+    group = "verification"
+    description = "Resolves and validates the exact source revision used for jar lineage."
+    doLast {
+        println("LATTEX_SCM_REVISION=" + implementationScmRevision.get())
+    }
 }
 
 tasks.jar {

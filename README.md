@@ -96,10 +96,12 @@ The image builds from source with the checked-in Gradle wrapper, has no BrewShot
 or browser runtime dependency, and runs as the dedicated non-root UID/GID
 `10001:10001` unless you deliberately map it to your own non-root host IDs.
 
-Build it from the repository root:
+Build it from the repository root. The exact source revision is required because
+the filtered Docker context deliberately contains no `.git` directory:
 
 ```bash
-docker build -t lattex:local .
+docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" \
+  -t lattex:local .
 mkdir -p Input Output
 ```
 
@@ -110,8 +112,9 @@ mounts below).
 
 ### Setup, end to end — and how to tell your image has gone stale
 
-**Prerequisites: Docker, and nothing else.** No JDK, no Gradle, no Chrome on the
-host. The first build stage is a `temurin:25-jdk` image that compiles the jar with
+**Prerequisites: Docker plus the Git checkout being built.** No host JDK, Gradle, or
+Chrome is needed. Git supplies the exact source revision to the otherwise Git-less
+build context. The first build stage is a `temurin:25-jdk` image that compiles the jar with
 the checked-in Gradle wrapper; the runtime stage is `temurin:25-jre-alpine`. Expect
 a few minutes cold (Gradle downloads its dependencies inside the build stage) and
 a **~227 MB** final image. Nothing from your host `build/` directory can leak in —
@@ -136,7 +139,8 @@ test -z "$(git status --porcelain)" || { echo 'refusing: working tree is dirty';
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" \
   || { echo 'refusing: HEAD is not origin/main'; exit 1; }
 
-docker build -t "lattex:main-$(git rev-parse --short HEAD)" .
+docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" \
+  -t "lattex:main-$(git rev-parse --short HEAD)" .
 ```
 
 The fence is not ceremony: `docker build .` ships your **working tree**, so a name derived
@@ -157,7 +161,8 @@ docker run --rm "$IMAGE" cli '\frac{a}{b}' | head -1
 docker run --rm "$IMAGE" cli --version      # -> lattex <version from build.gradle.kts>
 
 # 3. The full contract: modes, mounts, atomic claims, restart recovery, races.
-sh docker/smoke-test.sh "$IMAGE"            # -> "lattex Docker smoke: PASS"
+sh docker/smoke-test.sh "$IMAGE" build.gradle.kts "$(git rev-parse HEAD)"
+# -> "lattex Docker smoke: PASS"
 ```
 
 Only after `PASS` should you move the moving tag:
@@ -177,36 +182,27 @@ days behind main, and the symptom was `50\% \& 3\_4` returning `error: invalid L
 docker run --rm lattex:dogfood cli --version
 sed -n 's/^version = "\(.*\)"$/declared in source: \1/p' build.gradle.kts
 
-# How far behind is the commit the image was built from? This reads the
-# lattex:main-<sha> tag riding the same image. An earlier version of this block
-# carried the words "never index RepoTags positionally" directly above a `head -1`,
-# which is exactly that — an arbitrary pick reads just like a correct one. Each arm
-# below reports a distinct way of NOT knowing, rather than resolving it by luck.
-tags=$(docker inspect -f '{{join .RepoTags "\n"}}' lattex:dogfood | sed -n 's/^lattex:main-//p')
-n=$(printf '%s' "$tags" | grep -c . || true)
+# The jar manifest is authoritative; tags remain useful human-readable aliases.
+revision=$(docker run --rm --entrypoint sh lattex:dogfood -c \
+  'unzip -p /opt/lattex/lattex.jar META-INF/MANIFEST.MF' \
+  | sed -n 's/^Implementation-SCM-Revision: //p' | tr -d '\r')
 
-if [ "$n" -eq 0 ]; then
-  echo "provenance unknown: dogfood carries no lattex:main-<sha> tag — rebuild"
-elif [ "$n" -gt 1 ]; then
-  echo "provenance AMBIGUOUS: $n main-<sha> tags on this image — refusing to guess:"
-  printf '  %s\n' $tags
-elif ! git cat-file -e "${tags}^{commit}" 2>/dev/null; then
-  echo "provenance unverifiable: '$tags' is not a commit in this repository"
+if ! printf '%s\n' "$revision" | grep -Eq '^[0-9a-f]{40}$'; then
+  echo "provenance unknown: jar has no valid Implementation-SCM-Revision — rebuild"
+elif ! git cat-file -e "${revision}^{commit}" 2>/dev/null; then
+  echo "provenance unverifiable: '$revision' is not a commit in this repository"
 elif ! git fetch -q origin main; then
   echo "provenance uncomparable: fetch failed, 'behind main' has no meaning right now"
-elif ! git merge-base --is-ancestor "$tags" origin/main; then
-  echo "provenance DIVERGENT: $tags is a real commit but not an ancestor of origin/main"
+elif ! git merge-base --is-ancestor "$revision" origin/main; then
+  echo "provenance DIVERGENT: $revision is not an ancestor of origin/main"
 else
-  echo "built from $tags, $(git rev-list --count "$tags"..origin/main) commit(s) behind main"
+  echo "built from $revision, $(git rev-list --count "$revision"..origin/main) commit(s) behind main"
 fi
 ```
 
-That last check is why the promote step above builds `lattex:main-<sha>` *first* and
-tags `dogfood` as an alias onto it: that tag is the only thing linking the image to a
-commit — a label you apply honestly, not one Docker enforces, since any tag can be
-re-pointed at any image afterwards. The genuinely immutable identity is the image ID,
-which cannot tell you the commit. A `dogfood` built directly, with no sibling
-tag, can still be version-checked but cannot be placed in history.
+The manifest stamp survives re-tagging and names the source commit from inside the artifact.
+The `main-<sha>` tag remains a useful operator-facing cross-check, but it is a mutable label,
+not the provenance authority.
 
 If the two version strings disagree, the image predates the current source and the
 fix is a rebuild — repeat the build/verify/promote sequence above. `docker/smoke-test.sh`
