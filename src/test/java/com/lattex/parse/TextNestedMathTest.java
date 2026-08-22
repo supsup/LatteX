@@ -1,11 +1,13 @@
 package com.lattex.parse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.lattex.api.LatteX;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /// Nested inline math inside a text-family argument: an unescaped `$…$` span in
@@ -14,6 +16,14 @@ import org.junit.jupiter.api.Test;
 /// math segments. `\$` stays a literal; an unpaired `$` is a positioned error;
 /// the inner parse continues the outer depth so `$`-nesting can't blow the stack.
 class TextNestedMathTest {
+
+    private static void assertNoEmptyTextRuns(String latex) {
+        String parsed = MathParserTest.pp(MathParser.parse(latex));
+        assertFalse(parsed.matches(".*Txt\\[[^]]+]\\(\\).*"), parsed);
+
+        String mathml = LatteX.toMathML(latex);
+        assertFalse(mathml.contains("<mtext></mtext>"), mathml);
+    }
 
     @Test
     void aMathSpanInsideTextReentersMathMode() {
@@ -146,6 +156,62 @@ class TextNestedMathTest {
         // And a plain group is NOT opaque to the toggle: $ inside {…} still toggles.
         assertEquals("L(Txt[ROMAN](a b ) A(x,ORD) Txt[ROMAN]( c))",
             MathParserTest.pp(MathParser.parse("\\text{a {b $x$} c}")));
+    }
+
+    @Test
+    void structuralBracesAroundMathDoNotCreateEmptyTextRunSiblings() {
+        String latex = "\\text{{$x$}}";
+
+        assertEquals("A(x,ORD)", MathParserTest.pp(MathParser.parse(latex)));
+        assertEquals(LatteX.toMathML("x"), LatteX.toMathML(latex));
+        assertNoEmptyTextRuns(latex);
+    }
+
+    @Test
+    void meaningfulTrailingSpaceSurvivesAfterStructuralBracesAreStripped() {
+        String latex = "\\text{{$x$} }";
+
+        assertEquals("L(A(x,ORD) Txt[ROMAN]( ))",
+            MathParserTest.pp(MathParser.parse(latex)));
+        assertEquals(LatteX.toMathML("x\\text{ }"), LatteX.toMathML(latex));
+        assertTrue(LatteX.toMathML(latex).contains("<mtext> </mtext>"));
+        assertNoEmptyTextRuns(latex);
+    }
+
+    @Test
+    void deeperStructuralBracesAroundMathDoNotCreateEmptyTextRunSiblings() {
+        String latex = "\\text{{{$x$}}}";
+
+        assertEquals("A(x,ORD)", MathParserTest.pp(MathParser.parse(latex)));
+        assertEquals(LatteX.toMathML("x"), LatteX.toMathML(latex));
+        assertNoEmptyTextRuns(latex);
+    }
+
+    @Test
+    void adjacentStructurallySeparatedMathSpansHaveNoEmptyTextBetweenThem() {
+        String latex = "\\text{{$x$}{$y$}}";
+
+        assertEquals("L(A(x,ORD) A(y,ORD))",
+            MathParserTest.pp(MathParser.parse(latex)));
+        assertEquals(LatteX.toMathML("xy"), LatteX.toMathML(latex));
+        assertNoEmptyTextRuns(latex);
+    }
+
+    @Test
+    void everyTextCommandOmitsOnlyDecodedEmptyFragmentsAndKeepsTrailingSpace() {
+        assertEquals(Set.of("text", "textrm", "mathrm", "textnormal", "textbf", "textit", "texttt"),
+            Symbols.TEXT_COMMANDS.keySet(), "sweep must cover every text command family");
+
+        Symbols.TEXT_COMMANDS.forEach((command, style) -> {
+            String latex = "\\" + command + "{{$x$} }";
+            assertEquals("L(A(x,ORD) Txt[" + style + "]( ))",
+                MathParserTest.pp(MathParser.parse(latex)), "parser: \\" + command);
+            assertEquals(LatteX.toMathML("x\\" + command + "{ }"),
+                LatteX.toMathML(latex), "MathML: \\" + command);
+            assertTrue(LatteX.toMathML(latex).contains("<mtext> </mtext>"),
+                "meaningful trailing space: \\" + command);
+            assertNoEmptyTextRuns(latex);
+        });
     }
 
     @Test

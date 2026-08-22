@@ -1823,9 +1823,12 @@ public final class MathParser {
      * stays a literal (verbatim, exactly the pre-split behavior — never a toggle).
      * A plain argument (no unescaped {@code $}) yields the byte-identical single
      * {@link TextRun} it always did. An unpaired {@code $} is a positioned error;
-     * an empty {@code $$} span contributes nothing. The inner parse CONTINUES this
-     * parser's depth (see {@link #parseMath(String, int)}) so {@code $}-nesting
-     * cannot recurse past {@link #MAX_DEPTH}.
+     * an empty {@code $$} span contributes nothing. In the split path, each literal
+     * fragment is decoded before deciding whether it contributes a run: invisible
+     * grouping braces alone contribute nothing, while spaces and decoded escapes
+     * remain significant. The inner parse CONTINUES this parser's depth (see
+     * {@link #parseMath(String, int)}) so {@code $}-nesting cannot recurse past
+     * {@link #MAX_DEPTH}.
      */
     private MathNode textWithNestedMath(Token t) {
         String raw = t.text(); // verbatim, braces included (lexTextArgument keeps them)
@@ -1839,11 +1842,11 @@ public final class MathParser {
         while (i < n) {
             int open = indexOfUnescapedDollar(raw, i);
             if (open < 0) {
-                items.add(new TextRun(literalText(raw.substring(i), t), style));
+                addLiteralTextRun(items, raw.substring(i), t, style);
                 break;
             }
             if (open > i) {
-                items.add(new TextRun(literalText(raw.substring(i, open), t), style));
+                addLiteralTextRun(items, raw.substring(i, open), t, style);
             }
             int close = indexOfUnescapedDollar(raw, open + 1);
             if (close < 0) {
@@ -1870,6 +1873,15 @@ public final class MathParser {
             return items.get(0);
         }
         return new MathList(List.copyOf(items));
+    }
+
+    /** Adds a split-path literal only when decoding leaves meaningful text. */
+    private static void addLiteralTextRun(
+            List<MathNode> items, String raw, Token t, TextStyle style) {
+        String literal = literalText(raw, t);
+        if (!literal.isEmpty()) {
+            items.add(new TextRun(literal, style));
+        }
     }
 
     /**
