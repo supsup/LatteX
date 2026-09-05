@@ -6,6 +6,12 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Structural text braces no longer emit empty MathML text nodes (bug fix)
+
+Nested math now decodes each surrounding literal fragment before deciding whether it is text.
+Thus `\text{{$x$}}` no longer creates empty `TextRun` siblings or `<mtext></mtext>`, while a
+meaningful trailing space such as `\text{{$x$} }` remains intact. Explicit `\text{}` is unchanged.
+
 ### `./gradlew test` no longer launches a browser
 
 The core suite ran the six real-browser BrewShot pins inline, so every `test` invocation started
