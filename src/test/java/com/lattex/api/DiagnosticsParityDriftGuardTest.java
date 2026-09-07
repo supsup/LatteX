@@ -68,11 +68,20 @@ class DiagnosticsParityDriftGuardTest {
         RecordComponent[] rc = Diagnostics.class.getRecordComponents();
         // ...and the LatteX-only progressive-enhancement fields come STRICTLY after the
         // shared core, so the parity of the first five can never be disturbed by them.
-        assertEquals(7, rc.length, "expected 5 shared-core + 2 LatteX-only components");
+        // The count is hard-coded ON PURPOSE and this test firing on growth is the feature, not a
+        // maintenance cost: it cannot be satisfied by a field arriving unnoticed. It went 7 -> 8 when
+        // `caveats` was added (ruling lattex/868 via PROJECT/stafficy 25843), and that edit is the
+        // deliberate decision the guard exists to force.
+        assertEquals(8, rc.length, "expected 5 shared-core + 3 LatteX-only components");
         assertEquals("offset", rc[5].getName());
         assertEquals(int.class, rc[5].getType());
         assertEquals("caretString", rc[6].getName());
         assertEquals(String.class, rc[6].getType());
+        // caveats is APPENDED, after the shared core AND after the pre-existing LatteX-only tail, so
+        // a Sirentide-shaped consumer reading the first five is untouched and one reading positionally
+        // through caretString is untouched too.
+        assertEquals("caveats", rc[7].getName());
+        assertEquals(List.class, rc[7].getType());
     }
 
     @Test

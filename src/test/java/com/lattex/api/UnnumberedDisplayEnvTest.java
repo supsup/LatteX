@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -89,19 +90,43 @@ class UnnumberedDisplayEnvTest {
     }
 
     @Test
-    void theNumberedFormIsStillRefusedPendingTheCrewRuling() {
-        // NOT an endorsement of refusing — a PIN on the current state while the fork at
-        // lattex/865 is open, so the half-finished feature cannot be mistaken for a finished
-        // one. When the ruling lands this test changes, and its failure is the reminder.
-        try {
-            LatteX.render("\\begin{equation} E = mc^2 \\end{equation}");
-            org.junit.jupiter.api.Assertions.fail(
-                "equation is not yet accepted; if this now passes, resolve lattex/865 and "
-                    + "update this test deliberately rather than deleting it");
-        } catch (RuntimeException expected) {
-            assertTrue(String.valueOf(expected.getMessage()).contains("equation"),
-                "and the refusal names the environment: " + expected.getMessage());
-        }
+    void theNumberedFormIsAcceptedAndSAYSItDroppedTheNumber() {
+        // THE TRIPWIRE ABOVE FIRED AND THIS IS ITS DELIBERATE REPLACEMENT, not its deletion. The
+        // prior test pinned `equation` as REFUSED while the fork at lattex/865 was open, so the
+        // half-finished feature could not be mistaken for a finished one. The ruling landed
+        // (lattex/868 via PROJECT/stafficy 25843): accept it, and SAY what was dropped.
+        RenderResult r = LatteX.renderWithDiagnostics(
+            "\\begin{equation} E = mc^2 \\end{equation}");
+
+        assertEquals(Outcome.OK, r.diagnostics().outcome(), "the numbered form now renders");
+
+        // THE CREW'S BINDING CONDITION, and the reason this test is not just an OK assertion:
+        // unnumbered-and-SILENT is not support. Whichever branch was chosen had to SPEAK.
+        assertFalse(r.diagnostics().caveats().isEmpty(),
+            "accepting a numbered environment without saying the number was dropped is exactly the "
+                + "honesty failure the crew's binding condition refused");
+        assertTrue(r.diagnostics().caveats().stream().anyMatch(c -> c.contains("equation")),
+            "and the caveat names the environment: " + r.diagnostics().caveats());
+
+        // THE CHANNEL IS THE OTHER HALF OF THE RULING. detail is documented as the cleanliness
+        // discriminator, "" on every clean render, and this IS a clean render - the SVG is exactly
+        // what the page will serve. Routing the caveat through detail would have made every existing
+        // empty-detail gate report dirt on correct output.
+        assertEquals("", r.diagnostics().detail(),
+            "the caveat must NOT arrive through detail, or a documented discriminator changes "
+                + "meaning for every consumer already gating on it: " + r.diagnostics().detail());
+    }
+
+    @Test
+    void theStarredFormStillOwesNoCaveatAndThatIsWhatMakesTheCaveatMeanSomething() {
+        // THE CONTROL. Without it, a caveat emitted on every render would pass the test above while
+        // telling a reader nothing - the same "a gate that fires on everything is not a gate" shape.
+        RenderResult r = LatteX.renderWithDiagnostics(
+            "\\begin{equation*} E = mc^2 \\end{equation*}");
+        assertEquals(Outcome.OK, r.diagnostics().outcome());
+        assertTrue(r.diagnostics().caveats().isEmpty(),
+            "an EXPLICITLY unnumbered form promises no number, so it drops nothing and owes no "
+                + "caveat: " + r.diagnostics().caveats());
     }
 
     @Test

@@ -50,3 +50,10 @@ public static method com.lattex.api.MathStyle#valueOf(java.lang.String):com.latt
 public static method com.lattex.api.MathStyle#values():com.lattex.api.MathStyle[]
 public static method com.lattex.api.RenderOptions#parseMathStyle(java.lang.String):com.lattex.api.MathStyle
 public type com.lattex.api.MathStyle
+# B-prime: Diagnostics grows the additive `caveats` channel so a numbered display environment can
+# say it dropped its number WITHOUT going through `detail`, which is documented as the
+# cleanliness discriminator and is relied on by existing consumer gates.
+# Ruled lattex/868 via PROJECT/stafficy 25843; plan 4f1ffc87. Removals: none - the pre-existing
+# 7-argument constructor is retained deliberately so no construction site moves.
+public constructor com.lattex.api.Diagnostics(com.lattex.api.Outcome,java.lang.String,java.lang.String,int,java.lang.String,int,java.lang.String,java.util.List)
+public method com.lattex.api.Diagnostics#caveats():java.util.List

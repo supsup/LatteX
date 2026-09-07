@@ -165,6 +165,13 @@ final class EnvironmentParser {
             throw new MathSyntaxException("empty \\begin{" + env + "} environment");
         }
 
+        // Report a NUMBERED display environment to the caller's sink, at the last moment the name
+        // still exists: buildMatrix returns a Matrix carrying a MatrixKind and not a name, and the
+        // starred twin maps to an identical spec, so after this line the two are indistinguishable.
+        // No-op unless the caller asked (MathParser.parse's three-arg overload).
+        if (Symbols.NUMBERED_ENVIRONMENTS.contains(env)) {
+            parser.recordNumberedEnvironment(env);
+        }
         return buildMatrix(env, spec, specAligns, specVlines, rawRows, hlines);
     }
 

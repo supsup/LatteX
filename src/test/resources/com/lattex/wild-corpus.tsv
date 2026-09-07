@@ -501,3 +501,7 @@ OK	math.PR-2026-07-23	I	\llbracket 0,\tau\llbracket
 OK	math.PR-2026-07-23	I	\llbracket 0,\zeta\llbracket
 OK	math.PR-2026-07-23	I	\llbracket 0,\tau_{K}\llbracket
 OK	math.PR-2026-07-23	I	\llbracket\zeta,\infty\llbracket
+OK	calculus-physics	D	\begin{equation} E = mc^2 \end{equation}
+OK	calculus-physics	D	\begin{equation*} \oint_{\partial \Sigma} \mathbf{B} \cdot d\boldsymbol{\ell} = \mu_0 I_{\text{enc}} \end{equation*}
+OK	calculus-physics	D	\begin{displaymath} \lim_{n \to \infty} \left(1 + \frac{1}{n}\right)^n = e \end{displaymath}
+OK	calculus-physics	D	\begin{gather} a^2 + b^2 = c^2 \\ e^{i\pi} + 1 = 0 \end{gather}

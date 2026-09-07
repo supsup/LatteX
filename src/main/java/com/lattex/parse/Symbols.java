@@ -796,6 +796,22 @@ final class Symbols {
     static final int NO_DELIM = Fenced.NULL_DELIMITER;
 
     /** The supported grid environments and their enclosing delimiters. */
+    /**
+     * The display environments LaTeX NUMBERS, and whose number LatteX does not render.
+     *
+     * <p>Each one has an explicitly-unnumbered starred twin in {@link #ENVIRONMENTS} that maps to an
+     * IDENTICAL spec — which is exactly why this set has to exist as data rather than being derived
+     * downstream: after parse, {@code align} and {@code align*} are indistinguishable, so nothing
+     * later can tell which of the two the author wrote.
+     *
+     * <p>Membership is not a style choice: a name belongs here iff LaTeX numbers it and
+     * {@code ENVIRONMENTS} also carries its starred form (plus {@code equation}, whose starred form
+     * predates it). A guard test pins that derivation so a seventh numbered environment cannot be
+     * added without either joining this set or failing loudly.
+     */
+    static final java.util.Set<String> NUMBERED_ENVIRONMENTS =
+        java.util.Set.of("equation", "align", "alignat", "eqnarray", "gather", "multline");
+
     static final Map<String, EnvSpec> ENVIRONMENTS = Map.ofEntries(
         Map.entry("matrix", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MATRIX, ColumnAlign.CENTER)),
         Map.entry("pmatrix", new EnvSpec('(', ')', MatrixKind.MATRIX, ColumnAlign.CENTER)),
@@ -828,7 +844,9 @@ final class Symbols {
         // column pairs (the per-column alignment is derived in EnvironmentParser by
         // kind, so the uniform field is unused here); gather is a single centred
         // column. The starred forms differ only in equation numbering, which LatteX
-        // does not render, so they map to the same spec.
+        // does not render — so they map to the same spec, and the UNSTARRED form emits a
+        // dropped-the-number note through Diagnostics.caveats (lattex/868). Same spec, not
+        // same silence.
         Map.entry("align", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
         Map.entry("align*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
         Map.entry("aligned", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
@@ -840,7 +858,8 @@ final class Symbols {
         Map.entry("split", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
         // multline: one long equation with NO alignment column — first line flush-left, last
         // flush-right, middle centred (applied per-row in layout). The starred form differs
-        // only in numbering, which LatteX does not render.
+        // only in numbering, which LatteX does not render — the unstarred form says so through
+        // Diagnostics.caveats (lattex/868) rather than dropping it silently.
         Map.entry("multline", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MULTLINE, ColumnAlign.CENTER)),
         Map.entry("multline*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MULTLINE, ColumnAlign.CENTER)),
         // equation*/displaymath: a single centred display line — structurally a one-row gather,
@@ -856,6 +875,10 @@ final class Symbols {
         // silently would deepen that; adding it with a caveat while its five siblings stay quiet
         // would be arbitrary. Neither is mine to choose, so this commit closes only the half
         // that is uncontested under every option.
+        // `equation`: LaTeX NUMBERS this one. LatteX renders it identically to equation* and says so
+        // through Diagnostics.caveats rather than silently (ruling lattex/868 via PROJECT/stafficy
+        // 25843): unnumbered-and-SILENT is not support, unnumbered-and-STATED is.
+        Map.entry("equation", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
         Map.entry("equation*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
         Map.entry("displaymath", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)));
 }
