@@ -36,7 +36,13 @@ class WildCorpusCoverageTest {
     /// the pin, so the prose could only be kept true by someone remembering to. Now
     /// {@code ReadmeCorpusFigureTest} reads THIS constant, so the doc and the ratchet cannot
     /// disagree without a red test (plan 398daca1 item 1).
-    static final int PASS_SET_FLOOR = 502;
+    /// 502 -> 506 when plan 4f1ffc87 added four rows for four MEASURED ZEROES, not to pad the floor.
+    /// The corpus had no `equation`, no `equation*`, no `displaymath` and no `gather` row at all -
+    /// the first three because LatteX did not accept them until this slice, and `gather` because it
+    /// was simply never harvested while its starred twin was. Bumping this constant is the deliberate
+    /// act the named-constant form exists to force: it was a bare literal once, which is how the
+    /// README came to claim 484/484 four releases after the corpus reached 502.
+    static final int PASS_SET_FLOOR = 506;
 
     @Test
     void everyPassSetFormulaStillRenders() throws Exception {

@@ -6,6 +6,42 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### `\begin{equation}` renders, and says it dropped the number
+
+LatteX already rendered everything *inside* a display wrapper; only the outermost container was
+unknown. `\begin{equation*}` and `\begin{displaymath}` landed earlier as explicitly-unnumbered
+wrappers. **`\begin{equation}` now renders too — and because LaTeX numbers it and LatteX does not,
+it says so** rather than dropping the number silently.
+
+The crew's binding condition on the numbered form was that **unnumbered-and-silent is not support**.
+So the honesty is the feature, not a footnote on it: `equation` and the five environments that were
+already in this position — `align`, `alignat`, `eqnarray`, `gather`, `multline` — now all emit a
+caveat naming what was omitted.
+
+**The caveat arrives on a new channel, and that is deliberate.** `Diagnostics` grows one **additive**
+`caveats` list, empty on clean renders. It does *not* go through `detail`: `detail` is documented as
+the cleanliness discriminator — `""` on every clean render — and a numbered environment **is** a clean
+render, since the SVG is exactly what the page will serve. Routing the note through `detail` would
+have made every existing empty-`detail` gate start reporting dirt on correct output.
+
+Existing consumers are untouched. `caveats` is appended after the LatteX-only tail, so the
+Sirentide-parity core (`outcome`/`stage`/`message`/`line`/`detail`) is unmoved, a positional reader
+through `caretString` is unmoved, and the seven-argument constructor is retained so no existing
+construction site changes.
+
+```java
+RenderResult r = LatteX.renderWithDiagnostics("\\begin{equation} E = mc^2 \\end{equation}");
+r.diagnostics().outcome();   // OK
+r.diagnostics().detail();    // "" — still the cleanliness discriminator
+r.diagnostics().caveats();   // ["\\begin{equation} is numbered in LaTeX; LatteX rendered it
+                             //   without its equation number. Use equation* if the number is not wanted."]
+```
+
+The wild corpus gains four rows for four measured zeroes — it carried no `equation`, `equation*`,
+`displaymath` or `gather` row at all — so the coverage ratchet can now see this class instead of
+being blind to it.
+
+
 ### Structural text braces no longer emit empty MathML text nodes (bug fix)
 
 Nested math now decodes each surrounding literal fragment before deciding whether it is text.
