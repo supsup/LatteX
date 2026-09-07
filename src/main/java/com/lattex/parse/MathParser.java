@@ -25,6 +25,7 @@ import com.lattex.parse.MathNode.TextRun;
 import com.lattex.parse.MathNode.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 import static com.lattex.parse.Symbols.ACCENTS;
 import static com.lattex.parse.Symbols.ATOM_CLASS_WRAPPERS;
@@ -121,6 +122,24 @@ public final class MathParser {
 
     private final List<Token> tokens;
     private int p;
+
+    /**
+     * Caller-owned sink for numbered display environment names, or {@code null} when the caller did
+     * not ask. Per-parse by construction: {@code parseMath} is the only site that constructs a
+     * {@code MathParser}, the instance is discarded on return, and nothing pools or caches one — so
+     * this cannot bleed between parses, which is the failure mode an instance collector usually has.
+     */
+    private Collection<String> numberedEnvironmentSink;
+
+    /**
+     * Records that a numbered display environment was parsed. No-op when the caller supplied no
+     * sink, so the ordinary parse path allocates and stores nothing.
+     */
+    void recordNumberedEnvironment(String env) {
+        if (numberedEnvironmentSink != null) {
+            numberedEnvironmentSink.add(env);
+        }
+    }
 
     private MathParser(String src) {
         this(src, Map.of());
@@ -376,6 +395,57 @@ public final class MathParser {
         return parseMath(latex, 0, macros);
     }
 
+    /**
+     * Parses, and REPORTS which numbered display environments the source used, by adding their
+     * names to a sink the CALLER creates and owns.
+     *
+     * <p>THE CALLER SUPPLIES THE SINK, and that shape is a ruling rather than a preference
+     * (PROJECT/stafficy 25862, plan 4f1ffc87). The environment NAME is known only inside the parse:
+     * {@code MathNode.Matrix} carries a {@code MatrixKind} and NOT the name, and {@code align} and
+     * {@code align*} deliberately map to one identical spec — so nothing downstream can tell a
+     * numbered form from its explicitly-unnumbered twin. The information must leave at the stage
+     * that still has it.
+     *
+     * <p>Why a sink and not the alternatives. A RETURNED PAIR changes this method's contract for the
+     * call sites that do not want it. A THREAD-LOCAL hides the data flow at both ends. A SECOND SCAN
+     * of the source is a second answer to a question this parser already answers, and two answers
+     * drift. The sink is threaded through the ordinary parameter chain, so the dependency is visible
+     * in every signature it crosses.
+     *
+     * <p>SCOPE, stated rather than left to be discovered: the sink is filled by the top-level parse
+     * only. A nested {@code $…$} span inside {@code \text{…}} re-enters through the two-argument
+     * overload and does NOT collect, and neither does the top-level {@code \lx} path. Both are
+     * consistent with what the caveat is for — a display environment that LaTeX would number is a
+     * top-level construct — but neither is enforced here, so a future nested case would be silently
+     * uncollected rather than refused.
+     *
+     * @param numberedEnvironmentSink receives each numbered display environment encountered, in
+     *                                source order and possibly with repeats; never read by the parser
+     */
+    public static MathNode parse(String latex, Map<String, String> macros,
+                                 Collection<String> numberedEnvironmentSink) {
+        if (numberedEnvironmentSink == null) {
+            throw new MathSyntaxException("numberedEnvironmentSink must not be null (use List.of()'s mutable kin)");
+        }
+        if (latex == null) {
+            throw new MathSyntaxException("input must not be null");
+        }
+        if (macros == null) {
+            throw new MathSyntaxException("macros must not be null (use Map.of())");
+        }
+        String stripped = stripWholeInputMathWrapper(latex);
+        if (stripped.length() > MAX_SOURCE_LENGTH) {
+            throw new MathSyntaxException(
+                "input too long: " + stripped.length() + " chars exceeds the "
+                    + MAX_SOURCE_LENGTH + "-char limit");
+        }
+        if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
+            return LxOptionsParser.parseLx(stripped.strip(), macros);
+        }
+        return parseMath(stripped, 0, macros, numberedEnvironmentSink);
+    }
+
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */
     static MathNode parseMath(String latex) {
         return parseMath(latex, 0);
@@ -399,8 +469,15 @@ public final class MathParser {
      * limit (a nested span is opaque raw text at expansion time).
      */
     static MathNode parseMath(String latex, int initialDepth, Map<String, String> macros) {
+        return parseMath(latex, initialDepth, macros, null);
+    }
+
+    /** As above, additionally reporting numbered display environments into a caller-owned sink. */
+    static MathNode parseMath(String latex, int initialDepth, Map<String, String> macros,
+                              Collection<String> numberedEnvironmentSink) {
         try {
             MathParser parser = new MathParser(latex, macros);
+            parser.numberedEnvironmentSink = numberedEnvironmentSink;
             parser.depth = initialDepth;
             MathNode node = parser.parseTopLevel();
             if (parser.peek().kind() != Kind.EOF) {

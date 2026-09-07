@@ -1,5 +1,9 @@
 package com.lattex.api;
 
+import java.util.List;
+
+import java.util.ArrayList;
+
 import com.lattex.font.SfntFont;
 import com.lattex.layout.Layout;
 import com.lattex.layout.LayoutContext;
@@ -151,6 +155,37 @@ public final class LatteX {
      * (delimiter pieces, radical surds, big-op symbols) are excluded by construction rather than
      * by a filter that could fall out of step with them.
      */
+    /**
+     * One caveat per DISTINCT numbered display environment the source used, in first-appearance
+     * order; an empty list when the render carried none.
+     *
+     * <p>Mirrors {@link #unmappedReport} on purpose: derive the note from what the pipeline already
+     * observed rather than re-deriving it from the source. The only difference is WHERE the
+     * observation survives — an unmapped glyph is still visible in the layout, whereas an environment
+     * name is erased at parse, so that one has to be handed out at the stage that still holds it.
+     *
+     * <p>It goes in {@code caveats} and NOT in {@code detail}. {@code detail} is documented as the
+     * cleanliness discriminator ("" on every clean render), and a numbered environment IS a clean
+     * render — the SVG is exactly what the page will serve. Routing this through {@code detail} would
+     * make every existing empty-detail gate start reporting dirt on correct output, which is the
+     * cross-cutting change the ruling refused.
+     *
+     * <p>De-duplicated because the caveat is about the OMISSION, not its multiplicity: three aligns
+     * in one source drop three numbers for one reason, and a consumer rendering the list should not
+     * show it three times.
+     */
+    private static List<String> numberedEnvironmentCaveats(List<String> numberedEnvironments) {
+        if (numberedEnvironments.isEmpty()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (String env : new java.util.LinkedHashSet<>(numberedEnvironments)) {
+            out.add("\\begin{" + env + "} is numbered in LaTeX; LatteX rendered it without its "
+                + "equation number. Use " + env + "* if the number is not wanted.");
+        }
+        return List.copyOf(out);
+    }
+
     private static String unmappedReport(Layout layout) {
         java.util.LinkedHashSet<Integer> cps = new java.util.LinkedHashSet<>();
         for (PositionedGlyph g : layout.glyphs()) {
@@ -183,7 +218,11 @@ public final class LatteX {
         String stage = "parse";
         try {
             java.util.Objects.requireNonNull(opts, "opts");
-            MathNode node = MathParser.parse(latex, opts.macros());
+            // The sink is created HERE, by the caller that wants the answer, and dies with this
+            // render. Only this diagnostic path asks; the other MathParser.parse call sites in this
+            // file allocate nothing and behave byte-identically (ruling stafficy/25862).
+            List<String> numberedEnvironments = new ArrayList<>();
+            MathNode node = MathParser.parse(latex, opts.macros(), numberedEnvironments);
             RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
             MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             stage = "layout";
@@ -206,10 +245,12 @@ public final class LatteX {
                 return new RenderResult(svg, new Diagnostics(Outcome.OK, "layout",
                     "Rendered, but the font has no glyph for " + unmapped
                         + " — drawn as a .notdef box, so the visual and the aria-label disagree.",
-                    -1, "unmapped-glyph:" + unmapped, -1, ""));
+                    -1, "unmapped-glyph:" + unmapped, -1, "",
+                    numberedEnvironmentCaveats(numberedEnvironments)));
             }
             return new RenderResult(svg, new Diagnostics(Outcome.OK, "emit",
-                "Rendered successfully.", -1, "", -1, ""));
+                "Rendered successfully.", -1, "", -1, "",
+                numberedEnvironmentCaveats(numberedEnvironments)));
         } catch (MathSyntaxException e) {
             // Typed channel: a parse-stage throw is an author-facing syntax error with
             // position; a later-stage typed throw (depth guard, contained internal
