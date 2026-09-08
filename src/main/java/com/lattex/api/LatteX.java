@@ -1203,7 +1203,17 @@ public final class LatteX {
                 ? "<mrow/>"
                 : "<mo stretchy=\"false\">" + xmlEscape(Character.toString(sd.delimCp())) + "</mo>";
             case Accent a -> {
-                String acc = mo(a.accentCodePoint());
+                // GUARD THE SENTINEL, exactly as the SizedDelim arm four lines above guards its own
+                // (plan bc50471c). accentCodePoint() is Accent.RULE == -1 for a rule decoration, and
+                // mo() does Character.toString(cp), which throws
+                // IllegalArgumentException("Not a valid Unicode code point: 0xFFFFFFFF") -- a raw
+                // RuntimeException escaping the public toMathML surface on \\overline and \\underline.
+                // The LAYOUT path already branches on isRule() (LayoutEngine.accentBox), so this was
+                // the single place in the codebase where the guard was missing, and describe()
+                // already said "line over"/"line under" while mathml() crashed.
+                String acc = a.isRule()
+                    ? mo(a.under() ? RULE_UNDER_CODE_POINT : RULE_OVER_CODE_POINT)
+                    : mo(a.accentCodePoint());
                 yield a.under()
                     ? "<munder accentunder=\"true\">" + toMathML(a.base()) + acc + "</munder>"
                     : "<mover accent=\"true\">" + toMathML(a.base()) + acc + "</mover>";
@@ -1238,6 +1248,13 @@ public final class LatteX {
     }
 
     /** An {@code <mo>} for a code point (operator/relation/punctuation). */
+    /// The rule decoration's MathML characters. SPACING forms (not combining), so the emitted
+    /// {@code <mo>} is plain well-formed text rather than a mark that needs a base to attach to:
+    /// U+203E OVERLINE for {@code \\overline}, U+005F LOW LINE for {@code \\underline}. These make
+    /// mathml() agree with describe(), which already says "line over" / "line under".
+    private static final int RULE_OVER_CODE_POINT = 0x203E;
+    private static final int RULE_UNDER_CODE_POINT = 0x005F;
+
     private static String mo(int codePoint) {
         return "<mo>" + xmlEscape(Character.toString(codePoint)) + "</mo>";
     }
