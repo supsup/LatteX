@@ -116,13 +116,20 @@ class MathMLTest {
         // That is the difference between "it no longer crashes" and "it works".
         String math = "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">";
 
-        // U+203E OVERLINE. Kills the snowman mutation and half the inversion.
+        // U+203E OVERLINE. This assertion ALONE kills both the snowman mutation and the ternary
+        // swap; it is not half of anything.
         assertEquals(math + "<mover accent=\"true\"><mi>a</mi><mo>\u203E</mo></mover></math>",
             LatteX.toMathML("\\overline{a}"),
             "overline must emit U+203E OVERLINE over its base");
 
-        // U+005F LOW LINE, under. Kills the other half of the inversion: swapping the ternary
-        // fails BOTH of these, in opposite directions, which is what makes them non-redundant.
+        // U+005F LOW LINE, under. CORRECTED (review 953): I claimed here that swapping the
+        // ternary fails both assertions in opposite directions, which is what made them
+        // non-redundant. That was FALSE and the reviewer measured it -- deleting them one at a
+        // time, EITHER the overline or the underline alone kills the swap, so one assertEquals
+        // was sufficient and my argument for a second was wrong. A single-site ternary has
+        // exactly one swap, and a swap leaving overline correct would not be a swap of that
+        // ternary. This assertion stays for a REAL reason instead: it is the only coverage of
+        // the munder/accentunder serialization branch, which the overline case cannot reach.
         assertEquals(math + "<munder accentunder=\"true\"><mi>a</mi><mo>_</mo></munder></math>",
             LatteX.toMathML("\\underline{a}"),
             "underline must emit U+005F LOW LINE under its base");
