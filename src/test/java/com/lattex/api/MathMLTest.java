@@ -1,6 +1,7 @@
 package com.lattex.api;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -104,11 +105,47 @@ class MathMLTest {
     }
 
     @Test
+    void accentsEmitTheRightCharacter() {
+        // NEEDS-FIX PROJECT/lattex 950. Both of this branch's other checks are SHAPE assertions:
+        // assertWellFormed accepts ANY valid code point, and the boundary test only inspects
+        // exception classes. So the reviewer turned RULE_OVER_CODE_POINT into a snowman (0x2603),
+        // swapped the ternary so overline emitted LOW LINE and underline emitted OVERLINE, and
+        // hard-wired every non-rule accent to a caret -- and all 996 tests passed each time.
+        // Nothing in the repository asserted what an accent actually EMITS.
+        //
+        // That is the difference between "it no longer crashes" and "it works".
+        String math = "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">";
+
+        // U+203E OVERLINE. Kills the snowman mutation and half the inversion.
+        assertEquals(math + "<mover accent=\"true\"><mi>a</mi><mo>\u203E</mo></mover></math>",
+            LatteX.toMathML("\\overline{a}"),
+            "overline must emit U+203E OVERLINE over its base");
+
+        // U+005F LOW LINE, under. Kills the other half of the inversion: swapping the ternary
+        // fails BOTH of these, in opposite directions, which is what makes them non-redundant.
+        assertEquals(math + "<munder accentunder=\"true\"><mi>a</mi><mo>_</mo></munder></math>",
+            LatteX.toMathML("\\underline{a}"),
+            "underline must emit U+005F LOW LINE under its base");
+
+        // A NON-RULE accent, so the isRule() guard cannot be satisfied by ignoring its else arm.
+        // The reviewer's third mutation hard-wired mo(a.accentCodePoint()) to a caret and stayed
+        // green; it is pre-existing rather than this branch's regression, but it is exactly the
+        // hole these two new constants land in, so it is closed here rather than left as the
+        // instance next to the class.
+        assertEquals(math + "<mover accent=\"true\"><mi>a</mi><mo>\u0302</mo></mover></math>",
+            LatteX.toMathML("\\hat{a}"),
+            "a non-rule accent must still emit its own code point, not a shared constant");
+    }
+
+    @Test
     void toMathMLThrowsOnlyLatteXException() throws Exception {
         // STEP 4 of plan bc50471c: the public surface's exception boundary. Anything escaping
         // toMathML must be a LatteXException; a raw RuntimeException is a leak.
         //
         // THE ASSERTION IS ON LatteXException AND NOT ON IllegalArgumentException, DELIBERATELY.
+        // DO NOT SIMPLIFY THIS TO THE SUPERCLASS. The reviewer proved the trap by weakening this
+        // catch to IllegalArgumentException and running it against the BROKEN production code: it
+        // PASSES. With LatteXException it FAILS (needs-fix PROJECT/lattex 950).
         // LatteXException EXTENDS IllegalArgumentException, so asserting the superclass would have
         // been satisfied by the very defect this plan fixes: the rule-accent crash threw a BARE
         // IllegalArgumentException ("Not a valid Unicode code point: 0xFFFFFFFF") out of mo(). An
