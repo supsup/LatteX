@@ -1,5 +1,6 @@
 package com.lattex.api;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.BufferedReader;
@@ -74,6 +75,18 @@ class WildCorpusCoverageTest {
         assertTrue(okRows >= PASS_SET_FLOOR, "pass-set shrank in the TSV itself: " + okRows
             + " OK rows (current floor " + PASS_SET_FLOOR
             + "; started at 417) — statuses may only flip GAP->OK");
+        // A FLOOR IS ONE-DIRECTIONAL, and that was the hole (RFC lattex/967, ruling lattex/968).
+        // The assertion above catches the pass-set SHRINKING and is silent when it GROWS, which is
+        // the direction rows actually move. ReadmeCorpusFigureTest pins the README prose to
+        // PASS_SET_FLOOR rather than to the corpus, so with only the floor the README could
+        // understate coverage by any amount with every guard green. Measured before the fix:
+        // appending one row made the corpus 507 against a floor of 506 and BOTH guards passed.
+        //
+        // That is the 484-vs-502 drift one layer over. This constant's own javadoc says it exists
+        // to FORCE the deliberate bump — and >= forces nothing on growth. This assertion is what
+        // makes that sentence true.
+        assertEquals(PASS_SET_FLOOR, okRows, "corpus grew to " + okRows
+            + "; bump PASS_SET_FLOOR and the README prose at both sites");
         assertTrue(broken.isEmpty(), broken.size()
             + " previously-rendering formulas REGRESSED:\n  "
             + String.join("\n  ", broken.subList(0, Math.min(10, broken.size())))
