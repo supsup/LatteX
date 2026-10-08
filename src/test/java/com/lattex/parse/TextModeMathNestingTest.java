@@ -38,7 +38,7 @@ class TextModeMathNestingTest {
 
     @Test
     void parenMathInsideTextSplitsLikeDollar() {
-        assertEquals("L(Txt[ROMAN](for ) A(ν,ORD) Txt[ROMAN](-almost every ))",
+        assertEquals("L(Txt[ROMAN](for ) A(U+03BD,ORD) Txt[ROMAN](-almost every ))",
             pp("\\text{for \\(\\nu\\)-almost every }"));
     }
 

@@ -36,13 +36,14 @@ class SilentFlattenRegressionTest {
     }
 
     @Test
-    void eqrefInsideTextFailsLoudNotServedAsLiteral() {
+    void eqrefInsideTextRendersTheMarkerNotTheFlattenedKey() {
         // The real-world hit: \eqref in a trailing text note was served as the
-        // literal characters "\eqrefelliptic".
-        MathSyntaxException e = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("u = 0 \\text{ on the boundary, see \\eqref{elliptic}}"));
-        assertTrue(e.getMessage().contains("Unknown command in \\text: \\eqref"),
-            e.getMessage());
+        // literal characters "\eqrefelliptic". Plan c432f899 now decodes \ref/\eqref
+        // inside text to math mode's unresolved marker; the key still never leaks.
+        assertEquals("Txt[ROMAN]( on the boundary, see (??))", MathParserTest.pp(
+            MathParser.parse("\\text{ on the boundary, see \\eqref{elliptic}}")));
+        assertFalse(LatteX.toMathML("u = 0 \\text{ on the boundary, see \\eqref{elliptic}}")
+            .contains("elliptic"));
     }
 
     @Test
@@ -50,8 +51,8 @@ class SilentFlattenRegressionTest {
         // The split path (text with $…$ spans) validates its literal segments the
         // same way the fast path does.
         MathSyntaxException e = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("\\text{for $x$ see \\eqref{elliptic}}"));
-        assertTrue(e.getMessage().contains("Unknown command in \\text: \\eqref"),
+            () -> MathParser.parse("\\text{for $x$ see \\cite{elliptic}}"));
+        assertTrue(e.getMessage().contains("Unknown command in \\text: \\cite"),
             e.getMessage());
     }
 

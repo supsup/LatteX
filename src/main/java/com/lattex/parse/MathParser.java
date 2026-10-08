@@ -2126,7 +2126,11 @@ public final class MathParser {
      * literal {@link TextRun}s and recursively-parsed math segments. {@code \$}
      * stays a literal (verbatim, exactly the pre-split behavior — never a toggle).
      * A plain argument (no unescaped {@code $}) yields the byte-identical single
-     * {@link TextRun} it always did. An unpaired {@code $} is a positioned error;
+     * {@link TextRun} it always did. LaTeX's other inline-math spelling,
+     * {@code \(…\)}, is the same toggle (plan c432f899: the research corpus writes
+     * {@code \text{If \(K\) is categorical…}}); each span closes only on its own
+     * closer, and the inner math takes the surrounding style exactly as a {@code $}
+     * span does. An unpaired {@code $} or {@code \(} is a positioned error;
      * an empty {@code $$} span contributes nothing. In the split path, each literal
      * fragment is decoded before deciding whether it contributes a run: invisible
      * grouping braces alone contribute nothing, while spaces and decoded escapes
@@ -2137,14 +2141,14 @@ public final class MathParser {
     private MathNode textWithNestedMath(Token t) {
         String raw = t.text(); // verbatim, braces included (lexTextArgument keeps them)
         TextStyle style = TEXT_COMMANDS.get(t.name());
-        if (indexOfUnescapedDollar(raw, 0) < 0) {
+        if (indexOfTextMathOpener(raw, 0) < 0) {
             return new TextRun(literalText(raw, t), style); // fast path: one literal run
         }
         List<MathNode> items = new ArrayList<>();
         int i = 0;
         int n = raw.length();
         while (i < n) {
-            int open = indexOfUnescapedDollar(raw, i);
+            int open = indexOfTextMathOpener(raw, i);
             if (open < 0) {
                 addLiteralTextRun(items, raw.substring(i), t, style);
                 break;
@@ -2152,26 +2156,33 @@ public final class MathParser {
             if (open > i) {
                 addLiteralTextRun(items, raw.substring(i, open), t, style);
             }
-            int close = indexOfUnescapedDollar(raw, open + 1);
+            // The two spellings of inline math LaTeX accepts in text mode: `$...$` and
+            // `\(...\)` (plan c432f899). Each closes only on its OWN closer.
+            boolean paren = raw.charAt(open) == '\\';
+            int bodyStart = open + (paren ? 2 : 1);
+            int close = paren
+                ? indexOfTextParenClose(raw, bodyStart)
+                : indexOfUnescapedDollar(raw, bodyStart);
             if (close < 0) {
                 throw new MathSyntaxException(
-                    "Unpaired '$' in \\" + t.name() + " argument", t.offset());
+                    "Unpaired '" + (paren ? "\\(" : "$") + "' in \\" + t.name() + " argument",
+                    t.offset());
             }
             // The math span keeps its braces VERBATIM — the re-parse needs the group
             // structure (\frac{12}{34}, x^{10}); stripping here silently corrupted
             // multi-char braced arguments (Conf review lattex/210 F1).
-            String span = raw.substring(open + 1, close);
+            String span = raw.substring(bodyStart, close);
             if (!span.isBlank()) {
                 try {
                     items.add(parseMath(span, depth));
                 } catch (MathSyntaxException e) {
+                    String shown = paren ? "\\(" + span + "\\)" : "$" + span + "$";
                     throw MathSyntaxException.withUnsupportedKind(
-                        "in \\" + t.name() + " nested math '$"
-                            + span + "$': " + e.getMessage(),
+                        "in \\" + t.name() + " nested math '" + shown + "': " + e.getMessage(),
                         t.offset(), e.unsupportedKind());
                 }
             }
-            i = close + 1;
+            i = close + (paren ? 2 : 1);
         }
         if (items.size() == 1) {
             return items.get(0);
@@ -2235,8 +2246,11 @@ public final class MathParser {
      *
      * <p>The supported-in-text set is EXPLICIT: plain characters (spaces
      * significant), invisible grouping braces, the {@link #TEXT_CONTROL_SYMBOLS}
-     * escapes (decode to their literal character), and — at the caller's level —
-     * nested math via {@code $…$}. Everything else backslash-led fails LOUD:
+     * escapes (decode to their literal character), the {@link #TEXT_ACCENTS}
+     * ({@code \"a} decodes to the precomposed ä), {@code \ref}/{@code \eqref} with
+     * a braced key (math mode's unresolved marker), a tie {@code ~} (a space), and —
+     * at the caller's level — nested math via {@code $…$} or {@code \(…\)}
+     * (plan c432f899). Everything else backslash-led fails LOUD:
      * a command token ({@code \} + letters, e.g. {@code \frac}), an unmapped
      * control symbol (e.g. {@code \\}, {@code \^}), or a dangling trailing
      * backslash. The parser expands NO commands inside a text run, and the old
@@ -2247,11 +2261,12 @@ public final class MathParser {
      * kept their literal backslash instead of decoding OR rejecting
      * ({@code \text{50\%}} served "50\%" — plan d2f3447c, LTX-12). Neither shape
      * is acceptable: a supported escape decodes, everything else fails loud.
-     * The {@code $…$} toggle is the one supported way to put a command inside
-     * {@code \text}.
+     * The {@code $…$} / {@code \(…\)} toggle is the supported way to put a math
+     * command inside {@code \text}.
      */
     private static String literalText(String s, Token t) {
-        if (s.indexOf('{') < 0 && s.indexOf('}') < 0 && s.indexOf('\\') < 0) {
+        if (s.indexOf('{') < 0 && s.indexOf('}') < 0 && s.indexOf('\\') < 0
+                && s.indexOf('~') < 0) {
             return s;
         }
         StringBuilder sb = new StringBuilder(s.length());
@@ -2266,10 +2281,17 @@ public final class MathParser {
                 while (j < s.length() && isAsciiLetter(s.charAt(j))) {
                     j++;
                 }
+                String word = s.substring(i + 1, j);
+                if (word.equals("ref") || word.equals("eqref")) {
+                    i = textReference(s, j, word, sb, t) - 1;
+                    continue;
+                }
                 throw MathSyntaxException.unknownCommand(
-                    "Unknown command in \\" + t.name() + ": \\" + s.substring(i + 1, j)
+                    "Unknown command in \\" + t.name() + ": \\" + word
                         + " — commands are not expanded in text; wrap math in $...$",
                     t.offset());
+            } else if (c == '\\' && TEXT_ACCENTS.containsKey(s.charAt(i + 1))) {
+                i = textAccent(s, i, sb, t) - 1;
             } else if (c == '\\' && TEXT_CONTROL_SYMBOLS.containsKey(s.charAt(i + 1))) {
                 sb.append(TEXT_CONTROL_SYMBOLS.get(s.charAt(i + 1)));
                 i++;
@@ -2278,11 +2300,119 @@ public final class MathParser {
                     "Unknown command in \\" + t.name() + ": \\" + escapedTokenDisplay(s, i + 1)
                         + " — commands are not expanded in text; wrap math in $...$",
                     t.offset());
+            } else if (c == '~') {
+                // A tie is an interword (non-breaking) space in text mode as in math
+                // mode (TeXbook Ch.14: `~` is \penalty10000\ ); a TextRun has no line
+                // breaking, so it is one plain space. Plan c432f899: the corpus writes
+                // `\text{from Proposition~\ref{...}}`, which drew a literal tilde.
+                sb.append(' ');
             } else if (c != '{' && c != '}') {
                 sb.append(c);
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * The text-mode accent control symbols commonly found in names (plan c432f899):
+     * {@code \"} umlaut ({@code K\"ahler}), {@code \'} acute ({@code Poincar\'e},
+     * {@code \'etale}), {@code \`} grave, {@code \^} circumflex and {@code \~} tilde.
+     * Each maps an ASCII base letter to its PRECOMPOSED Unicode character, so the run
+     * stays one glyph per character with no combining-mark positioning. Pairs are
+     * {@code base, composed} and were derived from the Unicode canonical compositions
+     * (NFC of base + U+0308 / U+0301 / U+0300 / U+0302 / U+0303); a base with no
+     * precomposed character is refused, never drawn unaccented.
+     */
+    private static final Map<Character, Map<Character, Character>> TEXT_ACCENTS = Map.of(
+        '"', accentTable("a\u00e4e\u00ebh\u1e27i\u00efo\u00f6t\u1e97u\u00fcw\u1e85x\u1e8dy\u00ff"
+            + "A\u00c4E\u00cbH\u1e26I\u00cfO\u00d6U\u00dcW\u1e84X\u1e8cY\u0178"),
+        '\'', accentTable("a\u00e1c\u0107e\u00e9g\u01f5i\u00edk\u1e31l\u013am\u1e3fn\u0144o\u00f3"
+            + "p\u1e55r\u0155s\u015bu\u00faw\u1e83y\u00fdz\u017a"
+            + "A\u00c1C\u0106E\u00c9G\u01f4I\u00cdK\u1e30L\u0139M\u1e3eN\u0143O\u00d3"
+            + "P\u1e54R\u0154S\u015aU\u00daW\u1e82Y\u00ddZ\u0179"),
+        '`', accentTable("a\u00e0e\u00e8i\u00ecn\u01f9o\u00f2u\u00f9w\u1e81y\u1ef3"
+            + "A\u00c0E\u00c8I\u00ccN\u01f8O\u00d2U\u00d9W\u1e80Y\u1ef2"),
+        '^', accentTable("a\u00e2c\u0109e\u00eag\u011dh\u0125i\u00eej\u0135o\u00f4s\u015du\u00fb"
+            + "w\u0175y\u0177z\u1e91"
+            + "A\u00c2C\u0108E\u00caG\u011cH\u0124I\u00ceJ\u0134O\u00d4S\u015cU\u00db"
+            + "W\u0174Y\u0176Z\u1e90"),
+        '~', accentTable("a\u00e3e\u1ebdi\u0129n\u00f1o\u00f5u\u0169v\u1e7dy\u1ef9"
+            + "A\u00c3E\u1ebcI\u0128N\u00d1O\u00d5U\u0168V\u1e7cY\u1ef8"));
+
+    private static Map<Character, Character> accentTable(String pairs) {
+        Map<Character, Character> table = new java.util.HashMap<>();
+        for (int k = 0; k + 1 < pairs.length(); k += 2) {
+            table.put(pairs.charAt(k), pairs.charAt(k + 1));
+        }
+        return Map.copyOf(table);
+    }
+
+    /**
+     * Decodes the text accent whose backslash is at {@code i} into {@code sb} and returns
+     * the index just past its base. The base is the next letter ({@code \'e}, spaces
+     * skipped as TeX skips them before an undelimited argument) or a braced group holding
+     * exactly one letter ({@code \'{e}}); {@code \i}/{@code \j} as the base mean the
+     * dotless letters LaTeX authors accent, whose precomposed forms are the accented
+     * {@code i}/{@code j} ({@code \'{\i}} is í). Anything else fails loud.
+     */
+    private static int textAccent(String s, int i, StringBuilder sb, Token t) {
+        char accent = s.charAt(i + 1);
+        int k = i + 2;
+        while (k < s.length() && s.charAt(k) == ' ') {
+            k++;
+        }
+        String base;
+        int end;
+        if (k < s.length() && s.charAt(k) == '{') {
+            int close = s.indexOf('}', k + 1);
+            base = close < 0 ? "" : s.substring(k + 1, close).strip();
+            end = close < 0 ? s.length() : close + 1;
+        } else {
+            base = k < s.length() ? s.substring(k, k + 1) : "";
+            end = k + 1;
+        }
+        if (base.equals("\\i") || base.equals("\\j")) {
+            base = base.substring(1);
+        } else if (k < s.length() && s.charAt(k) == '\\' && s.startsWith("\\i", k)
+                && (k + 2 >= s.length() || !isAsciiLetter(s.charAt(k + 2)))) {
+            base = "i"; // bare \'\i
+            end = k + 2;
+        }
+        if (base.length() != 1 || !isAsciiLetter(base.charAt(0))) {
+            throw MathSyntaxException.unknownCommand(
+                "Unknown command in \\" + t.name() + ": \\" + accent
+                    + " expects one letter to accent", t.offset());
+        }
+        Character composed = TEXT_ACCENTS.get(accent).get(base.charAt(0));
+        if (composed == null) {
+            throw MathSyntaxException.unknownCommand(
+                "Unknown command in \\" + t.name() + ": \\" + accent + base
+                    + " has no precomposed character", t.offset());
+        }
+        sb.append(composed.charValue());
+        return end;
+    }
+
+    /**
+     * Decodes {@code \ref{key}} / {@code \eqref{key}} inside a text run (plan c432f899)
+     * into the SAME visible unresolved marker math mode draws (the {@code REFERENCE}
+     * handler): {@code ??} and {@code (??)}. LatteX has no document label resolver, so
+     * the key is consumed and never shown. {@code j} is just past the command word;
+     * returns the index just past the closing brace.
+     */
+    private static int textReference(String s, int j, String word, StringBuilder sb, Token t) {
+        int k = j;
+        while (k < s.length() && s.charAt(k) == ' ') {
+            k++;
+        }
+        int close = k < s.length() && s.charAt(k) == '{' ? s.indexOf('}', k + 1) : -1;
+        if (close < 0) {
+            throw MathSyntaxException.unknownCommand(
+                "Unknown command in \\" + t.name() + ": \\" + word + " expects a {key} group",
+                t.offset());
+        }
+        sb.append(word.equals("eqref") ? "(??)" : "??");
+        return close + 1;
     }
 
     /**
@@ -2442,6 +2572,33 @@ public final class MathParser {
     }
 
     private static int indexOfUnescapedDollar(String s, int from) {
+        return scanTextMathDelimiter(s, from, '$');
+    }
+
+    /**
+     * The first text-mode math OPENER at or after {@code from} — an unescaped {@code $} or
+     * an unescaped {@code \(} — or -1 (plan c432f899). Same scanner as
+     * {@link #indexOfUnescapedDollar}, so escapes and nested text-family arguments are
+     * skipped identically for both spellings: {@code \\(} is the control symbol
+     * {@code \\} then a literal {@code (}, never an opener.
+     */
+    private static int indexOfTextMathOpener(String s, int from) {
+        return scanTextMathDelimiter(s, from, '(');
+    }
+
+    /** The {@code \)} that closes a {@code \(} span opened before {@code from}, or -1. */
+    private static int indexOfTextParenClose(String s, int from) {
+        return scanTextMathDelimiter(s, from, ')');
+    }
+
+    /**
+     * Scans {@code s} from {@code from} for a text-mode math delimiter, skipping escapes
+     * and the WHOLE braced argument of any nested text-family command. {@code want}
+     * selects what is reported: {@code '$'} an unescaped dollar only (the pre-c432f899
+     * contract, unchanged); {@code '('} an unescaped dollar OR a {@code \(}; {@code ')'}
+     * a {@code \)} only. A returned {@code \(}/{@code \)} index points at its backslash.
+     */
+    private static int scanTextMathDelimiter(String s, int from, char want) {
         int i = from;
         int n = s.length();
         while (i < n) {
@@ -2473,8 +2630,13 @@ public final class MathParser {
                         }
                     }
                 }
+                if (j == i + 1 && j < n
+                        && ((want == '(' && s.charAt(j) == '(')
+                            || (want == ')' && s.charAt(j) == ')'))) {
+                    return i; // a live \( opener or \) closer
+                }
                 i = Math.max(j, i + 2); // command word skipped, or \X escape
-            } else if (c == '$') {
+            } else if (c == '$' && want != ')') {
                 return i;
             } else {
                 i++;
