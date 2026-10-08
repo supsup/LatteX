@@ -31,6 +31,17 @@ class MathParserTest {
     // default branch. If a new node kind is added to the sealed interface and
     // not handled here, this stops compiling (which is the point).
     // ------------------------------------------------------------------
+    /**
+     * The content of a braced group written as a list component, which the parser wraps
+     * as an Ord atom (TeX: a subformula in braces is Ord; plan 720cd87e). Tests whose
+     * subject is something else spell their input in braces and look through it here.
+     */
+    static MathNode braced(MathNode node) {
+        MathNode.ClassOverride co = assertInstanceOf(MathNode.ClassOverride.class, node);
+        assertEquals(MathClass.ORD, co.forcedClass(), "a braced group is Ord");
+        return co.body();
+    }
+
     static String pp(MathNode node) {
         return switch (node) {
             case Atom(int cp, MathClass cls, boolean upright) ->
@@ -407,10 +418,10 @@ class MathParserTest {
         // (== \frac), \atop is rule-less (no fence), and \choose/\brace/\brack are
         // rule-less fractions fenced by ( ) / { } / [ ] (== \binom with a delimiter).
         assertEquals("Frac(A(a,ORD),A(b,ORD))", pp(MathParser.parse("a \\over b")));
-        assertEquals("Binom(A(n,ORD),A(k,ORD))", pp(MathParser.parse("{n \\atop k}")));
+        assertEquals("Binom(A(n,ORD),A(k,ORD))", pp(braced(MathParser.parse("{n \\atop k}"))));
 
         // \choose -> ( ) fence around the rule-less stack, structurally verified.
-        MathNode ch = MathParser.parse("{n \\choose k}");
+        MathNode ch = braced(MathParser.parse("{n \\choose k}"));
         Fenced chf = assertInstanceOf(Fenced.class, ch);
         assertEquals('(', chf.leftDelim());
         assertEquals(')', chf.rightDelim());
@@ -418,8 +429,8 @@ class MathParserTest {
         assertTrue(!chStack.hasRule(), "\\choose has no fraction rule");
         assertEquals("Fen(( Binom(A(n,ORD),A(k,ORD)) ))", pp(ch));
         // \brace -> { }, \brack -> [ ].
-        assertEquals("Fen({ Binom(A(n,ORD),A(k,ORD)) })", pp(MathParser.parse("{n \\brace k}")));
-        assertEquals("Fen([ Binom(A(n,ORD),A(k,ORD)) ])", pp(MathParser.parse("{n \\brack k}")));
+        assertEquals("Fen({ Binom(A(n,ORD),A(k,ORD)) })", pp(braced(MathParser.parse("{n \\brace k}"))));
+        assertEquals("Fen([ Binom(A(n,ORD),A(k,ORD)) ])", pp(braced(MathParser.parse("{n \\brack k}"))));
 
         // \over is IDENTICAL to \frac (ruled, inherited style).
         Fraction over = assertInstanceOf(Fraction.class, MathParser.parse("a \\over b"));
@@ -434,8 +445,9 @@ class MathParserTest {
         assertEquals("Frac(A(a,ORD),SS(A(b,ORD),^A(2,ORD)))",
             pp(MathParser.parse("a \\over b^2")));
         // Nesting is by group: the inner {a \over b} splits only a/b; the outer
-        // `+ c` is unaffected and stays at top level.
-        assertEquals("L(Frac(A(a,ORD),A(b,ORD)) A(+,BIN) A(c,ORD))",
+        // `+ c` is unaffected and stays at top level. The braced fraction is an Ord atom
+        // of the outer list (plan 720cd87e).
+        assertEquals("L(Cls[ORD](Frac(A(a,ORD),A(b,ORD))) A(+,BIN) A(c,ORD))",
             pp(MathParser.parse("{a \\over b} + c")));
     }
 
@@ -495,7 +507,7 @@ class MathParserTest {
         // \\color{red} is a SWITCH (like \\displaystyle): it paints everything AFTER it to the
         // end of the enclosing group — unlike \\textcolor{red}{x} which paints only its argument.
         // The corpus case k={\\color{red}x}-2: inside the group, \\color{red} scopes exactly x.
-        MathNode grouped = MathParser.parse("{\\color{red}x}");
+        MathNode grouped = braced(MathParser.parse("{\\color{red}x}"));
         MathNode.Colored red = assertInstanceOf(MathNode.Colored.class, grouped);
         assertEquals("#ff0000", red.color().svgValue());
         assertEquals("Col[#ff0000](A(x,ORD))", pp(red));
@@ -509,7 +521,7 @@ class MathParserTest {
         // The switch STOPS at the group boundary: {\\color{red}a}b -> only a is red, b is bare.
         MathNode.MathList outer = assertInstanceOf(MathNode.MathList.class,
             MathParser.parse("{\\color{red}a}b"));
-        assertEquals("L(Col[#ff0000](A(a,ORD)) A(b,ORD))", pp(outer));
+        assertEquals("L(Cls[ORD](Col[#ff0000](A(a,ORD))) A(b,ORD))", pp(outer));
 
         // A later \\color in the same group overrides for what follows it (nesting).
         assertEquals("Col[#ff0000](L(A(x,ORD) Col[#0000ff](A(y,ORD))))",
@@ -573,7 +585,7 @@ class MathParserTest {
     void styleSwitchWrapsTheRestOfItsGroup() {
         // {\displaystyle x y}: a single StyleSwitch(DISPLAY, ...) capturing BOTH x and y.
         MathNode.StyleSwitch sw = assertInstanceOf(MathNode.StyleSwitch.class,
-            MathParser.parse("{\\displaystyle x y}"));
+            braced(MathParser.parse("{\\displaystyle x y}")));
         assertEquals(MathNode.StyleLevel.DISPLAY, sw.level());
         assertInstanceOf(MathNode.MathList.class, sw.body()); // both x and y are captured
 

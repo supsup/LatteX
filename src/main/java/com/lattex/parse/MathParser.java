@@ -871,7 +871,11 @@ public final class MathParser {
 
     /** One component: a nucleus, plus any scripts (or big-operator limits). */
     MathNode parseComponent() {
+        boolean braced = peek().kind() == Kind.LBRACE;
         MathNode nucleus = parseNucleus();
+        if (braced) {
+            nucleus = bracedSubformula(nucleus);
+        }
         // A large operator carries its scripts as limits, not as a SupSub.
         if (nucleus instanceof Atom op && op.mathClass() == MathClass.OP) {
             return parseBigOperator(op);
@@ -888,6 +892,41 @@ public final class MathParser {
             return parseStackLabel(st);
         }
         return parseScripts(nucleus);
+    }
+
+    /**
+     * A brace group read as a COMPONENT of a math list is an Ord atom (TeXbook ch. 17: a
+     * subformula in braces is treated as an Ord atom; Appendix G builds its nucleus as a
+     * box). Plan 720cd87e: {@link #parseGroup} returns a one-item group as its item, which
+     * kept that item's own class, so {@code 152{,}320} spaced the comma as punctuation and
+     * {@code a{+}b} the plus as a binary operator.
+     *
+     * <p>Only the list position is a subformula. The braces of a command argument
+     * ({@code \frac{+}{2}}, {@code \overset{a}{=}}, {@code \mathrel{...}}) delimit the
+     * argument, as TeX strips a macro argument's braces, so {@link #parseArgument} and the
+     * script arguments do not come through here.
+     *
+     * <p>What is left alone, and why: a multi-item group is already a {@link MathList},
+     * which layout spaces as Ord; and an Atom that is already Ord gains nothing from a
+     * wrapper, while staying a bare atom keeps the single-character script attachment
+     * (italic correction, math kerns) it had. A large-operator atom becomes the
+     * {@link BigOperator} it would have been outside the braces, so it keeps its display
+     * size; its scripts then attach to the Ord group, beside it, as in TeX.
+     */
+    private static MathNode bracedSubformula(MathNode nucleus) {
+        if (nucleus instanceof MathList) {
+            return nucleus;
+        }
+        if (nucleus instanceof Atom atom) {
+            if (atom.mathClass() == MathClass.ORD) {
+                return nucleus;
+            }
+            if (atom.mathClass() == MathClass.OP) {
+                return new MathNode.ClassOverride(
+                    new BigOperator(atom, null, null, LimitsMode.DEFAULT), MathClass.ORD);
+            }
+        }
+        return new MathNode.ClassOverride(nucleus, MathClass.ORD);
     }
 
     /**

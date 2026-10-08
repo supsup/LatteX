@@ -318,20 +318,22 @@ class StandardGapsTest {
         // Routing-densities (\right bucket).
         assertRenders("\\left\\|\\mathbb E_s(\\textstyle\\sum s_p W_p)^{2l}\\right\\| \\le"
             + " \\big(C(M\\sqrt l+K_0 l)\\big)^{2l}.");
-        // The scope is exactly "to the end of the cell / fence": same tree as a braced switch.
-        assertEquals(MathParser.parse("\\begin{pmatrix}a{\\displaystyle\\sum_j x}\\end{pmatrix}"),
-            MathParser.parse("\\begin{pmatrix}a\\displaystyle\\sum_j x\\end{pmatrix}"));
-        assertEquals(MathParser.parse("\\left({\\displaystyle\\binom{n}{i}}\\right)"),
-            MathParser.parse("\\left(\\displaystyle\\binom{n}{i}\\right)"));
-        assertEquals(MathParser.parse("\\left(a\\middle|{\\textstyle b}\\right)"),
-            MathParser.parse("\\left(a\\middle|\\textstyle b\\right)"));
-        assertEquals(MathParser.parse("\\left({\\textstyle a}\\middle|b\\right)"),
-            MathParser.parse("\\left(\\textstyle a\\middle|b\\right)"));
+        // The scope is exactly "to the end of the cell / fence": the same DRAWING as a braced switch.
+        // (Not the same tree: a braced group in a list is wrapped as an Ord atom, plan
+        // 720cd87e. Alone in its cell or fence it has no neighbour to space against.)
+        assertEquals(LatteX.render("\\begin{pmatrix}a{\\displaystyle\\sum_j x}\\end{pmatrix}"),
+            LatteX.render("\\begin{pmatrix}a\\displaystyle\\sum_j x\\end{pmatrix}"));
+        assertEquals(LatteX.render("\\left({\\displaystyle\\binom{n}{i}}\\right)"),
+            LatteX.render("\\left(\\displaystyle\\binom{n}{i}\\right)"));
+        assertEquals(LatteX.render("\\left(a\\middle|{\\textstyle b}\\right)"),
+            LatteX.render("\\left(a\\middle|\\textstyle b\\right)"));
+        assertEquals(LatteX.render("\\left({\\textstyle a}\\middle|b\\right)"),
+            LatteX.render("\\left(\\textstyle a\\middle|b\\right)"));
         // The same for the colour and legacy-font switches, which share the boundary.
-        assertEquals(MathParser.parse("\\left({\\color{red}a}\\right)"),
-            MathParser.parse("\\left(\\color{red}a\\right)"));
-        assertEquals(MathParser.parse("\\begin{matrix}{\\bf a}\\end{matrix}"),
-            MathParser.parse("\\begin{matrix}\\bf a\\end{matrix}"));
+        assertEquals(LatteX.render("\\left({\\color{red}a}\\right)"),
+            LatteX.render("\\left(\\color{red}a\\right)"));
+        assertEquals(LatteX.render("\\begin{matrix}{\\bf a}\\end{matrix}"),
+            LatteX.render("\\begin{matrix}\\bf a\\end{matrix}"));
     }
 
     // ------------------------------------------------------------------
