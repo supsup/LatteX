@@ -109,6 +109,10 @@ class StandardGapsTest {
         assertEquals(new MathNode.StyleSwitch(MathNode.StyleLevel.SCRIPT,
                 new MathNode.Fraction(Atom.ord('a'), Atom.ord('b'), true, MathNode.FractionStyle.INHERIT)),
             MathParser.parse("\\genfrac{}{}{}{2}{a}{b}"));
+        // Style 3 is scriptscript; without this pin a 2/3 mix-up that only moved style 3 passed.
+        assertEquals(new MathNode.StyleSwitch(MathNode.StyleLevel.SCRIPT_SCRIPT,
+                new MathNode.Fraction(Atom.ord('a'), Atom.ord('b'), true, MathNode.FractionStyle.INHERIT)),
+            MathParser.parse("\\genfrac{}{}{}{3}{a}{b}"));
     }
 
     @Test
