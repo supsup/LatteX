@@ -489,6 +489,44 @@ public sealed interface MathNode {
         }
     }
 
+    /**
+     * TeX's {@code \not} realised as an OVERSTRIKE: the {@link #body} with a negation
+     * slash (U+0338 COMBINING LONG SOLIDUS OVERLAY, the glyph STIX Two Math draws inside
+     * its own precomposed negations) centred on it. Used only where Unicode has no
+     * precomposed negated character ({@code \not\perp}, {@code \nleqslant}); where one
+     * exists ({@code \not\simeq} = U+2244) the parser emits that atom instead.
+     *
+     * <p>TeX's {@code \not} is a zero-width relation that kerns onto the next atom, so
+     * the struck result has the BODY's width and the body's class: a struck relation
+     * spaces as a relation; {@code \not D} (the physicist's slashed D) stays Ord.
+     *
+     * @param body the struck atom (non-null)
+     */
+    record Negated(MathNode body) implements MathNode {
+        public Negated {
+            if (body == null) {
+                throw new IllegalArgumentException("Negated body must not be null");
+            }
+        }
+    }
+
+    /**
+     * The material an {@code array} column spec places at a column boundary:
+     * {@code @{...}} REPLACES the intercolumn space there with its material
+     * ({@code keepsPadding == false}); {@code !{...}} keeps the space on both sides
+     * ({@code keepsPadding == true}). The material is typeset in every row.
+     *
+     * @param material     the math between the columns (non-null; may be empty)
+     * @param keepsPadding whether the default intercolumn space stays
+     */
+    record ColumnSeparator(MathNode material, boolean keepsPadding) {
+        public ColumnSeparator {
+            if (material == null) {
+                throw new IllegalArgumentException("column separator material must not be null");
+            }
+        }
+    }
+
     /** The four members of the {@code cancel} strike family. */
     enum CancelKind {
         /** {@code \cancel} — up-diagonal strike ({@code /}). */
@@ -878,10 +916,23 @@ public sealed interface MathNode {
      * @param leftDelim    the opening delimiter code point, or {@link Fenced#NULL_DELIMITER}
      * @param rightDelim   the closing delimiter code point, or {@link Fenced#NULL_DELIMITER}
      * @param kind         the environment kind (selects the spacing template)
+     * @param columnSeparators the {@code @{...}}/{@code !{...}} material at each column
+     *                     boundary (length = columns+1), an entry {@code null} where the
+     *                     spec wrote none; the 7-argument constructor fills all nulls
      */
     record Matrix(List<List<MathNode>> rows, List<ColumnAlign> columnAligns,
                   List<Integer> columnRules, List<RowRule> rowRules,
-                  int leftDelim, int rightDelim, MatrixKind kind) implements MathNode {
+                  int leftDelim, int rightDelim, MatrixKind kind,
+                  List<ColumnSeparator> columnSeparators) implements MathNode {
+
+        /** A grid whose column spec wrote no {@code @{...}}/{@code !{...}} material. */
+        public Matrix(List<List<MathNode>> rows, List<ColumnAlign> columnAligns,
+                      List<Integer> columnRules, List<RowRule> rowRules,
+                      int leftDelim, int rightDelim, MatrixKind kind) {
+            this(rows, columnAligns, columnRules, rowRules, leftDelim, rightDelim, kind,
+                java.util.Collections.nCopies(columnAligns.size() + 1, (ColumnSeparator) null));
+        }
+
         public Matrix {
             if (rows == null || rows.isEmpty()) {
                 throw new IllegalArgumentException("Matrix must have at least one row");
@@ -909,6 +960,12 @@ public sealed interface MathNode {
             if (kind == null) {
                 throw new IllegalArgumentException("Matrix kind must not be null");
             }
+            if (columnSeparators == null || columnSeparators.size() != cols + 1) {
+                throw new IllegalArgumentException("columnSeparators length must be columns+1");
+            }
+            // Nulls are meaningful (no material at that boundary), so not List.copyOf.
+            columnSeparators = java.util.Collections.unmodifiableList(
+                new java.util.ArrayList<>(columnSeparators));
         }
 
         /** Whether the grid carries an enclosing delimiter (⇒ Inner class). */

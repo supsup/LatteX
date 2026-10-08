@@ -323,3 +323,66 @@ and every later glyph starting after the operator, for `\varprojlim`/`\varinjlim
 in text and display style and all six arrow commands; exact width over a wide
 base. The `\overrightarrow` byte-identity ladder in `StretchyAssemblyLinearTest`
 was re-pinned after showing the old four hashes reproduce with the fit forced off.
+
+---
+
+<!-- Appended by a later branch; the entries above are still unfolded on main and are kept, not replaced. -->
+
+Proposed entry for the **Unreleased** section of `RELEASE_NOTES.md`, plan
+`fc988bc4` (`fixpoint/lattex-small-gaps`). Appended below the pending entries
+above rather than replacing them.
+
+### `@{...}` column specs, arrows as `\big` delimiters, `\not` over anything, every negated relation
+
+Measured on the research corpus (746 preprints, 137,880 unique display formulas):
+main cc8186a renders 105,156 and has 288 real gaps; this branch renders 105,199 and
+has 240. The four buckets below (19 + 14 + 1 + 12 refusals, plus 6 more from the
+named negations and their bases) are gone; nothing that rendered before fails now.
+
+**`@{...}` and `!{...}` in `array` column specs.** `@{math}` sets its material between
+the columns on every row IN PLACE of the intercolumn space (LaTeX's semantics, so
+`@{}` removes an edge or column gap and `@{\quad\longrightarrow\quad}` draws an arrow
+column); `!{math}` keeps the space. The material is a per-boundary
+`MathNode.ColumnSeparator` on `Matrix` (a new record component; the old 7-argument
+constructor still builds a grid with none). MathML puts it inside the adjacent cell,
+so the table keeps the author's column count. Two expressions, or a `|` and an
+expression, at one boundary fail loud.
+
+**Arrows as delimiters.** `\big`..`\Bigg` (with `l`/`r`/`m`) and `\left`/`\right` take
+`\uparrow` `\downarrow` `\updownarrow` `\Uparrow` `\Downarrow` `\Updownarrow` (the
+font's vertical constructions) and `\backslash` (the reverse solidus).
+
+**`\not` overstrikes.** The precomposed character is still preferred, and more of them
+are known (`\not\simeq` = U+2244, `\not\sqsubseteq`, `\not\preccurlyeq`, the
+turnstiles, `\not\lesssim` …). Any other target, which used to be refused, is drawn
+struck: the new `MathNode.Negated` places U+0338 COMBINING LONG SOLIDUS OVERLAY (the
+stroke STIX Two Math draws inside ≠) centred on the target's ink, keeping the
+target's width and class (`a\not\perp b` spaces as a relation; `\not D` is a slashed
+D). MathML appends U+0338 to the token (`<mo>⊥̸</mo>`); a non-atom target takes
+`<menclose notation="updiagonalstrike">`. `\not` with nothing after it still fails,
+now naming `\not`.
+
+**Negated relations.** 32 new names with their precomposed code points (`\nsimeq`
+`\napprox` `\nequiv` `\nasymp` `\lneq` `\gneq` `\lneqq` `\gneqq` `\lnsim` `\gnsim`
+`\lnapprox` `\gnapprox` `\nlesssim` `\ngtrsim` `\nlessgtr` `\ngtrless` `\npreceq`
+`\nsucceq` `\precneqq` `\succneqq` `\precnsim` `\succnsim` `\precnapprox`
+`\succnapprox` `\nsubset` `\nsupset` `\subsetneqq` `\supsetneqq` `\nsqsubseteq`
+`\nsqsupseteq` `\nni` `\notni`), six overstruck ones Unicode does not precompose
+(`\nleqslant` `\ngeqslant` `\nleqq` `\ngeqq` `\nsubseteqq` `\nsupseteqq`), and the
+bases `\preccurlyeq` `\succcurlyeq` `\VDash`, all relations. Registering them also
+fixes the PASTED glyph: a pasted ≄ (and ≉ ≢ ≭ ⊄ ⊅ ∌ ⋠ …) used to space as an
+ordinary symbol (`N≄0` tight) and now gets relation spacing like `\neq`. Not added:
+`\varsubsetneq` & co and `\lvertneqq`/`\gvertneqq` (Unicode has them only as a
+variation sequence, which LatteX does not map) and `\nshortmid`/`\nshortparallel`.
+`examples/symbol-index.html` grew by 41 cells (640 -> 681 commands).
+
+**Pinned.** `SmallGapsTest`: corpus formulas verbatim, a census of every negated name
+against its code point's Unicode NAME, a STIX glyph and REL class (command and
+pasted), relation spacing on both sides, and the loud refusals. `SmallGapsLayoutTest`:
+the slash's ink centred on and inside the struck relation's box and matching ≠'s
+slash; each `\big` level's arrow span centred on the axis; `@` material between its
+columns on each row with no `\arraycolsep` beside it. Nine mutants (slash dropped,
+slash uncentred, overstrike parse path dropped, `@` dropped, `@` keeping its padding,
+material on one row only, `\downarrow` delimiter dropped, `\not\simeq` mapping dropped,
+`\napprox` unregistered) each turn the suite red. `SymbolCoverageTest`'s
+"`\not\alpha` must throw" pin is inverted: the overstrike is real ink.

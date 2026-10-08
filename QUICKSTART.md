@@ -187,6 +187,34 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > 1420 font units). Only a base narrower than the font's smallest arrow
 > (`\underleftarrow{i}`) is widened to the arrow, base centred, so nothing overlaps.
 >
+> **`@{…}` and `!{…}` in an array column spec.** `@{math}` puts its material between
+> the columns IN PLACE of the intercolumn space, on every row, as LaTeX does:
+> `{c@{\qquad}c}` widens the gap, `{@{}l@{}}` drops the edge space,
+> `{c@{\;\to\;}l}` draws an arrow between the columns. `!{math}` puts it there and
+> keeps the space. Two expressions, or a `|` and an expression, at the SAME column
+> boundary fail loud (LaTeX would concatenate them; LatteX keeps one item per
+> boundary rather than guess at the order). `p{…}`, `*{…}` and the other `array`
+> package types are still refused.
+>
+> **Arrows as `\big` delimiters.** `\big`/`\Big`/`\bigg`/`\Bigg` (and their
+> `l`/`r`/`m` forms) and `\left`/`\right` take `\uparrow` `\downarrow` `\updownarrow`
+> `\Uparrow` `\Downarrow` `\Updownarrow` — the hand-drawn commutative-diagram idiom
+> `\big\downarrow` — and `\backslash` (the reverse solidus, as in
+> `\mathbin{\big\backslash}`).
+>
+> **`\not` and the negated relations.** `\not` keeps the single Unicode character
+> wherever Unicode has one (`\not\simeq` is ≄, `\not\sqsubseteq` is ⋢). Over anything
+> else it draws an overstrike: the bundled font's negation slash (U+0338, the same
+> stroke as in ≠) centred on the symbol, which keeps its own width and spacing class,
+> so `a\not\perp b` spaces as a relation and `\not D` is the physicist's slashed D.
+> amssymb's negated relations are all accepted (`\nsimeq` `\lneq` `\gneqq` `\lnsim`
+> `\npreceq` `\subsetneqq` `\nsqsubseteq` `\precnapprox` …), the ones Unicode does
+> not precompose (`\nleqslant` `\ngeqslant` `\nleqq` `\ngeqq` `\nsubseteqq`
+> `\nsupseteqq`) as the same overstrike; a PASTED ≄ ≉ ≢ ⋠ … now spaces as a relation,
+> like its command. Not accepted: `\varsubsetneq` & co, `\lvertneqq`/`\gvertneqq`
+> (Unicode spells them only as a variation sequence) and `\nshortmid`/`\nshortparallel`.
+> In MathML an overstrike is the symbol followed by U+0338 (`<mo>⊥̸</mo>`).
+>
 > **Two narrow acceptances, stated.** `\lhook` is plain TeX's hook *piece*, which has
 > no glyph of its own in Unicode or the bundled font, so it is accepted only in the
 > composites it exists for — `\lhook\joinrel\rightarrow` (= `\hookrightarrow`) and

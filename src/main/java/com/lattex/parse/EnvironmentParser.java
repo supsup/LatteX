@@ -65,6 +65,7 @@ final class EnvironmentParser {
         // eqnarray synthesises a fixed one. Every other env derives its columns from the body.
         List<ColumnAlign> specAligns = null;
         List<Integer> specVlines = null;
+        List<MathNode.ColumnSeparator> specSeparators = null;
         if (isEqnarray(env)) {
             // eqnarray is a FIXED 3-column right/center/left grid (LHS, relation, RHS)
             // with NO user column spec to read. Reuse ARRAY's machinery by synthesising
@@ -80,6 +81,7 @@ final class EnvironmentParser {
             ColumnSpec cs = readColumnSpec(parser);
             specAligns = cs.aligns();
             specVlines = cs.vlines();
+            specSeparators = cs.separators();
         } else if (isSubarray(env)) {
             // subarray takes a MANDATORY single-letter {c}/{l} column spec. Like eqnarray
             // above, it hands buildMatrix a DECLARED column spec rather than letting the
@@ -181,7 +183,7 @@ final class EnvironmentParser {
         if (Symbols.NUMBERED_ENVIRONMENTS.contains(env)) {
             parser.recordNumberedEnvironment(env);
         }
-        return buildMatrix(env, spec, specAligns, specVlines, rawRows, hlines);
+        return buildMatrix(env, spec, specAligns, specVlines, specSeparators, rawRows, hlines);
     }
 
     // ------------------------------------------------------------------
@@ -397,7 +399,9 @@ final class EnvironmentParser {
      * alignment + vertical-rule lists, and materialises the inter-row rule list.
      */
     static MathNode buildMatrix(String env, EnvSpec spec, List<ColumnAlign> specAligns,
-                                        List<Integer> specVlines, List<List<MathNode>> rawRows,
+                                        List<Integer> specVlines,
+                                        List<MathNode.ColumnSeparator> specSeparators,
+                                        List<List<MathNode>> rawRows,
                                         Map<Integer, RowRule> hlines) {
         int cols;
         List<ColumnAlign> aligns;
@@ -467,8 +471,12 @@ final class EnvironmentParser {
             rowRules.add(hlines.getOrDefault(g, RowRule.NONE));
         }
 
+        if (specSeparators == null) {
+            return new Matrix(grid, aligns, vlines, rowRules,
+                spec.leftDelim(), spec.rightDelim(), spec.kind());
+        }
         return new Matrix(grid, aligns, vlines, rowRules,
-            spec.leftDelim(), spec.rightDelim(), spec.kind());
+            spec.leftDelim(), spec.rightDelim(), spec.kind(), specSeparators);
     }
 
     /** True for {@code eqnarray}/{@code eqnarray*} — the fixed right/center/left 3-column grid. */
@@ -640,15 +648,26 @@ final class EnvironmentParser {
         return sb.toString();
     }
 
-    /** The parsed {@code array} column spec: per-column alignment + boundary rules. */
-    private record ColumnSpec(List<ColumnAlign> aligns, List<Integer> vlines) {
+    /**
+     * The parsed {@code array} column spec: per-column alignment, boundary rules, and
+     * the {@code @{...}}/{@code !{...}} material at each boundary (null where none).
+     */
+    private record ColumnSpec(List<ColumnAlign> aligns, List<Integer> vlines,
+                              List<MathNode.ColumnSeparator> separators) {
     }
 
     /**
      * Reads an {@code array} column spec {@code {lcr|}}: {@code l}/{@code c}/{@code r}
      * declare left/centre/right columns and {@code |} adds a vertical rule at the
-     * current boundary. {@code vlines} has one count per {@code columns+1} boundary.
-     * Unsupported column types ({@code p{}}, {@code @{}}, {@code *}, …) fail loud.
+     * current boundary. {@code @{math}} puts its material at the current boundary IN
+     * PLACE OF the intercolumn space (TeX's array semantics: {@code @{}} removes the
+     * edge or intercolumn space); {@code !{math}} puts it there and keeps the space.
+     * {@code vlines} and {@code separators} have one entry per {@code columns+1}
+     * boundary. Two expressions, or an expression and a {@code |}, at ONE boundary
+     * fail loud (LaTeX would concatenate them in spec order; LatteX carries one item
+     * per boundary rather than guess at the order). Other column types ({@code p{}},
+     * {@code *}, …) fail loud. The material is parsed by the ordinary parser, so it is
+     * bounded by the same depth and size limits as any cell. Plan fc988bc4.
      */
     private static ColumnSpec readColumnSpec(MathParser parser) {
         if (parser.peek().kind() != Kind.LBRACE) {
@@ -658,22 +677,52 @@ final class EnvironmentParser {
         parser.next(); // consume '{'
         List<ColumnAlign> aligns = new ArrayList<>();
         List<Integer> vlines = new ArrayList<>();
+        List<MathNode.ColumnSeparator> separators = new ArrayList<>();
         vlines.add(0); // boundary before the first column
+        separators.add(null);
         while (parser.peek().kind() != Kind.RBRACE) {
             Token t = parser.peek();
+            if (t.kind() == Kind.EOF) {
+                throw new MathSyntaxException("unterminated array column spec");
+            }
             if (t.kind() != Kind.CHAR) {
                 throw new MathSyntaxException(
-                    "array column spec must be l/c/r and '|', but found " + MathParser.describe(t));
+                    "array column spec must be l/c/r, '|', @{...} or !{...}, but found "
+                        + MathParser.describe(t));
             }
             int cp = t.codePoint();
+            int last = vlines.size() - 1;
             switch (cp) {
-                case 'l' -> { aligns.add(ColumnAlign.LEFT); vlines.add(0); }
-                case 'c' -> { aligns.add(ColumnAlign.CENTER); vlines.add(0); }
-                case 'r' -> { aligns.add(ColumnAlign.RIGHT); vlines.add(0); }
-                case '|' -> vlines.set(vlines.size() - 1, vlines.get(vlines.size() - 1) + 1);
+                case 'l' -> { aligns.add(ColumnAlign.LEFT); vlines.add(0); separators.add(null); }
+                case 'c' -> { aligns.add(ColumnAlign.CENTER); vlines.add(0); separators.add(null); }
+                case 'r' -> { aligns.add(ColumnAlign.RIGHT); vlines.add(0); separators.add(null); }
+                case '|' -> {
+                    if (separators.get(last) != null) {
+                        throw sharedBoundary();
+                    }
+                    vlines.set(last, vlines.get(last) + 1);
+                }
+                case '@', '!' -> {
+                    parser.next(); // consume '@' / '!'
+                    if (parser.peek().kind() != Kind.LBRACE) {
+                        throw new MathSyntaxException("array column spec: '"
+                            + Character.toString(cp) + "' must be followed by a {...} group, but found "
+                            + MathParser.describe(parser.peek()));
+                    }
+                    if (separators.get(last) != null) {
+                        throw new MathSyntaxException("array column spec: two @{...}/!{...}"
+                            + " expressions at one column boundary are not supported");
+                    }
+                    if (vlines.get(last) > 0) {
+                        throw sharedBoundary();
+                    }
+                    MathNode material = parser.parseComponent(); // the {...} group
+                    separators.set(last, new MathNode.ColumnSeparator(material, cp == '!'));
+                    continue; // the group is consumed; do not consume another token
+                }
                 default -> throw new MathSyntaxException(
                     "unsupported array column type '" + new String(Character.toChars(cp))
-                        + "' (only l, c, r and | are supported)");
+                        + "' (only l, c, r, |, @{...} and !{...} are supported)");
             }
             parser.next();
         }
@@ -681,6 +730,11 @@ final class EnvironmentParser {
         if (aligns.isEmpty()) {
             throw new MathSyntaxException("array column spec must declare at least one column");
         }
-        return new ColumnSpec(aligns, vlines);
+        return new ColumnSpec(aligns, vlines, separators);
+    }
+
+    private static MathSyntaxException sharedBoundary() {
+        return new MathSyntaxException("array column spec: a '|' rule and an @{...}/!{...}"
+            + " expression at one column boundary are not supported");
     }
 }

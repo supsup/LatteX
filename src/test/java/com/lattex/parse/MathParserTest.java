@@ -96,6 +96,7 @@ class MathParserTest {
                     + (limits == MathNode.LimitsMode.DEFAULT ? "" : "," + limits)
                     + "](" + pp(body) + ")";
             case MathNode.Boxed(var body) -> "Box(" + pp(body) + ")";
+            case MathNode.Negated(var body) -> "Not(" + pp(body) + ")";
             case MathNode.Cancel(var kind, var body, var to) ->
                 "Cancel[" + kind + "](" + pp(body)
                     + (to == null ? "" : "->" + pp(to)) + ")";

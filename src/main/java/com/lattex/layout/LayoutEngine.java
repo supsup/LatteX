@@ -191,6 +191,7 @@ public final class LayoutEngine {
             case MathNode.ClassOverride(var body, _, _) -> layoutBox(body, ctx);
             case MathNode.Boxed(var body) -> boxedBox(body, ctx);
             case MathNode.Cancel cancel -> cancelBox(cancel, ctx);
+            case MathNode.Negated negated -> negatedBox(negated, ctx);
             case Phantom(var content, var keepW, var keepV) ->
                 phantomBox(content, keepW, keepV, ctx);
             case BigOperator(var op, var lower, var upper, var limitsMode) ->
@@ -670,6 +671,47 @@ public final class LayoutEngine {
      * baseline) so it degrades to the bare annotation. No non-finite coordinate can reach
      * a {@link Rule}, {@link Box}, or the emitter.
      */
+    /**
+     * TeX's {@code \not} as an overstrike (plan fc988bc4): the body at its natural
+     * width, with U+0338 COMBINING LONG SOLIDUS OVERLAY — the slash STIX Two Math
+     * draws inside its own precomposed negations, so {@code \not\perp} matches
+     * {@code \neq}'s stroke — centred horizontally on the body's ink and set on the
+     * body's baseline at the body's size (the glyph's own vertical design places it
+     * across the relation band, as in ≠). TeX's {@code \not} is zero-width, so the
+     * result keeps the body's advance; the box grows only vertically, to contain the
+     * slash. Ink stays in the SVG alphabet (one more glyph path).
+     */
+    private static Box negatedBox(MathNode.Negated negated, LayoutContext ctx) {
+        Box body = layoutBox(negated.body(), ctx);
+        SfntFont font = ctx.font();
+        double scale = ctx.scale();
+        int slashGid = font.glyphId(NOT_SLASH);
+        GlyphOutline slash = font.outline(slashGid);
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        body.drawInto(glyphs, rules, 0.0, 0.0);
+        // Centre on the body's INK (an italic letter's ink is not centred in its advance),
+        // falling back to the advance box for an inkless body.
+        double inkMin = Double.POSITIVE_INFINITY;
+        double inkMax = Double.NEGATIVE_INFINITY;
+        for (PositionedGlyph g : glyphs) {
+            GlyphOutline o = font.outline(g.glyphId());
+            if (!o.isEmpty()) {
+                inkMin = Math.min(inkMin, g.originX() + g.scale() * o.xMin());
+                inkMax = Math.max(inkMax, g.originX() + g.scale() * o.xMax());
+            }
+        }
+        double centre = inkMin <= inkMax ? (inkMin + inkMax) / 2.0 : body.width() / 2.0;
+        double slashOrigin = centre - scale * (slash.xMin() + slash.xMax()) / 2.0;
+        glyphs.add(new PositionedGlyph(slashGid, slashOrigin, 0.0, scale, ctx.fenceDepth()));
+        return new Box(glyphs, rules, body.width(),
+            Math.max(body.height(), scale * slash.yMax()),
+            Math.max(body.depth(), -scale * slash.yMin()));
+    }
+
+    /** U+0338 COMBINING LONG SOLIDUS OVERLAY — the {@code \not} overstrike slash. */
+    static final int NOT_SLASH = 0x0338;
+
     private static Box cancelBox(MathNode.Cancel cancel, LayoutContext ctx) {
         Box body = layoutBox(cancel.body(), ctx);
         double w = body.width();
@@ -865,6 +907,9 @@ public final class LayoutEngine {
             case MathNode.ClassOverride co -> co.forcedClass();
             case MathNode.Boxed _ -> MathClass.ORD; // a framed box behaves as an Ord atom
             case MathNode.Cancel _ -> MathClass.ORD; // a struck sub-formula behaves as an Ord atom
+            // \not is a zero-width relation kerned onto its target: the struck atom keeps
+            // the target's class (a struck relation spaces as a relation).
+            case MathNode.Negated n -> classOf(n.body());
             case MathNode.Tagged t -> classOf(t.body()); // the tag rides outside; class = body's
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
             case OperatorName _ -> MathClass.OP; // a named operator is class Op
@@ -1989,6 +2034,19 @@ public final class LayoutEngine {
                 rowDepth[r] = Math.max(rowDepth[r], b.depth());
             }
         }
+        // @{...}/!{...} column-spec material (plan fc988bc4): typeset once per boundary in
+        // the cell style, then stamped on EVERY row, so every row's extent includes it.
+        Box[] sepBox = new Box[cols + 1];
+        for (int bnd = 0; bnd <= cols; bnd++) {
+            MathNode.ColumnSeparator sep = mx.columnSeparators().get(bnd);
+            if (sep != null) {
+                sepBox[bnd] = layoutBox(sep.material(), cellCtx);
+                for (int r = 0; r < rows; r++) {
+                    rowHeight[r] = Math.max(rowHeight[r], sepBox[bnd].height());
+                    rowDepth[r] = Math.max(rowDepth[r], sepBox[bnd].depth());
+                }
+            }
+        }
 
         // 2. Vertical stacking: row 0's baseline at local y=0, each subsequent row a
         // pitch of (prev depth + inter-row gap + this height) below.
@@ -2044,6 +2102,27 @@ public final class LayoutEngine {
                 : colGap;
         }
         boundaryGap[cols] = edgeGap;
+        // A boundary carrying @{...} material REPLACES its space with the material's width
+        // (TeX: @ suppresses \arraycolsep on both sides); !{...} keeps the space, split
+        // half before and half after the material at an inner boundary, and at an edge
+        // the edge space on the inner side only. sepLead[b] is the offset of the
+        // material from the boundary's start.
+        double[] sepLead = new double[cols + 1];
+        for (int bnd = 0; bnd <= cols; bnd++) {
+            Box sb = sepBox[bnd];
+            if (sb == null) {
+                continue;
+            }
+            if (!mx.columnSeparators().get(bnd).keepsPadding()) {
+                boundaryGap[bnd] = sb.width();
+                continue;
+            }
+            double before = bnd == 0 ? 0.0 : bnd == cols ? edgeGap : boundaryGap[bnd] / 2.0;
+            double after = bnd == 0 ? edgeGap : bnd == cols ? 0.0 : boundaryGap[bnd] / 2.0;
+            sepLead[bnd] = before;
+            boundaryGap[bnd] = before + sb.width() + after;
+        }
+        double[] boundaryX = new double[cols + 1];
 
         List<PositionedGlyph> glyphs = new ArrayList<>();
         List<Rule> rules = new ArrayList<>();
@@ -2066,12 +2145,14 @@ public final class LayoutEngine {
         for (int col = 0; col < cols; col++) {
             addVerticalRules(rules, penX, boundaryGap[col], mx.columnRules().get(col),
                 ruleThick, gridTopY, fullSpan);
+            boundaryX[col] = penX;
             penX += boundaryGap[col];
             colX[col] = penX;
             penX += colWidth[col];
         }
         addVerticalRules(rules, penX, boundaryGap[cols], mx.columnRules().get(cols),
             ruleThick, gridTopY, fullSpan);
+        boundaryX[cols] = penX;
         penX += boundaryGap[cols];
         double contentEndX = penX;
 
@@ -2100,6 +2181,15 @@ public final class LayoutEngine {
                     : mx.columnAligns().get(col);
                 double dx = colX[col] + alignOffset(align, colWidth[col], b.width());
                 b.drawInto(glyphs, rules, dx, baseline[r]);
+            }
+        }
+
+        // 7b. The @{...}/!{...} material, on every row's baseline at its boundary.
+        for (int bnd = 0; bnd <= cols; bnd++) {
+            if (sepBox[bnd] != null) {
+                for (int r = 0; r < rows; r++) {
+                    sepBox[bnd].drawInto(glyphs, rules, boundaryX[bnd] + sepLead[bnd], baseline[r]);
+                }
             }
         }
 

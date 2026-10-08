@@ -1511,10 +1511,16 @@ public final class MathParser {
                 return new Fenced(leftDelim, body, rightDelim);
             }
             case NOT -> {
-                // \not overlays a negation slash on the following relation. We
-                // realise it with the precomposed negated code point when one
-                // exists (STIX has the glyph); otherwise we fail loudly rather
-                // than fake an overlay we cannot draw in the minimal SVG alphabet.
+                // \not overlays a negation slash on the following atom. The precomposed
+                // negated code point is preferred where Unicode has one (STIX draws it:
+                // \not\simeq = U+2244); any other target is OVERSTRUCK — the target with
+                // the U+0338 slash centred on it, keeping the target's width and class,
+                // as TeX's zero-width \not relation does (plan fc988bc4). Nothing to
+                // negate (end of input, '}', '&') still refuses loudly, naming \not.
+                if (!isArgumentToken(peek())) {
+                    throw missingArgument(
+                        "\\not expects a symbol to negate, but found " + describe(peek()));
+                }
                 MathNode target = parseNucleus();
                 if (target instanceof Atom a) {
                     Integer negated = NEGATION.get(a.codePoint());
@@ -1522,8 +1528,13 @@ public final class MathParser {
                         return new Atom(negated, MathClass.REL);
                     }
                 }
-                throw new MathSyntaxException(
-                    "\\not has no precomposed negation for the following symbol");
+                return new MathNode.Negated(target);
+            }
+            case NEGATED_SYMBOL -> {
+                // amssymb's negations with no precomposed code point (\nleqslant, \nleqq…):
+                // the same overstrike \not draws over the base relation.
+                return new MathNode.Negated(
+                    new Atom(Symbols.OVERSTRUCK_NEGATIONS.get(name), MathClass.REL));
             }
             case BEGIN -> {
                 return EnvironmentParser.parseEnvironment(this);

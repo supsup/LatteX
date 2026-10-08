@@ -246,9 +246,9 @@ final class Symbols {
         Map.entry("underline", new AccentSpec(Accent.RULE, false, true)));
 
     // The \not prefix: base code point -> precomposed negated code point (Unicode).
-    // We only negate relations that HAVE a single precomposed negation glyph in
-    // Unicode (which STIX Two Math provides); anything else is reported loudly
-    // rather than faked with an overlay we cannot draw in the minimal alphabet.
+    // Where Unicode precomposes the negation (and STIX Two Math draws it) \not emits that
+    // single code point; any other target is OVERSTRUCK with the U+0338 slash glyph
+    // (MathNode.Negated, plan fc988bc4), which needs nothing outside the SVG alphabet.
     static final Map<Integer, Integer> NEGATION = Map.ofEntries(
         Map.entry(0x003D, 0x2260), // =  -> ≠
         Map.entry(0x003C, 0x226E), // <  -> ≮
@@ -274,7 +274,39 @@ final class Symbols {
         Map.entry(0x2194, 0x21AE), // ↔  -> ↮
         Map.entry(0x21D2, 0x21CF), // ⇒  -> ⇏
         Map.entry(0x21D0, 0x21CD), // ⇐  -> ⇍
-        Map.entry(0x21D4, 0x21CE)); // ⇔ -> ⇎
+        Map.entry(0x21D4, 0x21CE), // ⇔ -> ⇎
+        // Plan fc988bc4: the remaining relations whose negation Unicode precomposes.
+        Map.entry(0x2243, 0x2244), // ≃  -> ≄
+        Map.entry(0x224D, 0x226D), // ≍  -> ≭
+        Map.entry(0x2272, 0x2274), // ≲  -> ≴
+        Map.entry(0x2273, 0x2275), // ≳  -> ≵
+        Map.entry(0x2276, 0x2278), // ≶  -> ≸
+        Map.entry(0x2277, 0x2279), // ≷  -> ≹
+        Map.entry(0x227C, 0x22E0), // ≼  -> ⋠
+        Map.entry(0x227D, 0x22E1), // ≽  -> ⋡
+        Map.entry(0x2291, 0x22E2), // ⊑  -> ⋢
+        Map.entry(0x2292, 0x22E3), // ⊒  -> ⋣
+        Map.entry(0x22A2, 0x22AC), // ⊢  -> ⊬
+        Map.entry(0x22A8, 0x22AD), // ⊨  -> ⊭
+        Map.entry(0x22A9, 0x22AE), // ⊩  -> ⊮
+        Map.entry(0x22AB, 0x22AF), // ⊫  -> ⊯
+        Map.entry(0x22B2, 0x22EA), // ⊲  -> ⋪
+        Map.entry(0x22B3, 0x22EB), // ⊳  -> ⋫
+        Map.entry(0x22B4, 0x22EC), // ⊴  -> ⋬
+        Map.entry(0x22B5, 0x22ED)); // ⊵ -> ⋭
+
+    /**
+     * amssymb negated relations that Unicode does NOT precompose: name -> the base
+     * relation the parser overstrikes with a negation slash ({@link MathNode.Negated}),
+     * exactly as {@code \not\leqslant} does. Plan fc988bc4.
+     */
+    static final Map<String, Integer> OVERSTRUCK_NEGATIONS = Map.of(
+        "nleqslant", 0x2A7D,   // ⩽ struck
+        "ngeqslant", 0x2A7E,   // ⩾ struck
+        "nleqq", 0x2266,       // ≦ struck
+        "ngeqq", 0x2267,       // ≧ struck
+        "nsubseteqq", 0x2AC5,  // ⫅ struck
+        "nsupseteqq", 0x2AC6); // ⫆ struck
 
     /**
      * Font-variant alphabet commands -> the {@link MathVariant.Style} they apply.
@@ -584,6 +616,12 @@ final class Symbols {
         m.put("models", new Sym(0x22A8, MathClass.REL)); // ⊨
         m.put("vDash", new Sym(0x22A8, MathClass.REL));  // ⊨
         m.put("Vdash", new Sym(0x22A9, MathClass.REL));  // ⊩
+        // The three bases of a \not precomposed negation that had no command, so their
+        // PASTED glyph spaced as an Ord while its negation spaced as a relation (the
+        // census in SmallGapsTest pins the parity; plan fc988bc4).
+        m.put("VDash", new Sym(0x22AB, MathClass.REL));       // ⊫
+        m.put("preccurlyeq", new Sym(0x227C, MathClass.REL)); // ≼
+        m.put("succcurlyeq", new Sym(0x227D, MathClass.REL)); // ≽
         m.put("Vvdash", new Sym(0x22AA, MathClass.REL)); // ⊪
         m.put("perp", new Sym(0x22A5, MathClass.REL));   // ⊥
         m.put("parallel", new Sym(0x2225, MathClass.REL)); // ∥
@@ -624,6 +662,46 @@ final class Symbols {
         m.put("ntriangleright", new Sym(0x22EB, MathClass.REL)); // ⋫
         m.put("ntrianglelefteq", new Sym(0x22EC, MathClass.REL)); // ⋬
         m.put("ntrianglerighteq", new Sym(0x22ED, MathClass.REL)); // ⋭
+        // The rest of amssymb's negated relations (and the unicode-math names for the
+        // precomposed negations \not can produce), census-pinned in SmallGapsTest against
+        // each code point's Unicode NAME and a real STIX glyph (plan fc988bc4). Registering
+        // them here also makes the PASTED glyph a relation (CLASS_BY_CODEPOINT): a pasted
+        // U+2244 used to space as an Ord. amssymb's \varsubsetneq & co and
+        // \lvertneqq/\gvertneqq are NOT here: Unicode spells them only as a variation
+        // sequence (base + U+FE00) and LatteX maps single code points, so they stay unknown
+        // rather than be faked with the plain glyph.
+        m.put("lneq", new Sym(0x2A87, MathClass.REL));      // ⪇
+        m.put("gneq", new Sym(0x2A88, MathClass.REL));      // ⪈
+        m.put("lneqq", new Sym(0x2268, MathClass.REL));     // ≨
+        m.put("gneqq", new Sym(0x2269, MathClass.REL));     // ≩
+        m.put("lnsim", new Sym(0x22E6, MathClass.REL));     // ⋦
+        m.put("gnsim", new Sym(0x22E7, MathClass.REL));     // ⋧
+        m.put("lnapprox", new Sym(0x2A89, MathClass.REL));  // ⪉
+        m.put("gnapprox", new Sym(0x2A8A, MathClass.REL));  // ⪊
+        m.put("nlesssim", new Sym(0x2274, MathClass.REL));  // ≴
+        m.put("ngtrsim", new Sym(0x2275, MathClass.REL));   // ≵
+        m.put("nlessgtr", new Sym(0x2278, MathClass.REL));  // ≸
+        m.put("ngtrless", new Sym(0x2279, MathClass.REL));  // ≹
+        m.put("npreceq", new Sym(0x22E0, MathClass.REL));   // ⋠
+        m.put("nsucceq", new Sym(0x22E1, MathClass.REL));   // ⋡
+        m.put("precneqq", new Sym(0x2AB5, MathClass.REL));  // ⪵
+        m.put("succneqq", new Sym(0x2AB6, MathClass.REL));  // ⪶
+        m.put("precnsim", new Sym(0x22E8, MathClass.REL));  // ⋨
+        m.put("succnsim", new Sym(0x22E9, MathClass.REL));  // ⋩
+        m.put("precnapprox", new Sym(0x2AB9, MathClass.REL)); // ⪹
+        m.put("succnapprox", new Sym(0x2ABA, MathClass.REL)); // ⪺
+        m.put("nsimeq", new Sym(0x2244, MathClass.REL));    // ≄
+        m.put("napprox", new Sym(0x2249, MathClass.REL));   // ≉
+        m.put("nasymp", new Sym(0x226D, MathClass.REL));    // ≭
+        m.put("nequiv", new Sym(0x2262, MathClass.REL));    // ≢
+        m.put("nsubset", new Sym(0x2284, MathClass.REL));   // ⊄
+        m.put("nsupset", new Sym(0x2285, MathClass.REL));   // ⊅
+        m.put("subsetneqq", new Sym(0x2ACB, MathClass.REL)); // ⫋
+        m.put("supsetneqq", new Sym(0x2ACC, MathClass.REL)); // ⫌
+        m.put("nsqsubseteq", new Sym(0x22E2, MathClass.REL)); // ⋢
+        m.put("nsqsupseteq", new Sym(0x22E3, MathClass.REL)); // ⋣
+        m.put("nni", new Sym(0x220C, MathClass.REL));       // ∌
+        m.put("notni", new Sym(0x220C, MathClass.REL));     // ∌ alias
 
         // -- Arrows (MathClass.REL) ------------------------------------------
         m.put("leftarrow", new Sym(0x2190, MathClass.REL));  // ←

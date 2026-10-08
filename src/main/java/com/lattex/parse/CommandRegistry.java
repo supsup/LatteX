@@ -110,6 +110,7 @@ final class CommandRegistry {
         MATHSTRUT(GrammarKind.SYMBOL, OutputKind.RENDERING),
         LEFT(GrammarKind.CONTEXTUAL, OutputKind.RENDERING),
         NOT(GrammarKind.PREFIX, OutputKind.RENDERING),
+        NEGATED_SYMBOL(GrammarKind.SYMBOL, OutputKind.RENDERING),
         BEGIN(GrammarKind.ENVIRONMENT, OutputKind.RENDERING),
         BORDER_MATRIX(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         END(GrammarKind.CONTEXTUAL, OutputKind.NON_RENDERING),
@@ -354,6 +355,9 @@ final class CommandRegistry {
         add(out, "middle", Category.STRUCTURE, Handler.MIDDLE,
             "\\left(a\\middle|b\\right)");
         add(out, "not", Category.RELATION, Handler.NOT, "\\not=");
+        // amssymb negations Unicode does not precompose: an overstrike over the base.
+        Symbols.OVERSTRUCK_NEGATIONS.forEach((name, base) ->
+            add(out, name, Category.RELATION, Handler.NEGATED_SYMBOL, "a\\" + name + " b"));
         // \lhook: plain TeX's hook PIECE, which has no code point of its own (Unicode and
         // STIX Two Math encode only the whole hooked arrow), so it is accepted only in the
         // composite it exists for, \lhook\joinrel<arrow>. Plan edbda088.
@@ -466,6 +470,17 @@ final class CommandRegistry {
             case "rfloor" -> OptionalInt.of(0x230B);
             case "lceil" -> OptionalInt.of(0x2308);
             case "rceil" -> OptionalInt.of(0x2309);
+            // Arrows are TeX delimiters too (\big\downarrow in hand-drawn commutative
+            // diagrams; plan fc988bc4); STIX Two Math gives each a vertical construction.
+            case "uparrow" -> OptionalInt.of(0x2191);
+            case "downarrow" -> OptionalInt.of(0x2193);
+            case "updownarrow" -> OptionalInt.of(0x2195);
+            case "Uparrow" -> OptionalInt.of(0x21D1);
+            case "Downarrow" -> OptionalInt.of(0x21D3);
+            case "Updownarrow" -> OptionalInt.of(0x21D5);
+            // As a delimiter \backslash is the reverse solidus (with STIX size variants,
+            // like '/'), not the set-minus glyph its symbol form draws.
+            case "backslash" -> OptionalInt.of(0x5C);
             default -> OptionalInt.empty();
         };
     }
