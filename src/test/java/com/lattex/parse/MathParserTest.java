@@ -33,7 +33,8 @@ class MathParserTest {
     // ------------------------------------------------------------------
     static String pp(MathNode node) {
         return switch (node) {
-            case Atom(int cp, MathClass cls) -> "A(" + sym(cp) + "," + cls + ")";
+            case Atom(int cp, MathClass cls, boolean upright) ->
+                "A(" + sym(cp) + "," + cls + (upright ? ",rm" : "") + ")";
             case MathNode.MiddleDelim(int cp) -> "MID(" + sym(cp) + ")";
             case MathList(var items) -> {
                 StringBuilder sb = new StringBuilder("L(");

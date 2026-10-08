@@ -1265,16 +1265,31 @@ public final class LatteX {
             + xmlEscape(Character.toString(codePoint)) + "</mo>";
     }
 
-    /** An atom's element: {@code <mn>} for digits, {@code <mi>} for letters, else {@code <mo>}. */
+    /**
+     * An atom's element: {@code <mn>} for digits, {@code <mi>} for letters, else {@code <mo>}.
+     *
+     * <p>It agrees with the glyphs the SVG draws (plan a85ff403). A single-character
+     * {@code <mi>} is already italic in MathML Core, which is what layout draws for a Latin
+     * or lowercase Greek letter, so those need no attribute; the letters layout keeps
+     * UPRIGHT — uppercase Greek, and Latin under the legacy {@code \rm} — say so with
+     * {@code mathvariant="normal"}. {@code -} is the minus sign in both outputs.
+     */
     private static String atomMathML(Atom atom) {
-        int cp = atom.codePoint();
+        int cp = atom.codePoint() == '-' ? 0x2212 : atom.codePoint();
         String ch = xmlEscape(Character.toString(cp));
         return switch (atom.mathClass()) {
             case ORD -> {
                 if (cp >= '0' && cp <= '9') {
                     yield "<mn>" + ch + "</mn>";
                 }
-                yield Character.isLetter(cp) ? "<mi>" + ch + "</mi>" : "<mo>" + ch + "</mo>";
+                if (!Character.isLetter(cp)) {
+                    yield "<mo>" + ch + "</mo>";
+                }
+                boolean uprightGreek = cp >= 0x0391 && cp <= 0x03A9;
+                boolean romanLatin = atom.upright() && cp < 0x80;
+                yield uprightGreek || romanLatin
+                    ? "<mi mathvariant=\"normal\">" + ch + "</mi>"
+                    : "<mi>" + ch + "</mi>";
             }
             case OPEN, CLOSE -> "<mo fence=\"true\">" + ch + "</mo>";
             case OP, BIN, REL, PUNCT, INNER -> "<mo>" + ch + "</mo>";

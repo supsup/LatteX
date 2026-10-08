@@ -79,14 +79,28 @@ public sealed interface MathNode {
      * A single character on the baseline (a variable, digit, or symbol),
      * tagged with its {@link MathClass}.
      *
-     * @param codePoint the Unicode code point rendered
+     * <p>{@code codePoint} is the character the author wrote (after any explicit
+     * {@code \mathbf}-style remap), NOT necessarily the glyph drawn: layout sets a bare
+     * Latin letter or lowercase Greek letter in math italic and {@code -} as the minus
+     * sign, the way TeX does (plan a85ff403). Keeping the typed code point here is what
+     * lets token identity (glyphmap, substitute), the accessible label and MathML go on
+     * naming {@code x} rather than {@code U+1D465}.
+     *
+     * @param codePoint the Unicode code point of the source character
      * @param mathClass the atom's spacing class
+     * @param upright   set by the legacy {@code \rm} switch: a Latin letter keeps its
+     *                  roman glyph instead of the math-italic default
      */
-    record Atom(int codePoint, MathClass mathClass) implements MathNode {
+    record Atom(int codePoint, MathClass mathClass, boolean upright) implements MathNode {
         public Atom {
             if (mathClass == null) {
                 throw new IllegalArgumentException("Atom mathClass must not be null");
             }
+        }
+
+        /** An atom in the default math alphabet (not marked upright). */
+        public Atom(int codePoint, MathClass mathClass) {
+            this(codePoint, mathClass, false);
         }
 
         /** The code point as a {@code char} (valid for BMP atoms). */

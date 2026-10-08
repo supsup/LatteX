@@ -70,8 +70,8 @@ class LayoutS4Test {
         // gap is ~3x the fraction gap — so its numerator/denominator are pushed
         // farther apart than a same-content \frac. \frac geometry is unchanged
         // (guarded by fractionRuleSitsBetweenNumeratorAndDenominator above).
-        int nGid = FONT.glyphId('n');
-        int kGid = FONT.glyphId('k');
+        int nGid = FONT.glyphId(0x1D45B); // math-mode n is MATHEMATICAL ITALIC SMALL N
+        int kGid = FONT.glyphId(0x1D458); // and k is MATHEMATICAL ITALIC SMALL K
 
         double fracSep = numDenSeparation(layout("\\frac{n}{k}"), nGid, kGid);
         double binomSep = numDenSeparation(layout("\\binom{n}{k}"), nGid, kGid);
