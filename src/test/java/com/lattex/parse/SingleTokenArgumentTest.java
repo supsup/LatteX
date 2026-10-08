@@ -135,6 +135,26 @@ class SingleTokenArgumentTest {
     // ------------------------------------------------------------------
 
     @Test
+    void aRowBoundaryIsNamedNotCalledAnUnknownCommand() {
+        // Confluence's review of 18e34d82 (lattex/987): dropping the ROW_SEPARATOR exclusion from
+        // isArgumentToken left every caret identical, so only the MESSAGE says what went wrong.
+        // Pin it: a row separator in an argument slot is reported as found, never as unknown.
+        record Probe(String source, String expected) { }
+        List<Probe> probes = List.of(
+            new Probe("\\begin{matrix}\\pmod\\\\b\\end{matrix}", "but found \\\\"),
+            new Probe("\\begin{matrix}\\frac1\\\\b\\end{matrix}", "but found \\\\"),
+            new Probe("\\begin{matrix}\\sqrt\\cr b\\end{matrix}", "but found \\cr"),
+            new Probe("\\begin{matrix}x^\\\\b\\end{matrix}", "nothing follows"));
+        for (Probe probe : probes) {
+            MathSyntaxException e = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse(probe.source()), probe.source());
+            assertTrue(e.getMessage().contains(probe.expected()),
+                probe.source() + ": expected the message to contain '" + probe.expected() + "' but was: " + e.getMessage());
+            assertFalse(e.getMessage().contains("Unknown command"), probe.source() + ": " + e.getMessage());
+        }
+    }
+
+    @Test
     void noTokenIsStillATypedPositionedRefusal() {
         // Each source has its argument slot at a known offset: end of input, '}',
         // '&' (a cell boundary), or '\\' (a row boundary). None may be silently
