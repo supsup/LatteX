@@ -532,11 +532,13 @@ public sealed interface MathNode {
      *       \vec \dot \ddot \tilde \check \breve \acute \grave \mathring}) draw the
      *       accent at its natural size, always over the base; <em>stretchy</em>
      *       ({@code \widehat \widetilde \overrightarrow \overleftarrow
-     *       \overleftrightarrow \overparen \\underparen}) size the accent to the
-     *       base width via the OpenType MATH horizontal glyph construction — every
-     *       one over the base except {@code \\underparen}, the one stretchy glyph
-     *       accent that sits under it. In all cases {@link #accentCodePoint} is the
-     *       accent glyph's code point.</li>
+     *       \overleftrightarrow \overparen \\underparen \\underleftarrow
+     *       \\underrightarrow \\underleftrightarrow}) size the accent to the base
+     *       width via the OpenType MATH horizontal glyph construction — over the base,
+     *       except {@code \\underparen} and the three arrows below, which sit under
+     *       it. The six arrows are fitted to the base box (never wider than it; plan
+     *       b3f198f2). In all cases {@link #accentCodePoint} is the accent glyph's
+     *       code point.</li>
      *   <li><strong>Line decorations</strong> — {@code \overline} and
      *       {@code \\underline}, drawn as a rule (not a glyph). These carry
      *       {@link #accentCodePoint} == {@link #RULE}; {@link #under} selects an

@@ -1507,6 +1507,7 @@ public final class LatteX {
             // \varprojlim / \varinjlim: "lim" with an arrow UNDER it (plan edbda088).
             case "underleftarrow" -> "left arrow under";
             case "underrightarrow" -> "right arrow under";
+            case "underleftrightarrow" -> "left-right arrow under";
             case "overleftrightarrow" -> "left-right arrow over";
             case "dot" -> "dot over";
             case "ddot" -> "double dot over";

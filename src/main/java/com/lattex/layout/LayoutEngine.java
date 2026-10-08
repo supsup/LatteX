@@ -2318,8 +2318,12 @@ public final class LayoutEngine {
     // constants (MathTopAccentAttachment, accentBaseHeight, over/underbar*).
     // ------------------------------------------------------------------
 
-    /** One drawable piece of an accent: a glyph and its x-offset (design units). */
-    private record AccentPiece(int gid, int dx) {
+    /**
+     * One drawable piece of an accent: a glyph and its x-offset (design units). The
+     * offset is fractional because an arrow fitted to a base width spreads the extra
+     * part overlap across its joints (see {@link #fitAssembly}).
+     */
+    private record AccentPiece(int gid, double dx) {
     }
 
     private static Box accentBox(Accent accent, LayoutContext ctx) {
@@ -2356,9 +2360,15 @@ public final class LayoutEngine {
         double scale = ctx.scale();
         boolean under = accent.under();
 
-        // Base attachment x (where the accent centres over/under the base).
+        // A stretchy ARROW is fitted to the base box, not merely "at least" as wide
+        // (plan b3f198f2): TeX's \\overrightarrow / \\underleftarrow (and so amsmath's
+        // \\varprojlim) is an arrow exactly the width of the box.
+        boolean arrow = accent.stretchy() && isStretchyArrow(accent.accentCodePoint());
+
+        // Base attachment x (where the accent centres over/under the base). An arrow
+        // spans the box, so it centres on the box, never on a glyph's attachment.
         double baseAccentX;
-        if (!under && accent.base() instanceof Atom a) {
+        if (!arrow && !under && accent.base() instanceof Atom a) {
             int taa = font.topAccentAttachment(atomGlyphId(font, a));
             baseAccentX = taa != 0 ? taa * scale : baseBox.width() / 2.0;
         } else {
@@ -2369,7 +2379,10 @@ public final class LayoutEngine {
         // accent — a wider MATH variant / assembled row sized to the base width.
         int accentGid = font.glyphId(accent.accentCodePoint());
         List<AccentPiece> pieces = new ArrayList<>();
-        if (accent.stretchy()) {
+        if (arrow) {
+            fitHorizontal(font, arrowConstructionGlyph(font, accent.accentCodePoint()),
+                baseBox.width() / scale, pieces);
+        } else if (accent.stretchy()) {
             stretchHorizontal(font, accentGid, baseBox.width() / scale, pieces);
         } else {
             pieces.add(new AccentPiece(accentGid, 0));
@@ -2398,12 +2411,26 @@ public final class LayoutEngine {
         }
         double inkCenterDesign = (inkMinX + inkMaxX) / 2.0;
 
+        // An arrow is never wider than the box it sits in: when even the narrowest
+        // construction the font has is wider than the base (\\underleftarrow{i}), the
+        // box widens to the arrow with the base centred in it, so a neighbour can
+        // never run into the arrow. A fitted arrow (the normal case) leaves it alone.
+        double boxWidth = baseBox.width();
+        double baseShift = 0.0;
+        if (arrow) {
+            double arrowInkWidth = scale * (inkMaxX - inkMinX);
+            if (arrowInkWidth > boxWidth) {
+                baseShift = (arrowInkWidth - boxWidth) / 2.0;
+                boxWidth = arrowInkWidth;
+            }
+        }
+
         // Align the accent ink centre to the base attachment point; push it clear.
-        double accentOriginX = baseAccentX - scale * inkCenterDesign;
+        double accentOriginX = baseShift + baseAccentX - scale * inkCenterDesign;
 
         List<PositionedGlyph> glyphs = new ArrayList<>();
         List<Rule> rules = new ArrayList<>();
-        baseBox.drawInto(glyphs, rules, 0.0, 0.0);
+        baseBox.drawInto(glyphs, rules, baseShift, 0.0);
 
         if (under) {
             // Ink-driven clearance: pin the accent's ink TOP a positive gap BELOW the
@@ -2431,8 +2458,9 @@ public final class LayoutEngine {
             // Depth reaches the accent's ink bottom; = baseBox.depth() + gap +
             // scale*(inkYMax - inkYMin) >= baseBox.depth(), so it always grows the box.
             double depth = accentBaselineY - scale * inkYMin;
-            // Advance is the base width (an under-accent never widens the row).
-            return new Box(glyphs, rules, baseBox.width(), baseBox.height(), depth);
+            // Advance is the base width (an under-accent never widens the row), or the
+            // arrow's when no arrow the font can draw is as narrow as the base.
+            return new Box(glyphs, rules, boxWidth, baseBox.height(), depth);
         }
 
         double raise = Math.max(0.0, baseBox.height() - c.accentBaseHeight() * scale);
@@ -2443,9 +2471,10 @@ public final class LayoutEngine {
         }
 
         double height = Math.max(baseBox.height(), raise + scale * inkYMax);
-        // Advance is the base width (an over-accent never widens the row); ink may
-        // legitimately overhang, which the layout bbox accounts for.
-        return new Box(glyphs, rules, baseBox.width(), height, baseBox.depth());
+        // Advance is the base width (an over-accent never widens the row; ink of a
+        // hat or tilde may legitimately overhang, which the layout bbox accounts for),
+        // or an over-arrow's when no arrow the font can draw is as narrow as the base.
+        return new Box(glyphs, rules, boxWidth, height, baseBox.depth());
     }
 
     /**
@@ -2509,6 +2538,169 @@ public final class LayoutEngine {
         }
         // No horizontal construction: the natural accent glyph, unstretched.
         out.add(new AccentPiece(baseGid, 0));
+    }
+
+    /**
+     * Whether a stretchy accent is an ARROW (over: U+20D6/U+20D7/U+20E1; under:
+     * U+20EE/U+20EF/U+034D). Arrows are fitted to the base box by
+     * {@link #fitHorizontal}; hats, tildes and parentheses keep
+     * {@link #stretchHorizontal}'s smallest-adequate rule.
+     */
+    private static boolean isStretchyArrow(int codePoint) {
+        return switch (codePoint) {
+            case 0x20D6, 0x20D7, 0x20E1, 0x20EE, 0x20EF, 0x034D -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * The glyph whose horizontal construction draws this arrow. U+034D (left right
+     * arrow below) has no construction in STIX Two Math, so it stretches on U+20E1's,
+     * the same double-headed arrow: placement is from the pieces' ink, so a glyph
+     * drawn above its baseline lands under the base just as well.
+     */
+    private static int arrowConstructionGlyph(SfntFont font, int codePoint) {
+        int gid = font.glyphId(codePoint);
+        if (codePoint == 0x034D && font.horizontalVariants(gid) == null) {
+            return font.glyphId(0x20E1);
+        }
+        return gid;
+    }
+
+    /**
+     * Fits a stretchy ARROW to {@code targetDesignWidth} (plan b3f198f2): the widest
+     * rendering whose ink is NOT wider than the target, which is exactly the target
+     * whenever the font's assembly can reach it. Candidates are every pre-drawn
+     * variant (measured by ink) and the assembly, whose adjacent parts may overlap
+     * anywhere from {@code minConnectorOverlap} to the smaller of the two connector
+     * lengths (OpenType MATH), so an assembly covers a RANGE of widths per repeat
+     * count. Where no construction fits (a base narrower than the narrowest arrow),
+     * the narrowest variant is drawn and the caller widens the box to it. Contrast
+     * {@link #stretchHorizontal}, which picks the smallest rendering AT LEAST as wide
+     * and so overshoots by up to a whole variant step: under "lim" (1420 units) that
+     * chose the 1786-unit variant and hung it 183 units out on each side.
+     */
+    private static void fitHorizontal(SfntFont font, int gid, double targetDesignWidth,
+                                      List<AccentPiece> out) {
+        var construction = font.horizontalVariants(gid);
+        if (construction == null) {
+            out.add(new AccentPiece(gid, 0));
+            return;
+        }
+        int bestGid = -1;
+        double bestWidth = Double.NEGATIVE_INFINITY;
+        int narrowGid = gid;
+        double narrowWidth = Double.POSITIVE_INFINITY;
+        for (var v : construction.variants()) {
+            GlyphOutline o = font.outline(v.glyphId());
+            if (o.isEmpty()) {
+                continue;
+            }
+            double w = o.xMax() - o.xMin();
+            if (w <= targetDesignWidth && w > bestWidth) {
+                bestGid = v.glyphId();
+                bestWidth = w;
+            }
+            if (w < narrowWidth) {
+                narrowGid = v.glyphId();
+                narrowWidth = w;
+            }
+        }
+        if (construction.hasAssembly()) {
+            List<AccentPiece> assembled = new ArrayList<>();
+            double span = fitAssembly(construction.assembly(), font.minConnectorOverlap(),
+                targetDesignWidth, assembled);
+            if (span >= 0 && span > bestWidth) {
+                out.addAll(assembled);
+                return;
+            }
+        }
+        out.add(new AccentPiece(bestGid >= 0 ? bestGid : narrowGid, 0));
+    }
+
+    /**
+     * Lays out an arrow's assembly at the widest span not exceeding
+     * {@code targetDesignWidth} and returns that span, or {@code -1} (and draws
+     * nothing) when even the fewest parts are wider. With {@code r} extender repeats
+     * the span ranges from all joints at their largest permitted overlap to all at
+     * {@code minOverlap}, and both ends grow with {@code r}; so the target is reached
+     * exactly at the fewest repeats whose minimum-overlap span reaches it, if that
+     * count's maximum-overlap span does not already exceed it. Otherwise one repeat
+     * fewer, at minimum overlap, is the widest that fits. Extra overlap is spread
+     * over the joints in proportion to their headroom.
+     */
+    private static double fitAssembly(com.lattex.font.GlyphAssembly assembly, int minOverlap,
+                                      double targetDesignWidth, List<AccentPiece> out) {
+        var parts = assembly.parts();
+        // The fewest repeats whose minimum-overlap span reaches the target; charged to
+        // the layout-box budget at that count, the most this can draw (plan 5a594a59).
+        int minSize = (int) Math.ceil(targetDesignWidth);
+        expandBudgetedAssembly(parts, minOverlap, minSize);
+        int reps = (int) assemblyRepetitions(parts, minOverlap, minSize);
+        if (hasFixedPart(parts) && spanRange(expandAssembly(parts, 0), minOverlap)[1]
+                >= targetDesignWidth) {
+            reps = 0; // the fixed parts alone already reach it (e.g. a double-headed arrow)
+        }
+        List<com.lattex.font.GlyphPart> stack = expandAssembly(parts, reps);
+        double[] range = spanRange(stack, minOverlap);
+        double span;
+        if (range[0] <= targetDesignWidth) {
+            span = Math.min(targetDesignWidth, range[1]);
+        } else if (reps >= 1 && (reps >= 2 || hasFixedPart(parts))) {
+            stack = expandAssembly(parts, reps - 1);
+            span = spanRange(stack, minOverlap)[1];
+        } else {
+            return -1;
+        }
+        int joints = stack.size() - 1;
+        double[] lo = new double[Math.max(0, joints)];
+        double[] room = new double[lo.length];
+        double sum = 0.0;
+        double roomSum = 0.0;
+        for (int j = 0; j < joints; j++) {
+            lo[j] = minOverlap;
+            room[j] = maxOverlap(stack.get(j), stack.get(j + 1), minOverlap) - minOverlap;
+            roomSum += room[j];
+        }
+        for (com.lattex.font.GlyphPart p : stack) {
+            sum += p.fullAdvance();
+        }
+        double extra = Math.max(0.0, (sum - minOverlap * (double) joints) - span);
+        double dx = 0.0;
+        for (int i = 0; i < stack.size(); i++) {
+            out.add(new AccentPiece(stack.get(i).glyphId(), dx));
+            if (i < joints) {
+                double share = roomSum > 0 ? extra * room[i] / roomSum : 0.0;
+                dx += stack.get(i).fullAdvance() - (lo[i] + share);
+            }
+        }
+        return span;
+    }
+
+    /** The {min, max} span of a part list over its permitted joint overlaps. */
+    private static double[] spanRange(List<com.lattex.font.GlyphPart> stack, int minOverlap) {
+        double sum = 0.0;
+        double minJoints = 0.0;
+        double maxJoints = 0.0;
+        for (int i = 0; i < stack.size(); i++) {
+            sum += stack.get(i).fullAdvance();
+            if (i > 0) {
+                minJoints += minOverlap;
+                maxJoints += maxOverlap(stack.get(i - 1), stack.get(i), minOverlap);
+            }
+        }
+        return new double[] {sum - maxJoints, sum - minJoints};
+    }
+
+    /** The largest overlap OpenType MATH permits at one joint (never below the minimum). */
+    private static int maxOverlap(com.lattex.font.GlyphPart left, com.lattex.font.GlyphPart right,
+                                  int minOverlap) {
+        return Math.max(minOverlap,
+            Math.min(left.endConnectorLength(), right.startConnectorLength()));
+    }
+
+    private static boolean hasFixedPart(List<com.lattex.font.GlyphPart> parts) {
+        return parts.stream().anyMatch(p -> !p.isExtender());
     }
 
     /**

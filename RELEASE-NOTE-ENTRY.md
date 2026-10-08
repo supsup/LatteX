@@ -282,3 +282,44 @@ above rather than replacing them.
 `\ref` (5), `\"` (7 + 2) and `\'` (3) buckets are now zero. Seven of those
 formulas now stop at a macro the paper defines itself (inside the nested
 math), and one at a pre-existing, unrelated `\displaystyle`-in-`array` gap.
+
+---
+
+<!-- Appended by a later branch; the entries above are still unfolded on main and are kept, not replaced. -->
+
+Proposed entry for the **Unreleased** section of `RELEASE_NOTES.md`, plan
+`b3f198f2` (`fixpoint/lattex-varlim-width`). Appended below the pending entries
+above rather than replacing them.
+
+### Stretchy arrows fit what they decorate; `\underleftarrow` & co are new
+
+**The bug.** `\varprojlim` and `\varinjlim` (added in plan `edbda088`) drew their
+arrow wider than "lim": the stretchy-accent path picked the smallest arrow AT
+LEAST the base's width, and the font's arrows come in steps of about 447 font
+units, so under the 1420-unit "lim" it drew the 1786-unit one, centred. The head
+hung 183 units out on the left and the shaft ran under the next atom
+(`\varprojlim M`, the paren of `\varprojlim_k\bigl(`). `\overrightarrow` and its
+siblings had the same rule. Found on a BrewShot picture; the edbda088 tests checked
+acceptance and code points, not geometry.
+
+**Now.** The six arrow accents are FITTED to the base box, as TeX's are: the
+widest rendering whose ink is not wider than the box. Where the font's assembly
+can reach the box width (its parts may overlap anywhere between the minimum and
+their connector lengths), the arrow is exactly that width; under "lim" no
+assembly lands between 1306 and 1519 units, so the 1340-unit variant is drawn,
+within 15 units of lim's own ink at each end. A base narrower than the smallest
+arrow (`\underleftarrow{i}`) widens its box to the arrow, base centred, so a
+neighbour never overlaps it. Hats, tildes and parentheses keep their previous
+sizing.
+
+**New commands.** `\underleftarrow`, `\underrightarrow`, `\underleftrightarrow`
+(amsmath); the last stretches on the font's left-right arrow construction, since
+U+034D has none in STIX Two Math. `examples/symbol-index.html` grew by 3 cells
+(637 -> 640 commands), and its `\varprojlim`/`\varinjlim`/over-arrow cells redraw
+with the fitted arrows.
+
+**Pinned geometrically** (`ArrowAccentWidthTest`): arrow ink within the base box
+and every later glyph starting after the operator, for `\varprojlim`/`\varinjlim`
+in text and display style and all six arrow commands; exact width over a wide
+base. The `\overrightarrow` byte-identity ladder in `StretchyAssemblyLinearTest`
+was re-pinned after showing the old four hashes reproduce with the fit forced off.

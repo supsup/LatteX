@@ -339,11 +339,15 @@ class StretchyAssemblyLinearTest {
 
     // Re-pinned for plan a85ff403 (the body's `a`s now draw the math-italic a): with the
     // math alphabet reverted to identity the tree reproduces the prior four hashes exactly.
+    // Re-pinned for plan b3f198f2 (a stretchy arrow is fitted to the base box: the
+    // assembly's joints take up the slack, so the arrow is exactly the body's width instead
+    // of the next width at minimum overlap): with the arrow fit forced off
+    // (LayoutEngine.glyphAccentBox `arrow = false`) the tree reproduces the prior four exactly.
     private static final Map<Integer, String> GOLDEN_SHA256 = Map.of(
-        256,  "12093560dcbf82c02188f3c6471d1ecd7861ad684953fb176cd4b4eac6c99624",
-        512,  "4fa37b854bc62acfa7081d41d0f8e2b24d59601e0c6a5766ae12dc6920aab161",
-        1024, "e9184d2bd900dfb6409073a0dcdbbd24af2fcf4932eeac918c01ba85c352e402",
-        2048, "54eee2485f89897c7d6fe3bd468fa538488a98ffc498798979d45e4c263903a5");
+        256,  "f2182dd05a1b941291c3f14ba76d03cbdd7d706505a8a61930fd54660dbfd842",
+        512,  "e53de2bc325940cc0b1428525c445f951936c127df2ccd0613da26091a3cdd59",
+        1024, "a4e58533f96662a66d6e6eed01b6e54d24912a64806d63eabf9710b796fa6ac2",
+        2048, "d1a73aa34c4b11585494a304495fe7eb5fb9d9c1c67ea250a36647f107f6e092");
 
     @Test
     void overrightarrowLadderIsByteIdenticalToPreChangeRenders() {

@@ -64,6 +64,11 @@ class AccentMathMLCoverageTest {
             Map.entry("overrightarrow", new Expected(0x20D7, false)),
             Map.entry("overleftarrow", new Expected(0x20D6, false)),
             Map.entry("overleftrightarrow", new Expected(0x20E1, false)),
+            // The arrows below (plan b3f198f2): COMBINING LEFT / RIGHT ARROW BELOW and
+            // COMBINING LEFT RIGHT ARROW BELOW, under the base.
+            Map.entry("underleftarrow", new Expected(0x20EE, true)),
+            Map.entry("underrightarrow", new Expected(0x20EF, true)),
+            Map.entry("underleftrightarrow", new Expected(0x034D, true)),
             // Stretchy over/under-parenthesis accents.
             Map.entry("overparen", new Expected(0x23DC, false)),
             Map.entry("underparen", new Expected(0x23DD, true)),

@@ -227,6 +227,13 @@ final class Symbols {
         Map.entry("overrightarrow", new AccentSpec(0x20D7, true, false)),
         Map.entry("overleftarrow", new AccentSpec(0x20D6, true, false)),   // ◌⃖ left arrow above
         Map.entry("overleftrightarrow", new AccentSpec(0x20E1, true, false)), // ◌⃡
+        // The arrows BELOW (amsmath's \\underleftarrow & co; \\varprojlim/\\varinjlim are
+        // \\underleftarrow/\\underrightarrow of "lim"). U+20EE/U+20EF carry their own
+        // horizontal MATH constructions in STIX Two Math; U+034D (left right arrow below)
+        // has none there, so the layout stretches it on U+20E1's (plan b3f198f2).
+        Map.entry("underleftarrow", new AccentSpec(0x20EE, true, true)),      // ◌⃮
+        Map.entry("underrightarrow", new AccentSpec(0x20EF, true, true)),     // ◌⃯
+        Map.entry("underleftrightarrow", new AccentSpec(0x034D, true, true)), // ◌͍
         // Stretchy over/under-parenthesis accents (sized to the base). STIX Two
         // Math carries both U+23DC and its under-glyph mirror U+23DD with matching
         // horizontal MATH constructions (variants + assembly), so \\underparen rides
