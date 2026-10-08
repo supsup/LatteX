@@ -1015,22 +1015,17 @@ public final class MathParser {
      * <p>What is left alone, and why: a multi-item group is already a {@link MathList},
      * which layout spaces as Ord; and an Atom that is already Ord gains nothing from a
      * wrapper, while staying a bare atom keeps the single-character script attachment
-     * (italic correction, math kerns) it had. A large-operator atom becomes the
-     * {@link BigOperator} it would have been outside the braces, so it keeps its display
-     * size; its scripts then attach to the Ord group, beside it, as in TeX.
+     * (italic correction, math kerns) it had. A large operator never arrives here as a
+     * bare atom: the group's own component parse has already made it a {@link BigOperator}
+     * (display-sized), so {@code {\sum}_i} wraps that, and the script attaches to the Ord
+     * group, beside it, as in TeX.
      */
     private static MathNode bracedSubformula(MathNode nucleus) {
         if (nucleus instanceof MathList) {
             return nucleus;
         }
-        if (nucleus instanceof Atom atom) {
-            if (atom.mathClass() == MathClass.ORD) {
-                return nucleus;
-            }
-            if (atom.mathClass() == MathClass.OP) {
-                return new MathNode.ClassOverride(
-                    new BigOperator(atom, null, null, LimitsMode.DEFAULT), MathClass.ORD);
-            }
+        if (nucleus instanceof Atom atom && atom.mathClass() == MathClass.ORD) {
+            return nucleus;
         }
         return new MathNode.ClassOverride(nucleus, MathClass.ORD);
     }

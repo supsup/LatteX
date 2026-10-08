@@ -94,6 +94,12 @@ class MathOverlapTest {
         assertEquals(frac.height(), lapped.height(), EPS);
         assertEquals(atoms(layout("xy"), 'y').get(0).originX(),
             atoms(layout("x\\mathclap{\\frac{a}{b}}y"), 'y').get(0).originX(), EPS);
+        // The BOX keeps the height and depth (not just the ink): a radical sized to an
+        // overlapped fraction is the radical sized to the fraction.
+        Layout root = layout("\\sqrt{\\frac{a}{b}}");
+        Layout lappedRoot = layout("\\sqrt{\\mathrlap{\\frac{a}{b}}}");
+        assertEquals(root.minY(), lappedRoot.minY(), EPS);
+        assertEquals(root.maxY(), lappedRoot.maxY(), EPS);
     }
 
     @Test
