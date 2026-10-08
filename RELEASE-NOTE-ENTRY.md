@@ -430,3 +430,15 @@ failing.
 `examples/symbol-index.html` grew from 640 to 648 commands. Newly reserved built-in
 names (a preset macro of the same name is now refused, as for every addition):
 `\genfrac \multicolumn \sf \tt \fint \sqint \ointclockwise \ointctrclockwise`.
+
+**Review fixes (lattex/1015).** A `\tag` after a trailing `\\` in `align`/`gather`
+(`a\\ \tag{1}`) threw a raw `IllegalArgumentException` out of `render` and
+`toMathML`: the empty row was dropped as a phantom and its tag pointed past the
+grid. It is now a real numbered empty last row, as in amsmath, drawn below the row
+above with its tag on its own baseline (a row's height now includes its tag's), and
+any grid invariant the parser fails to uphold is a typed `MathSyntaxException`.
+
+**Limits.** `\genfrac`'s style is empty or `0`-`3`; `4` and above fail loud. Its
+thickness unit must be lowercase (`0PT` is refused; TeX accepts it). The `\\ [`
+space-skip decision is made by the environment's own name, so an `array` nested in
+`pmatrix` skips the space as `array` does and does not inherit amsmath's rule.

@@ -234,7 +234,15 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > `\tag{…}` on a row of `align`/`gather`/`alignat` (starred or not) numbers that row,
 > drawn at the row's baseline in a right-aligned column after the grid; anywhere else
 > — inside `gathered`/`aligned`/`split`, `equation`, a group or after `\displaystyle` —
-> it tags the whole equation. One tag per row, one per equation.
+> it tags the whole equation. One tag per row, one per equation. A `\tag` after a
+> trailing `\\` (`a\\ \tag{1}`) numbers a real empty last row, as amsmath does.
+>
+> **Limits, stated.** `\genfrac`'s style accepts only empty, `0`, `1`, `2` and `3`;
+> `4` and above fail loud. Its thickness unit must be lowercase (`0pt`, `0mm`, ...):
+> TeX reads units case-insensitively, LatteX refuses `0PT`. Whether a space before
+> `[` after `\\` is skipped is decided by the environment's OWN name (`array` and
+> `eqnarray` skip it, every other environment does not), so an `array` nested inside
+> `pmatrix` follows `array`'s rule and does not inherit amsmath's no-space-skip.
 >
 > **Smaller standard names.** `\vert` is the bar `|` as an ordinary symbol
 > (`h\vert_{Z=1}`) as well as a delimiter; `{\sf …}` and `{\tt …}` join `\rm \bf \it

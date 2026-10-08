@@ -102,7 +102,9 @@ final class Symbols {
         // name and present in STIX Two Math): the averaged integral \fint (U+2A0F INTEGRAL
         // AVERAGE WITH SLASH), \sqint (U+2A16 QUATERNION INTEGRAL OPERATOR, the integral
         // with a square, unicode-math's \sqint), and the oriented contour integrals
-        // (U+2232 CLOCKWISE / U+2233 ANTICLOCKWISE CONTOUR INTEGRAL). Plan 636d214f.
+        // (U+2232 CLOCKWISE CONTOUR INTEGRAL, which unicode-math names \varointclockwise,
+        // not \ointclockwise; U+2233 ANTICLOCKWISE CONTOUR INTEGRAL, unicode-math's
+        // \ointctrclockwise). The esint names map to those glyphs. Plan 636d214f.
         Map.entry("fint", new Sym(0x2A0F, MathClass.OP)),     // ⨏
         Map.entry("sqint", new Sym(0x2A16, MathClass.OP)),    // ⨖
         Map.entry("ointclockwise", new Sym(0x2232, MathClass.OP)),    // ∲
