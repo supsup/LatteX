@@ -135,6 +135,31 @@ class TextModeMathNestingTest {
     }
 
     @Test
+    void everyAccentOnEveryAsciiLetterRendersAMappedGlyphOrFailsLoud() {
+        // No silent third path: each accent x letter is either a precomposed character the
+        // bundled font draws (no unmapped-glyph diagnostic) or a loud parse refusal.
+        int composed = 0;
+        for (String accent : new String[] {"\\\"", "\\'", "\\`", "\\^", "\\~"}) {
+            for (char base = 'A'; base <= 'z'; base++) {
+                if (!Character.isLetter(base)) {
+                    continue;
+                }
+                String latex = "\\text{" + accent + base + "}";
+                try {
+                    MathParser.parse(latex);
+                } catch (MathSyntaxException e) {
+                    assertTrue(e.getMessage().contains("no precomposed character"), latex);
+                    continue;
+                }
+                composed++;
+                com.lattex.api.RenderResult r = LatteX.renderWithDiagnostics(latex);
+                assertEquals("", r.diagnostics().detail(), latex + " must draw a real glyph");
+            }
+        }
+        assertEquals(107, composed, "the five accent tables, pinned");
+    }
+
+    @Test
     void accentWithNoPrecomposedCharacterFailsLoud() {
         MathSyntaxException e = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("\\text{\\\"q}"));

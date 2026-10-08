@@ -120,17 +120,27 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 >
 > **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
 > `\mathrm`, and TeX's `\hbox`, which takes `\text`'s contract whole). The argument is *literal text*: plain characters (spaces preserved),
-> invisible grouping braces, `$…$` to re-enter math mode (`\text{if $x>0$ then}`),
+> invisible grouping braces, `$…$` or `\(…\)` to re-enter math mode
+> (`\text{if $x>0$ then}`, `\text{If \(K\) is categorical}` — the two spellings
+> are the same toggle, and the math takes the surrounding style),
 > and an EXPLICIT set of control-symbol escapes that decode to their literal
 > character — `\$` `\%` `\#` `\_` `\&` `\{` `\}` — plus `\,` (thin space) and the
 > control space `\ ` (`\mathrm{in\ the\ interval}`), which decode to a plain space
-> (text runs have no sub-em spacing unit). Every other
-> backslash sequence fails loud: a command (`\text{see \eqref{eq1}}` fails with
-> `Unknown command in \text: \eqref`), an unmapped control symbol (`\^`, `\~`),
+> (text runs have no sub-em spacing unit); a tie `~` is a space too. The accents
+> found in names — `\"` `\'` `` \` `` `\^` `\~` on one letter, bare or braced
+> (`K\"ahler`, `Poincar\'e`, `\'{e}tale`, `\'{\i}`) — become the precomposed
+> character (ä, é, í); a letter with no precomposed form fails loud. `\ref{key}`
+> and `\eqref{key}` draw the same unresolved marker as in math mode, `??` and
+> `(??)` (LatteX has no document to resolve labels against; the key is never
+> shown). Every other
+> backslash sequence fails loud: a command (`\text{see \cite{k}}` fails with
+> `Unknown command in \text: \cite`), an unmapped control symbol (`\=`, `\.`),
 > `\\` (a line break in real LaTeX — text runs are single-line, so it has no
 > target and is rejected rather than silently dropped), or a trailing lone `\`.
+> A math accent inside `\mathrm` (`\mathrm{\acute et}`) is still refused; write
+> `\text{\'et}` or `\acute{\mathrm{e}}\mathrm{t}`.
 > Nothing is ever silently flattened *or* left with a stray backslash; wrap math
-> in `$…$` instead.
+> in `$…$` or `\(…\)` instead.
 >
 > **Braces around a one-token argument are optional, as in TeX.** An argument is
 > the next token — one character, one control sequence, or one `{…}` group — with

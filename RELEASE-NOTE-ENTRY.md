@@ -245,3 +245,40 @@ Pre-existing conflicts elsewhere in the table (for example `\perp` vs `\bot`
 on U+22A5) are untouched and noted as a follow-up.
 
 `examples/symbol-index.html` grew by exactly 24 cells (613 → 637 commands).
+
+---
+
+<!-- Appended by a later branch; the entries above are still unfolded on main and are kept, not replaced. -->
+
+Proposed entry for the **Unreleased** section of `RELEASE_NOTES.md`, plan
+`c432f899` (`fixpoint/lattex-text-math`). Appended below the pending entries
+above rather than replacing them.
+
+### Math, accents and references inside `\text`, as LaTeX writes them
+
+- **`\(…\)` re-enters math inside `\text`, exactly like `$…$`.** Theorem
+  statements quoted into a formula write `\text{If \(K\) is categorical in some
+  \(\lambda\ge H(K)\),}`; LatteX refused that with "commands are not expanded in
+  text; wrap math in $...$". The `$…$` advice already worked; now the other
+  spelling is the same toggle, scanned by the same code (escapes and nested
+  `\text` arguments skipped identically), on every text-family command
+  including `\hbox`. The math takes the surrounding style, as a `$` span does.
+  An unpaired `\(` is a positioned error; a stray `\)` still fails loud.
+- **Accents in names.** `\"` `\'` `` \` `` `\^` `\~` on one letter, bare or
+  braced (`K\"ahler`, `Poincar\'e`, `\'{e}tale`, `\'{\i}`), become the
+  precomposed character. A letter with no precomposed character the bundled
+  font draws fails loud; a census renders every accent on every ASCII letter
+  and requires a real glyph or a refusal (107 compose).
+- **`\ref{key}` / `\eqref{key}` inside text** draw the same unresolved marker
+  math mode already drew, `??` and `(??)`; the key is never shown. A tie `~` in
+  text is now a space (it drew a literal tilde, e.g. `Proposition~\ref{…}`).
+- **Still refused, deliberately:** a math accent inside `\mathrm`
+  (`\mathrm{\acute et}`, 10 corpus formulas): `\mathrm` is lexed as a text
+  run here, and whether its argument should become math is a separate decision.
+
+**Measured**, same corpus and script as the entries above, against main
+`85c1ed7`: rendered OK **105,234 → 105,315**; candidate LatteX gaps
+**376 → 288**. The `\(`-in-text (53 + 5 in `\hbox`), `\eqref` (12 + 2),
+`\ref` (5), `\"` (7 + 2) and `\'` (3) buckets are now zero. Seven of those
+formulas now stop at a macro the paper defines itself (inside the nested
+math), and one at a pre-existing, unrelated `\displaystyle`-in-`array` gap.

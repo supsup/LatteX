@@ -2320,18 +2320,20 @@ public final class MathParser {
      * Each maps an ASCII base letter to its PRECOMPOSED Unicode character, so the run
      * stays one glyph per character with no combining-mark positioning. Pairs are
      * {@code base, composed} and were derived from the Unicode canonical compositions
-     * (NFC of base + U+0308 / U+0301 / U+0300 / U+0302 / U+0303); a base with no
-     * precomposed character is refused, never drawn unaccented.
+     * (NFC of base + U+0308 / U+0301 / U+0300 / U+0302 / U+0303), less the four the
+     * bundled STIX Two Math does not draw (U+01F4/5 G/g acute, U+01F8/9 N/n grave); a base
+     * with no drawable precomposed character is refused, never drawn unaccented or as a
+     * missing-glyph box (pinned per letter by TextModeMathNestingTest).
      */
     private static final Map<Character, Map<Character, Character>> TEXT_ACCENTS = Map.of(
         '"', accentTable("a\u00e4e\u00ebh\u1e27i\u00efo\u00f6t\u1e97u\u00fcw\u1e85x\u1e8dy\u00ff"
             + "A\u00c4E\u00cbH\u1e26I\u00cfO\u00d6U\u00dcW\u1e84X\u1e8cY\u0178"),
-        '\'', accentTable("a\u00e1c\u0107e\u00e9g\u01f5i\u00edk\u1e31l\u013am\u1e3fn\u0144o\u00f3"
+        '\'', accentTable("a\u00e1c\u0107e\u00e9i\u00edk\u1e31l\u013am\u1e3fn\u0144o\u00f3"
             + "p\u1e55r\u0155s\u015bu\u00faw\u1e83y\u00fdz\u017a"
-            + "A\u00c1C\u0106E\u00c9G\u01f4I\u00cdK\u1e30L\u0139M\u1e3eN\u0143O\u00d3"
+            + "A\u00c1C\u0106E\u00c9I\u00cdK\u1e30L\u0139M\u1e3eN\u0143O\u00d3"
             + "P\u1e54R\u0154S\u015aU\u00daW\u1e82Y\u00ddZ\u0179"),
-        '`', accentTable("a\u00e0e\u00e8i\u00ecn\u01f9o\u00f2u\u00f9w\u1e81y\u1ef3"
-            + "A\u00c0E\u00c8I\u00ccN\u01f8O\u00d2U\u00d9W\u1e80Y\u1ef2"),
+        '`', accentTable("a\u00e0e\u00e8i\u00eco\u00f2u\u00f9w\u1e81y\u1ef3"
+            + "A\u00c0E\u00c8I\u00ccO\u00d2U\u00d9W\u1e80Y\u1ef2"),
         '^', accentTable("a\u00e2c\u0109e\u00eag\u011dh\u0125i\u00eej\u0135o\u00f4s\u015du\u00fb"
             + "w\u0175y\u0177z\u1e91"
             + "A\u00c2C\u0108E\u00caG\u011cH\u0124I\u00ceJ\u0134O\u00d4S\u015cU\u00db"
