@@ -74,12 +74,20 @@ public final class LayoutEngine {
      *  the contiguous U+222B..U+2233 block; it keeps side limits like the rest. */
     private static final int QUAD_INTEGRAL_CODEPOINT = 0x2A0C;
 
+    /** U+2A0F INTEGRAL AVERAGE WITH SLASH (esint's \fint) and U+2A16 QUATERNION INTEGRAL
+     *  OPERATOR (\sqint): integrals outside the contiguous block (plan 636d214f). */
+    private static final int AVERAGE_INTEGRAL_CODEPOINT = 0x2A0F;
+    private static final int SQUARE_INTEGRAL_CODEPOINT = 0x2A16;
+
     /** True for any integral-family operator — keeps side limits even in display
      *  style. Covers the contiguous block ∫..∳ (U+222B..U+2233: \int \iint \iiint
-     *  \oint \oiint \oiiint) plus \idotsint (U+2A0C). */
+     *  \oint \oiint \oiiint \ointclockwise \ointctrclockwise) plus \idotsint
+     *  (U+2A0C), \fint (U+2A0F) and \sqint (U+2A16). */
     private static boolean isIntegral(int cp) {
         return (cp >= INTEGRAL_CODEPOINT && cp <= INTEGRAL_CODEPOINT_MAX)
-            || cp == QUAD_INTEGRAL_CODEPOINT;
+            || cp == QUAD_INTEGRAL_CODEPOINT
+            || cp == AVERAGE_INTEGRAL_CODEPOINT
+            || cp == SQUARE_INTEGRAL_CODEPOINT;
     }
 
     /**
@@ -871,11 +879,19 @@ public final class LayoutEngine {
      * after a {@code \qquad}-sized gap. {@code \tag} is equation-global, so this only
      * appears at the top level.
      */
+    /** The gap between an equation (or a tagged grid) and its tag, in ems: ~\qquad. */
+    private static final double TAG_GAP_EM = 2.0;
+
+    /** A tag's "(label)" box, shared by the equation tag and the row tags. */
+    private static Box tagLabelBox(MathNode label, LayoutContext ctx) {
+        return layoutBox(new MathList(List.of(
+            new Atom('(', MathClass.OPEN), label, new Atom(')', MathClass.CLOSE))), ctx);
+    }
+
     private static Box taggedBox(MathNode body, MathNode label, LayoutContext ctx) {
         Box bodyBox = layoutBox(body, ctx);
-        Box labelBox = layoutBox(new MathList(List.of(
-            new Atom('(', MathClass.OPEN), label, new Atom(')', MathClass.CLOSE))), ctx);
-        double gap = 2.0 * ctx.fontSize(); // ~\qquad between the equation and its tag
+        Box labelBox = tagLabelBox(label, ctx);
+        double gap = TAG_GAP_EM * ctx.fontSize(); // ~\qquad between the equation and its tag
         double labelX = bodyBox.width() + gap;
         List<PositionedGlyph> glyphs = new ArrayList<>();
         List<Rule> rules = new ArrayList<>();
@@ -2029,7 +2045,12 @@ public final class LayoutEngine {
             for (int col = 0; col < cols; col++) {
                 Box b = layoutBox(mx.rows().get(r).get(col), cellCtx);
                 cell[r][col] = b;
-                colWidth[col] = Math.max(colWidth[col], b.width());
+                // A \multicolumn cell's width is distributed AFTER the plain columns are
+                // sized (step 3b); it must not widen its first column alone.
+                MathNode.CellSpan span = mx.spanAt(r, col);
+                if (span == null || span.span() == 1) {
+                    colWidth[col] = Math.max(colWidth[col], b.width());
+                }
                 rowHeight[r] = Math.max(rowHeight[r], b.height());
                 rowDepth[r] = Math.max(rowDepth[r], b.depth());
             }
@@ -2124,6 +2145,24 @@ public final class LayoutEngine {
         }
         double[] boundaryX = new double[cols + 1];
 
+        // 3b. \multicolumn widths (plan 636d214f). A span fits in its columns plus the gaps
+        // between them; when its content is wider, TeX puts the whole excess into the LAST
+        // column of the span. Narrower spans first, so a wide span sees widths a narrow
+        // one already settled.
+        List<MathNode.CellSpan> bySpan = new ArrayList<>(mx.spans());
+        bySpan.sort(java.util.Comparator.comparingInt(MathNode.CellSpan::span));
+        for (MathNode.CellSpan span : bySpan) {
+            if (span.span() == 1) {
+                continue;
+            }
+            int last = span.column() + span.span() - 1;
+            double available = spanWidth(span, colWidth, boundaryGap);
+            double needed = cell[span.row()][span.column()].width();
+            if (needed > available) {
+                colWidth[last] += needed - available;
+            }
+        }
+
         List<PositionedGlyph> glyphs = new ArrayList<>();
         List<Rule> rules = new ArrayList<>();
         double penX = 0.0;
@@ -2140,20 +2179,41 @@ public final class LayoutEngine {
 
         // 5. Walk the columns, placing per-column x and drawing vertical rules in the
         // boundary gaps. Grid content spans [contentStartX, contentEndX].
+        // Vertical rules are per ROW once a span changes a boundary's rule on some row
+        // (TeX replaces the covered columns' templates, rules included); a boundary whose
+        // rule is the same on every row stays one full-height rect, as before spans existed.
+        int[][] ruleCount = effectiveColumnRules(mx, rows, cols);
+        double[] rowTop = new double[rows];
+        double[] rowBottom = new double[rows];
+        for (int r = 0; r < rows; r++) {
+            rowTop[r] = r == 0 ? gridTopY
+                : ((baseline[r - 1] + rowDepth[r - 1]) + (baseline[r] - rowHeight[r])) / 2.0;
+            rowBottom[r] = r == rows - 1 ? gridTopY + fullSpan
+                : ((baseline[r] + rowDepth[r]) + (baseline[r + 1] - rowHeight[r + 1])) / 2.0;
+        }
         double contentStartX = penX;
         double[] colX = new double[cols];
-        for (int col = 0; col < cols; col++) {
-            addVerticalRules(rules, penX, boundaryGap[col], mx.columnRules().get(col),
-                ruleThick, gridTopY, fullSpan);
+        for (int col = 0; col <= cols; col++) {
+            boolean uniform = true;
+            for (int r = 1; r < rows; r++) {
+                uniform &= ruleCount[r][col] == ruleCount[0][col];
+            }
+            if (uniform) {
+                addVerticalRules(rules, penX, boundaryGap[col], ruleCount[0][col],
+                    ruleThick, gridTopY, fullSpan);
+            } else {
+                for (int r = 0; r < rows; r++) {
+                    addVerticalRules(rules, penX, boundaryGap[col], ruleCount[r][col],
+                        ruleThick, rowTop[r], rowBottom[r] - rowTop[r]);
+                }
+            }
             boundaryX[col] = penX;
             penX += boundaryGap[col];
-            colX[col] = penX;
-            penX += colWidth[col];
+            if (col < cols) {
+                colX[col] = penX;
+                penX += colWidth[col];
+            }
         }
-        addVerticalRules(rules, penX, boundaryGap[cols], mx.columnRules().get(cols),
-            ruleThick, gridTopY, fullSpan);
-        boundaryX[cols] = penX;
-        penX += boundaryGap[cols];
         double contentEndX = penX;
 
         // 6. Right delimiter.
@@ -2179,16 +2239,26 @@ public final class LayoutEngine {
                        : r == rows - 1 ? ColumnAlign.RIGHT
                        : ColumnAlign.CENTER)
                     : mx.columnAligns().get(col);
-                double dx = colX[col] + alignOffset(align, colWidth[col], b.width());
+                double regionWidth = colWidth[col];
+                MathNode.CellSpan span = mx.spanAt(r, col);
+                if (span != null) {
+                    // A \multicolumn cell is aligned by its OWN spec across its columns.
+                    align = span.align();
+                    regionWidth = spanWidth(span, colWidth, boundaryGap);
+                }
+                double dx = colX[col] + alignOffset(align, regionWidth, b.width());
                 b.drawInto(glyphs, rules, dx, baseline[r]);
             }
         }
 
-        // 7b. The @{...}/!{...} material, on every row's baseline at its boundary.
+        // 7b. The @{...}/!{...} material, on every row's baseline at its boundary, except
+        // where a \multicolumn on that row replaced the template carrying it (as with rules).
         for (int bnd = 0; bnd <= cols; bnd++) {
             if (sepBox[bnd] != null) {
                 for (int r = 0; r < rows; r++) {
-                    sepBox[bnd].drawInto(glyphs, rules, boundaryX[bnd] + sepLead[bnd], baseline[r]);
+                    if (mx.separatorShownAt(r, bnd) != null) {
+                        sepBox[bnd].drawInto(glyphs, rules, boundaryX[bnd] + sepLead[bnd], baseline[r]);
+                    }
                 }
             }
         }
@@ -2216,7 +2286,69 @@ public final class LayoutEngine {
 
         double height = Math.max(boxHeight, Math.max(leftH, rightH));
         double depth = Math.max(boxDepth, Math.max(leftD, rightD));
+
+        // 9. Row tags (plan 636d214f): each \tag of an align/gather row sits on that row's
+        // baseline in one right-aligned column after the grid, the gap the equation tag
+        // uses (taggedBox) — the standalone stand-in for amsmath's right margin.
+        if (!mx.rowTags().isEmpty()) {
+            java.util.Map<Integer, Box> tagBoxes = new java.util.TreeMap<>();
+            double tagColumn = 0.0;
+            for (var e : mx.rowTags().entrySet()) {
+                Box tb = tagLabelBox(e.getValue(), ctx);
+                tagBoxes.put(e.getKey(), tb);
+                tagColumn = Math.max(tagColumn, tb.width());
+            }
+            double tagX = totalWidth + TAG_GAP_EM * ctx.fontSize();
+            for (var e : tagBoxes.entrySet()) {
+                Box tb = e.getValue();
+                double y = baseline[e.getKey()];
+                tb.drawInto(glyphs, rules, tagX + tagColumn - tb.width(), y);
+                height = Math.max(height, tb.height() - y);
+                depth = Math.max(depth, tb.depth() + y);
+            }
+            totalWidth = tagX + tagColumn;
+        }
         return new Box(glyphs, rules, totalWidth, height, depth);
+    }
+
+    /** The width a span's cell is aligned in: its columns plus the gaps between them. */
+    private static double spanWidth(MathNode.CellSpan span, double[] colWidth, double[] boundaryGap) {
+        double w = 0.0;
+        for (int c = span.column(); c < span.column() + span.span(); c++) {
+            w += colWidth[c];
+            if (c > span.column()) {
+                w += boundaryGap[c];
+            }
+        }
+        return w;
+    }
+
+    /**
+     * The vertical-rule count at each column boundary of each row. Without spans every
+     * row is the column spec's. A span replaces the templates of the columns it covers:
+     * no rule inside it, its own trailing rules at its right edge, and its leading rules
+     * at its left edge — instead of the spec's at the grid's left edge, in addition to
+     * the previous column's trailing rule elsewhere (LaTeX's \multicolumn{1}{|c|} in a
+     * middle column draws a doubled left rule, which is why authors write {c|} there).
+     */
+    private static int[][] effectiveColumnRules(Matrix mx, int rows, int cols) {
+        int[][] count = new int[rows][cols + 1];
+        for (int r = 0; r < rows; r++) {
+            for (int b = 0; b <= cols; b++) {
+                count[r][b] = mx.columnRules().get(b);
+            }
+        }
+        for (MathNode.CellSpan span : mx.spans()) {
+            int r = span.row();
+            int first = span.column();
+            int end = first + span.span();
+            for (int b = first + 1; b < end; b++) {
+                count[r][b] = 0;
+            }
+            count[r][end] = span.rightRules();
+            count[r][first] = first == 0 ? span.leftRules() : count[r][first] + span.leftRules();
+        }
+        return count;
     }
 
     // ------------------------------------------------------------------

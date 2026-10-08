@@ -117,6 +117,21 @@ final class EnvironmentParser {
         Map<Integer, RowRule> hlines = new java.util.HashMap<>();
         List<MathNode> row = new ArrayList<>();
         List<MathNode> cell = new ArrayList<>();
+        int pendingCover = 0;
+        // Plan 636d214f: \multicolumn cells of this grid, and the \tag of each row of a
+        // row-numbered display environment (align/gather/alignat). A \tag anywhere in such
+        // a row, at any depth, reaches the sink; elsewhere it tags the equation.
+        List<MathNode.CellSpan> spans = new ArrayList<>();
+        Map<Integer, MathNode> rowTags = new java.util.HashMap<>();
+        boolean rowTagged = ROW_TAGGED_ENVIRONMENTS.contains(env);
+        java.util.function.Consumer<MathNode> previousSink = rowTagged
+            ? parser.swapRowTagSink(label -> {
+                if (rowTags.putIfAbsent(rawRows.size(), label) != null) {
+                    throw new MathSyntaxException("Multiple \\tag on one row of \\begin{" + env + "}");
+                }
+            })
+            : null;
+        try {
 
         while (true) {
             Token t = parser.peek();
@@ -149,10 +164,38 @@ final class EnvironmentParser {
                 parser.next();
                 continue;
             }
-            if (parser.isCommand(t, CommandRegistry.Handler.ROW_SEPARATOR)) {
+            if (parser.isCommand(t, CommandRegistry.Handler.TAG)) {
+                // At the cell level, consumed without leaving an empty item in the cell.
                 parser.next();
-                skipRowBreakOptions(parser); // an optional \\[len] / \\* is accepted and ignored
+                parser.acceptTag(parser.parseTagLabel());
+                continue;
+            }
+            if (parser.isCommand(t, CommandRegistry.Handler.MULTICOLUMN)) {
+                if (!cell.isEmpty()) {
+                    throw new MathSyntaxException(
+                        "\\multicolumn must open its cell (TeX: misplaced \\omit)", t.offset());
+                }
+                if (!MULTICOLUMN_KINDS.contains(spec.kind()) || isEqnarray(env)) {
+                    throw new MathSyntaxException(
+                        "\\multicolumn is not supported in \\begin{" + env + "}", t.offset());
+                }
+                parser.next();
+                MathNode.CellSpan span = readMulticolumn(parser, rawRows.size(), row.size());
+                spans.add(span);
+                cell.add(parser.parseArgument("\\multicolumn body"));
+                // The covered columns are empty cells; the span ends where its cell ends.
+                pendingCover = span.span() - 1;
+                continue;
+            }
+            if (parser.isCommand(t, CommandRegistry.Handler.ROW_SEPARATOR)) {
+                int separatorEnd = t.offset() + 1 + t.name().length();
+                parser.next();
+                // an optional \\[len] / \\* is accepted and ignored
+                skipRowBreakOptions(parser, separatorEnd, spacesBeforeOption(env));
                 row.add(MathParser.wrap(cell));
+                for (; pendingCover > 0; pendingCover--) {
+                    row.add(new MathList(List.of()));
+                }
                 cell = new ArrayList<>();
                 rawRows.add(row);
                 row = new ArrayList<>();
@@ -161,6 +204,9 @@ final class EnvironmentParser {
             if (t.kind() == Kind.CHAR && t.codePoint() == '&') {
                 parser.next();
                 row.add(MathParser.wrap(cell));
+                for (; pendingCover > 0; pendingCover--) {
+                    row.add(new MathList(List.of()));
+                }
                 cell = new ArrayList<>();
                 continue;
             }
@@ -170,7 +216,15 @@ final class EnvironmentParser {
         // (row + cell both empty) adds no phantom row, matching LaTeX.
         if (!cell.isEmpty() || !row.isEmpty()) {
             row.add(MathParser.wrap(cell));
+            for (; pendingCover > 0; pendingCover--) {
+                row.add(new MathList(List.of()));
+            }
             rawRows.add(row);
+        }
+        } finally {
+            if (rowTagged) {
+                parser.swapRowTagSink(previousSink);
+            }
         }
         if (rawRows.isEmpty()) {
             throw new MathSyntaxException("empty \\begin{" + env + "} environment");
@@ -183,7 +237,65 @@ final class EnvironmentParser {
         if (Symbols.NUMBERED_ENVIRONMENTS.contains(env)) {
             parser.recordNumberedEnvironment(env);
         }
-        return buildMatrix(env, spec, specAligns, specVlines, specSeparators, rawRows, hlines);
+        MathNode grid = buildMatrix(env, spec, specAligns, specVlines, specSeparators, rawRows, hlines);
+        if (spans.isEmpty() && rowTags.isEmpty()) {
+            return grid;
+        }
+        Matrix m = (Matrix) grid;
+        return new Matrix(m.rows(), m.columnAligns(), m.columnRules(), m.rowRules(),
+            m.leftDelim(), m.rightDelim(), m.kind(), m.columnSeparators(), spans, rowTags);
+    }
+
+    /**
+     * The display environments amsmath numbers ROW BY ROW, so a {@code \tag} belongs to
+     * its row (plan 636d214f). {@code equation}/{@code multline} carry one number for the
+     * whole display and the inner forms ({@code aligned}, {@code gathered}, {@code split},
+     * ...) none of their own, so there a {@code \tag} tags the equation.
+     */
+    private static final java.util.Set<String> ROW_TAGGED_ENVIRONMENTS = java.util.Set.of(
+        "align", "align*", "gather", "gather*", "alignat", "alignat*");
+
+    /** Grid kinds built on LaTeX's array, where {@code \multicolumn} is defined. */
+    private static final java.util.Set<MatrixKind> MULTICOLUMN_KINDS =
+        java.util.EnumSet.of(MatrixKind.ARRAY, MatrixKind.MATRIX, MatrixKind.SMALL, MatrixKind.CASES);
+
+    /**
+     * Whether a SPACE may separate {@code \\} from its {@code [len]} option. LaTeX's own
+     * {@code array} and {@code eqnarray} read the option with {@code \@ifnextchar},
+     * which skips spaces; every amsmath environment (and the matrices and cases amsmath
+     * builds) uses {@code \new@ifnextchar}, which does NOT, precisely so that a row may
+     * begin with a bracket: {@code \\ [B]_2} is content there. Plan 636d214f (the
+     * corpus's "no nucleus" bucket).
+     */
+    private static boolean spacesBeforeOption(String env) {
+        return env.equals("array") || isEqnarray(env);
+    }
+
+    /**
+     * Reads {@code {n}{spec}} of a {@code \multicolumn} (the command consumed; its body is
+     * read by the caller): a positive column count and a ONE-column spec, one of
+     * {@code l c r} with optional {@code |} rules before and after it.
+     */
+    private static MathNode.CellSpan readMulticolumn(MathParser parser, int row, int column) {
+        String count = parser.readRawArgument("\\multicolumn column count").strip();
+        if (!count.matches("[0-9]{1,4}") || Integer.parseInt(count) < 1) {
+            throw new MathSyntaxException(
+                "\\multicolumn column count must be a positive integer, but found '" + count + "'");
+        }
+        String colSpec = parser.readRawArgument("\\multicolumn column spec").replace(" ", "");
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\|*)([lcr])(\\|*)")
+            .matcher(colSpec);
+        if (!m.matches()) {
+            throw new MathSyntaxException("\\multicolumn spec must be one column (l, c or r with"
+                + " optional | rules), but found '" + colSpec + "'");
+        }
+        ColumnAlign align = switch (m.group(2)) {
+            case "l" -> ColumnAlign.LEFT;
+            case "r" -> ColumnAlign.RIGHT;
+            default -> ColumnAlign.CENTER;
+        };
+        return new MathNode.CellSpan(row, column, Integer.parseInt(count), align,
+            m.group(1).length(), m.group(3).length());
     }
 
     // ------------------------------------------------------------------
@@ -603,10 +715,22 @@ final class EnvironmentParser {
 
     /** Silently consumes an optional {@code \\*} and/or {@code \\[len]} row-break modifier. */
     private static void skipRowBreakOptions(MathParser parser) {
+        skipRowBreakOptions(parser, -1, true);
+    }
+
+    /**
+     * As {@link #skipRowBreakOptions(MathParser)}, but when {@code spacesAllowed} is false
+     * a {@code [} separated from the {@code \\} (or its {@code *}) by source whitespace
+     * is NOT an option: it is left as the next row's content. {@code end} is the source
+     * offset just past the {@code \\}.
+     */
+    private static void skipRowBreakOptions(MathParser parser, int end, boolean spacesAllowed) {
         if (parser.peek().kind() == Kind.CHAR && parser.peek().codePoint() == '*') {
+            end = parser.peek().offset() + 1;
             parser.next();
         }
-        if (parser.peek().kind() == Kind.CHAR && parser.peek().codePoint() == '[') {
+        if (parser.peek().kind() == Kind.CHAR && parser.peek().codePoint() == '['
+                && (spacesAllowed || !parser.onlyWhitespaceBetween(end, parser.peek().offset()))) {
             parser.next(); // consume '['
             while (parser.peek().kind() != Kind.EOF
                     && !(parser.peek().kind() == Kind.CHAR && parser.peek().codePoint() == ']')) {
