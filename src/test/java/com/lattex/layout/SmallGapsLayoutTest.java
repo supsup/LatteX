@@ -132,4 +132,17 @@ class SmallGapsLayoutTest {
         assertEquals(aRight, first.originX(), 0.02 * SIZE, "no \\arraycolsep before the material");
         assertEquals(arrowRight, b.originX(), 0.02 * SIZE, "no \\arraycolsep after the material");
     }
+
+    @Test
+    void bangMaterialKeepsTheIntercolumnSpaceThatAtRemoves() {
+        // Confluence's F1 (lattex/1013): a mutant sending !{} down the @ path survived.
+        // ! inserts its material INTO the intercolumn space; @ REPLACES it. So with the
+        // same material the two differ by exactly the space plain cc puts between columns.
+        double bang = layout("\\begin{array}{c!{:}c}a&b\\end{array}").width();
+        double at = layout("\\begin{array}{c@{:}c}a&b\\end{array}").width();
+        double plain = layout("\\begin{array}{cc}a&b\\end{array}").width();
+        double tight = layout("\\begin{array}{c@{}c}a&b\\end{array}").width();
+        assertTrue(plain - tight > 0.1 * SIZE, "control: the intercolumn space is not zero");
+        assertEquals(plain - tight, bang - at, EPS, "! keeps the space @ removes");
+    }
 }
