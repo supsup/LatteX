@@ -176,7 +176,16 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > style and beside it in text style, and `\limits`/`\nolimits` after it force either
 > way. A single-symbol body (`\mathop{\boxtimes}_{i}`) is a large operator, centred on
 > the math axis. `\varprojlim`/`\varinjlim`/`\varliminf`/`\varlimsup` are such
-> operators already.
+> operators already: "lim" with an arrow or a rule exactly as wide as "lim" (never
+> wider, so the next atom never runs into it).
+>
+> **Stretchy arrows over and under.** `\overleftarrow` `\overrightarrow`
+> `\overleftrightarrow` and `\underleftarrow` `\underrightarrow` `\underleftrightarrow`
+> draw the bundled font's own extensible arrow at the width of what they decorate,
+> as TeX does: exactly that width wherever the font's arrow pieces can reach it, and
+> otherwise the widest arrow the font can draw that still fits (under "lim", 1340 of
+> 1420 font units). Only a base narrower than the font's smallest arrow
+> (`\underleftarrow{i}`) is widened to the arrow, base centred, so nothing overlaps.
 >
 > **Two narrow acceptances, stated.** `\lhook` is plain TeX's hook *piece*, which has
 > no glyph of its own in Unicode or the bundled font, so it is accepted only in the
