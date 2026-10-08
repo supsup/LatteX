@@ -99,4 +99,19 @@ class PrimePlacementTest {
         assertTrue(inkRight(ps.get(0)) <= inkLeft(ps.get(1)),
             "the two primes' ink must not overlap");
     }
+
+    @Test
+    void onlyScriptStylePrimesTakeTheSstyForm() {
+        // Confluence's F1 (lattex/1022): a mutant applying ssty in EVERY style was caught only
+        // by the symbol-index golden. Pin it directly: a prime set at text or display size
+        // keeps the cmap text prime; script and scriptscript take ssty levels 1 and 2.
+        int base = FONT.glyphId(0x2032);
+        int s1 = FONT.scriptStyleAlternate(base, 1);
+        int s2 = FONT.scriptStyleAlternate(base, 2);
+        assertEquals(base, atoms(layout("\\prime"), 0x2032).get(0).glyphId(), "text style keeps the text prime");
+        assertEquals(base, atoms(layout("\\displaystyle\\prime"), 0x2032).get(0).glyphId(),
+            "display style keeps the text prime");
+        assertEquals(s1, atoms(layout("x^\\prime"), 0x2032).get(0).glyphId(), "script style takes ssty 1");
+        assertEquals(s2, atoms(layout("x^{y^\\prime}"), 0x2032).get(0).glyphId(), "scriptscript takes ssty 2");
+    }
 }
