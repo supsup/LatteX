@@ -228,6 +228,9 @@ class SingleTokenArgumentTest {
         p.put(Handler.VPHANTOM, new String[] {"a\\%s{x}b", "a\\%s x b"});
         p.put(Handler.OPERATOR_NAME, new String[] {"\\%s{f}x", "\\%s f x"});
         p.put(Handler.PMOD, new String[] {"a\\%s{m}", "a\\%s m"});
+        // \mathop (plan edbda088) reads its body through parseFontArg; with a script so the
+        // probe also covers the Op-class limits path.
+        p.put(Handler.MATHOP, new String[] {"\\%s{x}_a", "\\%s x_a"});
         p.put(Handler.LABEL, new String[] {"x\\%s{k}", "x\\%s k"});
         p.put(Handler.REFERENCE, new String[] {"x=\\%s{k}", "x=\\%s k"});
         // \tag is TOP_LEVEL-grammar (equation-global) but takes one argument too.

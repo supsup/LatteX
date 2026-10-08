@@ -91,8 +91,10 @@ class MathParserTest {
             }
             case MathNode.Colored(var body, var color) ->
                 "Col[" + color.svgValue() + "](" + pp(body) + ")";
-            case MathNode.ClassOverride(var body, var forcedClass) ->
-                "Cls[" + forcedClass + "](" + pp(body) + ")";
+            case MathNode.ClassOverride(var body, var forcedClass, var limits) ->
+                "Cls[" + forcedClass
+                    + (limits == MathNode.LimitsMode.DEFAULT ? "" : "," + limits)
+                    + "](" + pp(body) + ")";
             case MathNode.Boxed(var body) -> "Box(" + pp(body) + ")";
             case MathNode.Cancel(var kind, var body, var to) ->
                 "Cancel[" + kind + "](" + pp(body)

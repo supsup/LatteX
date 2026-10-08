@@ -178,3 +178,70 @@ Plan `a85ff403` (`lattex-math-italic-minus`).
   decision about both outputs. `\boldsymbol{x}` is still bold *upright* (TeX makes it bold italic), which
   predates this change. Most effect GIFs and the README's `showcase.gif` were not
   re-captured and still show upright letters.
+
+---
+
+<!-- Appended by a later branch; the entries above are still unfolded on main and are kept, not replaced. -->
+
+Proposed entry for the **Unreleased** section of `RELEASE_NOTES.md`, plan
+`edbda088` (`fixpoint/lattex-ams-gaps`). Appended below the pending entry above
+rather than replacing it, so neither is lost before the lead folds them in.
+
+### The amsmath / amssymb names research papers use most now render
+
+Measured first, on main `066b90f`, over **138,172 unique display formulas from
+722 research preprints**: each name below was a refusal of standard LaTeX, with
+its count. Every one is now a row in the existing tables (`Symbols` /
+`CommandRegistry`), so its grammar, index cell, suggestion candidacy, macro
+reservation and MathML come from that one row.
+
+- **`\hbox{…}`** (957) takes `\text`'s contract whole: upright, spaces kept,
+  `$…$` re-enters math.
+- **`\begin{gathered}`** (897), plus the two missing inner forms
+  **`alignedat`** (with alignat's mandatory `{n}`) and mathtools' **`multlined`**.
+  Each lays out as its display twin; all take the optional `[t]`/`[b]`/`[c]`,
+  which is read and ignored, as `aligned` and `split` already did.
+- **`\lVert` `\rVert`** (118) and **`\lvert` `\rvert`** (55) are opening/closing
+  atoms *and* delimiters, so `\left\lVert … \right\rVert` and `\bigl\lvert`
+  work (23 more).
+- **`\mathop{…}`** (57) is an Op atom with TeX's limit behaviour: limits under
+  it in display style, beside it in text style, `\limits`/`\nolimits` after it
+  respected. A one-symbol body (`\mathop{\boxtimes}_{i}`) is a large operator,
+  centred on the axis (TeXbook App. G rule 13).
+- **`\varprojlim`** (44), **`\varinjlim`** (14), and their siblings
+  `\varliminf`/`\varlimsup`: "lim" with a stretchy arrow or rule under/over it,
+  as an Op that takes limits. The arrows are STIX Two Math's own combining
+  arrows below (U+20EE/U+20EF), stretched on their MATH constructions.
+- Symbols: **`\Subset`** (50) / `\Supset`, **`\dashrightarrow`** (39) /
+  `\dashleftarrow`, **`\Box`** (24), **`\restriction`** (10, = `\upharpoonright`),
+  **`\Bbbk`** (7), and latexsym's binary **`\lhd` `\rhd` `\unlhd` `\unrhd`**.
+- **`\lhook\joinrel\longrightarrow`** (35): the hook *piece* has no code point in
+  Unicode or the bundled font, so `\lhook` is accepted only in the composites
+  it exists for: `\lhook\joinrel\rightarrow` is exactly `\hookrightarrow`, and
+  the long form is the extensible hooked arrow. Alone it fails loud and names
+  `\hookrightarrow`. `\joinrel` itself is TeX's -3mu relation kern.
+- **`\qedhere`** (8) is accepted and renders nothing; the proof's end mark
+  belongs to the surrounding document, not the formula.
+- **`\hspace` physical units**: `mm` (149), `cm` (24), and `in` `bp` `pc` `dd`
+  `cc` `sp`, converted to pt by TeX's own ratios (TeXbook Ch.10) and then
+  through LatteX's existing 10pt-em pt anchor, so they inherit exactly pt's
+  approximation and nothing more.
+- **The control space `\ `** inside `\mathrm`/`\text`-family arguments (34)
+  decodes to a word space, like `\,` already did.
+
+**Measured after**, same corpus, same script: rendered OK **101,822 → 103,902**
+(73.7% → 75.2%); candidate LatteX gaps **4,594 → 2,108**. Every bucket above is
+now zero. Some formulas that got past their old refusal now stop at a macro the
+paper defines itself (31,756 → 32,162), which is the expected next failure, not
+a regression.
+
+**One determinism fix found on the way.** A pasted Unicode operator takes its
+class from the command table, "first mapping wins"; but the table iterates in
+`Map.copyOf`'s per-JVM order, so two rows sharing a code point with different
+classes made a pasted glyph's spacing vary between runs. `\lVert` (Open) next to
+`\Vert` (Ord) on U+2016 would have been a new instance, so class-tagged
+spellings no longer claim the code point; a pasted ‖ stays Ord every run.
+Pre-existing conflicts elsewhere in the table (for example `\perp` vs `\bot`
+on U+22A5) are untouched and noted as a follow-up.
+
+`examples/symbol-index.html` grew by exactly 24 cells (613 → 637 commands).

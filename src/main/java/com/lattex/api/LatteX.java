@@ -1068,8 +1068,15 @@ public final class LatteX {
             }
             case MathNode.XArrow xa -> {
                 String dir = xa.kind().a11yName();
+                String above = describe(xa.above());
+                // An unlabelled extensible arrow (\xhookrightarrow{}, and the
+                // \lhook\joinrel\longrightarrow composite built on it - plan edbda088) is
+                // just the arrow: never "labelled" followed by nothing.
+                if (xa.below() == null && above.isBlank()) {
+                    yield dir + " arrow";
+                }
                 yield xa.below() == null
-                    ? dir + " arrow labelled " + describe(xa.above())
+                    ? dir + " arrow labelled " + above
                     : dir + " arrow labelled " + describe(xa.above())
                         + " over " + describe(xa.below());
             }
@@ -1497,6 +1504,9 @@ public final class LatteX {
             case "bar" -> "bar over";
             case "vec", "overrightarrow" -> "vector";
             case "overleftarrow" -> "left arrow over";
+            // \varprojlim / \varinjlim: "lim" with an arrow UNDER it (plan edbda088).
+            case "underleftarrow" -> "left arrow under";
+            case "underrightarrow" -> "right arrow under";
             case "overleftrightarrow" -> "left-right arrow over";
             case "dot" -> "dot over";
             case "ddot" -> "double dot over";

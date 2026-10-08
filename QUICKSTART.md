@@ -119,11 +119,12 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > effects and the accessible label still key on `x`.
 >
 > **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
-> `\mathrm`). The argument is *literal text*: plain characters (spaces preserved),
+> `\mathrm`, and TeX's `\hbox`, which takes `\text`'s contract whole). The argument is *literal text*: plain characters (spaces preserved),
 > invisible grouping braces, `$…$` to re-enter math mode (`\text{if $x>0$ then}`),
 > and an EXPLICIT set of control-symbol escapes that decode to their literal
-> character — `\$` `\%` `\#` `\_` `\&` `\{` `\}` — plus `\,` (thin space), which
-> decodes to a plain space (text runs have no sub-em spacing unit). Every other
+> character — `\$` `\%` `\#` `\_` `\&` `\{` `\}` — plus `\,` (thin space) and the
+> control space `\ ` (`\mathrm{in\ the\ interval}`), which decode to a plain space
+> (text runs have no sub-em spacing unit). Every other
 > backslash sequence fails loud: a command (`\text{see \eqref{eq1}}` fails with
 > `Unknown command in \text: \eqref`), an unmapped control symbol (`\^`, `\~`),
 > `\\` (a line break in real LaTeX — text runs are single-line, so it has no
@@ -143,11 +144,36 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > — the error is the usual typed one, with the caret on the spot where the argument
 > is missing; a cell or row boundary is never silently taken as an argument.
 >
-> **`aligned`/`split` position argument.** The optional `[t]`/`[b]`/`[c]` after
-> `\begin{aligned}`/`\begin{split}` is parsed and **ignored**: it selects which
+> **Inner alignment environments.** `aligned`, `split`, `gathered`, `alignedat`
+> (with its mandatory `{n}`, like `alignat`) and mathtools' `multlined` render
+> standalone exactly as their display twins (`align`, `gather`, `alignat`,
+> `multline`), unnumbered.
+>
+> **Their position argument.** The optional `[t]`/`[b]`/`[c]` after
+> `\begin{aligned}`/`\begin{split}`/`\begin{gathered}`/`\begin{alignedat}`/
+> `\begin{multlined}` is parsed and **ignored**: it selects which
 > row's baseline anchors the box in surrounding text, and LatteX renders the
 > environment standalone, so it has no visual effect. Anything else in the bracket
 > fails loud, matching `array`'s column-spec discipline.
+>
+> **`\hspace` / `\kern` units.** `em`, `ex` and `mu` are exact; `pt` is taken at a
+> 10pt em (1pt = 1.8mu), and TeX's physical units `mm` `cm` `in` `bp` `pc` `dd` `cc`
+> `sp` convert to pt by TeX's own ratios (1in = 72.27pt, 2.54cm = 1in, …) and then
+> through that same pt anchor.
+>
+> **Operators you build yourself.** `\mathop{…}` makes an Op atom with TeX's limit
+> behaviour: `\mathop{\mathrm{colim}}_{i\in I}` sets the limit **under** it in display
+> style and beside it in text style, and `\limits`/`\nolimits` after it force either
+> way. A single-symbol body (`\mathop{\boxtimes}_{i}`) is a large operator, centred on
+> the math axis. `\varprojlim`/`\varinjlim`/`\varliminf`/`\varlimsup` are such
+> operators already.
+>
+> **Two narrow acceptances, stated.** `\lhook` is plain TeX's hook *piece*, which has
+> no glyph of its own in Unicode or the bundled font, so it is accepted only in the
+> composites it exists for — `\lhook\joinrel\rightarrow` (= `\hookrightarrow`) and
+> `\lhook\joinrel\longrightarrow` (the long hooked arrow) — and fails loud anywhere
+> else. `\qedhere` (amsthm) is accepted and renders nothing: the proof's end mark
+> belongs to the surrounding document, not the formula.
 
 ## 3. The `\lx[...]{...}` syntax (author-facing)
 

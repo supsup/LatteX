@@ -188,7 +188,7 @@ public final class LayoutEngine {
             // \mathopen/\mathclose/\mathord/\mathbin/\mathrel/\mathpunct: the forced
             // class matters ONLY to classOf (the enclosing row's spacing lookup) — the
             // wrapper itself lays out exactly as its body, like Colored/StyledMath.
-            case MathNode.ClassOverride(var body, _) -> layoutBox(body, ctx);
+            case MathNode.ClassOverride(var body, _, _) -> layoutBox(body, ctx);
             case MathNode.Boxed(var body) -> boxedBox(body, ctx);
             case MathNode.Cancel cancel -> cancelBox(cancel, ctx);
             case Phantom(var content, var keepW, var keepV) ->
@@ -906,7 +906,13 @@ public final class LayoutEngine {
         // limits), and sets them beside as ordinary scripts in text style. This
         // reuses the BigOperator limit-stacking path — sup is the upper limit,
         // sub the lower — exactly as a large operator does.
-        if (base instanceof OperatorName on && on.takesLimits() && ctx.isDisplay()) {
+        // A \mathop{…} group (and \varprojlim & co, which are one) is an Op atom: its
+        // scripts stack as limits in display style unless \nolimits, and in any style
+        // under \limits (TeXbook App. G rule 13). Same limit-stacking path.
+        boolean opGroupLimits = base instanceof MathNode.ClassOverride co
+            && co.stacksLimits(ctx.isDisplay());
+        if ((base instanceof OperatorName on && on.takesLimits() && ctx.isDisplay())
+                || opGroupLimits) {
             Box upperBox = sup == null ? null : layoutBox(sup, ctx.superscript());
             Box lowerBox = sub == null ? null : layoutBox(sub, ctx.subscript());
             return stackLimits(baseBox, upperBox, lowerBox, ctx);

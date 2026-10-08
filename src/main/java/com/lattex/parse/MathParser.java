@@ -798,6 +798,12 @@ public final class MathParser {
         if (nucleus instanceof Atom op && op.mathClass() == MathClass.OP) {
             return parseBigOperator(op);
         }
+        // A compound \mathop{…} group (or \varprojlim & co) is an Op atom too: it takes
+        // \limits/\nolimits, and its scripts become limits in display (see LayoutEngine).
+        if (nucleus instanceof MathNode.ClassOverride co && co.forcedClass() == MathClass.OP) {
+            return parseScripts(new MathNode.ClassOverride(
+                co.body(), MathClass.OP, parseLimitsModifiers(co.limits())));
+        }
         // \\underbrace/\overbrace take their label as a following limit script
         // (^ above the brace, _ below it), exactly as a large operator takes limits.
         if (nucleus instanceof MathNode.Stack st && st.takesLimitLabel()) {
@@ -884,19 +890,7 @@ public final class MathParser {
 
     /** A large operator with optional {@code \limits}/{@code \nolimits} + limits. */
     private MathNode parseBigOperator(Atom op) {
-        LimitsMode mode = LimitsMode.DEFAULT;
-        while (peek().kind() == Kind.COMMAND) {
-            if (isCommand(peek(), "limits", CommandRegistry.Handler.LIMITS_MODIFIER)) {
-                mode = LimitsMode.LIMITS;
-                next();
-            } else if (isCommand(
-                    peek(), "nolimits", CommandRegistry.Handler.LIMITS_MODIFIER)) {
-                mode = LimitsMode.NOLIMITS;
-                next();
-            } else {
-                break;
-            }
-        }
+        LimitsMode mode = parseLimitsModifiers(LimitsMode.DEFAULT);
         MathNode upper = null;
         MathNode lower = null;
         while (true) {
@@ -979,6 +973,63 @@ public final class MathParser {
             throw missingArgument(ifMissing);
         }
         return false;
+    }
+
+    /**
+     * {@code \lhook\joinrel<arrow>}: plain TeX builds {@code \hookrightarrow} as
+     * {@code \lhook\joinrel\rightarrow}, and authors build its long form the same way
+     * with {@code \longrightarrow}. The hook PIECE has no code point of its own -
+     * Unicode and STIX Two Math encode only the whole hooked arrow (U+21AA) - so
+     * {@code \lhook} is accepted only in that composite, which renders as the real
+     * glyph: U+21AA for the short form, and for the long form the extensible hooked
+     * arrow ({@code \xhookrightarrow{}}, stretched on U+21AA's own horizontal MATH
+     * construction). Anything else fails loud rather than faking a hook. Plan edbda088.
+     */
+    private MathNode parseHookedArrow(int offset) {
+        if (isCommand(peek(), "joinrel", CommandRegistry.Handler.SPACE)) {
+            Token join = next();
+            Token arrow = peek();
+            if (arrow.kind() == Kind.COMMAND
+                    && CommandRegistry.hasHandler(arrow.name(), CommandRegistry.Handler.SYMBOL)) {
+                switch (arrow.name()) {
+                    case "rightarrow", "to" -> {
+                        next();
+                        return new Atom(SYMBOLS.get("hookrightarrow").codePoint(), MathClass.REL);
+                    }
+                    case "longrightarrow" -> {
+                        next();
+                        return new MathNode.XArrow(
+                            new MathList(List.of()), null, MathNode.XArrowKind.HOOK_RIGHT);
+                    }
+                    default -> { }
+                }
+            }
+            offset = join.offset();
+        }
+        throw new MathSyntaxException("\\lhook is a hook piece with no glyph of its own (Unicode "
+            + "and STIX Two Math encode only the whole hooked arrow); LatteX accepts it as "
+            + "\\lhook\\joinrel\\rightarrow or \\lhook\\joinrel\\longrightarrow, "
+            + "or write \\hookrightarrow", offset);
+    }
+
+    /**
+     * Reads any run of {@code \limits}/{@code \nolimits} after an Op atom; the last one
+     * wins, as in TeX. Returns {@code mode} unchanged when none follows.
+     */
+    private LimitsMode parseLimitsModifiers(LimitsMode mode) {
+        while (peek().kind() == Kind.COMMAND) {
+            if (isCommand(peek(), "limits", CommandRegistry.Handler.LIMITS_MODIFIER)) {
+                mode = LimitsMode.LIMITS;
+                next();
+            } else if (isCommand(
+                    peek(), "nolimits", CommandRegistry.Handler.LIMITS_MODIFIER)) {
+                mode = LimitsMode.NOLIMITS;
+                next();
+            } else {
+                break;
+            }
+        }
+        return mode;
     }
 
     /** The argument of a script: a single nucleus ({@code '{'} opens a group). */
@@ -1074,7 +1125,8 @@ public final class MathParser {
     /**
      * Reads a braced dimension argument ({@code {2em}} / {@code {18mu}} / {@code {3pt}})
      * and returns its width in math units (18mu = 1em). em-relative units (em/ex/mu) are
-     * exact against the current size; pt is approximated at a 10pt em (1pt = 1.8mu).
+     * exact against the current size; pt is approximated at a 10pt em (1pt = 1.8mu), and
+     * TeX's physical units (mm cm in bp pc dd cc sp) reach mu through pt.
      * Throws a positioned {@link MathSyntaxException} on a missing brace, empty arg,
      * malformed number, or an unknown unit.
      */
@@ -1127,12 +1179,30 @@ public final class MathParser {
             case "em" -> 18.0;      // 1em = 18mu
             case "mu" -> 1.0;
             case "ex" -> 8.0;       // ~0.43em
-            case "pt" -> 1.8;       // approx at a 10pt em (absolute lengths are a follow-up)
+            case "pt" -> MU_PER_PT; // approx at a 10pt em
+            // TeX's physical units, each converted to pt by TeX's own exact ratios
+            // (TeXbook Ch.10, "Dimensions"), then to mu through the SAME pt anchor - so
+            // they inherit pt's 10pt-em approximation and nothing more. Plan edbda088.
+            case "in" -> 72.27 * MU_PER_PT;                  // 1in = 72.27pt
+            case "cm" -> 72.27 / 2.54 * MU_PER_PT;           // 2.54cm = 1in
+            case "mm" -> 72.27 / 25.4 * MU_PER_PT;           // 10mm = 1cm
+            case "bp" -> 72.27 / 72.0 * MU_PER_PT;           // 72bp = 1in (big point)
+            case "pc" -> 12.0 * MU_PER_PT;                   // 1pc = 12pt (pica)
+            case "dd" -> 1238.0 / 1157.0 * MU_PER_PT;        // 1157dd = 1238pt (didot)
+            case "cc" -> 12.0 * 1238.0 / 1157.0 * MU_PER_PT; // 1cc = 12dd (cicero)
+            case "sp" -> MU_PER_PT / 65536.0;                // 65536sp = 1pt (scaled point)
             default -> throw new MathSyntaxException(
-                "\\" + command + ": unknown unit '" + unit + "' (use em / ex / mu / pt)", offset);
+                "\\" + command + ": unknown unit '" + unit
+                    + "' (use em / ex / mu / pt / mm / cm / in / bp / pc / dd / cc / sp)", offset);
         };
         return value * muPerUnit;
     }
+
+    /**
+     * Math units per TeX point, at the 10pt em LatteX assumes for absolute lengths
+     * (18mu = 1em = 10pt). Every physical unit converts through this one anchor.
+     */
+    private static final double MU_PER_PT = 1.8;
 
     /** A char that can appear in the numeric prefix of a bare dimension ({@code -1.5em}). */
     private static boolean isDimensionNumberChar(int cp) {
@@ -1335,8 +1405,9 @@ public final class MathParser {
                 // a braced <number><unit> whose width becomes a Spacing node in math units
                 // (18mu = 1em). \hspace* is accepted (the star is a no-op here — we never
                 // discard glue at a line break). em-relative units (em/ex/mu) are exact;
-                // pt is approximated at a 10pt em (1pt ≈ 1.8mu) — absolute lengths are a
-                // follow-up. A malformed dimension throws a positioned MathSyntaxException.
+                // pt is approximated at a 10pt em (1pt ≈ 1.8mu), and the physical units
+                // (mm cm in bp pc dd cc sp) convert to pt by TeX's exact ratios first. A
+                // malformed dimension throws a positioned MathSyntaxException.
                 if (peek().kind() == Kind.CHAR && peek().codePoint() == '*') {
                     next(); // \hspace* — consume the star
                 }
@@ -1497,6 +1568,39 @@ public final class MathParser {
                 MathClass forcedClass = ATOM_CLASS_WRAPPERS.get(name);
                 MathNode arg = parseFontArg(name);
                 return new MathNode.ClassOverride(arg, forcedClass);
+            }
+            case MATHOP -> {
+                // \mathop{body}: an Op atom (TeXbook Ch.17). TeXbook App. G rule 13 treats
+                // an Op whose nucleus is a SINGLE SYMBOL specially - centred on the axis and
+                // enlarged in display style - which is exactly the large-operator path, so a
+                // one-symbol body (\mathop{\boxtimes}, \mathop{\sum}) becomes an Op Atom and
+                // rides it, \limits/\nolimits included. Any other body is an Op-class
+                // override whose scripts parseComponent and the layout treat as limits.
+                MathNode arg = parseFontArg(name);
+                if (arg instanceof BigOperator big && big.lower() == null && big.upper() == null
+                        && big.limitsMode() == LimitsMode.DEFAULT) {
+                    arg = big.op(); // {\sum} already parsed as a bare large operator
+                }
+                if (arg instanceof Atom atom) {
+                    return new Atom(atom.codePoint(), MathClass.OP);
+                }
+                return new MathNode.ClassOverride(arg, MathClass.OP);
+            }
+            case VAR_LIMIT -> {
+                // \varprojlim & co: the roman word "lim" with a mark under/over it, as an
+                // Op atom (amsopn sets them with \mathop, limits in display).
+                Symbols.VarLimitSpec spec = Symbols.VAR_LIMITS.get(name);
+                boolean rule = spec.accentCodePoint() == Accent.RULE;
+                Accent decorated = new Accent(spec.accentCommand(),
+                    new OperatorName("lim", false), spec.accentCodePoint(), !rule, spec.under());
+                return new MathNode.ClassOverride(decorated, MathClass.OP);
+            }
+            case HOOK_PREFIX -> {
+                return parseHookedArrow(commandOffset);
+            }
+            case QED_MARKER -> {
+                // \qedhere: accepted, emits nothing (see the registry row).
+                return nonRenderingResult(descriptor);
             }
             case NAMED_OPERATOR -> {
                 // Predefined named operator (\sin \cos \lim \max …).
@@ -2118,7 +2222,11 @@ public final class MathParser {
         '}', '}',
         '_', '_',
         '&', '&',
-        ',', ' ');
+        ',', ' ',
+        // The control space `\ ` is an interword space in text mode too
+        // (\mathrm{in\ the\ interval}); a TextRun's spaces are already significant, so
+        // it decodes to one plain space. Plan edbda088.
+        ' ', ' ');
 
     /**
      * A LITERAL text segment: grouping braces become invisible (exactly the old

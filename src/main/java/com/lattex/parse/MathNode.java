@@ -383,11 +383,21 @@ public sealed interface MathNode {
      * {@code \mathopen{}} as a zero-width open-class marker, and an empty brace
      * group already parses to an empty list, so that shape needs no special case.
      *
+     * <p>{@code \mathop{…}} of a compound body (plan edbda088) is this node with class
+     * {@link MathClass#OP}, and an Op is the one class whose SCRIPTS behave differently:
+     * TeX sets them as limits above/below in display style ({@code \displaylimits}),
+     * beside in text style, and {@code \limits}/{@code \nolimits} force either way
+     * (TeXbook App. G rule 13). {@link #limits} carries that modifier; for every other
+     * class it must be {@link LimitsMode#DEFAULT}, since TeX accepts {@code \limits}
+     * only after an Op.
+     *
      * @param body        the wrapped sub-formula (non-null; possibly an empty
      *                    {@link MathList})
      * @param forcedClass the atom class the enclosing row spaces this as (non-null)
+     * @param limits      script placement for an Op ({@code DEFAULT} otherwise)
      */
-    record ClassOverride(MathNode body, MathClass forcedClass) implements MathNode {
+    record ClassOverride(MathNode body, MathClass forcedClass, LimitsMode limits)
+            implements MathNode {
         public ClassOverride {
             if (body == null) {
                 throw new IllegalArgumentException("ClassOverride body must not be null");
@@ -395,6 +405,27 @@ public sealed interface MathNode {
             if (forcedClass == null) {
                 throw new IllegalArgumentException("ClassOverride forcedClass must not be null");
             }
+            if (limits == null) {
+                throw new IllegalArgumentException("ClassOverride limits must not be null");
+            }
+            if (forcedClass != MathClass.OP && limits != LimitsMode.DEFAULT) {
+                throw new IllegalArgumentException(
+                    "\\limits/\\nolimits apply only to an Op, not " + forcedClass);
+            }
+        }
+
+        /** A class override with TeX's default script placement. */
+        public ClassOverride(MathNode body, MathClass forcedClass) {
+            this(body, forcedClass, LimitsMode.DEFAULT);
+        }
+
+        /** Whether {@code ^}/{@code _} on this node stack as limits in the given style. */
+        public boolean stacksLimits(boolean displayStyle) {
+            return forcedClass == MathClass.OP && switch (limits) {
+                case LIMITS -> true;
+                case NOLIMITS -> false;
+                case DEFAULT -> displayStyle;
+            };
         }
     }
 
