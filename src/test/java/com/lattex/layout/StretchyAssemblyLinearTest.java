@@ -337,11 +337,13 @@ class StretchyAssemblyLinearTest {
     // are covered separately below.
     // ------------------------------------------------------------------
 
+    // Re-pinned for plan a85ff403 (the body's `a`s now draw the math-italic a): with the
+    // math alphabet reverted to identity the tree reproduces the prior four hashes exactly.
     private static final Map<Integer, String> GOLDEN_SHA256 = Map.of(
-        256,  "13e2a7aba683d2e13e9700efd317eba460de2c7387e71ec89bd578b6917fe130",
-        512,  "e9ce681c95de46de918115bfb088c9699fb513220b7e877b2638367269bfc927",
-        1024, "663aa6ace35618c6331147e3d493f777b5f150f5a9081598c079d4a4583ce79c",
-        2048, "065c99230487769b0483ed45a52aa379e1c5bf8511c792f7e22f01971e211cf9");
+        256,  "12093560dcbf82c02188f3c6471d1ecd7861ad684953fb176cd4b4eac6c99624",
+        512,  "4fa37b854bc62acfa7081d41d0f8e2b24d59601e0c6a5766ae12dc6920aab161",
+        1024, "e9184d2bd900dfb6409073a0dcdbbd24af2fcf4932eeac918c01ba85c352e402",
+        2048, "54eee2485f89897c7d6fe3bd468fa538488a98ffc498798979d45e4c263903a5");
 
     @Test
     void overrightarrowLadderIsByteIdenticalToPreChangeRenders() {

@@ -56,10 +56,12 @@ class FontCacheByteIdentityRatchetTest {
      * run over the original 181 rows still reproduced the prior hash exactly. The
      * documented array-center repair then added only the 187th row; removing that
      * exact row reproduces the 186-row hash, so this pin advances without weakening
-     * the fold or laundering an unrelated output change.
+     * the fold or laundering an unrelated output change. Re-pinned for plan a85ff403 (math
+     * letters draw math italic, '-' draws U+2212, which moves glyphs, widths and kerns);
+     * with that math alphabet reverted to identity the tree reproduces a9ce57ab... exactly.
      */
     private static final String PINNED_SHA256 =
-        "a9ce57ab94f2373d285fd7f661620cb0a3f4ce4af9e48770c37584af90ccc2a9";
+        "3ff6719e91e6dd8fec3ed7edddc0fe710e3b42c07e9816e2adafb53bc214ba10";
 
     private static final SfntFont FONT = SfntFont.loadBundled();
 
