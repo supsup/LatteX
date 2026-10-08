@@ -154,6 +154,38 @@ class StandardGapsLayoutTest {
         assertFalse(covers(between.get(0), atom(l, 'x').baselineY()), "not on the other row");
     }
 
+    /** The distinct x positions of the vertical rules between x0 and x1 that cross y. */
+    private static List<Double> ruleXsCrossing(Layout l, double x0, double x1, double y) {
+        return vRulesBetween(l, x0, x1).stream().filter(r -> covers(r, y))
+            .map(r -> Math.round(r.x() * 100.0) / 100.0).distinct().sorted().toList();
+    }
+
+    @Test
+    void aMiddleSpanDrawsItsOwnLeadingRuleBesideTheSpecRule() {
+        // Review lattex/1015 F3. {c|c} already rules boundary 1; \multicolumn{1}{|c}
+        // replaces column 2's template with one that ALSO opens with a rule, so TeX
+        // draws both: a doubled rule (which is why authors write {c|} there instead).
+        Layout one = layout("\\begin{array}{c|c}a&\\multicolumn{1}{|c}{b}\\end{array}");
+        PositionedGlyph a = atom(one, 'a');
+        PositionedGlyph b = atom(one, 'b');
+        List<Double> xs = ruleXsCrossing(one, a.originX() + advance(a), b.originX(), a.baselineY());
+        assertEquals(2, xs.size(), "the spec rule AND the span's own leading rule: " + xs);
+        // Two rows, the other row unspanned: the doubled rule is on the span's row only.
+        Layout two = layout("\\begin{array}{c|c}a&\\multicolumn{1}{|c}{b}\\\\c&d\\end{array}");
+        PositionedGlyph a2 = atom(two, 'a');
+        PositionedGlyph b2 = atom(two, 'b');
+        PositionedGlyph c2 = atom(two, 'c');
+        double gap0 = Math.max(a2.originX() + advance(a2), c2.originX() + advance(c2));
+        double gap1 = Math.min(b2.originX(), atom(two, 'd').originX());
+        assertEquals(2, ruleXsCrossing(two, gap0, gap1, a2.baselineY()).size(), "span row: doubled");
+        assertEquals(1, ruleXsCrossing(two, gap0, gap1, c2.baselineY()).size(), "other row: the spec's one");
+        // Control: a span with no leading | leaves the spec's single rule.
+        Layout plain = layout("\\begin{array}{c|c}a&\\multicolumn{1}{c}{b}\\end{array}");
+        PositionedGlyph pa = atom(plain, 'a');
+        assertEquals(1, ruleXsCrossing(plain, pa.originX() + advance(pa), atom(plain, 'b').originX(),
+            pa.baselineY()).size(), "control: one rule");
+    }
+
     @Test
     void anUnspannedGridIsByteIdenticalToBefore() {
         // The span machinery must not perturb a grid with no \multicolumn: the rules are
@@ -265,5 +297,26 @@ class StandardGapsLayoutTest {
         Layout l = layout("\\begin{align}a&=b\\\\c&=d\\tag{5}\\end{align}");
         assertEquals(1, atoms(l, '(').size(), "one tag");
         assertEquals(atom(l, 'c').baselineY(), atom(l, '5').baselineY(), EPS);
+    }
+
+    @Test
+    void aTagOnTheEmptyRowAfterATrailingBreakSitsBelowThePreviousRow() {
+        // Review lattex/1015 F1: "a\\ \tag{1}" numbers a real empty last row, so the tag
+        // sits on that row's own baseline, below row 1, not beside it.
+        for (String env : List.of("align", "align*", "gather", "gather*")) {
+            String body = env.startsWith("align") ? "a&=b" : "a";
+            Layout l = layout("\\begin{" + env + "}" + body + "\\\\\\tag{1}\\end{" + env + "}");
+            PositionedGlyph a = atom(l, 'a');
+            PositionedGlyph one = atom(l, '1');
+            assertTrue(one.baselineY() > a.baselineY() + 5.0, env + ": (1) is below row 1");
+            // Control: the same tag ON row 1 sits on its baseline.
+            Layout same = layout("\\begin{" + env + "}" + body + "\\tag{1}\\\\\\end{" + env + "}");
+            assertEquals(atom(same, 'a').baselineY(), atom(same, '1').baselineY(), EPS, env);
+        }
+        // The empty row is spaced like a row: it sits where a non-empty second row would.
+        Layout tagged = layout("\\begin{gather}a\\\\\\tag{1}\\end{gather}");
+        Layout filled = layout("\\begin{gather}a\\\\x\\tag{1}\\end{gather}");
+        assertEquals(atom(filled, '1').baselineY(), atom(tagged, '1').baselineY(), 0.5,
+            "the empty row's baseline is a normal row's");
     }
 }

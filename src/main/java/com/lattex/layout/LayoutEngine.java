@@ -2068,6 +2068,17 @@ public final class LayoutEngine {
                 }
             }
         }
+        // 1b. A row's \tag shares the row's line (amsmath sets it in the same line box),
+        // so the label's extent is the row's too. This is what gives a numbered EMPTY row
+        // ("a\\ \tag{1}", review lattex/1015 F1) the height of a real line instead of
+        // collapsing onto the row above.
+        java.util.Map<Integer, Box> tagBoxes = new java.util.TreeMap<>();
+        for (var e : mx.rowTags().entrySet()) {
+            Box tb = tagLabelBox(e.getValue(), ctx);
+            tagBoxes.put(e.getKey(), tb);
+            rowHeight[e.getKey()] = Math.max(rowHeight[e.getKey()], tb.height());
+            rowDepth[e.getKey()] = Math.max(rowDepth[e.getKey()], tb.depth());
+        }
 
         // 2. Vertical stacking: row 0's baseline at local y=0, each subsequent row a
         // pitch of (prev depth + inter-row gap + this height) below.
@@ -2290,12 +2301,9 @@ public final class LayoutEngine {
         // 9. Row tags (plan 636d214f): each \tag of an align/gather row sits on that row's
         // baseline in one right-aligned column after the grid, the gap the equation tag
         // uses (taggedBox) — the standalone stand-in for amsmath's right margin.
-        if (!mx.rowTags().isEmpty()) {
-            java.util.Map<Integer, Box> tagBoxes = new java.util.TreeMap<>();
+        if (!tagBoxes.isEmpty()) {
             double tagColumn = 0.0;
-            for (var e : mx.rowTags().entrySet()) {
-                Box tb = tagLabelBox(e.getValue(), ctx);
-                tagBoxes.put(e.getKey(), tb);
+            for (Box tb : tagBoxes.values()) {
                 tagColumn = Math.max(tagColumn, tb.width());
             }
             double tagX = totalWidth + TAG_GAP_EM * ctx.fontSize();

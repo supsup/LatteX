@@ -213,8 +213,11 @@ final class EnvironmentParser {
             cell.add(parser.parseComponent());
         }
         // Finalize a trailing row (content with no closing \\). A bare trailing \\
-        // (row + cell both empty) adds no phantom row, matching LaTeX.
-        if (!cell.isEmpty() || !row.isEmpty()) {
+        // (row + cell both empty) adds no phantom row, matching LaTeX — UNLESS that row
+        // carries a \tag: amsmath's "a\\ \tag{1}" is a real numbered empty last row
+        // (review lattex/1015 F1), so the tag keeps its row instead of pointing past
+        // the grid.
+        if (!cell.isEmpty() || !row.isEmpty() || rowTags.containsKey(rawRows.size())) {
             row.add(MathParser.wrap(cell));
             for (; pendingCover > 0; pendingCover--) {
                 row.add(new MathList(List.of()));
@@ -242,8 +245,22 @@ final class EnvironmentParser {
             return grid;
         }
         Matrix m = (Matrix) grid;
-        return new Matrix(m.rows(), m.columnAligns(), m.columnRules(), m.rowRules(),
-            m.leftDelim(), m.rightDelim(), m.kind(), m.columnSeparators(), spans, rowTags);
+        // The Matrix constructor re-checks that every span and row tag lies inside the
+        // grid. The parser upholds that by construction; should a future parser decision
+        // not, the author gets a typed refusal naming the environment, never a raw
+        // IllegalArgumentException out of render/toMathML (review lattex/1015 F1).
+        for (Integer r : rowTags.keySet()) {
+            if (r >= m.rows().size()) {
+                throw new MathSyntaxException("\\tag on row " + (r + 1) + " of \\begin{" + env
+                    + "}, which has only " + m.rows().size() + " rows");
+            }
+        }
+        try {
+            return new Matrix(m.rows(), m.columnAligns(), m.columnRules(), m.rowRules(),
+                m.leftDelim(), m.rightDelim(), m.kind(), m.columnSeparators(), spans, rowTags);
+        } catch (IllegalArgumentException e) {
+            throw new MathSyntaxException("\\begin{" + env + "}: " + e.getMessage());
+        }
     }
 
     /**

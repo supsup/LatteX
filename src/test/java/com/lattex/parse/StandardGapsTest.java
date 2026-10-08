@@ -124,6 +124,8 @@ class StandardGapsTest {
         assertTrue(thick.getMessage().contains("thickness"), thick.getMessage());
         // TeX requires a unit on a dimension.
         assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\genfrac{}{}{0}{}{a}{b}"));
+        // Documented limit (QUICKSTART): an uppercase unit is refused, though TeX takes it.
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\genfrac{}{}{0PT}{}{a}{b}"));
         MathSyntaxException style = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("\\genfrac{}{}{}{4}{a}{b}"));
         assertTrue(style.getMessage().contains("style"), style.getMessage());
@@ -360,5 +362,155 @@ class StandardGapsTest {
             MathParser.parse("\\begin{array}{c}a\\\\ [2pt] b\\end{array}"));
         assertEquals(MathParser.parse("\\begin{eqnarray}a&=&b\\\\c&=&d\\end{eqnarray}"),
             MathParser.parse("\\begin{eqnarray}a&=&b\\\\ [2pt] c&=&d\\end{eqnarray}"));
+    }
+
+    // ------------------------------------------------------------------
+    // Review lattex/1015 F1: a \tag on the empty row after a trailing \\
+    // ------------------------------------------------------------------
+
+    @Test
+    void aTagAfterATrailingRowBreakNumbersAnEmptyLastRow() {
+        // amsmath: "a\\ \tag{1}" is a real numbered (empty) last row. Before the fix the
+        // empty row was dropped as a phantom and the tag pointed at a missing row: a raw
+        // IllegalArgumentException out of render and toMathML.
+        for (String env : List.of("align", "align*", "gather", "gather*")) {
+            String body = env.startsWith("align") ? "a&=b" : "a";
+            for (String sep : List.of("\\\\\\tag{1}", "\\\\ \\tag{1}")) {
+                String src = "\\begin{" + env + "}" + body + sep + "\\end{" + env + "}";
+                assertRenders(src);
+                assertEquals(com.lattex.api.Outcome.OK,
+                    LatteX.renderWithDiagnostics(src).diagnostics().outcome(), src);
+                MathNode.Matrix m = assertInstanceOf(MathNode.Matrix.class, MathParser.parse(src), src);
+                assertEquals(2, m.rows().size(), "the tagged empty row is kept: " + src);
+                assertEquals(java.util.Set.of(1), m.rowTags().keySet(), "the tag is on row 2: " + src);
+                assertEquals(MathParser.parse("1"), m.rowTags().get(1));
+                String mathml = LatteX.toMathML(src);
+                assertEquals(1, count(mathml, "<mlabeledtr>"), mathml);
+                assertTrue(mathml.indexOf("<mtr>") < mathml.indexOf("<mlabeledtr>"),
+                    "the labelled row is the second: " + mathml);
+            }
+        }
+        // alignat takes it too.
+        assertRenders("\\begin{alignat}{1}a&=b\\\\\\tag{1}\\end{alignat}");
+        // Control: an UNTAGGED trailing \\ still adds no phantom row.
+        assertEquals(1, ((MathNode.Matrix) MathParser.parse("\\begin{align}a&=b\\\\\\end{align}"))
+            .rows().size());
+        // A tag-only body is one numbered empty row, not an "empty environment".
+        MathNode.Matrix only = (MathNode.Matrix) MathParser.parse("\\begin{gather}\\tag{9}\\end{gather}");
+        assertEquals(1, only.rows().size());
+        assertEquals(java.util.Set.of(0), only.rowTags().keySet());
+        // Still one tag per row on the kept row.
+        assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\begin{gather}a\\\\\\tag{1}\\tag{2}\\end{gather}"));
+    }
+
+    private static int count(String haystack, String needle) {
+        int n = 0;
+        for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + 1)) {
+            n++;
+        }
+        return n;
+    }
+
+    /**
+     * Review lattex/1015 F1 audit: every input path through the constructs this plan
+     * added (row tags, \multicolumn, \genfrac, nested \text) either renders or is
+     * refused as a typed author error. A grid invariant the parser failed to uphold
+     * must never surface as a raw IllegalArgumentException / RENDER_BUG.
+     */
+    @Test
+    void newConstructsNeverLeakAnUntypedException() {
+        List<String> inputs = List.of(
+            "\\begin{align}a&=b\\\\\\tag{1}\\end{align}",
+            "\\begin{gather}a\\\\\\tag{2}\\end{gather}",
+            "\\begin{align}\\tag{1}\\end{align}",
+            "\\begin{align}a\\\\\\tag{1}\\\\\\end{align}",
+            "\\begin{align}a\\\\\\hline\\tag{1}\\end{align}",
+            "\\begin{align}a\\\\\\tag{1}\\hline\\end{align}",
+            "\\begin{align}a\\tag{1}&b\\\\c\\end{align}",
+            "\\begin{align}a\\\\{\\tag{1}}\\end{align}",
+            "\\begin{align}a\\\\\\notag\\tag{1}\\end{align}",
+            "\\begin{align}a\\\\\\tag{}\\end{align}",
+            "\\begin{align}a\\\\\\tag{\\tag{1}}\\end{align}",
+            "\\begin{align}a\\\\\\begin{aligned}b\\tag{1}\\end{aligned}\\end{align}",
+            "\\begin{alignat}{2}a&=b\\\\\\tag{1}\\end{alignat}",
+            "\\begin{array}{c}\\multicolumn{2}{c}{x}\\end{array}",
+            "\\begin{array}{cc}a&\\multicolumn{2}{c}{x}\\end{array}",
+            "\\begin{array}{cc}\\multicolumn{2}{c}{x}\\\\\\end{array}",
+            "\\begin{array}{cc}\\multicolumn{2}{c}{x}&y\\end{array}",
+            "\\begin{array}{cc}\\multicolumn{0}{c}{x}\\end{array}",
+            "\\begin{array}{cc}\\multicolumn{1}{cc}{x}\\end{array}",
+            "\\begin{array}{cc}\\multicolumn{9999}{c}{x}\\end{array}",
+            "\\begin{matrix}\\multicolumn{9999}{c}{x}\\end{matrix}",
+            "\\begin{matrix}\\multicolumn{3}{c}{x}\\\\a\\end{matrix}",
+            "\\begin{array}{cc}{\\multicolumn{1}{c}{x}}&y\\end{array}",
+            "\\begin{array}{cc}a\\multicolumn{1}{c}{x}\\end{array}",
+            "\\begin{array}{c}\\multicolumn{1}{c}{}\\\\\\end{array}",
+            "\\begin{array}{c}\\multicolumn{1}{c}{\\multicolumn{1}{c}{x}}\\end{array}",
+            "\\begin{cases}\\multicolumn{2}{c}{x}\\end{cases}",
+            "\\begin{align}\\multicolumn{2}{c}{x}\\end{align}",
+            "\\begin{eqnarray}\\multicolumn{3}{c}{x}\\end{eqnarray}",
+            "\\multicolumn{1}{c}{x}",
+            "\\genfrac{}{}{}{9}{a}{b}",
+            "\\genfrac{}{}{}{-1}{a}{b}",
+            "\\genfrac{(}{)}{-1pt}{}{a}{b}",
+            "\\genfrac{(}{)}{1PT}{}{a}{b}",
+            "\\genfrac{}{}{}{}{}{}",
+            "\\genfrac{x}{}{}{}{a}{b}",
+            "\\genfrac",
+            "\\text{\\text{\\textbf{x}}}",
+            "\\tag{1}\\tag{2}");
+        List<String> leaks = new ArrayList<>();
+        for (String src : inputs) {
+            var outcome = LatteX.renderWithDiagnostics(src).diagnostics();
+            if (outcome.outcome() == com.lattex.api.Outcome.RENDER_BUG) {
+                leaks.add(src + " -> " + outcome.detail());
+            }
+            for (var call : List.<java.util.function.Supplier<String>>of(
+                    () -> LatteX.render(src), () -> LatteX.toMathML(src))) {
+                try {
+                    call.get();
+                } catch (MathSyntaxException expected) {
+                    // a typed author error is the contract
+                } catch (RuntimeException e) {
+                    leaks.add(src + " -> " + e);
+                }
+            }
+        }
+        assertEquals(List.of(), leaks);
+    }
+
+    // ------------------------------------------------------------------
+    // Review lattex/1015 F2: the MathML of spans and row tags
+    // ------------------------------------------------------------------
+
+    @Test
+    void aMulticolumnIsOneMathmlCellWithColumnspan() {
+        String mathml = LatteX.toMathML(
+            "\\begin{array}{ccc}u&\\multicolumn{2}{c}{m}\\\\x&a&b\\end{array}");
+        // Row 1: u's cell, then ONE cell for m spanning columns 2-3.
+        assertTrue(mathml.contains("<mtr><mtd><mi>u</mi></mtd><mtd columnspan=\"2\"><mi>m</mi></mtd></mtr>"),
+            mathml);
+        // Row 2 is three plain cells; columnspan appears exactly once.
+        assertTrue(mathml.contains("<mtr><mtd><mi>x</mi></mtd><mtd><mi>a</mi></mtd><mtd><mi>b</mi></mtd></mtr>"),
+            mathml);
+        assertEquals(1, count(mathml, "columnspan"), mathml);
+    }
+
+    @Test
+    void aTaggedRowIsAnMlabeledtrWithTheLabelCellFirst() {
+        String mathml = LatteX.toMathML("\\begin{align}a&=b\\tag{4}\\\\c&=d\\end{align}");
+        int open = mathml.indexOf("<mlabeledtr>");
+        assertTrue(open >= 0, mathml);
+        String labelled = mathml.substring(open, mathml.indexOf("</mlabeledtr>", open));
+        // The FIRST cell is the label, carrying the tag text in parentheses ...
+        assertTrue(labelled.startsWith("<mlabeledtr><mtd><mrow><mo>(</mo><mn>4</mn><mo>)</mo></mrow></mtd>"),
+            labelled);
+        // ... followed by the row's two cells: three in all.
+        assertEquals(3, count(labelled, "<mtd>"), labelled);
+        // The untagged row stays a plain <mtr> with no label cell.
+        assertEquals(1, count(mathml, "<mlabeledtr>"), mathml);
+        String plain = mathml.substring(mathml.indexOf("<mtr>"), mathml.indexOf("</mtr>"));
+        assertEquals(2, count(plain, "<mtd>"), plain);
     }
 }
