@@ -97,9 +97,13 @@ class WildCorpusTier2Test {
                 failure.getMessage());
         }
 
+        // Inside text (plan c432f899) a braced reference draws the same marker; a
+        // key-less one still fails loud rather than vanishing.
+        assertEquals("Txt[ROMAN](see (??))",
+            MathParserTest.pp(MathParser.parse("\\text{see \\eqref{eq:x}}")));
         MathSyntaxException nested = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("\\text{see \\eqref{eq:x}}"));
-        assertTrue(nested.getMessage().contains("Unknown command in \\text: \\eqref"),
+            () -> MathParser.parse("\\text{see \\eqref}"));
+        assertTrue(nested.getMessage().contains("\\eqref expects a {key} group"),
             nested.getMessage());
     }
 
