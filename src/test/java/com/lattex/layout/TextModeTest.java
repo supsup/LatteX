@@ -85,8 +85,12 @@ class TextModeTest {
     }
 
     @Test
-    void textCommandWithoutBraceFailsCleanly() {
-        assertTrue(assertThrowsSyntax("\\text x").getMessage().contains("text"));
+    void textCommandWithoutAnArgumentFailsCleanly() {
+        // No token: still a clean failure. "\text x" has a token, so TeX reads it as
+        // \text{x} (plan 18e34d82, SingleTokenArgumentTest).
+        assertTrue(assertThrowsSyntax("\\text").getMessage().contains("text"));
+        assertTrue(assertThrowsSyntax("{\\text}").getMessage().contains("text"));
+        assertEquals(MathParser.parse("\\text{x}"), MathParser.parse("\\text x"));
     }
 
     // ------------------------------------------------------------------

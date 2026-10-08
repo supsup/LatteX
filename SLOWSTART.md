@@ -80,6 +80,12 @@ backticks, escaped `\$()` text, leading dashes, and newlines remain renderer inp
 rather than commands or options. Within an inline span, escape a literal dollar
 as `\$`; the next unescaped single dollar always closes the span.
 
+Marcus pastes formulas from papers, and papers leave braces off one-token
+arguments: `$\frac12$`, `$a\equiv b \pmod p$`, `$\int f\,\mathrm dx$`. Those
+render as they do in LaTeX — braces around a single-token argument are optional
+for every command (see the argument note in
+[QUICKSTART §2](QUICKSTART.md#2-render-one-expression)).
+
 ```bash
 bin/lattex-markdown post.md > post.expanded.md
 ```
