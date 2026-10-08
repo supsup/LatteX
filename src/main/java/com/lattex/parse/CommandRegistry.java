@@ -33,6 +33,8 @@ final class CommandRegistry {
         ONE_ARGUMENT,
         TWO_ARGUMENTS,
         THREE_ARGUMENTS,
+        /** amsmath's {@code \genfrac}: two delimiters, a thickness, a style, then the stack. */
+        SIX_ARGUMENTS,
         OPTIONAL_THEN_ARGUMENT,
         SWITCH,
         DIMENSION,
@@ -81,6 +83,7 @@ final class CommandRegistry {
         CONTINUED_FRACTION(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
         DISPLAY_FRACTION(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
         TEXT_FRACTION(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
+        GENERAL_FRACTION(GrammarKind.SIX_ARGUMENTS, OutputKind.RENDERING),
         STYLE_SWITCH(GrammarKind.SWITCH, OutputKind.RENDERING),
         TEXT_COLOR(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
         COLOR_SWITCH(GrammarKind.SWITCH, OutputKind.RENDERING),
@@ -93,6 +96,7 @@ final class CommandRegistry {
         BRAKET(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         DIMENSION_SPACE(GrammarKind.DIMENSION, OutputKind.RENDERING),
         PRESCRIPT(GrammarKind.THREE_ARGUMENTS, OutputKind.RENDERING),
+        MULTICOLUMN(GrammarKind.THREE_ARGUMENTS, OutputKind.RENDERING),
         BINOM(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
         DISPLAY_BINOM(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
         TEXT_BINOM(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
@@ -122,7 +126,6 @@ final class CommandRegistry {
         BMOD(GrammarKind.SYMBOL, OutputKind.RENDERING),
         PMOD(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         SIZED_DELIMITER(GrammarKind.DELIMITER, OutputKind.RENDERING),
-        DELIMITER(GrammarKind.CONTEXTUAL, OutputKind.RENDERING),
         EQUATION_SUPPRESSOR(GrammarKind.CONTEXTUAL, OutputKind.NON_RENDERING),
         LABEL(GrammarKind.ONE_ARGUMENT, OutputKind.NON_RENDERING),
         REFERENCE(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
@@ -297,6 +300,10 @@ final class CommandRegistry {
         add(out, "cfrac", Category.STRUCTURE, Handler.CONTINUED_FRACTION, "\\cfrac{1}{x}");
         add(out, "dfrac", Category.STRUCTURE, Handler.DISPLAY_FRACTION, "\\dfrac{a}{b}");
         add(out, "tfrac", Category.STRUCTURE, Handler.TEXT_FRACTION, "\\tfrac{a}{b}");
+        // amsmath's general fraction, of which \frac \dfrac \tfrac \binom \dbinom \tbinom
+        // are all instances (plan 636d214f): {left}{right}{thickness}{style}{num}{den}.
+        add(out, "genfrac", Category.STRUCTURE, Handler.GENERAL_FRACTION,
+            "\\genfrac{[}{]}{0pt}{}{n}{k}_q");
         for (String name : List.of(
                 "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle")) {
             add(out, name, Category.STRUCTURE, Handler.STYLE_SWITCH, "\\" + name + " x");
@@ -306,7 +313,7 @@ final class CommandRegistry {
         // grammar is SWITCH (the \displaystyle / \color shape), NOT the
         // ONE_ARGUMENT shape of their \mathbf/\mathit/\mathcal cousins. Modelling
         // them as argument-takers would silently change what {\bf x}y means.
-        for (String name : List.of("rm", "bf", "it", "cal")) {
+        for (String name : List.of("rm", "bf", "it", "cal", "sf", "tt")) {
             add(out, name, Category.FONT_VARIANT, Handler.FONT_SWITCH,
                 "{\\" + name + " x} y");
         }
@@ -368,6 +375,10 @@ final class CommandRegistry {
         add(out, "end", Category.CONTROL, Handler.END, "\\begin{matrix}x\\end{matrix}");
         add(out, "bordermatrix", Category.STRUCTURE, Handler.BORDER_MATRIX,
             "\\bordermatrix{&1&2\\\\1&a&b\\\\2&c&d}");
+        // \multicolumn{n}{spec}{body}: a cell spanning n columns with its own one-column
+        // spec. Valid only where it opens a grid cell (EnvironmentParser). Plan 636d214f.
+        add(out, "multicolumn", Category.STRUCTURE, Handler.MULTICOLUMN,
+            "\\begin{array}{c|c}\\multicolumn{2}{c}{x+y}\\\\a&b\\end{array}");
         add(out, "hline", Category.STRUCTURE, Handler.ROW_RULE,
             "\\begin{matrix}\\hline a\\end{matrix}");
         add(out, "hdashline", Category.STRUCTURE, Handler.ROW_RULE,
@@ -390,9 +401,6 @@ final class CommandRegistry {
                     "\\" + name + delimiter);
             }
         }
-        add(out, "vert", Category.ORDINARY, Handler.DELIMITER,
-            "\\left\\vert x\\right\\vert",
-            delimiterCodePointFor("vert"));
 
         for (String name : List.of("nonumber", "notag")) {
             add(out, name, Category.CONTROL, Handler.EQUATION_SUPPRESSOR, "x\\" + name);

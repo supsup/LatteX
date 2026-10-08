@@ -3,6 +3,7 @@ package com.lattex.parse;
 import com.lattex.api.Color;
 import com.lattex.api.RenderOptions;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -915,22 +916,56 @@ public sealed interface MathNode {
      * @param rowRules     the rule at each inter-row gap (length = rows+1)
      * @param leftDelim    the opening delimiter code point, or {@link Fenced#NULL_DELIMITER}
      * @param rightDelim   the closing delimiter code point, or {@link Fenced#NULL_DELIMITER}
+     * <p>Two optional annotations (plan 636d214f), both empty for every grid that does
+     * not use them, so such a grid is unchanged: {@link #spans} lists the
+     * {@code \multicolumn} cells — the spanning cell's content sits in the FIRST
+     * column of its span and the covered cells are empty — and {@link #rowTags} maps
+     * a row index to its {@code \tag} label in {@code align}/{@code gather}.
+     *
      * @param kind         the environment kind (selects the spacing template)
      * @param columnSeparators the {@code @{...}}/{@code !{...}} material at each column
      *                     boundary (length = columns+1), an entry {@code null} where the
-     *                     spec wrote none; the 7-argument constructor fills all nulls
+     *                     spec wrote none; the shorter constructors fill all nulls
+     * @param spans        the {@code \multicolumn} cells, non-overlapping, in bounds
+     * @param rowTags      row index to that row's {@code \tag} label
      */
     record Matrix(List<List<MathNode>> rows, List<ColumnAlign> columnAligns,
                   List<Integer> columnRules, List<RowRule> rowRules,
                   int leftDelim, int rightDelim, MatrixKind kind,
-                  List<ColumnSeparator> columnSeparators) implements MathNode {
+                  List<ColumnSeparator> columnSeparators,
+                  List<CellSpan> spans, Map<Integer, MathNode> rowTags) implements MathNode {
 
-        /** A grid whose column spec wrote no {@code @{...}}/{@code !{...}} material. */
+        /**
+         * A grid with no {@code @{...}}/{@code !{...}} material, no spanning cells and
+         * no row tags (every grid before plans fc988bc4 and 636d214f).
+         */
         public Matrix(List<List<MathNode>> rows, List<ColumnAlign> columnAligns,
                       List<Integer> columnRules, List<RowRule> rowRules,
                       int leftDelim, int rightDelim, MatrixKind kind) {
             this(rows, columnAligns, columnRules, rowRules, leftDelim, rightDelim, kind,
-                java.util.Collections.nCopies(columnAligns.size() + 1, (ColumnSeparator) null));
+                noSeparators(columnAligns), List.of(), Map.of());
+        }
+
+        /** A grid whose column spec wrote {@code @{...}}/{@code !{...}} material, no spans or tags. */
+        public Matrix(List<List<MathNode>> rows, List<ColumnAlign> columnAligns,
+                      List<Integer> columnRules, List<RowRule> rowRules,
+                      int leftDelim, int rightDelim, MatrixKind kind,
+                      List<ColumnSeparator> columnSeparators) {
+            this(rows, columnAligns, columnRules, rowRules, leftDelim, rightDelim, kind,
+                columnSeparators, List.of(), Map.of());
+        }
+
+        /** A grid with spanning cells and/or row tags but no column-spec material. */
+        public Matrix(List<List<MathNode>> rows, List<ColumnAlign> columnAligns,
+                      List<Integer> columnRules, List<RowRule> rowRules,
+                      int leftDelim, int rightDelim, MatrixKind kind,
+                      List<CellSpan> spans, Map<Integer, MathNode> rowTags) {
+            this(rows, columnAligns, columnRules, rowRules, leftDelim, rightDelim, kind,
+                noSeparators(columnAligns), spans, rowTags);
+        }
+
+        private static List<ColumnSeparator> noSeparators(List<ColumnAlign> columnAligns) {
+            return java.util.Collections.nCopies(columnAligns.size() + 1, (ColumnSeparator) null);
         }
 
         public Matrix {
@@ -966,6 +1001,63 @@ public sealed interface MathNode {
             // Nulls are meaningful (no material at that boundary), so not List.copyOf.
             columnSeparators = java.util.Collections.unmodifiableList(
                 new java.util.ArrayList<>(columnSeparators));
+            spans = List.copyOf(spans);
+            rowTags = Map.copyOf(rowTags);
+            boolean[][] covered = new boolean[rows.size()][cols];
+            for (CellSpan span : spans) {
+                if (span.row() >= rows.size() || span.column() + span.span() > cols) {
+                    throw new IllegalArgumentException("span out of the grid: " + span);
+                }
+                for (int c = span.column(); c < span.column() + span.span(); c++) {
+                    if (covered[span.row()][c]) {
+                        throw new IllegalArgumentException("overlapping spans at row "
+                            + span.row() + ", column " + c);
+                    }
+                    covered[span.row()][c] = true;
+                }
+            }
+            for (Integer r : rowTags.keySet()) {
+                if (r < 0 || r >= rows.size()) {
+                    throw new IllegalArgumentException("row tag on a missing row: " + r);
+                }
+            }
+        }
+
+        /** The span whose FIRST column is {@code (row, column)}, or {@code null}. */
+        public CellSpan spanAt(int row, int column) {
+            for (CellSpan span : spans) {
+                if (span.row() == row && span.column() == column) {
+                    return span;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * The {@code @{...}}/{@code !{...}} material at {@code boundary} as row {@code row}
+         * shows it, or {@code null}. In LaTeX's array the material after a column belongs
+         * to that column's template (and the leading material to the first column's), so a
+         * {@code \multicolumn} replaces it exactly as it replaces the rules there: on its
+         * row, the material inside the span and at its right edge is gone, and at the left
+         * edge too when the span starts in the first column. The boundary keeps its width
+         * on every row, as a replaced rule's gap does.
+         */
+        public ColumnSeparator separatorShownAt(int row, int boundary) {
+            ColumnSeparator sep = columnSeparators.get(boundary);
+            if (sep == null) {
+                return null;
+            }
+            for (CellSpan span : spans) {
+                if (span.row() != row) {
+                    continue;
+                }
+                int end = span.column() + span.span();
+                if ((boundary > span.column() && boundary <= end)
+                        || (boundary == 0 && span.column() == 0)) {
+                    return null;
+                }
+            }
+            return sep;
         }
 
         /** Whether the grid carries an enclosing delimiter (⇒ Inner class). */
@@ -976,6 +1068,30 @@ public sealed interface MathNode {
         /** The number of columns in the (rectangular) grid. */
         public int columnCount() {
             return columnAligns.size();
+        }
+    }
+
+    /**
+     * One {@code \multicolumn{span}{spec}{body}} cell of a {@link Matrix}: it covers
+     * columns {@code column .. column+span-1} of {@code row}, is aligned by its own
+     * one-column spec, and carries that spec's vertical rules ({@code leftRules}
+     * before the alignment letter, {@code rightRules} after it). TeX replaces the
+     * covered columns' templates with the span's, so the rules INSIDE the span are
+     * not drawn on that row and the rule at its right edge is the span's own.
+     *
+     * @param row        the grid row
+     * @param column     the first covered column
+     * @param span       the number of columns covered, at least 1
+     * @param align      the span's own alignment
+     * @param leftRules  {@code |} count before the alignment letter
+     * @param rightRules {@code |} count after it
+     */
+    record CellSpan(int row, int column, int span, ColumnAlign align, int leftRules, int rightRules) {
+        public CellSpan {
+            if (row < 0 || column < 0 || span < 1 || leftRules < 0 || rightRules < 0) {
+                throw new IllegalArgumentException("invalid cell span");
+            }
+            Objects.requireNonNull(align, "align");
         }
     }
 

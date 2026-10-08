@@ -301,8 +301,12 @@ public final class MathVariant {
                     seps.add(sep == null ? null : new MathNode.ColumnSeparator(
                         rewrite(atomFn, sep.material()), sep.keepsPadding()));
                 }
+                // Spans are geometry only; row tags are content and restyle with the cells.
+                java.util.Map<Integer, MathNode> tags = new java.util.HashMap<>();
+                mx.rowTags().forEach((row, tag) -> tags.put(row, rewrite(atomFn, tag)));
                 yield new MathNode.Matrix(restyled, mx.columnAligns(), mx.columnRules(),
-                    mx.rowRules(), mx.leftDelim(), mx.rightDelim(), mx.kind(), seps);
+                    mx.rowRules(), mx.leftDelim(), mx.rightDelim(), mx.kind(), seps,
+                    mx.spans(), tags);
             }
             // A bordered matrix: restyle the corner, the labels, and every body cell.
             case MathNode.BorderMatrix bm -> {

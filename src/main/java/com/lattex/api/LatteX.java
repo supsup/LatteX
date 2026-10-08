@@ -1341,22 +1341,37 @@ public final class LatteX {
             }
         }
         sb.append("<mtable>");
-        for (var row : m.rows()) {
-            sb.append("<mtr>");
+        for (int r = 0; r < m.rows().size(); r++) {
+            var row = m.rows().get(r);
+            // Plan 636d214f: a tagged row is MathML's labelled row, label first; a
+            // \multicolumn cell is one <mtd columnspan> standing for the cells it covers.
+            MathNode tag = m.rowTags().get(r);
+            sb.append(tag == null ? "<mtr>" : "<mlabeledtr>");
+            if (tag != null) {
+                sb.append("<mtd><mrow><mo>(</mo>").append(toMathML(tag))
+                  .append("<mo>)</mo></mrow></mtd>");
+            }
             for (int c = 0; c < cols; c++) {
                 // @{...}/!{...} material has no MathML table primitive; it rides inside
                 // the cell it follows (the leading-edge material inside the first cell),
-                // so the table keeps the author's column count.
-                MathNode.ColumnSeparator before = c == 0 ? m.columnSeparators().get(0) : null;
-                MathNode.ColumnSeparator after = m.columnSeparators().get(c + 1);
+                // so the table keeps the author's column count. A \multicolumn cell is one
+                // <mtd columnspan> standing for the cells it covers (plan 636d214f), and it
+                // replaces the material its columns' templates carried (separatorShownAt).
+                MathNode.CellSpan span = m.spanAt(r, c);
+                int last = span == null ? c : c + span.span() - 1;
+                MathNode.ColumnSeparator before = c == 0 ? m.separatorShownAt(r, 0) : null;
+                MathNode.ColumnSeparator after = m.separatorShownAt(r, last + 1);
                 String content = c < row.size() ? toMathML(row.get(c)) : "";
                 if (before != null || after != null) {
                     content = "<mrow>" + (before == null ? "" : toMathML(before.material()))
                         + content + (after == null ? "" : toMathML(after.material())) + "</mrow>";
                 }
-                sb.append("<mtd>").append(content).append("</mtd>");
+                sb.append(span != null && span.span() > 1
+                        ? "<mtd columnspan=\"" + span.span() + "\">" : "<mtd>")
+                  .append(content).append("</mtd>");
+                c = last;
             }
-            sb.append("</mtr>");
+            sb.append(tag == null ? "</mtr>" : "</mlabeledtr>");
         }
         sb.append("</mtable>");
         if (fenced) {
@@ -1520,12 +1535,23 @@ public final class LatteX {
                     sb.append(", ");
                 }
                 sb.append(describe(m.rows().get(r).get(col)));
-                // Visible @{...} material between columns is spoken where it sits.
-                MathNode.ColumnSeparator sep = col + 1 < cols ? m.columnSeparators().get(col + 1) : null;
+                MathNode.CellSpan span = m.spanAt(r, col);
+                if (span != null && span.span() > 1) {
+                    // Plan 636d214f: one spanning cell, spoken once; skip what it covers.
+                    sb.append(" spanning ").append(span.span()).append(" columns");
+                    col += span.span() - 1;
+                }
+                // Visible @{...} material between columns is spoken where it sits (unless
+                // a \multicolumn on this row replaced it).
+                MathNode.ColumnSeparator sep = col + 1 < cols ? m.separatorShownAt(r, col + 1) : null;
                 String spoken = sep == null ? "" : describe(sep.material());
                 if (!spoken.isEmpty()) {
                     sb.append(' ').append(spoken);
                 }
+            }
+            MathNode tag = m.rowTags().get(r);
+            if (tag != null) {
+                sb.append(", tagged ").append(describe(tag));
             }
         }
         return sb.toString();

@@ -206,7 +206,7 @@ class SingleTokenArgumentTest {
     /** Argument grammars whose slots follow TeX's undelimited-argument rule. */
     private static final Set<GrammarKind> ARGUMENT_GRAMMARS = EnumSet.of(
         GrammarKind.ONE_ARGUMENT, GrammarKind.TWO_ARGUMENTS, GrammarKind.THREE_ARGUMENTS,
-        GrammarKind.OPTIONAL_THEN_ARGUMENT, GrammarKind.TEXT_ARGUMENT);
+        GrammarKind.OPTIONAL_THEN_ARGUMENT, GrammarKind.TEXT_ARGUMENT, GrammarKind.SIX_ARGUMENTS);
 
     /**
      * One braced/unbraced pair per handler, written with {@code %s} for the command
@@ -232,6 +232,12 @@ class SingleTokenArgumentTest {
         p.put(Handler.KET, new String[] {"\\%s{\\psi}", "\\%s\\psi"});
         p.put(Handler.BRAKET, new String[] {"\\%s{a}", "\\%s a"});
         p.put(Handler.PRESCRIPT, new String[] {"\\%s{1}{2}{C}", "\\%s12C"});
+        // Plan 636d214f. \genfrac: delimiters, style and both stack slots as single tokens
+        // (the thickness stays {} - an empty argument has no one-token spelling).
+        p.put(Handler.GENERAL_FRACTION, new String[] {"\\%s{(}{)}{}{0}{1}{2}", "\\%s(){}012"});
+        // \multicolumn: count, spec and body as single tokens, inside the grid it needs.
+        p.put(Handler.MULTICOLUMN, new String[] {
+            "\\begin{array}{cc}\\%s{2}{c}{x}\\end{array}", "\\begin{array}{cc}\\%s2cx\\end{array}"});
         p.put(Handler.BINOM, new String[] {"\\%s{n}{k}", "\\%s nk"});
         p.put(Handler.DISPLAY_BINOM, new String[] {"\\%s{n}{k}", "\\%s nk"});
         p.put(Handler.TEXT_BINOM, new String[] {"\\%s{n}{k}", "\\%s nk"});

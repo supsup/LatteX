@@ -221,6 +221,41 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > `\lhook\joinrel\longrightarrow` (the long hooked arrow) — and fails loud anywhere
 > else. `\qedhere` (amsthm) is accepted and renders nothing: the proof's end mark
 > belongs to the surrounding document, not the formula.
+>
+> **General fractions, spanning cells, row tags.** `\genfrac{left}{right}{thickness}{style}{num}{den}`
+> is amsmath's general fraction — `\genfrac{[}{]}{0pt}{}{n}{k}_q` is the Gaussian
+> binomial, and `\genfrac(){0pt}{}{n}{k}` is exactly `\binom{n}{k}`. A delimiter slot
+> takes anything `\left` takes, or `{}` for none; the thickness is empty (the normal
+> bar) or zero (no bar) — any other thickness fails loud; the style is empty, `0`
+> (display), `1` (text), `2` or `3` (script sizes). `\multicolumn{n}{spec}{body}` opens
+> an `array`, matrix or `cases` cell spanning `n` columns, aligned by its own one-column
+> spec (`l`/`c`/`r` with optional `|` rules); the rules inside the span are not drawn
+> on its row, and a span wider than its columns widens the last one, as TeX does. A span
+> also covers `@{...}`/`!{...}` material inside it and at its right edge (on its row
+> only); material to its left is still drawn, and every boundary keeps its width.
+> `\tag{…}` on a row of `align`/`gather`/`alignat` (starred or not) numbers that row,
+> drawn at the row's baseline in a right-aligned column after the grid; anywhere else
+> — inside `gathered`/`aligned`/`split`, `equation`, a group or after `\displaystyle` —
+> it tags the whole equation. One tag per row, one per equation. A `\tag` after a
+> trailing `\\` (`a\\ \tag{1}`) numbers a real empty last row, as amsmath does.
+>
+> **Limits, stated.** `\genfrac`'s style accepts only empty, `0`, `1`, `2` and `3`;
+> `4` and above fail loud. Its thickness unit must be lowercase (`0pt`, `0mm`, ...):
+> TeX reads units case-insensitively, LatteX refuses `0PT`. Whether a space before
+> `[` after `\\` is skipped is decided by the environment's OWN name (`array` and
+> `eqnarray` skip it, every other environment does not), so an `array` nested inside
+> `pmatrix` follows `array`'s rule and does not inherit amsmath's no-space-skip.
+>
+> **Smaller standard names.** `\vert` is the bar `|` as an ordinary symbol
+> (`h\vert_{Z=1}`) as well as a delimiter; `{\sf …}` and `{\tt …}` join `\rm \bf \it
+> \cal` as font declarations; esint's `\fint` (⨏), `\sqint`, `\ointclockwise` and
+> `\ointctrclockwise` are integrals with side limits; a text command nests inside
+> `\mathrm` or another text command (`\mathrm{non\text{-}tail}`, `\text{a \textbf{b}}`),
+> refusing only a style it cannot combine (bold inside italic). A `\displaystyle`-family,
+> `\color` or font switch now ends at `\right`, `\middle` and `\end` as well as at
+> `}`, `&` and `\\`. In amsmath environments (everything but `array` and `eqnarray`),
+> `\\ [x]` with a space is a row that starts with a bracket, not a spacing option —
+> amsmath's own rule; `\\[2pt]` with no space is still the option everywhere.
 
 ## 3. The `\lx[...]{...}` syntax (author-facing)
 

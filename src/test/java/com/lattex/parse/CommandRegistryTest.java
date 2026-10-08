@@ -59,14 +59,15 @@ class CommandRegistryTest {
                 case FRACTION, CONTINUED_FRACTION, DISPLAY_FRACTION, TEXT_FRACTION,
                         TEXT_COLOR, CANCEL_TO, BINOM, DISPLAY_BINOM, TEXT_BINOM, OVERSET,
                         UNDERSET, STACKREL -> GrammarKind.TWO_ARGUMENTS;
-                case PRESCRIPT -> GrammarKind.THREE_ARGUMENTS;
+                case PRESCRIPT, MULTICOLUMN -> GrammarKind.THREE_ARGUMENTS;
+                case GENERAL_FRACTION -> GrammarKind.SIX_ARGUMENTS;
                 case RADICAL, X_ARROW -> GrammarKind.OPTIONAL_THEN_ARGUMENT;
                 case STYLE_SWITCH, COLOR_SWITCH, FONT_SWITCH -> GrammarKind.SWITCH;
                 case DIMENSION_SPACE -> GrammarKind.DIMENSION;
                 case SIZED_DELIMITER -> GrammarKind.DELIMITER;
                 case INFIX_FRACTION -> GrammarKind.INFIX;
                 case BEGIN -> GrammarKind.ENVIRONMENT;
-                case LEFT, END, ROW_RULE, RIGHT, LIMITS_MODIFIER, DELIMITER,
+                case LEFT, END, ROW_RULE, RIGHT, LIMITS_MODIFIER,
                         EQUATION_SUPPRESSOR, MIDDLE, ROW_SEPARATOR -> GrammarKind.CONTEXTUAL;
                 case TEXT -> GrammarKind.TEXT_ARGUMENT;
                 case DEFINITION -> GrammarKind.DEFINITION;
@@ -97,6 +98,7 @@ class CommandRegistryTest {
             Map.entry(GrammarKind.ONE_ARGUMENT, "\\boxed{x}"),
             Map.entry(GrammarKind.TWO_ARGUMENTS, "\\frac{a}{b}"),
             Map.entry(GrammarKind.THREE_ARGUMENTS, "\\prescript{a}{b}{x}"),
+            Map.entry(GrammarKind.SIX_ARGUMENTS, "\\genfrac{(}{)}{0pt}{}{n}{k}"),
             Map.entry(GrammarKind.OPTIONAL_THEN_ARGUMENT, "\\sqrt[3]{x}"),
             Map.entry(GrammarKind.SWITCH, "\\displaystyle x"),
             Map.entry(GrammarKind.DIMENSION, "a\\hspace{9mu}b"),
@@ -183,7 +185,6 @@ class CommandRegistryTest {
             Map.entry("nolimits", Handler.LIMITS_MODIFIER),
             Map.entry("right", Handler.RIGHT),
             Map.entry("middle", Handler.MIDDLE),
-            Map.entry("vert", Handler.DELIMITER),
             Map.entry("\\", Handler.ROW_SEPARATOR),
             Map.entry("cr", Handler.ROW_SEPARATOR),
             Map.entry("end", Handler.END),
@@ -251,12 +252,15 @@ class CommandRegistryTest {
         assertTrue(failure.isUnknownCommand());
         assertTrue(failure.isUnsupportedConstruct());
 
+        // Plan 636d214f made \vert an ordinary symbol (it was this test's contextual
+        // example); \middle outside a fence is the remaining contextual refusal. It must
+        // not suggest itself; the "keeps the base alternative" half is pinned by
+        // commandSuggestionsCanOnlyNameAuthorityEntries (nearestAlternative("vert")).
         MathSyntaxException misplacedDelimiter = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("\\vert"));
+            () -> MathParser.parse("\\middle|"));
         assertEquals(0, misplacedDelimiter.offset());
-        assertEquals("Unknown command: \\vert — did you mean \\Vert?",
-            misplacedDelimiter.getMessage(),
-            "a known contextual command must exclude itself without losing the base alternative");
+        assertEquals("Unknown command: \\middle", misplacedDelimiter.getMessage(),
+            "a known contextual command must exclude itself from its own suggestion");
         assertTrue(misplacedDelimiter.isUnknownCommand());
 
         MathSyntaxException nested = assertThrows(MathSyntaxException.class,

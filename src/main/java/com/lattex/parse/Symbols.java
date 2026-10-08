@@ -98,6 +98,17 @@ final class Symbols {
         Map.entry("oiint", new Sym(0x222F, MathClass.OP)),    // ∯ surface integral
         Map.entry("oiiint", new Sym(0x2230, MathClass.OP)),   // ∰ volume integral
         Map.entry("idotsint", new Sym(0x2A0C, MathClass.OP)), // ⨌
+        // esint's integrals with a Unicode code point (each checked against its Unicode
+        // name and present in STIX Two Math): the averaged integral \fint (U+2A0F INTEGRAL
+        // AVERAGE WITH SLASH), \sqint (U+2A16 QUATERNION INTEGRAL OPERATOR, the integral
+        // with a square, unicode-math's \sqint), and the oriented contour integrals
+        // (U+2232 CLOCKWISE CONTOUR INTEGRAL, which unicode-math names \varointclockwise,
+        // not \ointclockwise; U+2233 ANTICLOCKWISE CONTOUR INTEGRAL, unicode-math's
+        // \ointctrclockwise). The esint names map to those glyphs. Plan 636d214f.
+        Map.entry("fint", new Sym(0x2A0F, MathClass.OP)),     // ⨏
+        Map.entry("sqint", new Sym(0x2A16, MathClass.OP)),    // ⨖
+        Map.entry("ointclockwise", new Sym(0x2232, MathClass.OP)),    // ∲
+        Map.entry("ointctrclockwise", new Sym(0x2233, MathClass.OP)), // ∳
         Map.entry("bigcup", new Sym(0x22C3, MathClass.OP)),   // ⋃
         Map.entry("bigcap", new Sym(0x22C2, MathClass.OP)),   // ⋂
         Map.entry("bigsqcup", new Sym(0x2A06, MathClass.OP)), // ⨆
@@ -900,6 +911,12 @@ final class Symbols {
         m.put("}", new Sym('}', MathClass.CLOSE));
         m.put("|", new Sym(0x2016, MathClass.ORD));       // \| is the double bar ‖ (synonym of \Vert)
         m.put("Vert", new Sym(0x2016, MathClass.ORD));    // ‖
+        // \vert is the plain bar | as an ORDINARY symbol, the single-bar twin of \Vert:
+        // fontmath.ltx declares \vert as \delimiter"26A30C, a delimiter that is ALSO a
+        // math character of class 0 (Ord), so h\vert_{Z=1} is h|_{Z=1}. LatteX used to
+        // accept it only after \left/\right/\middle/\big. Its delimiter role is unchanged
+        // (CommandRegistry.delimiterCodePointFor). Plan 636d214f.
+        m.put("vert", new Sym('|', MathClass.ORD));       // |
         // amsmath's paired bars: the SAME glyphs as \vert / \Vert, but class-tagged as an
         // opening and a closing atom (amsmath: \lvert = \mathopen|), which is the whole
         // reason they exist - |x| and \|x\| space as a fence, not as two Ords. They are

@@ -123,6 +123,25 @@ public final class MathParser {
     private final List<Token> tokens;
     private int p;
 
+    /** The source this parser lexed, for the whitespace test after a row break (plan 636d214f). */
+    private final String source;
+
+    /**
+     * The equation's {@code \tag} label, wherever in the formula it was written, or
+     * {@code null}. Equation-global, exactly as amsmath's tag of the display: it is set
+     * from the top level, from inside a group or style switch, and from an INNER
+     * environment ({@code gathered}, {@code aligned}, {@code split}, ...). Plan 636d214f.
+     */
+    private MathNode equationTag;
+
+    /**
+     * Where a {@code \tag} goes while a row-numbered display environment
+     * ({@code align}, {@code gather}, {@code alignat} and their starred forms) is being
+     * read: that environment's CURRENT row. {@code null} outside one. Installed and
+     * restored by {@link EnvironmentParser}; plan 636d214f.
+     */
+    private java.util.function.Consumer<MathNode> rowTagSink;
+
     /**
      * Caller-owned sink for numbered display environment names, or {@code null} when the caller did
      * not ask. Per-parse by construction: {@code parseMath} is the only site that constructs a
@@ -155,6 +174,7 @@ public final class MathParser {
      */
     private MathParser(String src, Map<String, String> macros) {
         this.tokens = MacroExpander.expand(lex(src), macros);
+        this.source = src;
     }
 
     /** Package-private for {@link MacroExpander} (preset bodies lex through the same lexer). */
@@ -528,19 +548,12 @@ public final class MathParser {
 
     private MathNode parseTopLevel() {
         List<MathNode> items = new ArrayList<>();
-        MathNode tag = null;
         while (peek().kind() != Kind.EOF) {
             // \tag{label} is equation-global: hoist it out of the component stream and
             // attach it to the whole equation, wherever it appears in the source.
             if (isCommand(peek(), "tag", CommandRegistry.Handler.TAG)) {
                 next(); // consume \tag
-                if (tag != null) {
-                    throw new MathSyntaxException("Multiple \\tag on one equation");
-                }
-                if (!isArgumentToken(peek())) {
-                    throw missingArgument("\\tag expects a {label} group");
-                }
-                tag = parseArgument("\\tag label"); // \tag{1} or \tag1
+                acceptTag(parseTagLabel());
                 continue;
             }
             // A TeX INFIX fraction operator (\over/\atop/...) splits its enclosing
@@ -556,7 +569,57 @@ public final class MathParser {
             items.add(parseComponent());
         }
         MathNode body = wrap(items);
-        return tag == null ? body : new MathNode.Tagged(body, tag);
+        return equationTag == null ? body : new MathNode.Tagged(body, equationTag);
+    }
+
+    /** Reads a {@code \tag}'s label, the {@code \tag} itself already consumed. */
+    MathNode parseTagLabel() {
+        if (!isArgumentToken(peek())) {
+            throw missingArgument("\\tag expects a {label} group");
+        }
+        return parseArgument("\\tag label"); // \tag{1} or \tag1
+    }
+
+    /**
+     * Routes a {@code \tag} label to the row of the row-numbered environment being read,
+     * or, outside one, to the equation. One tag per row and one per equation, as amsmath
+     * ("Multiple \tag").
+     */
+    void acceptTag(MathNode label) {
+        if (rowTagSink != null) {
+            rowTagSink.accept(label);
+            return;
+        }
+        if (equationTag != null) {
+            throw new MathSyntaxException("Multiple \\tag on one equation");
+        }
+        equationTag = label;
+    }
+
+    /** Installs a row-tag sink, returning the one it replaces (restore it when done). */
+    java.util.function.Consumer<MathNode> swapRowTagSink(java.util.function.Consumer<MathNode> sink) {
+        java.util.function.Consumer<MathNode> previous = rowTagSink;
+        rowTagSink = sink;
+        return previous;
+    }
+
+    /**
+     * Whether only whitespace separates source offsets {@code from} (inclusive) and
+     * {@code to} (exclusive), with at least one character between them. Tokens spliced
+     * from a preset macro all carry their invocation's offset, and an inline macro's
+     * body tokens point at the definition, so a span that is not pure source whitespace
+     * reads as "adjacent" — the conservative answer (plan 636d214f).
+     */
+    boolean onlyWhitespaceBetween(int from, int to) {
+        if (from < 0 || to <= from || to > source.length()) {
+            return false;
+        }
+        for (int i = from; i < to; i++) {
+            if (!isWhitespace(source.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** A brace group {@code '{' list '}'}. Assumes the current token is LBRACE. */
@@ -760,6 +823,10 @@ public final class MathParser {
             case "bf" -> MathVariant.apply(MathVariant.Style.BOLD, body);
             case "it" -> MathVariant.apply(MathVariant.Style.ITALIC, body);
             case "cal" -> MathVariant.apply(MathVariant.Style.SCRIPT, body);
+            // The two TeX 2.09 switches the original four left out (plan 636d214f); they
+            // are the declaration forms of \mathsf and \mathtt, on the same alphabets.
+            case "sf" -> MathVariant.apply(MathVariant.Style.SANS, body);
+            case "tt" -> MathVariant.apply(MathVariant.Style.MONO, body);
             default -> throw new IllegalStateException("not a legacy font switch: " + name);
         };
     }
@@ -780,13 +847,24 @@ public final class MathParser {
         return new MathNode.Colored(parseRestOfGroup(), color);
     }
 
-    /** Where a {@code \displaystyle}-family switch stops consuming: group end or a cell/row sep. */
+    /**
+     * Where a {@code \displaystyle}-family switch stops consuming: the end of its group,
+     * cell, row, environment or fence. TeX ends a declaration at the end of the group
+     * that contains it, and an environment cell, a {@code \left..\right} body and each
+     * {@code \middle} segment are such groups; before plan 636d214f only the first three
+     * were boundaries here, so {@code \displaystyle} in the LAST cell of a pmatrix
+     * swallowed {@code \end{pmatrix}} ("\end without a matching \begin") and one inside
+     * {@code \left(..\right)} swallowed the {@code \right}.
+     */
     private boolean isStyleSwitchBoundary(Token t) {
         return switch (t.kind()) {
             case RBRACE, EOF -> true;
             case CHAR -> t.codePoint() == '&';                              // matrix column separator
             case COMMAND ->
-                CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.ROW_SEPARATOR);
+                CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.ROW_SEPARATOR)
+                    || CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.END)
+                    || CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.RIGHT)
+                    || CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.MIDDLE);
             default -> false;
         };
     }
@@ -1086,7 +1164,7 @@ public final class MathParser {
      * still means what TeX means: an argument-less control sequence
      * ({@code \frac\alpha\beta}) reads identically under both rules.
      */
-    private MathNode parseArgument(String context) {
+    MathNode parseArgument(String context) {
         if (!isArgumentToken(peek())) {
             throw missingArgument(
                 context + " expects an argument, but found " + describe(peek()));
@@ -1219,6 +1297,110 @@ public final class MathParser {
      * the stack's math style ({@code \dbinom} display, {@code \tbinom} text,
      * {@code \binom} inherited).
      */
+    /**
+     * amsmath's {@code \genfrac{left}{right}{thickness}{style}{num}{den}} (plan 636d214f),
+     * built from the same nodes as its six amsmath instances so that, e.g.,
+     * {@code \genfrac(){0pt}{}{n}{k}} IS {@code \binom{n}{k}}: a {@link Fraction}
+     * (ruled unless the thickness is zero) inside a {@link Fenced} pair when either
+     * delimiter is given. An empty style inherits; {@code 0}/{@code 1} are the display
+     * and text styles {@code \dfrac}/{@code \tfrac} force; {@code 2}/{@code 3} set the
+     * whole construction in script/scriptscript style. A non-zero explicit thickness
+     * has no model here (a {@link Fraction} draws the font's rule or none) and fails
+     * loud rather than drawing the default rule.
+     */
+    private MathNode parseGenfrac() {
+        int left = readGenfracDelimiter("\\genfrac left delimiter");
+        int right = readGenfracDelimiter("\\genfrac right delimiter");
+        String thickness = readRawArgument("\\genfrac thickness").strip();
+        String style = readRawArgument("\\genfrac style").strip();
+        boolean rule;
+        if (thickness.isEmpty()) {
+            rule = true;
+        } else {
+            java.util.regex.Matcher m = GENFRAC_THICKNESS.matcher(thickness);
+            if (!m.matches()) {
+                throw new MathSyntaxException("\\genfrac thickness must be empty or a dimension"
+                    + " such as 0pt, but found '" + thickness + "'");
+            }
+            if (Double.parseDouble(m.group(1)) != 0.0) {
+                throw new MathSyntaxException("\\genfrac: a rule thickness other than empty"
+                    + " (the default rule) or zero (no rule) is not supported: " + thickness);
+            }
+            rule = false;
+        }
+        MathNode.FractionStyle fractionStyle = MathNode.FractionStyle.INHERIT;
+        MathNode.StyleLevel switchTo = null;
+        switch (style) {
+            case "" -> { }
+            case "0" -> fractionStyle = MathNode.FractionStyle.DISPLAY;
+            case "1" -> fractionStyle = MathNode.FractionStyle.TEXT;
+            case "2" -> switchTo = MathNode.StyleLevel.SCRIPT;
+            case "3" -> switchTo = MathNode.StyleLevel.SCRIPT_SCRIPT;
+            default -> throw new MathSyntaxException(
+                "\\genfrac style must be empty, 0, 1, 2 or 3, but found '" + style + "'");
+        }
+        MathNode num = parseArgument("\\genfrac numerator");
+        MathNode den = parseArgument("\\genfrac denominator");
+        MathNode result = new Fraction(num, den, rule, fractionStyle);
+        if (left != Fenced.NULL_DELIMITER || right != Fenced.NULL_DELIMITER) {
+            result = new Fenced(left, result, right);
+        }
+        return switchTo == null ? result : new MathNode.StyleSwitch(switchTo, result);
+    }
+
+    /** A TeX dimension: a decimal number and one of TeX's units. */
+    private static final java.util.regex.Pattern GENFRAC_THICKNESS = java.util.regex.Pattern.compile(
+        "([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))\\s*(?:pt|pc|in|bp|cm|mm|dd|cc|sp|em|ex|mu)");
+
+    /** A {@code \genfrac} delimiter slot: {@code {}} (none), {@code {d}}, or one delimiter token. */
+    private int readGenfracDelimiter(String context) {
+        if (peek().kind() != Kind.LBRACE) {
+            if (!isArgumentToken(peek())) {
+                throw missingArgument(context + " expects a delimiter, but found " + describe(peek()));
+            }
+            return readDelimiter(context);
+        }
+        next(); // '{'
+        if (peek().kind() == Kind.RBRACE) {
+            next();
+            return Fenced.NULL_DELIMITER;
+        }
+        int delimiter = readDelimiter(context);
+        if (peek().kind() != Kind.RBRACE) {
+            throw new MathSyntaxException(context + " must be one delimiter, but found "
+                + describe(peek()), currentOffset());
+        }
+        next(); // '}'
+        return delimiter;
+    }
+
+    /**
+     * Reads a plain-character argument verbatim — {@code {chars}} or one character — for
+     * the slots TeX reads as a number or dimension rather than as math. A control
+     * sequence or nested group inside it fails loud.
+     */
+    String readRawArgument(String context) {
+        if (peek().kind() != Kind.LBRACE) {
+            if (peek().kind() != Kind.CHAR || !isArgumentToken(peek())) {
+                throw missingArgument(context + " expects an argument, but found " + describe(peek()));
+            }
+            return new String(Character.toChars(next().codePoint()));
+        }
+        next(); // '{'
+        StringBuilder sb = new StringBuilder();
+        while (peek().kind() != Kind.RBRACE) {
+            Token t = peek();
+            if (t.kind() != Kind.CHAR) {
+                throw new MathSyntaxException(context + " must be plain characters, but found "
+                    + describe(t), currentOffset());
+            }
+            sb.appendCodePoint(t.codePoint());
+            next();
+        }
+        next(); // '}'
+        return sb.toString();
+    }
+
     private MathNode binom(MathNode.FractionStyle style) {
         MathNode upper = parseArgument("\\binom upper argument");
         MathNode lower = parseArgument("\\binom lower argument");
@@ -1689,7 +1871,19 @@ public final class MathParser {
             case TEXT -> {
                 return parseUnbracedTextArgument(name, commandOffset);
             }
-            case DELIMITER, INFIX_FRACTION, TAG, MIDDLE, ROW_SEPARATOR, DEFINITION ->
+            case TAG -> {
+                // A \tag NOT at the top level: inside a group, a style switch, or an
+                // environment cell. It still tags its row or its equation (acceptTag) and
+                // contributes nothing where it sits. Plan 636d214f.
+                acceptTag(parseTagLabel());
+                return new MathList(List.of());
+            }
+            case GENERAL_FRACTION -> {
+                return parseGenfrac();
+            }
+            case MULTICOLUMN -> throw new MathSyntaxException(
+                "\\multicolumn must open a cell of an array or matrix environment", commandOffset);
+            case INFIX_FRACTION, MIDDLE, ROW_SEPARATOR, DEFINITION ->
                 throw unknownCommand(name, commandOffset);
         }
         throw new IllegalStateException(
@@ -2150,22 +2344,39 @@ public final class MathParser {
      * {@link #MAX_DEPTH}.
      */
     private MathNode textWithNestedMath(Token t) {
+        return textWithNestedMath(t, TEXT_COMMANDS.get(t.name()));
+    }
+
+    /**
+     * {@link #textWithNestedMath(Token)} with the run style already resolved — the entry
+     * for a NESTED text command, whose style depends on the one around it
+     * ({@link #nestedTextStyle}). A nested text-mode command ({@code \text},
+     * {@code \textbf}, ... — plan 636d214f: the corpus writes
+     * {@code \mathrm{non\text{-}tail}}) splits the run like a {@code $} span does, and
+     * its own argument is read by this same method, so math and further nesting inside
+     * it keep working. The nesting continues this parser's depth, bounded by
+     * {@link #MAX_DEPTH}.
+     */
+    private MathNode textWithNestedMath(Token t, TextStyle style) {
         String raw = t.text(); // verbatim, braces included (lexTextArgument keeps them)
-        TextStyle style = TEXT_COMMANDS.get(t.name());
-        if (indexOfTextMathOpener(raw, 0) < 0) {
+        if (indexOfTextOpener(raw, 0) < 0) {
             return new TextRun(literalText(raw, t), style); // fast path: one literal run
         }
         List<MathNode> items = new ArrayList<>();
         int i = 0;
         int n = raw.length();
         while (i < n) {
-            int open = indexOfTextMathOpener(raw, i);
+            int open = indexOfTextOpener(raw, i);
             if (open < 0) {
                 addLiteralTextRun(items, raw.substring(i), t, style);
                 break;
             }
             if (open > i) {
                 addLiteralTextRun(items, raw.substring(i, open), t, style);
+            }
+            if (raw.charAt(open) == '\\' && isAsciiLetter(raw.charAt(open + 1))) {
+                i = nestedTextCommand(raw, open, t, style, items);
+                continue;
             }
             // The two spellings of inline math LaTeX accepts in text mode: `$...$` and
             // `\(...\)` (plan c432f899). Each closes only on its OWN closer.
@@ -2199,6 +2410,91 @@ public final class MathParser {
             return items.get(0);
         }
         return new MathList(List.copyOf(items));
+    }
+
+    /**
+     * Reads the nested text command whose backslash is at {@code open} (the scanner
+     * guarantees a text-mode command followed by its braced argument), appends its run,
+     * and returns the index just past its closing brace.
+     */
+    private int nestedTextCommand(String raw, int open, Token outer, TextStyle outerStyle,
+                                  List<MathNode> items) {
+        int j = open + 1;
+        while (j < raw.length() && isAsciiLetter(raw.charAt(j))) {
+            j++;
+        }
+        String inner = raw.substring(open + 1, j);
+        while (raw.charAt(j) != '{') {
+            j++; // whitespace before the argument (the scanner checked a '{' follows)
+        }
+        int bodyStart = j + 1;
+        int close = matchingTextBrace(raw, bodyStart);
+        if (close < 0) {
+            throw new MathSyntaxException(
+                "Unbalanced brace in \\" + inner + " inside \\" + outer.name(), outer.offset());
+        }
+        TextStyle style = nestedTextStyle(outer.name(), outerStyle, inner);
+        if (++depth > MAX_DEPTH) {
+            depth--;
+            throw new MathSyntaxException(
+                "nesting too deep: exceeds the " + MAX_DEPTH + "-level limit", outer.offset());
+        }
+        try {
+            MathNode run = textWithNestedMath(
+                Token.text(inner, raw.substring(bodyStart, close), outer.offset()), style);
+            if (run instanceof MathList list) {
+                items.addAll(list.items());
+            } else if (!(run instanceof TextRun tr && tr.text().isEmpty())) {
+                items.add(run);
+            }
+        } finally {
+            depth--;
+        }
+        return close + 1;
+    }
+
+    /** The index of the '}' closing a text argument whose content starts at {@code from}, or -1. */
+    private static int matchingTextBrace(String s, int from) {
+        int d = 1;
+        for (int k = from; k < s.length(); k++) {
+            char c = s.charAt(k);
+            if (c == '\\') {
+                k++; // an escape: its character never moves the depth
+            } else if (c == '{') {
+                d++;
+            } else if (c == '}' && --d == 0) {
+                return k;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * The style of a text command nested in another text-family argument, as LaTeX's
+     * NFSS composes them, or a loud refusal where {@link TextStyle} cannot express the
+     * result. Inside {@code \mathrm} (a math font that leaves the text font alone) and
+     * inside upright roman text the inner command's own style is exact; {@code \text}
+     * and {@code \hbox} keep the surrounding text font; {@code \textnormal} resets to
+     * roman; {@code \textrm} changes only the family, so it keeps bold or italic and
+     * turns typewriter into roman. Any other pairing (bold italic, bold typewriter, ...)
+     * has no TextStyle and is refused rather than approximated.
+     */
+    private static TextStyle nestedTextStyle(String outerName, TextStyle outer, String inner) {
+        TextStyle own = TEXT_COMMANDS.get(inner);
+        if (outerName.equals("mathrm") || outer == TextStyle.ROMAN) {
+            return own;
+        }
+        TextStyle result = switch (inner) {
+            case "text", "hbox" -> outer;
+            case "textnormal" -> TextStyle.ROMAN;
+            case "textrm" -> outer == TextStyle.MONO ? TextStyle.ROMAN : outer;
+            default -> own == outer ? outer : null;
+        };
+        if (result == null) {
+            throw new MathSyntaxException("\\" + inner + " inside \\" + outerName
+                + " needs a combined text style LatteX does not have");
+        }
+        return result;
     }
 
     /** Adds a split-path literal only when decoding leaves meaningful text. */
@@ -2599,6 +2895,15 @@ public final class MathParser {
         return scanTextMathDelimiter(s, from, '(');
     }
 
+    /**
+     * {@link #indexOfTextMathOpener} plus a nested text-MODE command with a braced
+     * argument ({@code \text{…}}, {@code \textbf{…}}, … but not the math-only
+     * {@code \mathrm}): every point where a text run splits. Plan 636d214f.
+     */
+    private static int indexOfTextOpener(String s, int from) {
+        return scanTextMathDelimiter(s, from, 'T');
+    }
+
     /** The {@code \)} that closes a {@code \(} span opened before {@code from}, or -1. */
     private static int indexOfTextParenClose(String s, int from) {
         return scanTextMathDelimiter(s, from, ')');
@@ -2609,7 +2914,9 @@ public final class MathParser {
      * and the WHOLE braced argument of any nested text-family command. {@code want}
      * selects what is reported: {@code '$'} an unescaped dollar only (the pre-c432f899
      * contract, unchanged); {@code '('} an unescaped dollar OR a {@code \(}; {@code ')'}
-     * a {@code \)} only. A returned {@code \(}/{@code \)} index points at its backslash.
+     * a {@code \)} only; {@code 'T'} what {@code '('} reports plus a nested text-mode
+     * command with a braced argument (plan 636d214f). A returned {@code \(}/{@code \)}
+     * or command index points at its backslash.
      */
     private static int scanTextMathDelimiter(String s, int from, char want) {
         int i = from;
@@ -2623,9 +2930,13 @@ public final class MathParser {
                 }
                 if (j > i + 1 && CommandRegistry.hasGrammar(
                         s.substring(i + 1, j), CommandRegistry.GrammarKind.TEXT_ARGUMENT)) {
+                    String nested = s.substring(i + 1, j);
                     // nested text-family command: skip its whole braced argument
                     while (j < n && isWhitespace(s.charAt(j))) {
                         j++;
+                    }
+                    if (want == 'T' && j < n && s.charAt(j) == '{' && !nested.equals("mathrm")) {
+                        return i; // a nested text-mode command splits the run
                     }
                     if (j < n && s.charAt(j) == '{') {
                         int depth = 1;
@@ -2644,7 +2955,7 @@ public final class MathParser {
                     }
                 }
                 if (j == i + 1 && j < n
-                        && ((want == '(' && s.charAt(j) == '(')
+                        && (((want == '(' || want == 'T') && s.charAt(j) == '(')
                             || (want == ')' && s.charAt(j) == ')'))) {
                     return i; // a live \( opener or \) closer
                 }
