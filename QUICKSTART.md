@@ -118,6 +118,18 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > Nothing is ever silently flattened *or* left with a stray backslash; wrap math
 > in `$…$` instead.
 >
+> **Braces around a one-token argument are optional, as in TeX.** An argument is
+> the next token — one character, one control sequence, or one `{…}` group — with
+> spaces before it skipped. So `\frac12`, `\sqrt2`, `\hat x`, `\mathrm d`,
+> `\text a`, `x\pmod q`, `\boldsymbol 1_A`, `\phantom x`, `\tag1` and `\label k`
+> mean exactly their braced forms, for every argument-taking command (environment
+> arguments, such as `\begin{array}`'s column spec, still need their braces). It is
+> ONE token: `x\pmod q r` is `x\pmod{q}r`, and `\mathrm dx` is `\mathrm{d}x`. A text
+> command's one token is still literal text (`\mathrm\alpha` fails exactly as
+> `\mathrm{\alpha}` does). With no token at all — end of input, `}`, `&` or `\\`
+> — the error is the usual typed one, with the caret on the spot where the argument
+> is missing; a cell or row boundary is never silently taken as an argument.
+>
 > **`aligned`/`split` position argument.** The optional `[t]`/`[b]`/`[c]` after
 > `\begin{aligned}`/`\begin{split}` is parsed and **ignored**: it selects which
 > row's baseline anchors the box in surrounding text, and LatteX renders the
