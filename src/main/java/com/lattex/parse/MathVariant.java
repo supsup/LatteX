@@ -276,6 +276,7 @@ public final class MathVariant {
             case MathNode.ClassOverride co ->
                 new MathNode.ClassOverride(rewrite(atomFn, co.body()), co.forcedClass(), co.limits());
             case MathNode.Boxed bx -> new MathNode.Boxed(rewrite(atomFn, bx.body()));
+            case MathNode.Negated n -> new MathNode.Negated(rewrite(atomFn, n.body()));
             case MathNode.Cancel c -> new MathNode.Cancel(c.kind(), rewrite(atomFn, c.body()),
                 c.to() == null ? null : rewrite(atomFn, c.to()));
             case MathNode.Tagged t ->
@@ -294,8 +295,14 @@ public final class MathVariant {
                     }
                     restyled.add(cells);
                 }
+                // @{...}/!{...} material sits inside the styled grid, so it is restyled too.
+                List<MathNode.ColumnSeparator> seps = new ArrayList<>(mx.columnSeparators().size());
+                for (MathNode.ColumnSeparator sep : mx.columnSeparators()) {
+                    seps.add(sep == null ? null : new MathNode.ColumnSeparator(
+                        rewrite(atomFn, sep.material()), sep.keepsPadding()));
+                }
                 yield new MathNode.Matrix(restyled, mx.columnAligns(), mx.columnRules(),
-                    mx.rowRules(), mx.leftDelim(), mx.rightDelim(), mx.kind());
+                    mx.rowRules(), mx.leftDelim(), mx.rightDelim(), mx.kind(), seps);
             }
             // A bordered matrix: restyle the corner, the labels, and every body cell.
             case MathNode.BorderMatrix bm -> {

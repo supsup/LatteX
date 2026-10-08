@@ -51,7 +51,7 @@ class CommandRegistryTest {
         for (Handler handler : Handler.values()) {
             GrammarKind expectedGrammar = switch (handler) {
                 case SYMBOL, BIG_OPERATOR, NAMED_OPERATOR, SPACE, MATHSTRUT, BMOD, VAR_LIMIT,
-                        QED_MARKER -> GrammarKind.SYMBOL;
+                        QED_MARKER, NEGATED_SYMBOL -> GrammarKind.SYMBOL;
                 case NOT, HOOK_PREFIX -> GrammarKind.PREFIX;
                 case ACCENT, FONT_VARIANT, ATOM_CLASS, MATHOP, BOXED, CANCEL, BRA, KET, BRAKET, SUBSTACK,
                         PHANTOM, HPHANTOM, VPHANTOM, UNDERBRACE, OVERBRACE, BORDER_MATRIX,

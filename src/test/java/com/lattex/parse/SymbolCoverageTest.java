@@ -1,5 +1,6 @@
 package com.lattex.parse;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -135,10 +136,15 @@ class SymbolCoverageTest {
     }
 
     @Test
-    void notPrefixOnUnsupportedTargetFailsLoudly() {
-        // \not on a symbol with no precomposed negation must throw (never fake it).
+    void notPrefixWithNoPrecomposedNegationOverstrikesAndNothingToNegateFailsLoudly() {
+        // \not on a symbol with no precomposed negation used to throw, because the slash
+        // could not be drawn. Plan fc988bc4 draws it: a REAL overstrike (the U+0338 glyph
+        // STIX uses in its own negations, a <path> like any other), never a <text> fake.
+        assertEquals(new MathNode.Negated(new Atom(0x03B1, MathNode.MathClass.ORD)),
+            MathParser.parse("\\not\\alpha"));
+        // With nothing after it there is still nothing to negate: loud.
         MathSyntaxException e = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("\\not\\alpha"));
+            () -> MathParser.parse("x\\not"));
         assertTrue(e.getMessage().contains("not"), e.getMessage());
     }
 

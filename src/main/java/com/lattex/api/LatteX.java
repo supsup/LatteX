@@ -1024,6 +1024,7 @@ public final class LatteX {
             // speak, so the wrapper is transparent (like StyleSwitch).
             case MathNode.ClassOverride co -> describe(co.body());
             case MathNode.Boxed bx -> "boxed " + describe(bx.body());
+            case MathNode.Negated n -> "not " + describe(n.body());
             case MathNode.Cancel c -> switch (c.kind()) {
                 case CANCELTO -> describe(c.body()) + " cancels to " + describe(c.to());
                 default -> "cancel " + describe(c.body());
@@ -1158,6 +1159,7 @@ public final class LatteX {
             case MathNode.ClassOverride co -> toMathML(co.body());
             case MathNode.Boxed bx ->
                 "<menclose notation=\"box\">" + toMathML(bx.body()) + "</menclose>";
+            case MathNode.Negated n -> negatedMathML(n);
             case MathNode.Cancel c -> switch (c.kind()) {
                 case CANCEL -> "<menclose notation=\"updiagonalstrike\">"
                     + toMathML(c.body()) + "</menclose>";
@@ -1304,6 +1306,24 @@ public final class LatteX {
     }
 
     /**
+     * MathML for a {@code \\not} overstrike (plan fc988bc4). MathML Core has no strike
+     * element, and Unicode's own spelling of a negation with no precomposed character is
+     * the base followed by U+0338 COMBINING LONG SOLIDUS OVERLAY, so an atom body becomes
+     * its usual token element with U+0338 appended to the character ({@code <mo>⊥̸</mo>}),
+     * which a renderer composes and a screen reader announces as negated. Any other body
+     * takes {@code <menclose notation="updiagonalstrike">}, the encoding {@code \\cancel}
+     * already uses (MathML 3/4; a Core-only renderer shows the body unstruck).
+     */
+    private static String negatedMathML(MathNode.Negated n) {
+        if (n.body() instanceof Atom atom) {
+            String token = atomMathML(atom);
+            int close = token.lastIndexOf("</");
+            return token.substring(0, close) + "\u0338" + token.substring(close);
+        }
+        return "<menclose notation=\"updiagonalstrike\">" + toMathML(n.body()) + "</menclose>";
+    }
+
+    /**
      * MathML {@code <mtable>} for a grid; cells walk the same tree. When the matrix
      * carries enclosing delimiters ({@code pmatrix}/{@code bmatrix}/{@code vmatrix}/…),
      * the table is wrapped in stretchy {@code <mo>} fences so a screen reader hears the
@@ -1324,9 +1344,17 @@ public final class LatteX {
         for (var row : m.rows()) {
             sb.append("<mtr>");
             for (int c = 0; c < cols; c++) {
-                sb.append("<mtd>")
-                  .append(c < row.size() ? toMathML(row.get(c)) : "")
-                  .append("</mtd>");
+                // @{...}/!{...} material has no MathML table primitive; it rides inside
+                // the cell it follows (the leading-edge material inside the first cell),
+                // so the table keeps the author's column count.
+                MathNode.ColumnSeparator before = c == 0 ? m.columnSeparators().get(0) : null;
+                MathNode.ColumnSeparator after = m.columnSeparators().get(c + 1);
+                String content = c < row.size() ? toMathML(row.get(c)) : "";
+                if (before != null || after != null) {
+                    content = "<mrow>" + (before == null ? "" : toMathML(before.material()))
+                        + content + (after == null ? "" : toMathML(after.material())) + "</mrow>";
+                }
+                sb.append("<mtd>").append(content).append("</mtd>");
             }
             sb.append("</mtr>");
         }
@@ -1492,6 +1520,12 @@ public final class LatteX {
                     sb.append(", ");
                 }
                 sb.append(describe(m.rows().get(r).get(col)));
+                // Visible @{...} material between columns is spoken where it sits.
+                MathNode.ColumnSeparator sep = col + 1 < cols ? m.columnSeparators().get(col + 1) : null;
+                String spoken = sep == null ? "" : describe(sep.material());
+                if (!spoken.isEmpty()) {
+                    sb.append(' ').append(spoken);
+                }
             }
         }
         return sb.toString();
