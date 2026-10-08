@@ -87,4 +87,22 @@ class BracedGroupOrdTest {
         assertEquals(width("x^+"), width("x^{+}"), EPS);
         assertEquals(width("\\frac{+}{2}"), width("\\frac+2"), EPS);
     }
+
+    @Test
+    void whatTheWrapperLeavesAlone() {
+        // An Ord atom in braces stays a bare atom: its scripts attach exactly as without
+        // the braces (italic correction, math kerns), so {x}^2 draws as x^2.
+        assertEquals(LayoutEngine.layout(MathParser.parse("x^2"), CTX).glyphs(),
+            LayoutEngine.layout(MathParser.parse("{x}^2"), CTX).glyphs());
+        // A braced large operator keeps its display size: the same glyph as a bare \sum.
+        var bare = LayoutEngine.layout(MathParser.parse("\\sum"), CTX).glyphs();
+        var braced = LayoutEngine.layout(MathParser.parse("{\\sum}"), CTX).glyphs();
+        assertEquals(bare.get(0).glyphId(), braced.get(0).glyphId());
+        // ... and its scripts go beside the Ord group, not above and below it.
+        var g = LayoutEngine.layout(MathParser.parse("{\\sum}_{i}"), CTX).glyphs();
+        int sumGlyph = bare.get(0).glyphId();
+        var sum = g.stream().filter(p -> p.glyphId() == sumGlyph).findFirst().orElseThrow();
+        var i = g.stream().filter(p -> p.sourceCodePoint() == 'i').findFirst().orElseThrow();
+        assertTrue(i.originX() > sum.originX() + 1.0, "the subscript sits beside the sum");
+    }
 }
