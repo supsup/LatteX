@@ -252,6 +252,7 @@ class SingleTokenArgumentTest {
         p.put(Handler.PHANTOM, new String[] {"a\\%s{x}b", "a\\%s x b"});
         p.put(Handler.HPHANTOM, new String[] {"a\\%s{x}b", "a\\%s x b"});
         p.put(Handler.VPHANTOM, new String[] {"a\\%s{x}b", "a\\%s x b"});
+        p.put(Handler.LAP, new String[] {"a\\%s{x}b", "a\\%s x b"});
         p.put(Handler.OPERATOR_NAME, new String[] {"\\%s{f}x", "\\%s f x"});
         p.put(Handler.PMOD, new String[] {"a\\%s{m}", "a\\%s m"});
         // \mathop (plan edbda088) reads its body through parseFontArg; with a script so the

@@ -150,6 +150,7 @@ public final class SubstituteExpansion {
             case Colored c -> collectLetterAtoms(c.body(), out);
             case Boxed b -> collectLetterAtoms(b.body(), out);
             case Phantom p -> collectLetterAtoms(p.content(), out);
+            case MathNode.Lap l -> collectLetterAtoms(l.body(), out);
             // The same pass-through leaves AtomSubstitution treats as variable-free.
             case MathNode.Spacing sp -> { }
             case MathNode.MiddleDelim md -> { }
@@ -186,6 +187,7 @@ public final class SubstituteExpansion {
             case Colored c -> countOccurrences(c.body(), variable);
             case Boxed b -> countOccurrences(b.body(), variable);
             case Phantom p -> countOccurrences(p.content(), variable);
+            case MathNode.Lap l -> countOccurrences(l.body(), variable);
             // Unreachable for a body collectLetterAtoms already accepted; zero is the
             // safe answer either way (an empty run reads as "nothing addressed" -> inert).
             default -> 0;

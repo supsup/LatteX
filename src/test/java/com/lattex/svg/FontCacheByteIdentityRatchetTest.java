@@ -59,9 +59,12 @@ class FontCacheByteIdentityRatchetTest {
      * the fold or laundering an unrelated output change. Re-pinned for plan a85ff403 (math
      * letters draw math italic, '-' draws U+2212, which moves glyphs, widths and kerns);
      * with that math alphabet reverted to identity the tree reproduces a9ce57ab... exactly.
+     * Re-pinned for plan 720cd87e (a prime in a script style draws the font's ssty
+     * superscript prime; the three PARSES-NOW rows with a prime move): with the prime
+     * family excluded from ssty the tree reproduces 3ff6719e... exactly.
      */
     private static final String PINNED_SHA256 =
-        "3ff6719e91e6dd8fec3ed7edddc0fe710e3b42c07e9816e2adafb53bc214ba10";
+        "3e551b9a40019d4e10fededbf2442ac3fb2966f14b8b53c1bec699a07b228e1b";
 
     private static final SfntFont FONT = SfntFont.loadBundled();
 

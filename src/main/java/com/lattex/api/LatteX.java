@@ -1031,6 +1031,7 @@ public final class LatteX {
             };
             case MathNode.Tagged t -> describe(t.body()) + ", tagged " + describe(t.label());
             case Phantom _ -> ""; // invisible: reserves space, reads as nothing
+            case MathNode.Lap l -> describe(l.body()); // an overlap is visible: it reads as its content
             case BigOperator(var op, var lower, var upper, _) -> {
                 StringBuilder sb = new StringBuilder(operatorName(op.codePoint()));
                 if (lower != null) {
@@ -1178,6 +1179,13 @@ public final class LatteX {
                 "<mrow>" + toMathML(t.body()) + "<mspace width=\"1em\"/><mo>(</mo>"
                     + toMathML(t.label()) + "<mo>)</mo></mrow>";
             case Phantom p -> "<mphantom>" + toMathML(p.content()) + "</mphantom>";
+            // A zero-width overlap: MathML's mpadded with width 0, shifted left by the
+            // whole (llap) or half (clap) of its content's width, as MathJax writes it.
+            case MathNode.Lap l -> "<mpadded width=\"0\"" + switch (l.kind()) {
+                case LEFT -> " lspace=\"-1width\"";
+                case RIGHT -> "";
+                case CENTER -> " lspace=\"-0.5width\"";
+            } + ">" + toMathML(l.body()) + "</mpadded>";
             case BigOperator(var op, var lower, var upper, var limits) -> {
                 String o = mo(op.codePoint());
                 // \nolimits (e.g. an inline integral) sets scripts to the SIDE —

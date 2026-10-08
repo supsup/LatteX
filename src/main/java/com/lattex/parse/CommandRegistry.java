@@ -109,6 +109,7 @@ final class CommandRegistry {
         X_ARROW(GrammarKind.OPTIONAL_THEN_ARGUMENT, OutputKind.RENDERING),
         SUBSTACK(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         PHANTOM(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
+        LAP(GrammarKind.OPTIONAL_THEN_ARGUMENT, OutputKind.RENDERING),
         HPHANTOM(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         VPHANTOM(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         MATHSTRUT(GrammarKind.SYMBOL, OutputKind.RENDERING),
@@ -357,6 +358,10 @@ final class CommandRegistry {
         add(out, "hphantom", Category.STRUCTURE, Handler.HPHANTOM, "a\\hphantom{x}b");
         add(out, "vphantom", Category.STRUCTURE, Handler.VPHANTOM, "a\\vphantom{x}b");
         add(out, "mathstrut", Category.STRUCTURE, Handler.MATHSTRUT, "a\\mathstrut b");
+        // mathtools' zero-width overlaps (plan 720cd87e).
+        add(out, "mathllap", Category.STRUCTURE, Handler.LAP, "x\\mathllap{/}");
+        add(out, "mathrlap", Category.STRUCTURE, Handler.LAP, "\\mathrlap{/}x");
+        add(out, "mathclap", Category.STRUCTURE, Handler.LAP, "\\sum_{\\mathclap{1\\le i\\le n}} x_i");
         add(out, "left", Category.STRUCTURE, Handler.LEFT, "\\left(x\\right)");
         add(out, "right", Category.STRUCTURE, Handler.RIGHT, "\\left(x\\right)");
         add(out, "middle", Category.STRUCTURE, Handler.MIDDLE,

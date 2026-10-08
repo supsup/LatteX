@@ -290,7 +290,8 @@ class StandardGapsTest {
         MathNode node = MathParser.parse("\\begin{gathered} T_2 \\ll P_1,\\\\ L T_1 \\ll G_1 . \\tag{C18}"
             + " \\end{gathered}");
         assertInstanceOf(MathNode.Tagged.class, node);
-        assertEquals(MathParser.parse("C18"), ((MathNode.Tagged) node).label());
+        // The label is TEXT, as amsmath sets it (plan 720cd87e).
+        assertEquals(new TextRun("C18", TextStyle.ROMAN), ((MathNode.Tagged) node).label());
         // Inside a style switch or a group, too: the tag is equation-global wherever it sits.
         assertInstanceOf(MathNode.Tagged.class, MathParser.parse("\\displaystyle x \\tag{1}"));
         assertInstanceOf(MathNode.Tagged.class, MathParser.parse("{x \\tag{1}}"));
@@ -318,20 +319,22 @@ class StandardGapsTest {
         // Routing-densities (\right bucket).
         assertRenders("\\left\\|\\mathbb E_s(\\textstyle\\sum s_p W_p)^{2l}\\right\\| \\le"
             + " \\big(C(M\\sqrt l+K_0 l)\\big)^{2l}.");
-        // The scope is exactly "to the end of the cell / fence": same tree as a braced switch.
-        assertEquals(MathParser.parse("\\begin{pmatrix}a{\\displaystyle\\sum_j x}\\end{pmatrix}"),
-            MathParser.parse("\\begin{pmatrix}a\\displaystyle\\sum_j x\\end{pmatrix}"));
-        assertEquals(MathParser.parse("\\left({\\displaystyle\\binom{n}{i}}\\right)"),
-            MathParser.parse("\\left(\\displaystyle\\binom{n}{i}\\right)"));
-        assertEquals(MathParser.parse("\\left(a\\middle|{\\textstyle b}\\right)"),
-            MathParser.parse("\\left(a\\middle|\\textstyle b\\right)"));
-        assertEquals(MathParser.parse("\\left({\\textstyle a}\\middle|b\\right)"),
-            MathParser.parse("\\left(\\textstyle a\\middle|b\\right)"));
+        // The scope is exactly "to the end of the cell / fence": the same DRAWING as a braced switch.
+        // (Not the same tree: a braced group in a list is wrapped as an Ord atom, plan
+        // 720cd87e. Alone in its cell or fence it has no neighbour to space against.)
+        assertEquals(LatteX.render("\\begin{pmatrix}a{\\displaystyle\\sum_j x}\\end{pmatrix}"),
+            LatteX.render("\\begin{pmatrix}a\\displaystyle\\sum_j x\\end{pmatrix}"));
+        assertEquals(LatteX.render("\\left({\\displaystyle\\binom{n}{i}}\\right)"),
+            LatteX.render("\\left(\\displaystyle\\binom{n}{i}\\right)"));
+        assertEquals(LatteX.render("\\left(a\\middle|{\\textstyle b}\\right)"),
+            LatteX.render("\\left(a\\middle|\\textstyle b\\right)"));
+        assertEquals(LatteX.render("\\left({\\textstyle a}\\middle|b\\right)"),
+            LatteX.render("\\left(\\textstyle a\\middle|b\\right)"));
         // The same for the colour and legacy-font switches, which share the boundary.
-        assertEquals(MathParser.parse("\\left({\\color{red}a}\\right)"),
-            MathParser.parse("\\left(\\color{red}a\\right)"));
-        assertEquals(MathParser.parse("\\begin{matrix}{\\bf a}\\end{matrix}"),
-            MathParser.parse("\\begin{matrix}\\bf a\\end{matrix}"));
+        assertEquals(LatteX.render("\\left({\\color{red}a}\\right)"),
+            LatteX.render("\\left(\\color{red}a\\right)"));
+        assertEquals(LatteX.render("\\begin{matrix}{\\bf a}\\end{matrix}"),
+            LatteX.render("\\begin{matrix}\\bf a\\end{matrix}"));
     }
 
     // ------------------------------------------------------------------
@@ -383,7 +386,7 @@ class StandardGapsTest {
                 MathNode.Matrix m = assertInstanceOf(MathNode.Matrix.class, MathParser.parse(src), src);
                 assertEquals(2, m.rows().size(), "the tagged empty row is kept: " + src);
                 assertEquals(java.util.Set.of(1), m.rowTags().keySet(), "the tag is on row 2: " + src);
-                assertEquals(MathParser.parse("1"), m.rowTags().get(1));
+                assertEquals(new TextRun("1", TextStyle.ROMAN), m.rowTags().get(1)); // text label (plan 720cd87e)
                 String mathml = LatteX.toMathML(src);
                 assertEquals(1, count(mathml, "<mlabeledtr>"), mathml);
                 assertTrue(mathml.indexOf("<mtr>") < mathml.indexOf("<mlabeledtr>"),
@@ -503,8 +506,9 @@ class StandardGapsTest {
         int open = mathml.indexOf("<mlabeledtr>");
         assertTrue(open >= 0, mathml);
         String labelled = mathml.substring(open, mathml.indexOf("</mlabeledtr>", open));
-        // The FIRST cell is the label, carrying the tag text in parentheses ...
-        assertTrue(labelled.startsWith("<mlabeledtr><mtd><mrow><mo>(</mo><mn>4</mn><mo>)</mo></mrow></mtd>"),
+        // The FIRST cell is the label, carrying the tag text in parentheses (an <mtext>:
+        // amsmath sets the label as text, plan 720cd87e) ...
+        assertTrue(labelled.startsWith("<mlabeledtr><mtd><mrow><mo>(</mo><mtext>4</mtext><mo>)</mo></mrow></mtd>"),
             labelled);
         // ... followed by the row's two cells: three in all.
         assertEquals(3, count(labelled, "<mtd>"), labelled);

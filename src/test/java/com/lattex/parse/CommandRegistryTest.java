@@ -61,7 +61,7 @@ class CommandRegistryTest {
                         UNDERSET, STACKREL -> GrammarKind.TWO_ARGUMENTS;
                 case PRESCRIPT, MULTICOLUMN -> GrammarKind.THREE_ARGUMENTS;
                 case GENERAL_FRACTION -> GrammarKind.SIX_ARGUMENTS;
-                case RADICAL, X_ARROW -> GrammarKind.OPTIONAL_THEN_ARGUMENT;
+                case RADICAL, X_ARROW, LAP -> GrammarKind.OPTIONAL_THEN_ARGUMENT;
                 case STYLE_SWITCH, COLOR_SWITCH, FONT_SWITCH -> GrammarKind.SWITCH;
                 case DIMENSION_SPACE -> GrammarKind.DIMENSION;
                 case SIZED_DELIMITER -> GrammarKind.DELIMITER;

@@ -446,3 +446,47 @@ any grid invariant the parser fails to uphold is a typed `MathSyntaxException`.
 thickness unit must be lowercase (`0PT` is refused; TeX accepts it). The `\\ [`
 space-skip decision is made by the environment's own name, so an `array` nested in
 `pmatrix` skips the space as `array` does and does not inherit amsmath's rule.
+
+### Braced atoms are ordinary; `\tag` labels are text; `\mathllap` & co; the superscript prime
+
+Found by typesetting the math showcase (plan `720cd87e`), not by a test.
+
+- **A braced subformula is an Ord atom** (TeXbook ch. 17). A one-item group used to
+  collapse to its item and keep that item's class, so `152{,}320` was exactly as wide
+  as `152,320` and `a{+}b` as `a+b`, with nothing refused: a corpus scan cannot see it.
+  Now `{,}` `{+}` `{=}` `{;}` `{\le}` lay out as their `\mathord` spelling, and a braced
+  `\sin`, `\left(..\right)` or `{n\choose k}` is Ord too. Command and script arguments
+  are not subformulas and keep their class (`\overset{a}{=}` is still a relation,
+  `\mathbin{+}` still binary). A braced Ord atom stays a bare atom, so `{x}^2` draws as
+  `x^2`; a braced `\sum` keeps its display size and takes its scripts beside it. The
+  showcase's quotient-map card (`X/{\sim}`) narrows 324.18 -> 301.96 as the tildes lose
+  their relation glue; it is the one tracked example that moves, regenerated.
+- **`\tag` labels are text**, as amsmath sets them: `\tag{a}` is upright, `\tag{C-pair}`
+  keeps its hyphen, `\tag{$\dagger$}` no longer draws its dollar signs, and
+  `\tag{\(*\)}` renders instead of failing. Row tags likewise. A label text mode cannot
+  read (`\tag{\ref{x}.1}`, `\tag{\ast}`) falls back to its old math reading. Digit labels
+  draw the same glyphs either way, so `\tag{1}` output is unchanged. In MathML the label
+  is an `<mtext>`.
+- **`\mathllap`, `\mathrlap`, `\mathclap`** (mathtools): zero width, content in math at
+  the current style (or the optional `[\scriptstyle]`-family argument), keeping height
+  and depth, spacing as Ord. MathML: `<mpadded width="0">`.
+- **Primes.** The construction already matched TeX and is now pinned (`f'` draws
+  exactly `f^{\prime}`, `u''` exactly `u^{\prime\prime}`, `x'^2` exactly
+  `x^{\prime 2}`). The glyph did not: STIX Two Math's U+2032 is a text prime drawn
+  raised (ink 0.399 to 0.703 em), and superscripting it put a small prime well above the
+  letter. A prime in a script style now draws the font's `ssty` alternate
+  (`minute.ssty`, ink 0.085 to 0.527 em), the superscript prime a TeX engine on this font
+  uses. Only the prime family takes `ssty`; other glyphs' script alternates are a
+  separate decision. The two whole-corpus byte pins move for this alone (three corpus
+  rows have a prime) and reproduce exactly with it reverted.
+
+`examples/symbol-index.html` grew from 689 to 692 commands. Newly reserved built-in
+names: `\mathllap \mathrlap \mathclap`.
+
+**Preprint corpus** (137,880 display formulas from 746 preprints): rendered 105,262 ->
+105,270; candidate LatteX gaps 178 -> 170 (the four `\tag{\(..\)}` formulas and the four
+overlap formulas); newly failing 0, compared formula by formula.
+
+**Limits.** A tag label read as text expands no macros; one that text mode refuses is
+re-read as math with the preset macros only, not ones defined inline earlier in the
+formula. `\tag*` is still unsupported.

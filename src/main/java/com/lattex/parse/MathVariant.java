@@ -270,6 +270,7 @@ public final class MathVariant {
                 a.accentCodePoint(), a.stretchy(), a.under());
             case Phantom p -> new Phantom(
                 rewrite(atomFn, p.content()), p.keepWidth(), p.keepVertical());
+            case MathNode.Lap l -> new MathNode.Lap(rewrite(atomFn, l.body()), l.kind());
             case MathNode.Colored c -> new MathNode.Colored(rewrite(atomFn, c.body()), c.color());
             // The forced class survives the alphabet rewrite: \mathbf{\mathbin{x}} is
             // still spaced as a binary operator, with a bold nucleus.

@@ -256,6 +256,23 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > `}`, `&` and `\\`. In amsmath environments (everything but `array` and `eqnarray`),
 > `\\ [x]` with a space is a row that starts with a bracket, not a spacing option —
 > amsmath's own rule; `\\[2pt]` with no space is still the option everywhere.
+>
+> **Braces, tag labels, overlaps, primes.** A braced subformula in a list is an Ord
+> atom, as in TeX: `152{,}320` is a tight thousands separator (no space after the
+> comma), `a{+}b` and `x{=}y` set the symbol with no binary or relation glue, and
+> `X/{\sim}` spaces the tilde as an ordinary symbol. Only a list item is a subformula:
+> the braces of a command argument (`\frac{+}{2}`, `\overset{a}{=}`, `\mathrel{..}`)
+> and of a script (`x^{+}`) just delimit it. A `\tag` label is TEXT, as amsmath sets it:
+> `\tag{a}` is an upright a, `\tag{C-pair}` keeps its hyphen, and `\tag{\(*\)}` or
+> `\tag{$\dagger$}` re-enter math (row tags too). A label text mode cannot take
+> (`\tag{\ref{x}.1}`, `\tag{\ast}`: LatteX's text mode runs no commands) keeps the math
+> reading it had before rather than failing. mathtools' `\mathllap{..}`, `\mathrlap{..}`
+> and `\mathclap{..}` are zero-width boxes whose math content overhangs left, right or
+> centred (`\sum_{\mathclap{1\le i\le n}}`), with an optional style
+> (`\mathclap[\scriptstyle]{..}`). A prime is TeX's `^\prime` (consecutive primes and a
+> following `^` join one superscript, so `f''_n` is `f^{\prime\prime}_n`), drawn with
+> the font's script-style prime: the bundled font's plain prime is a raised text prime,
+> which as a superscript floated above the letter.
 
 ## 3. The `\lx[...]{...}` syntax (author-facing)
 

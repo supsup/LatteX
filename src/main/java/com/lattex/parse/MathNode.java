@@ -665,6 +665,40 @@ public sealed interface MathNode {
     }
 
     /**
+     * A zero-width overlap — mathtools' {@code \mathllap}, {@code \mathrlap} and
+     * {@code \mathclap} (plan 720cd87e): the {@code body} is set in math at the current
+     * style, then boxed with zero width so it overhangs to the left of the point where it
+     * sits ({@link LapKind#LEFT}), to the right ({@link LapKind#RIGHT}), or equally both
+     * ways ({@link LapKind#CENTER}). It keeps the body's height and depth, and spaces as an
+     * Ord atom (mathtools builds it as an {@code \llap}/{@code \rlap}/{@code \clap}
+     * hbox). The optional style argument ({@code \mathclap[\scriptstyle]{..}}) arrives as
+     * a {@link StyleSwitch} around the body.
+     *
+     * @param body the overlapped content (non-null)
+     * @param kind which way it overhangs (non-null)
+     */
+    record Lap(MathNode body, LapKind kind) implements MathNode {
+        public Lap {
+            if (body == null) {
+                throw new IllegalArgumentException("Lap body must not be null");
+            }
+            if (kind == null) {
+                throw new IllegalArgumentException("Lap kind must not be null");
+            }
+        }
+    }
+
+    /** Which way a {@link Lap} overhangs the point where it sits. */
+    enum LapKind {
+        /** {@code \mathllap}: the content ends at the point (overhangs left). */
+        LEFT,
+        /** {@code \mathrlap}: the content starts at the point (overhangs right). */
+        RIGHT,
+        /** {@code \mathclap}: the content is centred on the point. */
+        CENTER
+    }
+
+    /**
      * A named mathematical operator set in upright roman type — the trig/log
      * family ({@code \sin \cos \log \ln \exp}, …), the limit-taking operators
      * ({@code \lim \max \min \sup \inf \det \gcd \dim \ker \arg \Pr}, …), and the

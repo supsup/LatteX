@@ -397,6 +397,7 @@ final class AtomSubstitution {
             case Boxed b -> new Boxed(replace(b.body(), varCodePoint, value));
             case Phantom p -> new Phantom(
                 replace(p.content(), varCodePoint, value), p.keepWidth(), p.keepVertical());
+            case MathNode.Lap l -> new MathNode.Lap(replace(l.body(), varCodePoint, value), l.kind());
             // Leaves that structurally cannot hold a variable atom - pass through as-is.
             case MathNode.Spacing sp -> sp;
             case MathNode.MiddleDelim md -> md;
