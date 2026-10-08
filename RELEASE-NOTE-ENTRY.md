@@ -396,8 +396,8 @@ above rather than replacing them.
 ### The next standard-LaTeX gaps: `\genfrac`, `\multicolumn`, row `\tag`s, `\vert`, `\sf`, `\fint`
 
 Measured on the research corpus (746 preprints, 137,880 display formulas): main
-cc8186a refused 280 formulas for reasons that were LatteX's, not the paper's. This
-branch: 226, with 63 more formulas rendering (105,156 -> 105,219) and none newly
+f396b9d refused 232 formulas for reasons that were LatteX's, not the paper's. This
+branch: 178, with 63 more formulas rendering (105,199 -> 105,262) and none newly
 failing.
 
 - **`\genfrac{l}{r}{thickness}{style}{num}{den}`** (amsmath). Built from the same
@@ -408,7 +408,11 @@ failing.
   aligned across its columns by its own spec, a wider span widens the LAST spanned
   column (TeX's rule), the rules inside the span are not drawn on its row and its own
   trailing `|` is. `Matrix` carries the spans as metadata; a grid without one is
-  unchanged, down to one full-height rect per vertical rule.
+  unchanged, down to one full-height rect per vertical rule. A span also covers
+  `@{...}`/`!{...}` material, as TeX's column templates do: on the span's row the
+  material inside it and at its right edge is not drawn (and the leading material
+  too when it starts in column one), the material to its left still is, and every
+  boundary keeps its width on every row.
 - **`\tag` per row** in `align`/`gather`/`alignat` (starred too), drawn on its row's
   baseline in a right-aligned column after the grid, and as `<mlabeledtr>` in
   MathML. Anywhere else (`gathered`, `equation`, a group, after `\displaystyle`) it
@@ -427,7 +431,7 @@ failing.
   `\\ [B]_2` failed "no nucleus" (4). amsmath reads that option without skipping
   spaces; now so does LatteX (LaTeX's own `array`/`eqnarray` still skip them).
 
-`examples/symbol-index.html` grew from 640 to 648 commands. Newly reserved built-in
+`examples/symbol-index.html` grew from 681 to 689 commands. Newly reserved built-in
 names (a preset macro of the same name is now refused, as for every addition):
 `\genfrac \multicolumn \sf \tt \fint \sqint \ointclockwise \ointctrclockwise`.
 

@@ -230,7 +230,9 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > (display), `1` (text), `2` or `3` (script sizes). `\multicolumn{n}{spec}{body}` opens
 > an `array`, matrix or `cases` cell spanning `n` columns, aligned by its own one-column
 > spec (`l`/`c`/`r` with optional `|` rules); the rules inside the span are not drawn
-> on its row, and a span wider than its columns widens the last one, as TeX does.
+> on its row, and a span wider than its columns widens the last one, as TeX does. A span
+> also covers `@{...}`/`!{...}` material inside it and at its right edge (on its row
+> only); material to its left is still drawn, and every boundary keeps its width.
 > `\tag{…}` on a row of `align`/`gather`/`alignat` (starred or not) numbers that row,
 > drawn at the row's baseline in a right-aligned column after the grid; anywhere else
 > — inside `gathered`/`aligned`/`split`, `equation`, a group or after `\displaystyle` —
