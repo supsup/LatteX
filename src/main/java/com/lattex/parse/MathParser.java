@@ -127,6 +127,14 @@ public final class MathParser {
     private final String source;
 
     /**
+     * The caller's preset macros, kept for the one re-parse that reads source text this
+     * parser already lexed: a {@code \tag} label that text mode cannot take falls back to
+     * its math reading ({@link #tagLabel}). Inline {@code \newcommand}s made earlier in the
+     * same formula are not in it.
+     */
+    private final Map<String, String> presetMacros;
+
+    /**
      * The equation's {@code \tag} label, wherever in the formula it was written, or
      * {@code null}. Equation-global, exactly as amsmath's tag of the display: it is set
      * from the top level, from inside a group or style switch, and from an INNER
@@ -175,6 +183,7 @@ public final class MathParser {
     private MathParser(String src, Map<String, String> macros) {
         this.tokens = MacroExpander.expand(lex(src), macros);
         this.source = src;
+        this.presetMacros = macros;
     }
 
     /** Package-private for {@link MacroExpander} (preset bodies lex through the same lexer). */
@@ -224,6 +233,17 @@ public final class MathParser {
                             // (\mathrm u) or, with no token, reports the
                             // established missing-text-argument error
                             // (parseUnbracedTextArgument).
+                            i = lexTextArgument(s, name, i, out, start);
+                        } else if (CommandRegistry.hasHandler(name, CommandRegistry.Handler.TAG)
+                                && !definitionTarget
+                                && hasTextArgument(s, i)) {
+                            // amsmath sets a \tag label in TEXT mode (\maketag@@@ is an
+                            // \hbox in \normalfont), so its braced label is captured raw like
+                            // a text argument: spaces survive and $..$ / \(..\) re-enter
+                            // math. The \tag stays a COMMAND token (it is hoisted, and it
+                            // may sit in a row); its label follows as a TEXT token. Plan
+                            // 720cd87e.
+                            out.add(Token.cmd(name, start));
                             i = lexTextArgument(s, name, i, out, start);
                         } else {
                             out.add(Token.cmd(name, start));
@@ -572,12 +592,67 @@ public final class MathParser {
         return equationTag == null ? body : new MathNode.Tagged(body, equationTag);
     }
 
-    /** Reads a {@code \tag}'s label, the {@code \tag} itself already consumed. */
+    /**
+     * Reads a {@code \tag}'s label, the {@code \tag} itself already consumed.
+     *
+     * <p>amsmath typesets the label as TEXT (plan 720cd87e): {@code \tag{a}} is an upright
+     * a, {@code \tag{C-pair}} keeps its hyphen, and {@code \tag{\(*\)}} /
+     * {@code \tag{$*$}} re-enter math. The braced label arrives as the TEXT token the lexer
+     * captured; TeX's one-token form ({@code \tag1}) is read as that one token's text.
+     * See {@link #tagLabel} for what happens when text mode cannot take the label.
+     */
     MathNode parseTagLabel() {
-        if (!isArgumentToken(peek())) {
+        Token t = peek();
+        if (t.kind() == Kind.TEXT && CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.TAG)) {
+            next();
+            return tagLabel(t.text(), t.offset());
+        }
+        if (!isArgumentToken(t)) {
             throw missingArgument("\\tag expects a {label} group");
         }
-        return parseArgument("\\tag label"); // \tag{1} or \tag1
+        if (t.kind() == Kind.LBRACE) {
+            // A brace group the lexer did not capture (a macro body spliced it in after
+            // lexing): its spaces are gone, so it cannot be read as text faithfully. It
+            // keeps the math reading it always had.
+            return parseArgument("\\tag label");
+        }
+        next();
+        String raw = switch (t.kind()) {
+            case CHAR -> new String(Character.toChars(t.codePoint()));
+            case COMMAND -> "\\" + t.name();
+            case TEXT -> "\\" + t.name() + "{" + t.text() + "}";
+            default -> throw new IllegalStateException("not an argument token: " + t);
+        };
+        return tagLabel(raw, t.offset());
+    }
+
+    /**
+     * A tag label's node: its text-mode reading, and, ONLY where text mode refuses it,
+     * the math reading every label had before plan 720cd87e.
+     *
+     * <p>Why a fallback and not a refusal: LatteX's text mode runs no commands, while
+     * amsmath's text label does ({@code \tag{\ref{x}.1}}, {@code \tag{\ast}} with a
+     * text-mode asterisk). Those labels rendered (as math) before this change; refusing
+     * them now would trade a slightly-wrong label for a refused equation. When both
+     * readings fail, the MATH error is the one reported: it was the error before, it names
+     * the unknown command with a suggestion, and callers that classify refusals by the
+     * command they name keep seeing the same name.
+     */
+    private MathNode tagLabel(String raw, int offset) {
+        try {
+            return textWithNestedMath(Token.text("tag", raw, offset), TextStyle.ROMAN);
+        } catch (MathSyntaxException textRefused) {
+            try {
+                return parseMath(raw, depth, presetMacros);
+            } catch (MathSyntaxException mathRefused) {
+                if (mathRefused.isCapExceeded()) {
+                    throw mathRefused;
+                }
+                // Re-positioned at the \tag: the re-parse's offsets count from the label.
+                throw MathSyntaxException.withUnsupportedKind(
+                    mathRefused.getMessage(), offset, mathRefused.unsupportedKind());
+            }
+        }
     }
 
     /**

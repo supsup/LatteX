@@ -42,6 +42,18 @@ class StandardGapsLayoutTest {
         return found.get(0);
     }
 
+    /**
+     * The one glyph of a tag label's character. A label is TEXT (amsmath; plan 720cd87e),
+     * and a text run's glyphs carry no source code point, so it is found by glyph.
+     */
+    private static PositionedGlyph label(Layout l, int cp) {
+        List<PositionedGlyph> found = l.glyphs().stream()
+            .filter(g -> g.sourceCodePoint() == PositionedGlyph.NO_SOURCE
+                && g.glyphId() == FONT.glyphId(cp)).toList();
+        assertEquals(1, found.size(), "exactly one label '" + Character.toString(cp) + "'");
+        return found.get(0);
+    }
+
     private static double advance(PositionedGlyph g) {
         return FONT.advanceWidth(g.glyphId()) * g.scale();
     }
@@ -279,8 +291,8 @@ class StandardGapsLayoutTest {
     @Test
     void eachRowTagSitsOnItsOwnRowRightOfTheGrid() {
         Layout l = layout("\\begin{align}a&=b\\tag{4}\\\\c&=dd\\tag{5}\\end{align}");
-        PositionedGlyph four = atom(l, '4');
-        PositionedGlyph five = atom(l, '5');
+        PositionedGlyph four = label(l, '4');
+        PositionedGlyph five = label(l, '5');
         assertEquals(atom(l, 'a').baselineY(), four.baselineY(), EPS, "(4) on row 1's baseline");
         assertEquals(atom(l, 'c').baselineY(), five.baselineY(), EPS, "(5) on row 2's baseline");
         assertNotEquals(four.baselineY(), five.baselineY());
@@ -296,7 +308,7 @@ class StandardGapsLayoutTest {
     void anUntaggedRowCarriesNoTag() {
         Layout l = layout("\\begin{align}a&=b\\\\c&=d\\tag{5}\\end{align}");
         assertEquals(1, atoms(l, '(').size(), "one tag");
-        assertEquals(atom(l, 'c').baselineY(), atom(l, '5').baselineY(), EPS);
+        assertEquals(atom(l, 'c').baselineY(), label(l, '5').baselineY(), EPS);
     }
 
     @Test
@@ -307,16 +319,16 @@ class StandardGapsLayoutTest {
             String body = env.startsWith("align") ? "a&=b" : "a";
             Layout l = layout("\\begin{" + env + "}" + body + "\\\\\\tag{1}\\end{" + env + "}");
             PositionedGlyph a = atom(l, 'a');
-            PositionedGlyph one = atom(l, '1');
+            PositionedGlyph one = label(l, '1');
             assertTrue(one.baselineY() > a.baselineY() + 5.0, env + ": (1) is below row 1");
             // Control: the same tag ON row 1 sits on its baseline.
             Layout same = layout("\\begin{" + env + "}" + body + "\\tag{1}\\\\\\end{" + env + "}");
-            assertEquals(atom(same, 'a').baselineY(), atom(same, '1').baselineY(), EPS, env);
+            assertEquals(atom(same, 'a').baselineY(), label(same, '1').baselineY(), EPS, env);
         }
         // The empty row is spaced like a row: it sits where a non-empty second row would.
         Layout tagged = layout("\\begin{gather}a\\\\\\tag{1}\\end{gather}");
         Layout filled = layout("\\begin{gather}a\\\\x\\tag{1}\\end{gather}");
-        assertEquals(atom(filled, '1').baselineY(), atom(tagged, '1').baselineY(), 0.5,
+        assertEquals(label(filled, '1').baselineY(), label(tagged, '1').baselineY(), 0.5,
             "the empty row's baseline is a normal row's");
     }
 }

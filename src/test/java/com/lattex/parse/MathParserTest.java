@@ -538,8 +538,9 @@ class MathParserTest {
         MathNode.Tagged t = assertInstanceOf(MathNode.Tagged.class,
             MathParser.parse("x \\tag{1}"));
         assertEquals("A(x,ORD)", pp(t.body()));
-        assertEquals("A(1,ORD)", pp(t.label()));
-        assertEquals("Tag(A(x,ORD)|A(1,ORD))", pp(t));
+        // amsmath sets the label as TEXT (plan 720cd87e)
+        assertEquals("Txt[ROMAN](1)", pp(t.label()));
+        assertEquals("Tag(A(x,ORD)|Txt[ROMAN](1))", pp(t));
         // \tag is equation-global — it hoists out wherever it appears in the stream
         assertInstanceOf(MathNode.Tagged.class, MathParser.parse("\\tag{1} x + y"));
         // two \tag on one equation, or a \tag with no label at all, fail loudly;

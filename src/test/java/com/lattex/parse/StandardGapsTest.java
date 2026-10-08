@@ -290,7 +290,8 @@ class StandardGapsTest {
         MathNode node = MathParser.parse("\\begin{gathered} T_2 \\ll P_1,\\\\ L T_1 \\ll G_1 . \\tag{C18}"
             + " \\end{gathered}");
         assertInstanceOf(MathNode.Tagged.class, node);
-        assertEquals(MathParser.parse("C18"), ((MathNode.Tagged) node).label());
+        // The label is TEXT, as amsmath sets it (plan 720cd87e).
+        assertEquals(new TextRun("C18", TextStyle.ROMAN), ((MathNode.Tagged) node).label());
         // Inside a style switch or a group, too: the tag is equation-global wherever it sits.
         assertInstanceOf(MathNode.Tagged.class, MathParser.parse("\\displaystyle x \\tag{1}"));
         assertInstanceOf(MathNode.Tagged.class, MathParser.parse("{x \\tag{1}}"));
@@ -385,7 +386,7 @@ class StandardGapsTest {
                 MathNode.Matrix m = assertInstanceOf(MathNode.Matrix.class, MathParser.parse(src), src);
                 assertEquals(2, m.rows().size(), "the tagged empty row is kept: " + src);
                 assertEquals(java.util.Set.of(1), m.rowTags().keySet(), "the tag is on row 2: " + src);
-                assertEquals(MathParser.parse("1"), m.rowTags().get(1));
+                assertEquals(new TextRun("1", TextStyle.ROMAN), m.rowTags().get(1)); // text label (plan 720cd87e)
                 String mathml = LatteX.toMathML(src);
                 assertEquals(1, count(mathml, "<mlabeledtr>"), mathml);
                 assertTrue(mathml.indexOf("<mtr>") < mathml.indexOf("<mlabeledtr>"),
@@ -505,8 +506,9 @@ class StandardGapsTest {
         int open = mathml.indexOf("<mlabeledtr>");
         assertTrue(open >= 0, mathml);
         String labelled = mathml.substring(open, mathml.indexOf("</mlabeledtr>", open));
-        // The FIRST cell is the label, carrying the tag text in parentheses ...
-        assertTrue(labelled.startsWith("<mlabeledtr><mtd><mrow><mo>(</mo><mn>4</mn><mo>)</mo></mrow></mtd>"),
+        // The FIRST cell is the label, carrying the tag text in parentheses (an <mtext>:
+        // amsmath sets the label as text, plan 720cd87e) ...
+        assertTrue(labelled.startsWith("<mlabeledtr><mtd><mrow><mo>(</mo><mtext>4</mtext><mo>)</mo></mrow></mtd>"),
             labelled);
         // ... followed by the row's two cells: three in all.
         assertEquals(3, count(labelled, "<mtd>"), labelled);
