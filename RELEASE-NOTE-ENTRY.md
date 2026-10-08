@@ -386,3 +386,47 @@ slash uncentred, overstrike parse path dropped, `@` dropped, `@` keeping its pad
 material on one row only, `\downarrow` delimiter dropped, `\not\simeq` mapping dropped,
 `\napprox` unregistered) each turn the suite red. `SymbolCoverageTest`'s
 "`\not\alpha` must throw" pin is inverted: the overstrike is real ink.
+
+<!-- Appended by a later branch; the entries above are still unfolded on main and are kept, not replaced. -->
+
+Proposed entry for the **Unreleased** section of `RELEASE_NOTES.md`, plan
+`636d214f` (`fixpoint/lattex-standard-gaps`). Appended below the pending entries
+above rather than replacing them.
+
+### The next standard-LaTeX gaps: `\genfrac`, `\multicolumn`, row `\tag`s, `\vert`, `\sf`, `\fint`
+
+Measured on the research corpus (746 preprints, 137,880 display formulas): main
+cc8186a refused 280 formulas for reasons that were LatteX's, not the paper's. This
+branch: 226, with 63 more formulas rendering (105,156 -> 105,219) and none newly
+failing.
+
+- **`\genfrac{l}{r}{thickness}{style}{num}{den}`** (amsmath). Built from the same
+  nodes as its instances, so `\genfrac(){0pt}{}{n}{k}` IS `\binom{n}{k}` and
+  `\genfrac{}{}{}{0}{a}{b}` IS `\dfrac{a}{b}` (pinned tree-equal and SVG-equal). A
+  non-zero explicit thickness fails loud rather than drawing the default bar.
+- **`\multicolumn{n}{spec}{body}`** in `array`, the matrices and `cases`. The span is
+  aligned across its columns by its own spec, a wider span widens the LAST spanned
+  column (TeX's rule), the rules inside the span are not drawn on its row and its own
+  trailing `|` is. `Matrix` carries the spans as metadata; a grid without one is
+  unchanged, down to one full-height rect per vertical rule.
+- **`\tag` per row** in `align`/`gather`/`alignat` (starred too), drawn on its row's
+  baseline in a right-aligned column after the grid, and as `<mlabeledtr>` in
+  MathML. Anywhere else (`gathered`, `equation`, a group, after `\displaystyle`) it
+  tags the equation, as amsmath does.
+- **`\vert`** is the ordinary bar symbol, not only a delimiter; **`\sf`** and
+  **`\tt`** complete the TeX 2.09 font declarations; esint's **`\fint`** (U+2A0F),
+  **`\sqint`** (U+2A16), **`\ointclockwise`** and **`\ointctrclockwise`** are
+  integrals with side limits; **`\text` nests in `\mathrm`** and in other text
+  commands (`\mathrm{non\text{-}tail}`).
+- **Two parser bugs from the investigation buckets.** (1) A `\displaystyle`/
+  `\textstyle` (or `\color`, or legacy font) switch ran past `\end{…}` and `\right`,
+  so `\displaystyle` in a pmatrix's last cell gave "\end without a matching \begin"
+  (7 corpus formulas) and one inside `\left(..\right)` gave "\right without matching
+  \left" (3). It now ends at `\end`, `\right` and `\middle` too. (2) After `\\` in an
+  amsmath environment, a SPACED `[` was read as the spacing option, so
+  `\\ [B]_2` failed "no nucleus" (4). amsmath reads that option without skipping
+  spaces; now so does LatteX (LaTeX's own `array`/`eqnarray` still skip them).
+
+`examples/symbol-index.html` grew from 640 to 648 commands. Newly reserved built-in
+names (a preset macro of the same name is now refused, as for every addition):
+`\genfrac \multicolumn \sf \tt \fint \sqint \ointclockwise \ointctrclockwise`.
