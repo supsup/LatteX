@@ -219,6 +219,84 @@ public final class SfntFont {
     }
 
     /**
+     * The glyph the font's {@code ssty} ("math script style alternates") feature puts in
+     * place of {@code glyphId} at script level {@code level} (1 = script, 2 = script-script),
+     * or {@code glyphId} itself when the font has no such alternate. OpenType math fonts
+     * draw some glyphs differently for script use; a TeX engine on such a font
+     * (XeTeX/LuaTeX with unicode-math) loads its script fonts with this feature on.
+     *
+     * <p>Reads the GSUB table directly: every FeatureRecord tagged {@code ssty}, its
+     * lookups of type 3 (alternate substitution, alternate {@code level - 1}, clamped to
+     * the last) or type 1 (single substitution, any level), through type-7 extension
+     * subtables. A font with no GSUB table, or a glyph no {@code ssty} lookup covers,
+     * yields {@code glyphId}. Plan 720cd87e (the superscript prime).
+     */
+    public int scriptStyleAlternate(int glyphId, int level) {
+        if (level < 1) {
+            throw new IllegalArgumentException("script level must be 1 or 2, not " + level);
+        }
+        Integer gsub = tableOffset.get("GSUB");
+        if (gsub == null) {
+            return glyphId;
+        }
+        int featureList = gsub + u16(gsub + 6);
+        int lookupList = gsub + u16(gsub + 8);
+        int featureCount = u16(featureList);
+        for (int f = 0; f < featureCount; f++) {
+            int rec = featureList + 2 + f * 6;
+            if (data[rec] != 's' || data[rec + 1] != 's' || data[rec + 2] != 't' || data[rec + 3] != 'y') {
+                continue;
+            }
+            int feature = featureList + u16(rec + 4);
+            int lookupCount = u16(feature + 2);
+            for (int l = 0; l < lookupCount; l++) {
+                int lookupIndex = u16(feature + 4 + l * 2);
+                int lookup = lookupList + u16(lookupList + 2 + lookupIndex * 2);
+                int found = substituteInLookup(lookup, glyphId, level);
+                if (found >= 0) {
+                    return found;
+                }
+            }
+        }
+        return glyphId;
+    }
+
+    /** One GSUB lookup's substitute for {@code glyphId} (types 1 and 3), or -1. */
+    private int substituteInLookup(int lookup, int glyphId, int level) {
+        int type = u16(lookup);
+        int subTableCount = u16(lookup + 4);
+        for (int t = 0; t < subTableCount; t++) {
+            int sub = lookup + u16(lookup + 6 + t * 2);
+            int subType = type;
+            if (type == 7) { // ExtensionSubstFormat1: the real type and a 32-bit offset
+                subType = u16(sub + 2);
+                sub = sub + (int) u32(sub + 4);
+            }
+            int coverage = sub + u16(sub + 2);
+            int idx = coverageIndex(coverage, glyphId);
+            if (idx < 0) {
+                continue;
+            }
+            if (subType == 1) {
+                int format = u16(sub);
+                if (format == 1) {
+                    return (glyphId + s16(sub + 4)) & 0xFFFF;
+                }
+                if (format == 2 && idx < u16(sub + 4)) {
+                    return u16(sub + 6 + idx * 2);
+                }
+            } else if (subType == 3 && idx < u16(sub + 4)) {
+                int set = sub + u16(sub + 6 + idx * 2);
+                int count = u16(set);
+                if (count > 0) {
+                    return u16(set + 2 + Math.min(level, count) * 2 - 2);
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Per-glyph math kern staircases (the four corners), from the MATH table's
      * {@code MathKernInfo}. Returns {@code null} when the glyph has no kern
      * record (or the font provides no kern info). Individual corners inside the

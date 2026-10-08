@@ -317,7 +317,10 @@ class OutputCapPostconditionTest {
         // than permission for an unrelated compliant-output change.
         // Re-pinned for plan a85ff403 (math letters draw math italic, '-' draws U+2212): with
         // the math alphabet reverted to identity the tree reproduces d0905205... exactly.
-        assertEquals("5d6cc7860669a040c860c06bca72562715a08cb8e59eadd63df62ef713f5f7a8", hex.toString(),
+        // Re-pinned for plan 720cd87e (a prime in a script style draws the font's ssty
+        // superscript prime): with the prime family excluded from ssty the tree
+        // reproduces 5d6cc786... exactly.
+        assertEquals("2e5442e38d1c6faf92ba45028504fd9c4219c1d61cd937f333e432960b4d70a3", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
     }

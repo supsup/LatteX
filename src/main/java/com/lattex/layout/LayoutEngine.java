@@ -244,7 +244,7 @@ public final class LayoutEngine {
     private static Box atomBox(Atom atom, LayoutContext ctx) {
         SfntFont font = ctx.font();
         double scale = ctx.scale();
-        int gid = atomGlyphId(font, atom);
+        int gid = atomGlyphId(font, atom, ctx.style());
         GlyphOutline o = font.outline(gid);
         // Carry the source code point so the glyphmap can key token identity to this
         // glyph's emitted <path> (the data-lx-glyphmap sidecar the `thread` effect reads),
@@ -273,9 +273,38 @@ public final class LayoutEngine {
      * {@link #styledCodePoint} does; for the bundled STIX Two Math every mapped code point
      * has a glyph (pinned by {@code MathItalicDefaultTest}).
      */
-    private static int atomGlyphId(SfntFont font, Atom atom) {
+    private static int atomGlyphId(SfntFont font, Atom atom, MathStyle style) {
         int gid = font.glyphId(mathAlphabetCodePoint(atom));
-        return gid != 0 ? gid : font.glyphId(atom.codePoint());
+        if (gid == 0) {
+            gid = font.glyphId(atom.codePoint());
+        }
+        if (isPrime(atom.codePoint()) && gid != 0) {
+            switch (style) {
+                case SCRIPT -> gid = font.scriptStyleAlternate(gid, 1);
+                case SCRIPT_SCRIPT -> gid = font.scriptStyleAlternate(gid, 2);
+                default -> { }
+            }
+        }
+        return gid;
+    }
+
+    /**
+     * The prime family (U+2032..U+2037, U+2057). In an OpenType math font the cmap prime
+     * is a TEXT prime, drawn already raised (STIX Two Math: ink 0.399..0.703 em), for use
+     * at full size without a superscript. TeX builds {@code '} as {@code ^\prime}, a glyph
+     * designed to be superscripted (Computer Modern's {@code \prime} sits from near its
+     * baseline and is large); in an OpenType font that design is the {@code ssty} script
+     * alternate ({@code minute.ssty}: ink 0.085..0.527 em), which XeTeX/LuaTeX with
+     * unicode-math select in script styles. Plan 720cd87e: superscripting the raised text
+     * prime drew a small prime floating above the nucleus.
+     *
+     * <p>Only the primes take {@code ssty} here. For the other glyphs the font covers
+     * (letters, digits, delimiters) the script alternate is an optical refinement of a
+     * glyph that is already correct when scaled; adopting it would redraw every script in
+     * every formula, which is a separate decision from fixing the prime.
+     */
+    private static boolean isPrime(int cp) {
+        return (cp >= 0x2032 && cp <= 0x2037) || cp == 0x2057;
     }
 
     /**
@@ -1005,12 +1034,12 @@ public final class LayoutEngine {
         double italic = 0.0;
         boolean simpleChar = base instanceof Atom;
         if (base instanceof Atom baseAtom) {
-            italic = font.italicCorrection(atomGlyphId(font, baseAtom)) * baseScale;
+            italic = font.italicCorrection(atomGlyphId(font, baseAtom, ctx.style())) * baseScale;
         }
 
         // The per-glyph kern staircases only exist for a single-glyph nucleus.
         com.lattex.font.MathKernInfo baseKern = base instanceof Atom baseAtom
-            ? font.mathKernInfo(atomGlyphId(font, baseAtom)) : null;
+            ? font.mathKernInfo(atomGlyphId(font, baseAtom, ctx.style())) : null;
         Box supBox = sup == null ? null : layoutBox(sup, ctx.superscript());
         Box subBox = sub == null ? null : layoutBox(sub, ctx.subscript());
         return attachScripts(baseBox, simpleChar, italic, supBox, subBox, baseKern, ctx);
@@ -2620,7 +2649,7 @@ public final class LayoutEngine {
         // spans the box, so it centres on the box, never on a glyph's attachment.
         double baseAccentX;
         if (!arrow && !under && accent.base() instanceof Atom a) {
-            int taa = font.topAccentAttachment(atomGlyphId(font, a));
+            int taa = font.topAccentAttachment(atomGlyphId(font, a, ctx.style()));
             baseAccentX = taa != 0 ? taa * scale : baseBox.width() / 2.0;
         } else {
             baseAccentX = baseBox.width() / 2.0;

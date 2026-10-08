@@ -64,4 +64,27 @@ class SfntFontTest {
         assertTrue(mc.superscriptShiftUp() > 0 && mc.superscriptShiftUp() < font.unitsPerEm(),
             "superscriptShiftUp positive and sub-em: " + mc.superscriptShiftUp());
     }
+
+    @Test
+    void theScriptStyleAlternateOfThePrimeIsTheFontsSuperscriptPrime() {
+        // STIX Two Math (measured with fontTools, plan 720cd87e): the cmap prime 'minute'
+        // has ink 399..703; its ssty alternates are minute.ssty (85..527, advance 356) and
+        // minute.ssty2 (74..626, advance 435).
+        SfntFont font = SfntFont.loadBundled();
+        int prime = font.glyphId(0x2032);
+        assertEquals(399, font.outline(prime).yMin());
+        int s1 = font.scriptStyleAlternate(prime, 1);
+        int s2 = font.scriptStyleAlternate(prime, 2);
+        assertNotEquals(prime, s1);
+        assertNotEquals(s1, s2);
+        assertEquals(85, font.outline(s1).yMin());
+        assertEquals(527, font.outline(s1).yMax());
+        assertEquals(356, font.advanceWidth(s1));
+        assertEquals(74, font.outline(s2).yMin());
+        assertEquals(435, font.advanceWidth(s2));
+        // The double prime has its own pair; a glyph the feature does not cover maps to itself.
+        int dbl = font.glyphId(0x2033);
+        assertEquals(595, font.advanceWidth(font.scriptStyleAlternate(dbl, 1)));
+        assertEquals(0, font.scriptStyleAlternate(0, 1));
+    }
 }
