@@ -105,6 +105,19 @@ scope note: Stafficy `/docs` does **not** consume fluid yet — its sanitizer st
 the style attribute, so `/docs` output is unchanged until a separate, deliberate
 two-sided carve-out lands. Fluid works today in any standalone embedding.)
 
+> **Which letters slant.** LatteX follows TeX's default math alphabet. A Latin
+> letter is **math italic** (`x` draws 𝑥, `h` draws ℎ), and so is lowercase Greek
+> (`\alpha`, `\epsilon`, `\phi`, …) and `\imath`/`\jmath`. Digits, uppercase Greek
+> (`\Gamma`, `\Omega`), `\partial` and `\nabla` stay **upright**, as do whole words:
+> function names (`\sin x` is upright *sin*, italic *x*), `\operatorname{…}`,
+> `\mathrm{…}`, `\text{…}` and the legacy `{\rm …}` switch (which, as in TeX,
+> straightens Latin letters only). `\mathit{x}` is the same glyph as a bare `x`. A `-`
+> in math is the **minus sign** U+2212 — binary (`a-b`), unary (`-1`) or in a
+> script (`x^{-1}`) — while `\text{a-b}` keeps its hyphen. The source stays what you
+> typed: `toMathML` emits `<mi>x</mi>` (italic by MathML's own default),
+> `<mi mathvariant="normal">Γ</mi>` and `<mo>−</mo>`, and the `thread`/`substitute`
+> effects and the accessible label still key on `x`.
+>
 > **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
 > `\mathrm`). The argument is *literal text*: plain characters (spaces preserved),
 > invisible grouping braces, `$…$` to re-enter math mode (`\text{if $x>0$ then}`),

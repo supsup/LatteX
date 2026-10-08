@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 class AccentLayoutTest {
 
     private static final SfntFont FONT = SfntFont.loadBundled();
+    /** A math-mode {@code a} is drawn as MATHEMATICAL ITALIC SMALL A (plan a85ff403). */
+    private static final int ITALIC_A = 0x1D44E;
     private static final double SIZE = 40.0;
     private static final double SCALE = SIZE / FONT.unitsPerEm();
 
@@ -53,15 +55,19 @@ class AccentLayoutTest {
     @Test
     void accentSitsAboveBaseAndIsCentred() {
         Layout l = layout("\\hat{a}");
-        double baseTop = -baseHeightOf('a');
-        // The accent glyph is the one whose ink is highest (most negative y).
-        PositionedGlyph accent = l.glyphs().stream()
-            .min((p, q) -> Double.compare(p.baselineY(), q.baselineY())).orElseThrow();
+        double baseTop = -baseHeightOf(ITALIC_A);
+        // The accent glyph is the one that is not the base. (This used to pick "the
+        // highest baseline", but U+0302 is a combining mark drawn on baseline 0 with its ink
+        // already raised, so the tie went to the BASE and the centring check compared the
+        // upright a with its own attachment — it passed by coincidence, and stopped passing
+        // when the base became the italic a, plan a85ff403.)
         PositionedGlyph base = l.glyphs().stream()
-            .filter(g -> g.glyphId() == FONT.glyphId('a')).findFirst().orElseThrow();
+            .filter(g -> g.glyphId() == FONT.glyphId(ITALIC_A)).findFirst().orElseThrow();
+        PositionedGlyph accent = l.glyphs().stream()
+            .filter(g -> g != base).findFirst().orElseThrow();
         assertTrue(accent.baselineY() <= 0.0, "accent raised at or above the baseline");
         // Accent ink centre lands near the base's top-accent attachment point.
-        double baseAccentX = FONT.topAccentAttachment(FONT.glyphId('a')) * SCALE;
+        double baseAccentX = FONT.topAccentAttachment(FONT.glyphId(ITALIC_A)) * SCALE;
         var ao = FONT.outline(accent.glyphId());
         double accentCentre = accent.originX() + SCALE * (ao.xMin() + ao.xMax()) / 2.0;
         assertEquals(baseAccentX, accentCentre, 1.5, "accent centred over the base attachment");
@@ -105,7 +111,7 @@ class AccentLayoutTest {
         Layout l = layout("\\overline{a}");
         assertEquals(1, l.rules().size(), "overline is a single rule");
         Rule bar = l.rules().get(0);
-        assertTrue(bar.y() < -baseHeightOf('a'), "overline rule sits above the base ink top");
+        assertTrue(bar.y() < -baseHeightOf(ITALIC_A), "overline rule sits above the base ink top");
         assertTrue(bar.width() > 0 && bar.height() > 0, "rule has extent");
         assertAlphabet(LatteX.render("\\overline{a}"));
     }
@@ -144,7 +150,7 @@ class AccentLayoutTest {
         // use glyphAccentBox's draw order instead (base first, then the accent piece).
         PositionedGlyph accent = bottomGlyph(l);
         PositionedGlyph base = l.glyphs().stream()
-            .filter(g -> g.glyphId() == FONT.glyphId('a')).findFirst().orElseThrow();
+            .filter(g -> g.glyphId() == FONT.glyphId(ITALIC_A)).findFirst().orElseThrow();
         // Accent ink centre lands near the base's horizontal centre (no per-glyph
         // "bottom attachment" table exists in OpenType MATH, unlike the over case).
         double baseWidth = FONT.advanceWidth(base.glyphId()) * SCALE;

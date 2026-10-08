@@ -7,6 +7,7 @@ import com.lattex.font.SfntFont;
 import com.lattex.api.Color;
 import com.lattex.parse.MathNode;
 import com.lattex.parse.MathSyntaxException;
+import com.lattex.parse.MathVariant;
 import com.lattex.parse.MathNode.Accent;
 import com.lattex.parse.MathNode.Colored;
 import com.lattex.parse.MathNode.Atom;
@@ -233,7 +234,7 @@ public final class LayoutEngine {
     private static Box atomBox(Atom atom, LayoutContext ctx) {
         SfntFont font = ctx.font();
         double scale = ctx.scale();
-        int gid = font.glyphId(atom.codePoint());
+        int gid = atomGlyphId(font, atom);
         GlyphOutline o = font.outline(gid);
         // Carry the source code point so the glyphmap can key token identity to this
         // glyph's emitted <path> (the data-lx-glyphmap sidecar the `thread` effect reads),
@@ -250,6 +251,71 @@ public final class LayoutEngine {
         double height = o.isEmpty() ? 0.0 : Math.max(0.0, o.yMax() * scale);
         double depth = o.isEmpty() ? 0.0 : Math.max(0.0, -o.yMin() * scale);
         return new Box(List.of(glyph), List.of(), width, height, depth);
+    }
+
+    /**
+     * The glyph a math atom draws. THE one place the math-mode default alphabet is applied
+     * (plan a85ff403), so the nucleus that is drawn and the nucleus whose italic correction,
+     * math-kern staircase and top-accent attachment are read can never disagree — every
+     * reader of an atom's glyph goes through here.
+     *
+     * <p>Falls back to the typed code point's glyph if the font has no shaped form, as
+     * {@link #styledCodePoint} does; for the bundled STIX Two Math every mapped code point
+     * has a glyph (pinned by {@code MathItalicDefaultTest}).
+     */
+    private static int atomGlyphId(SfntFont font, Atom atom) {
+        int gid = font.glyphId(mathAlphabetCodePoint(atom));
+        return gid != 0 ? gid : font.glyphId(atom.codePoint());
+    }
+
+    /**
+     * TeX's default math alphabet (TeXbook ch. 17 and Appendix F, the plain-TeX mathcodes):
+     * a Latin letter and a lowercase Greek letter are family 1, MATH ITALIC; {@code -} has
+     * mathcode "2200, the MINUS SIGN of family 2; digits and uppercase Greek stay upright
+     * (family 0). Expressed in Unicode: Mathematical Italic (U+1D434.., with italic h at its
+     * Letterlike slot U+210E), the italic Greek run (U+1D6FC..), dotless i/j at U+1D6A4/5,
+     * and U+2212.
+     *
+     * <p>The atom keeps its TYPED code point and only the drawn glyph changes, so the
+     * glyphmap, substitute, the aria-label and MathML still key on {@code x}, not
+     * {@code U+1D465}. Explicit variants ({@code \mathbf}, {@code \mathbb}, …) have already
+     * moved their atoms out of ASCII and pass through untouched; roman words ({@code \sin},
+     * {@code \mathrm}, {@code \text}) are not atoms at all. The legacy {@code \rm} marks its
+     * atoms {@link Atom#upright()}, which straightens Latin letters only — like TeX's
+     * {@code \rm}, which changes the family of class-7 characters and nothing else.
+     */
+    private static int mathAlphabetCodePoint(Atom atom) {
+        int cp = atom.codePoint();
+        if (cp == '-') {
+            return 0x2212; // MINUS SIGN — the hyphen is a text character
+        }
+        boolean latin = (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z');
+        if (latin) {
+            return atom.upright() ? cp : italicCodePoint(cp);
+        }
+        if (cp == 0x0131) {
+            return 0x1D6A4; // dotless i (\imath)
+        }
+        if (cp == 0x0237) {
+            return 0x1D6A5; // dotless j (\jmath)
+        }
+        if (isLowercaseGreek(cp)) {
+            return MathVariant.map(MathVariant.Style.ITALIC, cp);
+        }
+        return cp;
+    }
+
+    /**
+     * The lowercase Greek letters TeX keeps in math italic: α..ω (with ς) and the variant
+     * shapes ϵ ϑ ϰ ϕ ϱ ϖ, all family-1 characters in plain TeX. Uppercase Greek is
+     * deliberately absent (family 0, upright), as is ∇ (family 2, a symbol). ∂ is family 1
+     * in TeX too but is left on its own glyph here: toMathML emits it as an operator
+     * ({@code <mo>}), so slanting it is a separate decision about both outputs.
+     */
+    private static boolean isLowercaseGreek(int cp) {
+        return (cp >= 0x03B1 && cp <= 0x03C9)
+            || cp == 0x03F5 || cp == 0x03D1 || cp == 0x03F0
+            || cp == 0x03D5 || cp == 0x03F1 || cp == 0x03D6;
     }
 
     /**
@@ -851,12 +917,12 @@ public final class LayoutEngine {
         double italic = 0.0;
         boolean simpleChar = base instanceof Atom;
         if (base instanceof Atom baseAtom) {
-            italic = font.italicCorrection(font.glyphId(baseAtom.codePoint())) * baseScale;
+            italic = font.italicCorrection(atomGlyphId(font, baseAtom)) * baseScale;
         }
 
         // The per-glyph kern staircases only exist for a single-glyph nucleus.
         com.lattex.font.MathKernInfo baseKern = base instanceof Atom baseAtom
-            ? font.mathKernInfo(font.glyphId(baseAtom.codePoint())) : null;
+            ? font.mathKernInfo(atomGlyphId(font, baseAtom)) : null;
         Box supBox = sup == null ? null : layoutBox(sup, ctx.superscript());
         Box subBox = sub == null ? null : layoutBox(sub, ctx.subscript());
         return attachScripts(baseBox, simpleChar, italic, supBox, subBox, baseKern, ctx);
@@ -2287,7 +2353,7 @@ public final class LayoutEngine {
         // Base attachment x (where the accent centres over/under the base).
         double baseAccentX;
         if (!under && accent.base() instanceof Atom a) {
-            int taa = font.topAccentAttachment(font.glyphId(a.codePoint()));
+            int taa = font.topAccentAttachment(atomGlyphId(font, a));
             baseAccentX = taa != 0 ? taa * scale : baseBox.width() / 2.0;
         } else {
             baseAccentX = baseBox.width() / 2.0;

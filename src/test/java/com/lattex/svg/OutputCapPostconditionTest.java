@@ -315,7 +315,9 @@ class OutputCapPostconditionTest {
         // The documented array-center repair adds only the 187th row, and removing
         // that exact row reproduces fd731b18..., so this is a causal re-pin rather
         // than permission for an unrelated compliant-output change.
-        assertEquals("d0905205dd209b2efc7fba7974d5d7fcf1fd8aaea4c454717e87e73d1483b1c4", hex.toString(),
+        // Re-pinned for plan a85ff403 (math letters draw math italic, '-' draws U+2212): with
+        // the math alphabet reverted to identity the tree reproduces d0905205... exactly.
+        assertEquals("5d6cc7860669a040c860c06bca72562715a08cb8e59eadd63df62ef713f5f7a8", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
     }

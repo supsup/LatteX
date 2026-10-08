@@ -42,8 +42,18 @@ class UnnumberedDisplayEnvTest {
         String wrapped = LatteX.render("\\begin{equation*} E = mc^2 \\end{equation*}");
         assertEquals(countPaths(bare), countPaths(wrapped),
             "same glyphs — the wrapper adds no marks of its own");
-        assertTrue(wrapped.contains("width=\"144.4942\"") && wrapped.contains("height=\"36.832\""),
+        // The size is read from the bare render rather than written as a literal: the claim is
+        // "same size as the body", and the literal (144.4942 x 36.832) went stale the moment
+        // math letters moved to their italic glyphs (plan a85ff403) while the claim still held.
+        assertEquals(sizeOf(bare), sizeOf(wrapped),
             "and the same rendered size as the bare body: " + wrapped.substring(0, 120));
+    }
+
+    private static String sizeOf(String svg) {
+        java.util.regex.Matcher m = java.util.regex.Pattern
+            .compile("<svg [^>]*?width=\"([^\"]+)\" height=\"([^\"]+)\"").matcher(svg);
+        assertTrue(m.find(), "no width/height on the root svg: " + svg);
+        return m.group(1) + "x" + m.group(2);
     }
 
     @Test

@@ -123,14 +123,30 @@ class LegacyFontSwitchTest {
     }
 
     @Test
-    void romanSwitchIsUprightAndThereforeAnIdentityRemap() {
-        // A bare math atom already draws its own (upright) code point in this
-        // renderer, so \rm's whole job is the scoping. Pin BOTH halves: the atom is
-        // untouched, and the rendered output is byte-identical to the bare letter.
+    void romanSwitchKeepsTheCodePointAndMarksTheAtomUpright() {
+        // This pin used to read "\rm is an identity remap, byte-identical to the bare
+        // letter", which was true only because a bare math letter drew its UPRIGHT glyph —
+        // the defect plan a85ff403 fixes. A bare letter is now math italic, so \rm has a real
+        // job: the code point is still the roman d (roman IS the base alphabet), the atom is
+        // marked upright, and it draws the same ink as \mathrm{d}, not the italic d.
         assertEquals((int) 'd', soleAtom("{\\rm d}"));
-        assertEquals(LatteX.render("dx"), LatteX.render("{\\rm d}x"));
+        assertTrue(((Atom) MathParser.parse("{\\rm d}")).upright(), "\\rm marks its atoms upright");
+        assertFalse(((Atom) MathParser.parse("d")).upright(), "a bare letter is not marked");
+        assertEquals(pathData(LatteX.render("\\mathrm{d}x")), pathData(LatteX.render("{\\rm d}x")));
+        assertNotEquals(pathData(LatteX.render("dx")), pathData(LatteX.render("{\\rm d}x")));
         // Control: the same probe DOES see a difference for a switch that remaps.
         assertNotEquals(LatteX.render("dx"), LatteX.render("{\\bf d}x"));
+    }
+
+    /** The glyph outlines of a render, in emit order (positions and labels excluded). */
+    private static List<String> pathData(String svg) {
+        List<String> out = new java.util.ArrayList<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("<path d=\"([^\"]*)\"").matcher(svg);
+        while (m.find()) {
+            out.add(m.group(1));
+        }
+        assertFalse(out.isEmpty(), "no glyph paths in " + svg);
+        return out;
     }
 
     // ------------------------------------------------------------------

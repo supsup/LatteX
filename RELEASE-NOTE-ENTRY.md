@@ -116,3 +116,65 @@ Plan `18e34d82` (`lattex-unbraced-args`).
   a macro argument such as `\frac\sqrt2 3`, TeX would take `\sqrt` alone and fail;
   LatteX renders the evident reading instead. Environment arguments
   (`\begin{array}{cc}`'s column spec, `alignat`'s count) still require braces.
+
+---
+
+<!-- Appended by a later branch; the entries above are still unfolded on main and are kept, not replaced. -->
+
+Proposed entry for the **Unreleased** section of `RELEASE_NOTES.md`.
+Written to this file rather than edited in place, per the branch brief.
+Plan `a85ff403` (`lattex-math-italic-minus`).
+
+---
+
+### Math letters are math italic, and `-` is a minus sign
+
+- **Variables now slant, the way TeX sets them.** A bare `x` used to draw the upright
+  roman x: its paths were byte-identical to `\mathrm{x}`. TeX's default math alphabet
+  is math italic, so every formula LatteX rendered read like typed text. Now a Latin
+  letter draws its Mathematical Italic glyph (𝑥; `h` uses the Letterlike slot ℎ),
+  lowercase Greek draws italic Greek (including the variant shapes `\epsilon`,
+  `\vartheta`, `\phi`, `\varrho`, `\varpi`, `\varkappa`), and `\imath`/`\jmath` draw
+  the italic dotless forms. Digits, uppercase Greek, `\partial` and `\nabla` stay
+  upright, and so does everything that was never a math letter: `\sin` and the other
+  function names, `\operatorname`, `\mathrm`, `\text`. `\mathit{x}` and a bare `x` are
+  now the same glyph, as in TeX. Explicit alphabets (`\mathbf`, `\mathbb`, `\mathsf`,
+  `\mathcal`, ...) are unchanged.
+
+- **`-` in math is the minus sign.** `a-b` drew the 225-unit hyphen; it now draws
+  U+2212, the 596-unit bar that lines up with `+`. That covers binary minus, unary
+  minus (`-1`) and every negative exponent (`x^{-1}`). Text keeps its hyphen:
+  `\text{a-b}` is unchanged.
+
+- **Scripts follow the slanted letter.** Italic correction and the OpenType
+  math-kern staircases are now read from the glyph that is actually drawn. Before,
+  they were read from the upright glyph, which in STIX Two Math has zero italic
+  correction, so a superscript on `f`, `V` or `P` sat where an upright letter would put
+  it. The drawn nucleus, its italic correction, its kern staircase and its accent
+  attachment now come from one resolver and cannot disagree.
+
+- **`{\rm ...}` now does something.** The legacy switch used to be an identity remap,
+  because bare letters were already upright. It now keeps Latin letters roman inside
+  its group. As in TeX, it does not straighten Greek or the minus.
+
+- **What you typed is still what is named.** Only the drawn glyph changed. The parse
+  tree keeps the typed character, so the `thread` glyphmap (`78:` for x), `substitute`,
+  the aria-label and `toMathML` all still say `x`. MathML now agrees with the picture:
+  `-` emits `<mo>−</mo>`, and the letters LatteX keeps upright (uppercase Greek, `\rm`
+  letters) emit `<mi mathvariant="normal">`. MathML Core already italicises a
+  single-character `<mi>`, so plain letters need no attribute.
+
+- **Every rendered formula changes, on purpose.** Any formula with a letter or a
+  minus now renders different bytes and a slightly different width. The byte goldens
+  (the whole-corpus ratchet hashes, the cap-postcondition SVGs, the batch golden and
+  the stretchy-arrow ladder) were re-pinned in their own commit, after a control run
+  showed that with the old alphabet forced back on, the tree reproduces every
+  previous golden exactly. The tracked `examples/` pages and their BrewShot PNGs were
+  regenerated. The wild-corpus ratchet counts successful renders, so it could not see
+  either defect and did not move.
+
+- **Known limits.** `\partial` keeps its own glyph. It is family 1 in TeX, but LatteX
+  emits it to MathML as an operator (`<mo>∂</mo>`), so slanting it is a separate
+  decision about both outputs. `\boldsymbol{x}` is still bold *upright* (TeX makes it bold italic), which
+  predates this change. Most effect GIFs and the README's `showcase.gif` were not
+  re-captured and still show upright letters.

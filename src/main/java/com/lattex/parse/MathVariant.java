@@ -16,6 +16,7 @@ import com.lattex.parse.MathNode.TextRun;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 /**
  * The font-variant alphabets ({@code \mathbb \mathcal \mathfrak \mathbf \mathsf
@@ -219,50 +220,66 @@ public final class MathVariant {
      * consume.
      */
     public static MathNode apply(Style style, MathNode node) {
+        return rewrite(a -> new Atom(map(style, a.codePoint()), a.mathClass(), a.upright()), node);
+    }
+
+    /**
+     * The legacy {@code \rm} switch: marks every atom in {@code node} {@link Atom#upright()},
+     * so a Latin letter keeps its roman glyph instead of layout's math-italic default. The
+     * code points are untouched — roman IS the base alphabet — and layout reads the mark
+     * only for Latin letters, as TeX's {@code \rm} selects family 0 for class-7 characters
+     * alone (TeXbook ch. 17): Greek and the minus keep their fixed families.
+     */
+    public static MathNode upright(MathNode node) {
+        return rewrite(a -> new Atom(a.codePoint(), a.mathClass(), true), node);
+    }
+
+    /** Rebuilds {@code node} with {@code atomFn} applied to every {@link Atom} in it. */
+    private static MathNode rewrite(UnaryOperator<Atom> atomFn, MathNode node) {
         return switch (node) {
-            case Atom a -> new Atom(map(style, a.codePoint()), a.mathClass());
+            case Atom a -> atomFn.apply(a);
             // A delimiter is never letter/digit-mapped by a style variant.
             case MathNode.MiddleDelim md -> md;
             case MathList list -> {
                 List<MathNode> items = new ArrayList<>(list.items().size());
                 for (MathNode child : list.items()) {
-                    items.add(apply(style, child));
+                    items.add(rewrite(atomFn, child));
                 }
                 yield new MathList(items);
             }
             case SupSub s -> new SupSub(
-                apply(style, s.base()),
-                s.sup() == null ? null : apply(style, s.sup()),
-                s.sub() == null ? null : apply(style, s.sub()));
+                rewrite(atomFn, s.base()),
+                s.sup() == null ? null : rewrite(atomFn, s.sup()),
+                s.sub() == null ? null : rewrite(atomFn, s.sub()));
             case Fraction f -> new Fraction(
-                apply(style, f.numerator()), apply(style, f.denominator()),
+                rewrite(atomFn, f.numerator()), rewrite(atomFn, f.denominator()),
                 f.hasRule(), f.fractionStyle());
             case Radical r -> new Radical(
-                apply(style, r.radicand()),
-                r.index() == null ? null : apply(style, r.index()));
+                rewrite(atomFn, r.radicand()),
+                r.index() == null ? null : rewrite(atomFn, r.index()));
             case BigOperator b -> new BigOperator(
-                (Atom) apply(style, b.op()),
-                b.lower() == null ? null : apply(style, b.lower()),
-                b.upper() == null ? null : apply(style, b.upper()),
+                (Atom) rewrite(atomFn, b.op()),
+                b.lower() == null ? null : rewrite(atomFn, b.lower()),
+                b.upper() == null ? null : rewrite(atomFn, b.upper()),
                 b.limitsMode());
             case Fenced f -> new Fenced(
-                f.leftDelim(), apply(style, f.body()), f.rightDelim());
+                f.leftDelim(), rewrite(atomFn, f.body()), f.rightDelim());
             case MathNode.SizedDelim sd -> sd; // a delimiter glyph is not font-variant styled
             case Accent a -> new Accent(
-                a.command(), apply(style, a.base()),
+                a.command(), rewrite(atomFn, a.base()),
                 a.accentCodePoint(), a.stretchy(), a.under());
             case Phantom p -> new Phantom(
-                apply(style, p.content()), p.keepWidth(), p.keepVertical());
-            case MathNode.Colored c -> new MathNode.Colored(apply(style, c.body()), c.color());
+                rewrite(atomFn, p.content()), p.keepWidth(), p.keepVertical());
+            case MathNode.Colored c -> new MathNode.Colored(rewrite(atomFn, c.body()), c.color());
             // The forced class survives the alphabet rewrite: \mathbf{\mathbin{x}} is
             // still spaced as a binary operator, with a bold nucleus.
             case MathNode.ClassOverride co ->
-                new MathNode.ClassOverride(apply(style, co.body()), co.forcedClass());
-            case MathNode.Boxed bx -> new MathNode.Boxed(apply(style, bx.body()));
-            case MathNode.Cancel c -> new MathNode.Cancel(c.kind(), apply(style, c.body()),
-                c.to() == null ? null : apply(style, c.to()));
+                new MathNode.ClassOverride(rewrite(atomFn, co.body()), co.forcedClass());
+            case MathNode.Boxed bx -> new MathNode.Boxed(rewrite(atomFn, bx.body()));
+            case MathNode.Cancel c -> new MathNode.Cancel(c.kind(), rewrite(atomFn, c.body()),
+                c.to() == null ? null : rewrite(atomFn, c.to()));
             case MathNode.Tagged t ->
-                new MathNode.Tagged(apply(style, t.body()), apply(style, t.label()));
+                new MathNode.Tagged(rewrite(atomFn, t.body()), rewrite(atomFn, t.label()));
             // Glue, roman operator words, and text-mode runs carry no math letter to restyle.
             case Spacing s -> s;
             case OperatorName o -> o;
@@ -273,7 +290,7 @@ public final class MathVariant {
                 for (List<MathNode> gridRow : mx.rows()) {
                     List<MathNode> cells = new ArrayList<>(gridRow.size());
                     for (MathNode c : gridRow) {
-                        cells.add(apply(style, c));
+                        cells.add(rewrite(atomFn, c));
                     }
                     restyled.add(cells);
                 }
@@ -286,42 +303,42 @@ public final class MathVariant {
                 for (List<MathNode> gridRow : bm.body()) {
                     List<MathNode> cells = new ArrayList<>(gridRow.size());
                     for (MathNode c : gridRow) {
-                        cells.add(apply(style, c));
+                        cells.add(rewrite(atomFn, c));
                     }
                     body.add(cells);
                 }
                 List<MathNode> colLabels = new ArrayList<>(bm.columnLabels().size());
                 for (MathNode c : bm.columnLabels()) {
-                    colLabels.add(apply(style, c));
+                    colLabels.add(rewrite(atomFn, c));
                 }
                 List<MathNode> rowLabels = new ArrayList<>(bm.rowLabels().size());
                 for (MathNode c : bm.rowLabels()) {
-                    rowLabels.add(apply(style, c));
+                    rowLabels.add(rewrite(atomFn, c));
                 }
-                yield new MathNode.BorderMatrix(body, colLabels, rowLabels, apply(style, bm.corner()));
+                yield new MathNode.BorderMatrix(body, colLabels, rowLabels, rewrite(atomFn, bm.corner()));
             }
             // A stack: restyle the base and any above/below marks, preserving the kind.
             case MathNode.Stack st -> new MathNode.Stack(
-                apply(style, st.base()),
-                st.above() == null ? null : apply(style, st.above()),
-                st.below() == null ? null : apply(style, st.below()),
+                rewrite(atomFn, st.base()),
+                st.above() == null ? null : rewrite(atomFn, st.above()),
+                st.below() == null ? null : rewrite(atomFn, st.below()),
                 st.kind());
             // An extensible arrow: restyle its labels (the arrow itself is a glyph
             // synthesized in layout, not a restylable atom).
             case MathNode.XArrow xa -> new MathNode.XArrow(
-                apply(style, xa.above()),
-                xa.below() == null ? null : apply(style, xa.below()),
+                rewrite(atomFn, xa.above()),
+                xa.below() == null ? null : rewrite(atomFn, xa.below()),
                 xa.kind());
             // A CD connector: restyle its side labels; the shaft is a synthesized glyph.
             case MathNode.CdArrow cd -> new MathNode.CdArrow(
                 cd.kind(),
-                cd.labelA() == null ? null : apply(style, cd.labelA()),
-                cd.labelB() == null ? null : apply(style, cd.labelB()));
+                cd.labelA() == null ? null : rewrite(atomFn, cd.labelA()),
+                cd.labelB() == null ? null : rewrite(atomFn, cd.labelB()));
             // A \lx wrapper is top-level-only (nested \lx is rejected by the parser),
             // so this arm is unreachable in practice; restyle the body for totality.
             case StyledMath sm -> new StyledMath(
-                apply(style, sm.body()), sm.style(), sm.fx(), sm.sem());
-            case MathNode.StyleSwitch sw -> new MathNode.StyleSwitch(sw.level(), apply(style, sw.body()));
+                rewrite(atomFn, sm.body()), sm.style(), sm.fx(), sm.sem());
+            case MathNode.StyleSwitch sw -> new MathNode.StyleSwitch(sw.level(), rewrite(atomFn, sw.body()));
         };
     }
 }

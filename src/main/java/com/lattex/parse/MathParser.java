@@ -718,9 +718,11 @@ public final class MathParser {
      *
      * <p>The mapped semantics reuse the existing {@link MathVariant} alphabets, so no
      * new node kind appears — the consumed group's atoms are rewritten to the same
-     * variant code points {@code \mathbf{…}} produces. {@code \rm} performs no remap,
-     * because an unstyled math atom already renders as upright roman (an {@link
-     * MathNode.Atom} draws its own code point verbatim).
+     * variant code points {@code \mathbf{…}} produces. {@code \rm} performs no remap —
+     * roman IS the base alphabet — but it must still MARK its atoms {@link
+     * MathNode.Atom#upright()}, because layout sets an unmarked Latin letter in math
+     * italic (plan a85ff403; it used to draw every atom's code point verbatim, which is
+     * why {@code \rm} could once be the identity).
      *
      * <h4>KNOWN LIMITATION — a later switch NESTS, it does not REPLACE</h4>
      * In real TeX 2.09 a second declaration in the same group REPLACES the first for
@@ -754,7 +756,7 @@ public final class MathParser {
     private MathNode parseFontSwitch(String name) {
         MathNode body = parseRestOfGroup();
         return switch (name) {
-            case "rm" -> body;
+            case "rm" -> MathVariant.upright(body);
             case "bf" -> MathVariant.apply(MathVariant.Style.BOLD, body);
             case "it" -> MathVariant.apply(MathVariant.Style.ITALIC, body);
             case "cal" -> MathVariant.apply(MathVariant.Style.SCRIPT, body);
