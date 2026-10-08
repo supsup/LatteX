@@ -44,12 +44,35 @@ final class Symbols {
      * mapping wins on a shared code point. Clean-room: the class travels with the
      * code point from the TeXbook assignment already encoded in {@link #SYMBOLS}.
      */
-    static final Map<Integer, MathClass> CLASS_BY_CODEPOINT = buildClassByCodepoint();
+    static final Map<Integer, MathClass> CLASS_BY_CODEPOINT;
+
+    /**
+     * Command spellings that re-class a glyph whose BARE form already owns that code
+     * point, so they must not decide the class of the PASTED glyph. amsmath's
+     * {@code \lVert}/{@code \rVert} are the opening/closing spellings of U+2016, whose
+     * bare form ({@code \|}, {@code \Vert}, a pasted ‖) is Ord; latexsym's
+     * {@code \lhd}/{@code \rhd}/{@code \\unlhd}/{@code \\unrhd} are binary-operator
+     * spellings of U+22B2..U+22B5, whose Unicode meaning (and {@code \vartriangleleft}
+     * and co) is a relation. Without this exclusion the "first mapping wins" rule below
+     * would pick between the two by {@code Map.copyOf}'s per-JVM iteration order, so a
+     * pasted ‖ could space differently from one run to the next. (Plan edbda088.)
+     *
+     * <p>Declared before the static initializer that reads it, deliberately: static
+     * fields initialize in source order.
+     */
+    private static final java.util.Set<String> CLASS_TAGGED_SPELLINGS = java.util.Set.of(
+        "lVert", "rVert", "lhd", "rhd", "unlhd", "unrhd");
+
+    static {
+        CLASS_BY_CODEPOINT = buildClassByCodepoint();
+    }
 
     private static Map<Integer, MathClass> buildClassByCodepoint() {
         Map<Integer, MathClass> m = new java.util.HashMap<>();
-        for (Sym s : SYMBOLS.values()) {
-            if (s.codePoint() > 0x7F) { // non-ASCII only; ASCII is the classify() switch's job
+        for (Map.Entry<String, Sym> e : SYMBOLS.entrySet()) {
+            Sym s = e.getValue();
+            if (s.codePoint() > 0x7F // non-ASCII only; ASCII is the classify() switch's job
+                    && !CLASS_TAGGED_SPELLINGS.contains(e.getKey())) {
                 m.putIfAbsent(s.codePoint(), s.mathClass());
             }
         }
@@ -105,7 +128,12 @@ final class Symbols {
         Map.entry(" ", 6.0),             // control space \(space)
         Map.entry("quad", 18.0),         // 1em
         Map.entry("qquad", 36.0),        // 2em
-        Map.entry("enspace", 9.0));      // 0.5em
+        Map.entry("enspace", 9.0),       // 0.5em
+        // \joinrel: plain TeX's \mathrel{\mkern-3mu}, the negative kern that glues two
+        // relation pieces into one arrow (\relbar\joinrel\rightarrow). Its Rel class only
+        // matters next to another relation, where TeX inserts no glue anyway, so the kern
+        // is the whole observable effect. See also \lhook (HOOK_PREFIX). Plan edbda088.
+        Map.entry("joinrel", -3.0));
 
     /**
      * A named operator's roman rendering text plus whether it takes limits
@@ -145,6 +173,29 @@ final class Symbols {
         m.put("projlim", new OpSpec("proj lim", true));
         return Map.copyOf(m);
     }
+
+    /**
+     * amsmath's decorated limits ({@code amsopn}): the roman word "lim" with a mark
+     * under or over it, set as an Op atom that takes limits in display style exactly
+     * as {@code \lim} does. {@code \varprojlim} and {@code \varinjlim} carry an
+     * extensible arrow UNDER "lim" (left for the projective/inverse limit, right for the
+     * inductive/direct one); {@code \varliminf}/{@code \varlimsup} carry a rule under /
+     * over it. The arrows are the Unicode combining arrows BELOW, U+20EE/U+20EF, which
+     * bundled STIX Two Math carries with horizontal MATH constructions, so they stretch
+     * to the word's width on the existing stretchy-accent path rather than being faked.
+     *
+     * @param accentCodePoint the mark's code point, or {@link Accent#RULE} for a rule
+     * @param under           whether the mark sits under "lim"
+     * @param accentCommand   the accent's name for the a11y description
+     */
+    record VarLimitSpec(int accentCodePoint, boolean under, String accentCommand) {
+    }
+
+    static final Map<String, VarLimitSpec> VAR_LIMITS = Map.of(
+        "varprojlim", new VarLimitSpec(0x20EE, true, "underleftarrow"),
+        "varinjlim", new VarLimitSpec(0x20EF, true, "underrightarrow"),
+        "varliminf", new VarLimitSpec(Accent.RULE, true, "underline"),
+        "varlimsup", new VarLimitSpec(Accent.RULE, false, "overline"));
 
     /**
      * Accent commands -> the accent glyph and how it is applied. Code points are
@@ -449,6 +500,14 @@ final class Symbols {
         m.put("rtimes", new Sym(0x22CA, MathClass.BIN));       // ⋊
         m.put("leftthreetimes", new Sym(0x22CB, MathClass.BIN));  // ⋋
         m.put("rightthreetimes", new Sym(0x22CC, MathClass.BIN)); // ⋌
+        // latexsym's triangles are BINARY operators (\mathbin in latexsym.sty), unlike
+        // amssymb's \vartriangleleft & co, which are relations on the same glyphs. Both
+        // are right for their own names; CLASS_TAGGED_SPELLINGS keeps these four from
+        // deciding a pasted glyph's class. (Plan edbda088.)
+        m.put("lhd", new Sym(0x22B2, MathClass.BIN));          // ⊲
+        m.put("rhd", new Sym(0x22B3, MathClass.BIN));          // ⊳
+        m.put("unlhd", new Sym(0x22B4, MathClass.BIN));        // ⊴
+        m.put("unrhd", new Sym(0x22B5, MathClass.BIN));        // ⊵
 
         // -- Relations (MathClass.REL) ---------------------------------------
         m.put("leq", new Sym(0x2264, MathClass.REL));    // ≤
@@ -507,6 +566,8 @@ final class Symbols {
         m.put("sqsupset", new Sym(0x2290, MathClass.REL)); // ⊐
         m.put("sqsubseteq", new Sym(0x2291, MathClass.REL)); // ⊑
         m.put("sqsupseteq", new Sym(0x2292, MathClass.REL)); // ⊒
+        m.put("Subset", new Sym(0x22D0, MathClass.REL)); // ⋐ (amssymb; "compactly contained")
+        m.put("Supset", new Sym(0x22D1, MathClass.REL)); // ⋑
         m.put("in", new Sym(0x2208, MathClass.REL));     // ∈
         m.put("ni", new Sym(0x220B, MathClass.REL));     // ∋
         m.put("owns", new Sym(0x220B, MathClass.REL));   // ∋ alias
@@ -622,6 +683,11 @@ final class Symbols {
         m.put("downdownarrows", new Sym(0x21CA, MathClass.REL));   // ⇊
         m.put("Lleftarrow", new Sym(0x21DA, MathClass.REL)); // ⇚
         m.put("Rrightarrow", new Sym(0x21DB, MathClass.REL)); // ⇛
+        m.put("dashrightarrow", new Sym(0x21E2, MathClass.REL)); // ⇢ (amssymb)
+        m.put("dashleftarrow", new Sym(0x21E0, MathClass.REL));  // ⇠ (amssymb)
+        // amssymb defines \restriction as \\upharpoonright (a relation), the
+        // "restricted to" mark in f\restriction A.
+        m.put("restriction", new Sym(0x21BE, MathClass.REL)); // ↾
         // Negated arrows.
         m.put("nleftarrow", new Sym(0x219A, MathClass.REL));  // ↚
         m.put("nrightarrow", new Sym(0x219B, MathClass.REL)); // ↛
@@ -656,6 +722,8 @@ final class Symbols {
         m.put("triangle", new Sym(0x25B3, MathClass.ORD)); // △
         m.put("triangledown", new Sym(0x25BD, MathClass.ORD)); // ▽
         m.put("square", new Sym(0x25A1, MathClass.ORD));  // □
+        m.put("Box", new Sym(0x25A1, MathClass.ORD));     // □ (amssymb: \Box = \square; the d'Alembertian)
+        m.put("Bbbk", new Sym(0x1D55C, MathClass.ORD));   // 𝕜 (amssymb; = \mathbb{k})
         m.put("blacksquare", new Sym(0x25A0, MathClass.ORD)); // ■
         m.put("lozenge", new Sym(0x25CA, MathClass.ORD)); // ◊
         m.put("blacklozenge", new Sym(0x29EB, MathClass.ORD)); // ⧫
@@ -747,6 +815,15 @@ final class Symbols {
         m.put("}", new Sym('}', MathClass.CLOSE));
         m.put("|", new Sym(0x2016, MathClass.ORD));       // \| is the double bar ‖ (synonym of \Vert)
         m.put("Vert", new Sym(0x2016, MathClass.ORD));    // ‖
+        // amsmath's paired bars: the SAME glyphs as \vert / \Vert, but class-tagged as an
+        // opening and a closing atom (amsmath: \lvert = \mathopen|), which is the whole
+        // reason they exist - |x| and \|x\| space as a fence, not as two Ords. They are
+        // also delimiters (CommandRegistry.delimiterCodePointFor), so \left\lVert and
+        // \bigl\lvert work. lVert/rVert are in CLASS_TAGGED_SPELLINGS. Plan edbda088.
+        m.put("lvert", new Sym('|', MathClass.OPEN));     // |
+        m.put("rvert", new Sym('|', MathClass.CLOSE));    // |
+        m.put("lVert", new Sym(0x2016, MathClass.OPEN));  // ‖
+        m.put("rVert", new Sym(0x2016, MathClass.CLOSE)); // ‖
         m.put("langle", new Sym(0x27E8, MathClass.OPEN)); // ⟨
         m.put("rangle", new Sym(0x27E9, MathClass.CLOSE)); // ⟩
         // stmaryrd double brackets. STIX Two Math carries the dedicated Unicode
@@ -785,6 +862,11 @@ final class Symbols {
         // italic override, which this renderer does not model — is exactly the
         // upright roman \text/\textrm already produce.
         "textnormal", TextStyle.ROMAN,
+        // \hbox{...}: TeX's horizontal box, whose content is set in TEXT mode - the
+        // primitive underneath \mbox and \text. Plain-TeX-trained authors write it
+        // directly (\quad\hbox{and}\quad), so it takes \text's contract whole: upright
+        // roman, spaces significant, $...$ re-enters math. Plan edbda088.
+        "hbox", TextStyle.ROMAN,
         "textbf", TextStyle.BOLD,
         "textit", TextStyle.ITALIC,
         "texttt", TextStyle.MONO);
@@ -852,6 +934,15 @@ final class Symbols {
         Map.entry("aligned", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
         Map.entry("gather", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
         Map.entry("gather*", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
+        // The INNER forms (plan edbda088): amsmath's gathered and alignedat and
+        // mathtools' multlined are the box-building twins of gather / alignat / multline,
+        // used inside another display. Standalone they lay out exactly as their display
+        // twin, so each reuses that kind; like aligned/split they take the optional
+        // [t]/[b]/[c] position argument (read and ignored in EnvironmentParser), and
+        // alignedat additionally takes alignat's mandatory {n}. None is numbered.
+        Map.entry("gathered", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.GATHER, ColumnAlign.CENTER)),
+        Map.entry("alignedat", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.ALIGN, ColumnAlign.RIGHT)),
+        Map.entry("multlined", new EnvSpec(NO_DELIM, NO_DELIM, MatrixKind.MULTLINE, ColumnAlign.CENTER)),
         // split: a single equation broken over lines, aligned on the relation (the &) —
         // identical layout to aligned, so it reuses the ALIGN kind. Always used inside a
         // host display in LaTeX; LatteX renders it standalone too.

@@ -72,6 +72,10 @@ final class CommandRegistry {
         ACCENT(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         FONT_VARIANT(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
         ATOM_CLASS(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
+        MATHOP(GrammarKind.ONE_ARGUMENT, OutputKind.RENDERING),
+        VAR_LIMIT(GrammarKind.SYMBOL, OutputKind.RENDERING),
+        HOOK_PREFIX(GrammarKind.PREFIX, OutputKind.RENDERING),
+        QED_MARKER(GrammarKind.SYMBOL, OutputKind.NON_RENDERING),
         SPACE(GrammarKind.SYMBOL, OutputKind.RENDERING),
         FRACTION(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
         CONTINUED_FRACTION(GrammarKind.TWO_ARGUMENTS, OutputKind.RENDERING),
@@ -275,6 +279,14 @@ final class CommandRegistry {
         Symbols.ATOM_CLASS_WRAPPERS.forEach((name, forcedClass) ->
             add(out, name, Category.SPACING, Handler.ATOM_CLASS,
                 "x\\" + name + "{y}z"));
+        // \mathop{...}: the Op-class override. Kept OUT of ATOM_CLASS_WRAPPERS because an
+        // Op is the one class whose scripts change placement (limits in display style,
+        // \limits/\nolimits after it), so it owns a handler of its own. Plan edbda088.
+        add(out, "mathop", Category.NAMED_OPERATOR, Handler.MATHOP,
+            "\\mathop{\\mathrm{colim}}_{i\\in I}");
+        Symbols.VAR_LIMITS.forEach((name, spec) ->
+            add(out, name, Category.NAMED_OPERATOR, Handler.VAR_LIMIT,
+                "\\" + name + "_{k} A_k"));
         Symbols.SPACES.forEach((name, mu) ->
             add(out, name, Category.SPACING, Handler.SPACE, "a\\" + name + " b"));
         Symbols.TEXT_COMMANDS.forEach((name, style) ->
@@ -342,6 +354,11 @@ final class CommandRegistry {
         add(out, "middle", Category.STRUCTURE, Handler.MIDDLE,
             "\\left(a\\middle|b\\right)");
         add(out, "not", Category.RELATION, Handler.NOT, "\\not=");
+        // \lhook: plain TeX's hook PIECE, which has no code point of its own (Unicode and
+        // STIX Two Math encode only the whole hooked arrow), so it is accepted only in the
+        // composite it exists for, \lhook\joinrel<arrow>. Plan edbda088.
+        add(out, "lhook", Category.ARROW, Handler.HOOK_PREFIX,
+            "a\\lhook\\joinrel\\longrightarrow b");
         add(out, "begin", Category.STRUCTURE, Handler.BEGIN,
             "\\begin{matrix}a&b\\\\c&d\\end{matrix}");
         add(out, "end", Category.CONTROL, Handler.END, "\\begin{matrix}x\\end{matrix}");
@@ -376,6 +393,10 @@ final class CommandRegistry {
         for (String name : List.of("nonumber", "notag")) {
             add(out, name, Category.CONTROL, Handler.EQUATION_SUPPRESSOR, "x\\" + name);
         }
+        // \qedhere (amsthm) places the proof's end mark at this point of a display. The
+        // mark belongs to the surrounding proof, not the formula, so a standalone formula
+        // renderer accepts it and emits nothing. Plan edbda088.
+        add(out, "qedhere", Category.CONTROL, Handler.QED_MARKER, "x\\qedhere");
         add(out, "label", Category.CONTROL, Handler.LABEL, "x\\label{eq:x}");
         add(out, "ref", Category.STRUCTURE, Handler.REFERENCE, "x=\\ref{eq:x}");
         add(out, "eqref", Category.STRUCTURE, Handler.REFERENCE, "x=\\eqref{eq:x}");
@@ -437,8 +458,8 @@ final class CommandRegistry {
         return switch (name) {
             case "{" -> OptionalInt.of('{');
             case "}" -> OptionalInt.of('}');
-            case "|", "Vert" -> OptionalInt.of(0x2016);
-            case "vert" -> OptionalInt.of('|');
+            case "|", "Vert", "lVert", "rVert" -> OptionalInt.of(0x2016);
+            case "vert", "lvert", "rvert" -> OptionalInt.of('|');
             case "langle" -> OptionalInt.of(0x27E8);
             case "rangle" -> OptionalInt.of(0x27E9);
             case "lfloor" -> OptionalInt.of(0x230A);

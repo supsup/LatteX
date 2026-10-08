@@ -50,10 +50,10 @@ class CommandRegistryTest {
     void everyHandlerOwnsOneCanonicalGrammarAndOutputContract() {
         for (Handler handler : Handler.values()) {
             GrammarKind expectedGrammar = switch (handler) {
-                case SYMBOL, BIG_OPERATOR, NAMED_OPERATOR, SPACE, MATHSTRUT, BMOD ->
-                    GrammarKind.SYMBOL;
-                case NOT -> GrammarKind.PREFIX;
-                case ACCENT, FONT_VARIANT, ATOM_CLASS, BOXED, CANCEL, BRA, KET, BRAKET, SUBSTACK,
+                case SYMBOL, BIG_OPERATOR, NAMED_OPERATOR, SPACE, MATHSTRUT, BMOD, VAR_LIMIT,
+                        QED_MARKER -> GrammarKind.SYMBOL;
+                case NOT, HOOK_PREFIX -> GrammarKind.PREFIX;
+                case ACCENT, FONT_VARIANT, ATOM_CLASS, MATHOP, BOXED, CANCEL, BRA, KET, BRAKET, SUBSTACK,
                         PHANTOM, HPHANTOM, VPHANTOM, UNDERBRACE, OVERBRACE, BORDER_MATRIX,
                         OPERATOR_NAME, PMOD, LABEL, REFERENCE -> GrammarKind.ONE_ARGUMENT;
                 case FRACTION, CONTINUED_FRACTION, DISPLAY_FRACTION, TEXT_FRACTION,
@@ -73,7 +73,7 @@ class CommandRegistryTest {
                 case LX, TAG -> GrammarKind.TOP_LEVEL;
             };
             OutputKind expectedOutput = switch (handler) {
-                case END, EQUATION_SUPPRESSOR, LABEL, DEFINITION ->
+                case END, EQUATION_SUPPRESSOR, LABEL, DEFINITION, QED_MARKER ->
                     OutputKind.NON_RENDERING;
                 default -> OutputKind.RENDERING;
             };
@@ -128,12 +128,13 @@ class CommandRegistryTest {
         }
         assertEquals(
             EnumSet.of(Handler.END, Handler.EQUATION_SUPPRESSOR, Handler.LABEL,
-                Handler.DEFINITION),
+                Handler.DEFINITION, Handler.QED_MARKER),
             nonRendering);
 
         String x = LatteX.render("x");
         assertEquals(x, LatteX.render("x\\nonumber"));
         assertEquals(x, LatteX.render("x\\notag"));
+        assertEquals(x, LatteX.render("x\\qedhere"));
         assertEquals(x, LatteX.render("x\\label{eq:x}"));
         assertEquals(x, LatteX.render("\\newcommand{\\fresh}{x}\\fresh"));
         assertEquals(x, LatteX.render("\\def\\fresh{x}\\fresh"));

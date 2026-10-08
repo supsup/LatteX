@@ -92,6 +92,12 @@ final class EnvironmentParser {
             // the ARRAY column-spec read above); LatteX's ALIGN path then derives the
             // alternating right/left columns from the & structure exactly like align.
             discardBraceArg(parser, "\\begin{" + env + "}");
+        } else if (env.equals("alignedat")) {
+            // alignedat = aligned's optional [t]/[b]/[c] position, THEN alignat's
+            // mandatory {n} (amsmath: \begin{alignedat}[pos]{n}). Both read, neither
+            // rendered, for the reasons given on the branches above and below.
+            readAndIgnorePositionArg(parser, env);
+            discardBraceArg(parser, "\\begin{" + env + "}");
         } else if (takesPositionArg(env)) {
             // aligned/split take LaTeX's OPTIONAL [t]/[b]/[c] vertical-position argument.
             // Read and IGNORE it: LatteX renders the environment standalone (no
@@ -132,9 +138,12 @@ final class EnvironmentParser {
                     (a, b) -> a == RowRule.SOLID ? a : b); // a solid line wins
                 continue;
             }
-            if (parser.isCommand(t, CommandRegistry.Handler.EQUATION_SUPPRESSOR)) {
+            if (parser.isCommand(t, CommandRegistry.Handler.EQUATION_SUPPRESSOR)
+                    || parser.isCommand(t, CommandRegistry.Handler.QED_MARKER)) {
                 // Equation-numbering suppressors: LatteX renders no equation numbers, so
                 // these are inert no-ops (skipped here so an env body containing them parses).
+                // \qedhere likewise: the proof's end mark belongs to the surrounding
+                // document, not the formula (plan edbda088).
                 parser.next();
                 continue;
             }
@@ -474,7 +483,10 @@ final class EnvironmentParser {
      * in LaTeX and get none here.
      */
     private static boolean takesPositionArg(String env) {
-        return env.equals("aligned") || env.equals("split");
+        // gathered and multlined are inner forms too (plan edbda088); alignedat reads its
+        // position on its own branch, ahead of its mandatory {n}.
+        return env.equals("aligned") || env.equals("split")
+            || env.equals("gathered") || env.equals("multlined");
     }
 
     /**

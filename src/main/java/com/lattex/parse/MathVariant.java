@@ -274,7 +274,7 @@ public final class MathVariant {
             // The forced class survives the alphabet rewrite: \mathbf{\mathbin{x}} is
             // still spaced as a binary operator, with a bold nucleus.
             case MathNode.ClassOverride co ->
-                new MathNode.ClassOverride(rewrite(atomFn, co.body()), co.forcedClass());
+                new MathNode.ClassOverride(rewrite(atomFn, co.body()), co.forcedClass(), co.limits());
             case MathNode.Boxed bx -> new MathNode.Boxed(rewrite(atomFn, bx.body()));
             case MathNode.Cancel c -> new MathNode.Cancel(c.kind(), rewrite(atomFn, c.body()),
                 c.to() == null ? null : rewrite(atomFn, c.to()));

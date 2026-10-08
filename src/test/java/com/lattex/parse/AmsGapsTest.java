@@ -273,6 +273,9 @@ class AmsGapsTest {
         // The long form is the extensible hooked arrow with no label.
         assertEquals(MathParser.parse("a\\xhookrightarrow{} b"),
             MathParser.parse("a\\lhook\\joinrel\\longrightarrow b"));
+        assertTrue(LatteX.render("a\\lhook\\joinrel\\longrightarrow b")
+                .contains("aria-label=\"a rightwards hook arrow b\""),
+            "an unlabelled arrow is spoken as just the arrow");
         // \lhook alone has no glyph in Unicode or STIX Two Math: refuse loud, never fake.
         MathSyntaxException alone = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("a\\lhook b"));
