@@ -309,8 +309,8 @@ public final class LayoutEngine {
      * The lowercase Greek letters TeX keeps in math italic: α..ω (with ς) and the variant
      * shapes ϵ ϑ ϰ ϕ ϱ ϖ, all family-1 characters in plain TeX. Uppercase Greek is
      * deliberately absent (family 0, upright), as is ∇ (family 2, a symbol). ∂ is family 1
-     * in TeX too but is left on its own glyph here: it is classified and emitted to MathML
-     * as an operator ({@code <mo>}), and moving it is a separate decision from this one.
+     * in TeX too but is left on its own glyph here: toMathML emits it as an operator
+     * ({@code <mo>}), so slanting it is a separate decision about both outputs.
      */
     private static boolean isLowercaseGreek(int cp) {
         return (cp >= 0x03B1 && cp <= 0x03C9)

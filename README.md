@@ -18,9 +18,12 @@ preserved) for internal layout/emit failures — so an `Error` from the laid-out
 pipeline can never escape onto a live page. Inline embedding carries baseline
 metrics (`renderInlineResult` → depth/height in em) so prose math sits on the line.
 `renderWithDiagnostics` returns a never-throwing `RenderResult` with a Sirentide-parity
-`Diagnostics` (outcome/stage/message + caret). Script placement consumes the font's
-OpenType math-kern staircases, so subscripts tuck into a slanted glyph (V₁, Pₙ) and
-superscripts clear an overhang (f²) exactly as the font intends. Untrusted input is
+`Diagnostics` (outcome/stage/message + caret). Math is set the way TeX sets it: a
+variable is **math italic** (𝑥, 𝛼; `h` is ℎ), `-` is the **minus sign** (−, not a
+hyphen), and digits, uppercase Greek, `\sin`/`\operatorname`, `\mathrm` and `\text` stay
+upright. Script placement reads the italic glyph's correction and the font's OpenType
+math-kern staircases, so subscripts tuck into the slanted letter (V₁, Pₙ) and
+superscripts clear an overhang (f², W²) exactly as the font intends. Untrusted input is
 bounded on every axis — source length, nesting depth, layout fan-out (box budget), and
 output size (incremental) — and control characters can never reach the output; a resource
 trip degrades to a typed `OUTPUT_CAP_EXCEEDED` diagnostic, never an escaped error.
