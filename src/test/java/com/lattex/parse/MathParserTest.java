@@ -92,6 +92,7 @@ class MathParserTest {
             case MathNode.SizedDelim sd ->
                 "Big" + sd.sizeLevel() + "[" + sd.mathClass() + "](" + delim(sd.delimCp()) + ")";
             case Spacing(double mu) -> "Sp(" + mu + ")";
+            case MathNode.Lap(var body, var kind) -> "Lap[" + kind + "](" + pp(body) + ")";
             case Phantom(var content, var keepW, var keepV) -> {
                 String kind = keepW && keepV ? "phantom" : keepW ? "hphantom" : "vphantom";
                 yield "Ph[" + kind + "](" + pp(content) + ")";

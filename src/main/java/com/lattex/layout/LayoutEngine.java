@@ -202,6 +202,7 @@ public final class LayoutEngine {
             case MathNode.Negated negated -> negatedBox(negated, ctx);
             case Phantom(var content, var keepW, var keepV) ->
                 phantomBox(content, keepW, keepV, ctx);
+            case MathNode.Lap(var body, var kind) -> lapBox(body, kind, ctx);
             case BigOperator(var op, var lower, var upper, var limitsMode) ->
                 bigOperatorBox(op, lower, upper, limitsMode, ctx);
             case Fenced(var leftDelim, var body, var rightDelim) ->
@@ -341,6 +342,25 @@ public final class LayoutEngine {
             keepWidth ? inner.width() : 0.0,
             keepVertical ? inner.height() : 0.0,
             keepVertical ? inner.depth() : 0.0);
+    }
+
+    /**
+     * A mathtools overlap (plan 720cd87e): the body drawn so it ends at, starts at, or is
+     * centred on the box's origin, in a box of ZERO width that keeps the body's height and
+     * depth. The overhanging ink is outside the box on purpose; the Layout's bounds are
+     * taken from the ink, so the viewBox still covers it.
+     */
+    private static Box lapBox(MathNode body, MathNode.LapKind kind, LayoutContext ctx) {
+        Box inner = layoutBox(body, ctx);
+        double dx = switch (kind) {
+            case LEFT -> -inner.width();
+            case RIGHT -> 0.0;
+            case CENTER -> -inner.width() / 2.0;
+        };
+        List<PositionedGlyph> glyphs = new ArrayList<>();
+        List<Rule> rules = new ArrayList<>();
+        inner.drawInto(glyphs, rules, dx, 0.0);
+        return new Box(glyphs, rules, 0.0, inner.height(), inner.depth());
     }
 
     // ------------------------------------------------------------------
@@ -928,6 +948,7 @@ public final class LayoutEngine {
             case MathNode.Negated n -> classOf(n.body());
             case MathNode.Tagged t -> classOf(t.body()); // the tag rides outside; class = body's
             case Phantom _ -> MathClass.ORD;  // a phantom box behaves as an Ord atom
+            case MathNode.Lap _ -> MathClass.ORD; // an \llap/\rlap/\clap hbox is Ord
             case OperatorName _ -> MathClass.OP; // a named operator is class Op
             case TextRun _ -> MathClass.ORD;   // a text run behaves as an Ord atom
             // A delimited grid behaves as an Inner sub-formula (like \left..\right);

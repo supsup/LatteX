@@ -819,14 +819,45 @@ public final class MathParser {
      * override — a later {@code \textstyle} in the same group parses as an inner switch.
      */
     private MathNode parseStyleSwitch(String name) {
-        MathNode.StyleLevel level = switch (name) {
+        return new MathNode.StyleSwitch(styleLevel(name), parseRestOfGroup());
+    }
+
+    /** The level a {@code \displaystyle}-family switch selects (by its command name). */
+    private static MathNode.StyleLevel styleLevel(String name) {
+        return switch (name) {
             case "displaystyle" -> MathNode.StyleLevel.DISPLAY;
             case "textstyle" -> MathNode.StyleLevel.TEXT;
             case "scriptstyle" -> MathNode.StyleLevel.SCRIPT;
             case "scriptscriptstyle" -> MathNode.StyleLevel.SCRIPT_SCRIPT;
             default -> throw new IllegalStateException("not a style switch: " + name);
         };
-        return new MathNode.StyleSwitch(level, parseRestOfGroup());
+    }
+
+    /**
+     * The optional {@code [\style]} of a mathtools overlap, or {@code null} when absent
+     * (the content then takes the current style, mathtools' {@code \mathpalette}). Only
+     * the four style switches are accepted: anything else in the brackets is refused
+     * rather than read as the overlap's content.
+     */
+    private MathNode.StyleLevel parseLapStyle(String name, int commandOffset) {
+        if (peek().kind() != Kind.CHAR || peek().codePoint() != '[') {
+            return null;
+        }
+        next(); // '['
+        Token t = peek();
+        String expected = "\\" + name + "'s optional argument is a math style: \\displaystyle,"
+            + " \\textstyle, \\scriptstyle or \\scriptscriptstyle";
+        if (!isCommand(t, CommandRegistry.Handler.STYLE_SWITCH)) {
+            throw new MathSyntaxException(expected, t.kind() == Kind.EOF ? commandOffset : t.offset());
+        }
+        next();
+        MathNode.StyleLevel level = styleLevel(t.name());
+        if (peek().kind() != Kind.CHAR || peek().codePoint() != ']') {
+            throw new MathSyntaxException("\\" + name + ": missing ']' after the style",
+                currentOffset());
+        }
+        next(); // ']'
+        return level;
     }
 
     /**
@@ -1795,6 +1826,20 @@ public final class MathParser {
             case VPHANTOM -> {
                 // Occupies the content's height/depth only (zero width).
                 return new Phantom(parseArgument("\\vphantom argument"), false, true);
+            }
+            case LAP -> {
+                // mathtools' \mathllap / \mathrlap / \mathclap [\style]{content}: a
+                // zero-width box overhanging left / right / both ways (plan 720cd87e).
+                MathNode.LapKind kind = switch (name) {
+                    case "mathllap" -> MathNode.LapKind.LEFT;
+                    case "mathrlap" -> MathNode.LapKind.RIGHT;
+                    case "mathclap" -> MathNode.LapKind.CENTER;
+                    default -> throw new IllegalStateException("not an overlap: \\" + name);
+                };
+                MathNode.StyleLevel style = parseLapStyle(name, commandOffset);
+                MathNode body = parseArgument("\\" + name + " argument");
+                return new MathNode.Lap(
+                    style == null ? body : new MathNode.StyleSwitch(style, body), kind);
             }
             case MATHSTRUT -> {
                 // A zero-width strut with the height/depth of '(' — i.e. \vphantom{(}.
