@@ -126,8 +126,11 @@ class MacroExpansionTest {
 
     @Test
     void malformedTextCommandKeepsItsEstablishedArgumentError() {
+        // No token after the command (end of input): the established error, at the
+        // command. "\textbf x" is no longer malformed: one token is \textbf{x}
+        // (plan 18e34d82).
         MathSyntaxException failure = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("\\textbf x"));
+            () -> MathParser.parse("\\textbf"));
         assertEquals("\\textbf expects a '{...}' text argument", failure.getMessage());
         assertEquals(0, failure.offset());
     }

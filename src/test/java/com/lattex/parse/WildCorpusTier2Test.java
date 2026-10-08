@@ -85,8 +85,12 @@ class WildCorpusTier2Test {
     }
 
     @Test
-    void referencesRequireABracedKeyAndTextModeStillFailsLoud() {
-        for (String source : List.of("\\ref", "\\ref x", "\\eqref", "\\eqref x")) {
+    void referencesRequireAKeyAndTextModeStillFailsLoud() {
+        // A one-token key is a key (TeX's undelimited argument, plan 18e34d82): it is
+        // discarded exactly as a braced one, and nothing of it leaks into output.
+        assertEquals(MathParser.parse("\\ref{x}"), MathParser.parse("\\ref x"));
+        assertEquals(MathParser.parse("\\eqref{x}"), MathParser.parse("\\eqref x"));
+        for (String source : List.of("\\ref", "{\\ref}", "\\eqref", "{\\eqref}")) {
             MathSyntaxException failure = assertThrows(MathSyntaxException.class,
                 () -> MathParser.parse(source), source);
             assertTrue(failure.getMessage().contains("expects a {key} group"),

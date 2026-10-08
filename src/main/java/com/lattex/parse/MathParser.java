@@ -200,8 +200,10 @@ public final class MathParser {
                             // that lets MacroExpander inspect
                             // \newcommand{\textbf}{...} and reject the name via
                             // the typed built-in reservation policy, while the
-                            // ordinary parser still reports the established
-                            // missing-text-argument error.
+                            // parser reads TeX's undelimited one-token form
+                            // (\mathrm u) or, with no token, reports the
+                            // established missing-text-argument error
+                            // (parseUnbracedTextArgument).
                             i = lexTextArgument(s, name, i, out, start);
                         } else {
                             out.add(Token.cmd(name, start));
@@ -535,10 +537,10 @@ public final class MathParser {
                 if (tag != null) {
                     throw new MathSyntaxException("Multiple \\tag on one equation");
                 }
-                if (peek().kind() != Kind.LBRACE) {
-                    throw new MathSyntaxException("\\tag expects a {label} group");
+                if (!isArgumentToken(peek())) {
+                    throw missingArgument("\\tag expects a {label} group");
                 }
-                tag = parseGroup();
+                tag = parseArgument("\\tag label"); // \tag{1} or \tag1
                 continue;
             }
             // A TeX INFIX fraction operator (\over/\atop/...) splits its enclosing
@@ -916,12 +918,71 @@ public final class MathParser {
         return new BigOperator(op, lower, upper, mode);
     }
 
+    // ------------------------------------------------------------------
+    // Arguments: TeX's undelimited-argument rule, in ONE place
+    // ------------------------------------------------------------------
+
+    /**
+     * Whether {@code t} can BE an undelimited argument. The TeXbook (Ch. 20,
+     * "Definitions") reads an undelimited argument as the next token — one
+     * character, one control sequence, or one {@code {…}} group — after skipping
+     * spaces (the lexer already dropped math-mode spaces). So {@code \frac12},
+     * {@code \mathrm u}, {@code x\pmod q} and {@code \sqrt2} are all ordinary LaTeX.
+     *
+     * <p>What is NOT a token here is a BOUNDARY, and reading one as an argument
+     * would silently re-scope the formula: end of input, a closing {@code '}'}, a
+     * script marker, {@code \right}, a matrix cell separator {@code '&'}, or a row
+     * separator ({@code \\} / {@code \cr}). Before plan 18e34d82 the math readers
+     * took {@code '&'} as an atom, so {@code \frac1&2} inside a matrix silently
+     * merged two cells; each of these is now a typed, caret-pointing refusal
+     * ({@link #missingArgument}).
+     *
+     * <p>EVERY registry-declared argument goes through this predicate — the math
+     * readers ({@link #parseArgument}, {@link #parseAccentArg},
+     * {@link #parseFontArg}, {@link #parseScriptArg}) and the readers whose
+     * argument is not math ({@link #openArgument}: text, colour, operator name,
+     * label/reference key, {@code \substack}, {@code \bordermatrix}) — so no
+     * command can drift back to a brace requirement. Pinned by the registry census
+     * in {@code SingleTokenArgumentTest}.
+     */
+    private boolean isArgumentToken(Token t) {
+        return switch (t.kind()) {
+            case SUP, SUB, RBRACE, EOF -> false;
+            case CHAR -> t.codePoint() != '&';
+            case COMMAND -> !CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.RIGHT)
+                && !CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.ROW_SEPARATOR);
+            case LBRACE, TEXT -> true;
+        };
+    }
+
+    /** The typed refusal for "no argument token here", with the caret ON the boundary. */
+    private MathSyntaxException missingArgument(String message) {
+        return new MathSyntaxException(message, currentOffset());
+    }
+
+    /**
+     * The entry point for an argument that is NOT a math unit (its content is
+     * read by a dedicated loop: text, a colour name, a label key, substack rows).
+     * Returns {@code true} with the {@code '{'} consumed for the braced form, or
+     * {@code false} with the cursor ON the single argument token (the
+     * undelimited form, see {@link #isArgumentToken}); throws {@code ifMissing}
+     * when there is no token at all.
+     */
+    private boolean openArgument(String ifMissing) {
+        if (peek().kind() == Kind.LBRACE) {
+            next(); // consume '{'
+            return true;
+        }
+        if (!isArgumentToken(peek())) {
+            throw missingArgument(ifMissing);
+        }
+        return false;
+    }
+
     /** The argument of a script: a single nucleus ({@code '{'} opens a group). */
     private MathNode parseScriptArg(String what) {
-        Kind k = peek().kind();
-        if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
-                || isCommand(peek(), CommandRegistry.Handler.RIGHT)) {
-            throw new MathSyntaxException(
+        if (!isArgumentToken(peek())) {
+            throw missingArgument(
                 "Dangling " + what + ": nothing follows the script marker");
         }
         return parseNucleus();
@@ -933,10 +994,8 @@ public final class MathParser {
      * taken as-is (matching LaTeX's brace-optional accent argument).
      */
     private MathNode parseAccentArg(String command) {
-        Kind k = peek().kind();
-        if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
-                || isCommand(peek(), CommandRegistry.Handler.RIGHT)) {
-            throw new MathSyntaxException(
+        if (!isArgumentToken(peek())) {
+            throw missingArgument(
                 "\\" + command + " needs a base to accent, but found " + describe(peek()));
         }
         return parseNucleus();
@@ -949,10 +1008,8 @@ public final class MathParser {
      * argument, e.g. {@code \mathbb R}).
      */
     private MathNode parseFontArg(String command) {
-        Kind k = peek().kind();
-        if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
-                || isCommand(peek(), CommandRegistry.Handler.RIGHT)) {
-            throw new MathSyntaxException(
+        if (!isArgumentToken(peek())) {
+            throw missingArgument(
                 "\\" + command + " needs an argument, but found " + describe(peek()));
         }
         return parseNucleus();
@@ -960,20 +1017,56 @@ public final class MathParser {
 
     /**
      * A required brace-optional argument of a command that takes a math unit —
-     * {@code \frac}, {@code \cfrac}, {@code \sqrt}, {@code \binom}. A {@code '{'}
-     * opens a group; otherwise the single next token (a char or a {@code \command})
-     * is consumed, so {@code \frac1x} ≡ {@code \frac{1}{x}}, {@code \sqrt2} ≡
-     * {@code \sqrt{2}} and {@code \frac{x^3}3} all read — matching LaTeX's
+     * {@code \frac}, {@code \cfrac}, {@code \sqrt}, {@code \binom}, {@code \pmod},
+     * {@code \phantom}, … A {@code '{'} opens a group; otherwise the single next
+     * token (a char or a {@code \command}) is consumed, so {@code \frac1x} ≡
+     * {@code \frac{1}{x}}, {@code \sqrt2} ≡ {@code \sqrt{2}}, {@code x\pmod q} ≡
+     * {@code x\pmod{q}} and {@code \frac{x^3}3} all read — matching LaTeX's
      * single-token argument rule. Fails cleanly when nothing follows.
+     *
+     * <p>A control-sequence argument is read as a NUCLEUS, so a command that takes
+     * its own arguments brings them ({@code \hat\mathbf x} reads as
+     * {@code \hat{\mathbf x}}). That is TeX's reading for a primitive math field
+     * (an accent, a script), which expands the macro it finds; for a MACRO
+     * argument ({@code \frac\sqrt2 3}) TeX would take {@code \sqrt} alone and then
+     * fail, so here LatteX is the more lenient of the two. Every input TeX accepts
+     * still means what TeX means: an argument-less control sequence
+     * ({@code \frac\alpha\beta}) reads identically under both rules.
      */
     private MathNode parseArgument(String context) {
-        Kind k = peek().kind();
-        if (k == Kind.SUP || k == Kind.SUB || k == Kind.RBRACE || k == Kind.EOF
-                || isCommand(peek(), CommandRegistry.Handler.RIGHT)) {
-            throw new MathSyntaxException(
+        if (!isArgumentToken(peek())) {
+            throw missingArgument(
                 context + " expects an argument, but found " + describe(peek()));
         }
         return parseNucleus();
+    }
+
+    /**
+     * The undelimited form of a text-family argument ({@code \mathrm u},
+     * {@code \text\%}): the one token becomes the {@link Kind#TEXT} payload the
+     * lexer would have captured from {@code \mathrm{u}} / {@code \text{\%}}, so the
+     * braced and unbraced spellings produce the SAME node — including the same
+     * refusal for a control word ({@code \mathrm\alpha} fails exactly as
+     * {@code \mathrm{\alpha}} does). The lexer only captures the braced form raw
+     * ({@link #lexTextArgument}); a text command with no {@code '{'} reaches here
+     * as a COMMAND token.
+     */
+    private MathNode parseUnbracedTextArgument(String name, int commandOffset) {
+        String ifMissing = "\\" + name + " expects a '{...}' text argument";
+        if (peek().kind() == Kind.LBRACE || !isArgumentToken(peek())) {
+            // A '{' here is a brace group the lexer did not capture as raw text (a
+            // macro body spliced it in after lexing); its spaces are already gone, so
+            // it cannot be read as text faithfully. Keep the established refusal.
+            throw new MathSyntaxException(ifMissing, commandOffset);
+        }
+        Token t = next();
+        String raw = switch (t.kind()) {
+            case CHAR -> new String(Character.toChars(t.codePoint()));
+            case COMMAND -> "\\" + t.name();
+            case TEXT -> "\\" + t.name() + "{" + t.text() + "}";
+            default -> throw new IllegalStateException("not an argument token: " + t);
+        };
+        return textWithNestedMath(Token.text(name, raw, commandOffset));
     }
 
     /**
@@ -1059,6 +1152,23 @@ public final class MathParser {
         MathNode lower = parseArgument("\\binom lower argument");
         Fraction stack = new Fraction(upper, lower, false, style);
         return new Fenced('(', stack, ')');
+    }
+
+    /**
+     * Reads and DISCARDS a label/reference key: {@code {key}} or, under TeX's
+     * undelimited-argument rule, one token ({@code \\label k}). A key is opaque, so
+     * the one-token form takes exactly the token — even a control sequence that
+     * would take arguments of its own is not run.
+     */
+    private void discardKeyArgument(String ifMissing) {
+        if (peek().kind() == Kind.LBRACE) {
+            parseGroup(); // read and discard the braced key
+            return;
+        }
+        if (!isArgumentToken(peek())) {
+            throw missingArgument(ifMissing);
+        }
+        next(); // the one-token key
     }
 
     /** A single nucleus (no trailing scripts). */
@@ -1307,15 +1417,15 @@ public final class MathParser {
             }
             case PHANTOM -> {
                 // Occupies the content's full box (width + height + depth), no ink.
-                return new Phantom(parseGroup(), true, true);
+                return new Phantom(parseArgument("\\phantom argument"), true, true);
             }
             case HPHANTOM -> {
                 // Occupies the content's width only (zero height/depth).
-                return new Phantom(parseGroup(), true, false);
+                return new Phantom(parseArgument("\\hphantom argument"), true, false);
             }
             case VPHANTOM -> {
                 // Occupies the content's height/depth only (zero width).
-                return new Phantom(parseGroup(), false, true);
+                return new Phantom(parseArgument("\\vphantom argument"), false, true);
             }
             case MATHSTRUT -> {
                 // A zero-width strut with the height/depth of '(' — i.e. \vphantom{(}.
@@ -1402,7 +1512,8 @@ public final class MathParser {
                 return new OperatorName("mod", false);
             }
             case PMOD -> {
-                MathNode arg = parseGroup();
+                // x\pmod q is x\pmod{q}: one token (TeX's undelimited argument).
+                MathNode arg = parseArgument("\\pmod argument");
                 return new MathList(List.of(
                     new Spacing(18.0),
                     new Atom('(', MathClass.OPEN),
@@ -1438,12 +1549,9 @@ public final class MathParser {
                 return nonRenderingResult(descriptor);
             }
             case LABEL -> {
-                // \label{key}: consume and DISCARD its mandatory brace group (mirrors
-                // the strictness of the \tag reader), then emit nothing.
-                if (peek().kind() != Kind.LBRACE) {
-                    throw new MathSyntaxException("\\label expects a {key} group");
-                }
-                parseGroup(); // read and discard the label
+                // \label{key} (or \label k — one token): consume and DISCARD the key,
+                // then emit nothing.
+                discardKeyArgument("\\label expects a {key} group");
                 return nonRenderingResult(descriptor);
             }
             case REFERENCE -> {
@@ -1451,10 +1559,7 @@ public final class MathParser {
                 // cannot leak into output, then render a visible unresolved marker:
                 // "??" for \ref and "(??)" for \eqref. This is fail-honest without
                 // pretending that a standalone formula renderer resolved a document.
-                if (peek().kind() != Kind.LBRACE) {
-                    throw new MathSyntaxException("\\" + name + " expects a {key} group");
-                }
-                parseGroup(); // read and discard the reference key
+                discardKeyArgument("\\" + name + " expects a {key} group");
                 MathNode placeholder = new MathList(List.of(
                     Atom.ord('?'), Atom.ord('?')));
                 return switch (name) {
@@ -1464,8 +1569,9 @@ public final class MathParser {
                         "reference handler does not name a reference command: \\" + name);
                 };
             }
-            case TEXT -> throw new MathSyntaxException(
-                "\\" + name + " expects a '{...}' text argument", commandOffset);
+            case TEXT -> {
+                return parseUnbracedTextArgument(name, commandOffset);
+            }
             case DELIMITER, INFIX_FRACTION, TAG, MIDDLE, ROW_SEPARATOR, DEFINITION ->
                 throw unknownCommand(name, commandOffset);
         }
@@ -1514,14 +1620,15 @@ public final class MathParser {
      * {@code \substack} is always centred.
      */
     private MathNode parseSubstack() {
-        if (peek().kind() != Kind.LBRACE) {
-            throw new MathSyntaxException(
-                "\\substack expects a '{...}' argument but found " + describe(peek()));
-        }
-        next(); // consume '{'
         List<List<MathNode>> rows = new ArrayList<>();
         List<MathNode> row = new ArrayList<>();
-        while (true) {
+        // \substack i (one token) is a one-row stack, exactly as \substack{i}.
+        boolean braced = openArgument(
+            "\\substack expects a '{...}' argument but found " + describe(peek()));
+        if (!braced) {
+            row.add(parseArgument("\\substack argument"));
+        }
+        while (braced) {
             Token t = peek();
             if (t.kind() == Kind.RBRACE) {
                 next(); // consume '}'
@@ -1569,15 +1676,17 @@ public final class MathParser {
      * cells, like a matrix.
      */
     private MathNode parseBorderMatrix() {
-        if (peek().kind() != Kind.LBRACE) {
-            throw new MathSyntaxException(
-                "\\bordermatrix expects a '{...}' argument but found " + describe(peek()));
-        }
-        next(); // consume '{'
         List<List<MathNode>> rawRows = new ArrayList<>();
         List<MathNode> row = new ArrayList<>();
         List<MathNode> cell = new ArrayList<>();
-        while (true) {
+        // One token is a header-only grid, refused below by the body-row check —
+        // the same refusal \bordermatrix{x} gets, never a brace complaint.
+        boolean braced = openArgument(
+            "\\bordermatrix expects a '{...}' argument but found " + describe(peek()));
+        if (!braced) {
+            cell.add(parseArgument("\\bordermatrix argument"));
+        }
+        while (braced) {
             Token t = peek();
             if (t.kind() == Kind.RBRACE) {
                 next(); // consume '}'
@@ -1761,13 +1870,21 @@ public final class MathParser {
      * or malformed color fails as a clean parse error, never an emitted raw string.
      */
     private Color parseColorArg(String command) {
-        if (peek().kind() != Kind.LBRACE) {
-            throw new MathSyntaxException(
-                command + " needs a '{color}' argument but found " + describe(peek()));
-        }
-        next(); // consume '{'
         StringBuilder sb = new StringBuilder();
-        while (peek().kind() != Kind.RBRACE) {
+        // One token is a one-character colour name, which Color.parse then refuses
+        // as a colour (no colour is one character) — the domain check, not a brace one.
+        boolean braced = openArgument(
+            command + " needs a '{color}' argument but found " + describe(peek()));
+        if (!braced) {
+            Token t = next();
+            if (t.kind() != Kind.CHAR) {
+                throw new MathSyntaxException(
+                    command + " color must be a name or hex literal, but found " + describe(t),
+                    t.offset());
+            }
+            sb.appendCodePoint(t.codePoint());
+        }
+        while (braced && peek().kind() != Kind.RBRACE) {
             Token t = peek();
             if (t.kind() != Kind.CHAR) {
                 throw new MathSyntaxException(
@@ -1776,7 +1893,9 @@ public final class MathParser {
             sb.appendCodePoint(t.codePoint());
             next();
         }
-        next(); // consume '}'
+        if (braced) {
+            next(); // consume '}'
+        }
         try {
             return Color.parse(sb.toString());
         } catch (IllegalArgumentException e) {
@@ -1785,13 +1904,13 @@ public final class MathParser {
     }
 
     private String readOperatorNameArg() {
-        if (peek().kind() != Kind.LBRACE) {
-            throw new MathSyntaxException(
-                "\\operatorname needs a '{name}' argument but found " + describe(peek()));
-        }
-        next(); // consume '{'
+        // \operatorname f is \operatorname{f}: the one token is the whole name, read
+        // by the same loop below (which refuses anything but plain text).
+        boolean braced = openArgument(
+            "\\operatorname needs a '{name}' argument but found " + describe(peek()));
+        int end = braced ? Integer.MAX_VALUE : p + 1;
         StringBuilder sb = new StringBuilder();
-        while (peek().kind() != Kind.RBRACE) {
+        while (p < end && peek().kind() != Kind.RBRACE) {
             Token t = peek();
             if (t.kind() == Kind.CHAR) {
                 sb.appendCodePoint(t.codePoint());
@@ -1810,7 +1929,9 @@ public final class MathParser {
                     "\\operatorname argument must be plain text, but found " + describe(t));
             }
         }
-        next(); // consume '}'
+        if (braced) {
+            next(); // consume '}'
+        }
         if (sb.length() == 0) {
             throw new MathSyntaxException("\\operatorname argument must be non-empty");
         }

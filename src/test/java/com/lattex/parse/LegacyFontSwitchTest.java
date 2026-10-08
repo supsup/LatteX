@@ -219,9 +219,15 @@ class LegacyFontSwitchTest {
 
     @Test
     void textnormalWithoutAnArgumentStillFailsLoud() {
-        MathSyntaxException failure = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("\\textnormal x"));
-        assertTrue(failure.getMessage().contains("\\textnormal"), failure.getMessage());
+        // No token at all (end of input, or the group's closing brace) still fails loud.
+        // "\textnormal x" is NOT that case: TeX reads one token as the argument, so it
+        // is \textnormal{x} (plan 18e34d82, SingleTokenArgumentTest).
+        for (String source : List.of("\\textnormal", "{\\textnormal}")) {
+            MathSyntaxException failure = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse(source), source);
+            assertTrue(failure.getMessage().contains("\\textnormal"), failure.getMessage());
+        }
+        assertEquals(MathParser.parse("\\textnormal{x}"), MathParser.parse("\\textnormal x"));
     }
 
     // ------------------------------------------------------------------

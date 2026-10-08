@@ -526,9 +526,11 @@ class MathParserTest {
         assertEquals("Tag(A(x,ORD)|A(1,ORD))", pp(t));
         // \tag is equation-global — it hoists out wherever it appears in the stream
         assertInstanceOf(MathNode.Tagged.class, MathParser.parse("\\tag{1} x + y"));
-        // two \tag on one equation, or a \tag with no { label } group, fail loudly
+        // two \tag on one equation, or a \tag with no label at all, fail loudly;
+        // \tag 1 is \tag{1} (TeX's one-token argument, plan 18e34d82)
         assertThrows(MathSyntaxException.class, () -> MathParser.parse("x \\tag{1} \\tag{2}"));
-        assertThrows(MathSyntaxException.class, () -> MathParser.parse("x \\tag 1"));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("x \\tag"));
+        assertEquals(MathParser.parse("x \\tag{1}"), MathParser.parse("x \\tag 1"));
     }
 
     @Test
@@ -868,8 +870,11 @@ class MathParserTest {
     }
 
     @Test
-    void substackNeedsABraceArgument() {
-        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\substack a"));
+    void substackNeedsAnArgument() {
+        // \substack a is \substack{a} (one token, plan 18e34d82); NO argument fails.
+        assertEquals(MathParser.parse("\\substack{a}"), MathParser.parse("\\substack a"));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\substack"));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("{\\substack}"));
     }
 
     @Test
