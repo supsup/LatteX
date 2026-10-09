@@ -63,9 +63,9 @@ test -z "$(git status --porcelain)" || { echo 'refusing: working tree is dirty';
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" \
   || { echo 'refusing: HEAD is not origin/main'; exit 1; }
 
-SHA=$(git rev-parse --short HEAD)           # every example below reuses this
-docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" \
-  -t "lattex:main-$SHA" .
+SHA_FULL="$(git rev-parse HEAD)"; SRC=.      # every example below reuses these three
+SHA="$(git rev-parse --short "$SHA_FULL")"
+docker build --build-arg LATTEX_SOURCE_REVISION="$SHA_FULL" -t "lattex:main-$SHA" "$SRC"
 ```
 
 **Why four lines of fence before one line of build.** `docker build .` sends *your working
@@ -87,26 +87,31 @@ exact 40-character commit into the Git-less build context. Prerequisite: **Docke
 and nothing else** — no host JDK, no Gradle, no Chrome. Roughly a few minutes cold, ~227 MB
 final.
 
-**The recommended promotion path skips the fence by skipping the working tree.** The four
-fence lines exist because `docker build .` reads whatever is on disk. `git archive` reads the
-commit instead: export it to an empty directory and build from there.
+**The recommended promotion path skips the working-tree half of the fence by skipping the
+working tree.** The dirty-tree and `HEAD` == `origin/main` lines exist because `docker build .`
+reads whatever is on disk. `git archive` reads the commit instead: export it to an empty
+directory and build from there. The fetch line is not a working-tree guard and it stays, first,
+on this path too: `origin/main` is the ref being named, and the load-bearing failure described
+above (a stale `origin/main` blessed by every later step) is exactly as available here.
 
 ```sh
+git fetch -q origin main || { echo 'refusing: fetch failed, origin/main may be stale'; exit 1; }
 SHA_FULL="$(git rev-parse origin/main)"
 SHA="$(git rev-parse --short "$SHA_FULL")"
-EXPORT="$(mktemp -d)"
+EXPORT="$(mktemp -d)"; SRC="$EXPORT"
 git archive "$SHA_FULL" | tar -x -C "$EXPORT"
-docker build --build-arg LATTEX_SOURCE_REVISION="$SHA_FULL" -t "lattex:main-$SHA" "$EXPORT"
-rm -rf "$EXPORT"
+docker build --build-arg LATTEX_SOURCE_REVISION="$SHA_FULL" -t "lattex:main-$SHA" "$SRC"
+# keep $EXPORT until Act II has read its build.gradle.kts; Circle 3 removes it
 ```
 
 The export contains no `.git`, so the context is exactly the commit's tree: a dirty working
 tree, a wrong branch, or a stale host `build/` cannot leak in because none of them is there.
 `build.gradle.kts` cross-checks `LATTEX_SOURCE_REVISION` against `git rev-parse HEAD` only
 when `.git` exists in the project root; with no `.git` it stamps the value you pass, and that
-stamp is true by construction because the compiled tree came from that same sha. The fence
-above applies to live-checkout builds only; keep it when you build from a checkout, drop it
-when you build from an export.
+stamp is true by construction because the compiled tree came from that same sha. So of the
+four fence lines, only the two that inspect the working tree are specific to live-checkout
+builds; keep all four when you build from a checkout, keep the fetch when you build from an
+export.
 
 **Stage 1 — `eclipse-temurin:25-jdk AS build`**
 
@@ -173,7 +178,7 @@ docker run --rm lattex:main-$SHA cli '\frac{a}{b}' | head -1
 
 ```sh
 docker run --rm lattex:main-$SHA cli --version
-sed -n 's/^version = "\(.*\)"$/source declares: \1/p' build.gradle.kts
+sed -n 's/^version = "\(.*\)"$/source declares: \1/p' "$SRC/build.gradle.kts"   # the tree you BUILT
 ```
 
 Both sides *printed*, for you to compare. Nothing here compares them — an earlier draft said
@@ -184,9 +189,15 @@ want the comparison made rather than displayed, that is what `assert_version` in
 **Circle 3 — the full contract:**
 
 ```sh
-sh docker/smoke-test.sh lattex:main-$SHA build.gradle.kts "$(git rev-parse HEAD)"
+sh docker/smoke-test.sh lattex:main-$SHA "$SRC/build.gradle.kts" "$SHA_FULL"
 # -> "lattex Docker smoke: PASS"
+[ "$SRC" != . ] && rm -rf "$SRC"    # export path only: the export has done its job
 ```
+
+`$SRC` and `$SHA_FULL` come from whichever Act I build you ran. On the export path the
+working tree's `build.gradle.kts` and `HEAD` may both differ from what was built, so the
+expected version and revision are read from the export and the pinned sha, never from the
+checkout.
 
 Modes, mounts, stdin/argv/file input, batch NUL framing, reserved-word escaping, atomic
 claims, restart recovery, collisions, races.
@@ -338,15 +349,15 @@ build — restart restarts the same container, it does not re-resolve the tag. R
 > and `-f` is the exception, not the other way round.
 
 ```sh
-STAMP="$(date +%Y%m%d)"
+STAMP="$(date +%Y%m%d-%H%M%S)"   # time component: two swaps on one day must not collide
 # 1. Keep a way back: the image the live container ACTUALLY runs, under a dated tag. Read it
 #    off the container's pinned ID, so this is right whether or not Act III has already moved
 #    the alias (`docker tag lattex:dogfood ...` would capture the NEW image once it has).
 docker tag "$(docker inspect -f '{{.Image}}' lattex-dogfood)" "lattex:dogfood-rollback-$STAMP"
-# 2. The old container under a dated name, stopped, not removed.
+# 2. The old container under a dated name, stopped, not removed. A manually stopped
+#    `unless-stopped` container stays stopped across daemon restarts; no policy change needed.
 docker stop -t 30 lattex-dogfood && docker rename lattex-dogfood "lattex-dogfood-old-$STAMP"
 # `docker rm -f` only when the graceful stop has already failed — it kills a job mid-flight.
-docker update --restart no "lattex-dogfood-old-$STAMP"   # so a daemon restart does not revive it
 # 3. Recreate under the live name from the re-pointed alias.
 docker run -d --name lattex-dogfood --restart unless-stopped \
   --user "$(id -u):$(id -g)" \
@@ -356,14 +367,17 @@ docker run -d --name lattex-dogfood --restart unless-stopped \
 ```
 
 **Roll back.** Two routes, pick by what went wrong. If the new image is bad, retag and
-recreate: `docker tag "lattex:dogfood-rollback-$STAMP" lattex:dogfood`, then stop and
-rename the new container the same way and `docker run` again from the alias. If the new
-container is bad but the image is fine, or you just want the old one back fastest:
-`docker stop -t 30 lattex-dogfood && docker rename lattex-dogfood lattex-dogfood-bad-$STAMP`,
-then `docker rename "lattex-dogfood-old-$STAMP" lattex-dogfood && docker update --restart
-unless-stopped lattex-dogfood && docker start lattex-dogfood`. Only one container may hold
-each bind mount's watcher at a time, so stop one before starting the other. Prune the
-`-old-`/`-rollback-` leftovers once the new build has run clean for a while, not before.
+recreate: `docker tag "lattex:dogfood-rollback-$STAMP" lattex:dogfood`, then
+`docker stop -t 30 lattex-dogfood && docker rename lattex-dogfood "lattex-dogfood-bad-$STAMP"`
+(the `-bad-` name cannot collide with the `-old-` one parked above) and `docker run` again
+from the alias. If the new container is bad but the image is fine, or you just want the old
+one back fastest: the same stop-and-rename to `-bad-`, then
+`docker rename "lattex-dogfood-old-$STAMP" lattex-dogfood && docker start lattex-dogfood`
+(its `unless-stopped` policy is still in place). Stop one before starting the other: two
+watchers on one mount is a supported configuration (the smoke test runs it deliberately and
+the atomic claims make it safe), but during a rollback it would only blur which build
+produced which output. Prune the `-old-`/`-bad-`/`-rollback-` leftovers once the restored
+build has run clean for a while, not before.
 
 **Ask for the two IDs; do not read the `docker ps` image column.** An earlier version of this
 section claimed a bare hex ID appears there when the tag has moved. That is false, and it is
@@ -462,11 +476,14 @@ staleness: this image, and that vendored jar. Updating one says nothing about th
 
 ## The short version
 
-1. Fence first (clean tree, `HEAD` == `origin/main`), then
-   `docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" -t lattex:main-$SHA .`.
-   The fence makes both the tag and the jar stamp truthful; `docker build .` ships your working
-   tree, not the commit you named.
-2. Verify: renders → version matches source → smoke passes.
+1. Fetch first, always (`git fetch origin main || exit 1`). Then either export the commit
+   (`git archive "$SHA_FULL" | tar -x -C "$EXPORT"`) and
+   `docker build --build-arg LATTEX_SOURCE_REVISION="$SHA_FULL" -t lattex:main-$SHA "$EXPORT"`,
+   the recommended path, or finish the fence (clean tree, `HEAD` == `origin/main`) and build
+   from `.`. Either way the tag and the jar stamp are truthful; `docker build .` ships your
+   working tree, not the commit you named, which is why the export needs no tree checks.
+2. Verify: renders → version matches the source you BUILT (`$SRC/build.gradle.kts`) → smoke
+   passes against `$SHA_FULL`.
 3. Tag `main-<sha>` **first**; promote `dogfood` second. Treat tags as readable aliases and the
    jar's `Implementation-SCM-Revision` as source provenance.
 4. Pin **tagged** releases. `0.11.1` is the standing proof that a version string can name
