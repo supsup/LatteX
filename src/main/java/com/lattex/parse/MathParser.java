@@ -1970,7 +1970,9 @@ public final class MathParser {
                 return new MathList(List.of(
                     new Spacing(18.0),
                     new Atom('(', MathClass.OPEN),
-                    new OperatorName("mod", false),
+                    // amsmath braces the word ({\operator@font mod}), so it is an Ord:
+                    // mod|\mkern6mu|arg is Ord|Ord (no glue), not Op|Ord's thin space.
+                    new MathNode.ClassOverride(new OperatorName("mod", false), MathClass.ORD),
                     new Spacing(6.0),
                     arg,
                     new Atom(')', MathClass.CLOSE)));

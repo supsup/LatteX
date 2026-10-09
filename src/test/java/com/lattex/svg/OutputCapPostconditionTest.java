@@ -320,7 +320,12 @@ class OutputCapPostconditionTest {
         // Re-pinned for plan 720cd87e (a prime in a script style draws the font's ssty
         // superscript prime): with the prime family excluded from ssty the tree
         // reproduces 5d6cc786... exactly.
-        assertEquals("2e5442e38d1c6faf92ba45028504fd9c4219c1d61cd937f333e432960b4d70a3", hex.toString(),
+        // Re-pinned for plan e749291c (explicit kerns/glue are transparent to inter-atom
+        // spacing; \pmod's "mod" set as Ord): one row moves, `a\not= b,\ x\not\in S,...`
+        // (Punct|`\ `|Ord gains 3mu); with rowBox's prev-reset restored the tree
+        // reproduces 2e5442e3... exactly. The mid-display/mid-fluid goldens move by the
+        // Ord|\quad|Op thin space before \int (+3mu = 6.6667 units, 667.1862 -> 673.8529).
+        assertEquals("def81e064b5bd2e9259fcc31a3c3e6b6cbfcc298a7f724b5d3863ecb2a03cebb", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
     }

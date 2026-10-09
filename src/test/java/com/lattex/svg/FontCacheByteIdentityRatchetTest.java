@@ -62,9 +62,14 @@ class FontCacheByteIdentityRatchetTest {
      * Re-pinned for plan 720cd87e (a prime in a script style draws the font's ssty
      * superscript prime; the three PARSES-NOW rows with a prime move): with the prime
      * family excluded from ssty the tree reproduces 3ff6719e... exactly.
+     * Re-pinned for plan e749291c (explicit kerns/glue are transparent to inter-atom
+     * spacing, TeX82 §760-761; \pmod's "mod" set as Ord like amsmath's braced group):
+     * exactly one PARSES-NOW row moves, `a\not= b,\ x\not\in S,...` (Punct|`\ `|Ord
+     * gains TeX's 3mu thin space), and with rowBox's prev-reset restored the tree
+     * reproduces 3e551b9a... exactly.
      */
     private static final String PINNED_SHA256 =
-        "3e551b9a40019d4e10fededbf2442ac3fb2966f14b8b53c1bec699a07b228e1b";
+        "7b1c7afcf1eeb749b15b5a0a4b3a39014c4234838dae62a6fcd7cb6a9dbf2f4f";
 
     private static final SfntFont FONT = SfntFont.loadBundled();
 

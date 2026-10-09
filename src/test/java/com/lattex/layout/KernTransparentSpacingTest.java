@@ -91,4 +91,13 @@ class KernTransparentSpacingTest {
         double relOrd = width("={-}a"); // Rel Ord Ord: Rel|Ord 5mu, Ord|Ord 0
         assertEquals(relOrd - 3 * MU, width("=\\!-a"), EPS, "=\\!-a: Bin after Rel stays Ord");
     }
+
+    @Test
+    void pmodSetsModAsOrdSoItsKernAddsNoThinSpace() {
+        // amsmath: \pmod{b} = \mkern18mu({\operator@font mod}\mkern6mu b). The braced
+        // "mod" is an Ord, so mod|kern|b is Ord|Ord: no glue. Were "mod" an Op, kern
+        // transparency would add Op|Ord's 3mu thin space here.
+        assertEquals(width("x\\mkern18mu({\\operatorname{mod}}\\mkern6mu b)"),
+            width("x\\pmod{b}"), EPS, "\\pmod's mod is Ord, not Op");
+    }
 }
