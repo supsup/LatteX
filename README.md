@@ -105,13 +105,16 @@ the filtered Docker context deliberately contains no `.git` directory:
 ```bash
 docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" \
   -t lattex:local .
-mkdir -p Input Output
+mkdir -p Input Output      # local example only; see the dogfood root convention below
 ```
 
 `Input/` and `Output/` are operator data, not repository artifacts. They are
-excluded from the Docker build context; keep them out of commits (or place the
-same two folders at any absolute host path and change only the left side of the
-mounts below).
+excluded from the Docker build context; keep them out of commits. Creating them
+at the repository root is a local example for a first try. The convention the
+dogfood watcher actually uses is one root outside the repo,
+`$HOME/projects/dogfood/lattex/{Input,Output}`, as set out in
+[dockerDogFoodflow.md](dockerDogFoodflow.md) (Act V); any absolute host path
+works, changing only the left side of the mounts below.
 
 ### Setup, end to end — and how to tell your image has gone stale
 
@@ -151,6 +154,24 @@ from `origin/main` is a claim about a commit that may be nothing like what you b
 `||` on the fetch is the load-bearing one — without it a failed fetch leaves `origin/main`
 at its last value, `HEAD` still equals it, and the build is blessed by the very check meant
 to catch an unfetched remote.
+
+The fence applies to **live-checkout** builds only. The recommended promotion path
+avoids the working tree altogether: export the exact commit with `git archive` into an
+empty directory and build there.
+
+```bash
+SHA="$(git rev-parse origin/main)"
+EXPORT="$(mktemp -d)"
+git archive "$SHA" | tar -x -C "$EXPORT"
+docker build --build-arg LATTEX_SOURCE_REVISION="$SHA" \
+  -t "lattex:main-$(git rev-parse --short "$SHA")" "$EXPORT"
+rm -rf "$EXPORT"
+```
+
+The export has no `.git`, so the context is exactly the commit's tree and nothing else.
+`build.gradle.kts` cross-checks `LATTEX_SOURCE_REVISION` against `git rev-parse HEAD` only
+when a `.git` directory exists in the project root; without one it stamps the value you
+pass, which is true by construction because the tree it compiled came from that same sha.
 
 **Verify before you trust it.** Three checks, cheapest first:
 
@@ -252,13 +273,15 @@ and `docker run ... cli` selects CLI mode with no expression argument. Adding
 `watch` or `cli`; after that prefix, argv/stdin/stdout are passed to the shipped
 jar unchanged.
 
-`--help`, `--version`, `--batch`, `--inline`, `--scale`, `--macro`, `--color`,
-and `-o/--output` pass through to the jar unchanged. For a mounted source file,
-the container-only `cli --input FILE` adapter feeds that file to the same CLI's
-stdin. The input mount can therefore be read-only while output stays writable:
+`-h/--help`, `-V/--version`, `--batch`, `-0/--null`, `--inline`, `--scale`,
+`--macro`, `--color`, `-o/--output`, and `--` (end of options) pass through to the
+jar unchanged; the entrypoint intercepts only a leading `--input`. For a mounted
+source file, the container-only `cli --input FILE` adapter feeds that file to the
+same CLI's stdin. The input mount can therefore be read-only while output stays
+writable:
 
 ```bash
-DOGFOOD_ROOT="$PWD"                       # one explicit root; every command below reuses it
+DOGFOOD_ROOT="$PWD"   # local example; the dogfood convention is "$HOME/projects/dogfood/lattex" (dockerDogFoodflow.md, Act V)
 printf '%s\n' '\int_0^1 x^2\,dx' > "$DOGFOOD_ROOT/Input/integral.tex"
 
 docker run --rm \

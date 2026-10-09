@@ -1,9 +1,10 @@
 # RELEASE-NOTE-ENTRY.md
 
-Proposed entry for the **Unreleased** section of `RELEASE_NOTES.md`.
-Written to this file rather than edited in place, per the branch brief.
-Plan `d2f3447c` (`lattex-nonletter-escape-residual`), residual half —
-the math-mode counterpart to the already-landed text-mode work.
+Entries queued for the next `RELEASE_NOTES.md` fold; newest last; folded on
+release. Each landed branch appends its entry here instead of editing
+`RELEASE_NOTES.md` in place, so the fold into the **Unreleased** section is a
+single release-time act rather than a per-branch merge hazard. The entries
+below are kept verbatim as their branches wrote them.
 
 ---
 

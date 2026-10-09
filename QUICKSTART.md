@@ -23,7 +23,7 @@ filled `<path>`s (never `<text>`, `<use>`, `<defs>`, `<script>`, or external
 a standard sanitizer allow-list. The math font (**STIX Two Math**, OFL) is bundled,
 so there are no web fonts to load either. Apache-2.0.
 
-**What it can render:** measured, not claimed — 484 of 484 real-world formulas
+**What it can render:** measured, not claimed — 506 of 506 real-world formulas
 (100%) from the wild corpus render clean, regression-locked by a coverage
 ratchet that only moves up. Browse the tour: **[examples/showcase.html]
 (examples/showcase.html)** (highlights incl. matrices, cases, align, bra-ket,
@@ -541,8 +541,13 @@ value fails loud with exit code 2. A top-level `\lx[...]` in the source still wi
 
 ```bash
 ./gradlew run --args="\frac{a}{b}"                 # via Gradle
-java -jar build/libs/lattex-0.12.0.jar "x^2"            # via the runnable jar
+java -jar build/libs/lattex-<version>.jar "x^2"    # via the runnable jar
 ```
+
+The jar's file name follows `version` in `build.gradle.kts` (a `-SNAPSHOT` suffix
+between releases), not the last released number. `./gradlew build` also writes
+`-sources` and `-javadoc` jars beside it, so a bare `lattex-*.jar` glob matches three
+files; pick the one without a classifier.
 
 ### Performance — native binary vs. `java -jar` vs. `./gradlew run`
 
@@ -610,21 +615,20 @@ inline math is em-sized and baseline-seated while display math renders full size
 
 | Capability | Status |
 | --- | --- |
-| `LatteX.render(latex)` / `render(latex, RenderOptions)` | Built* |
-| `RenderOptions` (scale / color / mathStyle) | Built* |
-| `\lx[...]{...}` author syntax (validated, fail-loud) | Built* |
-| Inline math — em-sizing + baseline alignment (`renderInline`) | Built* |
-| `fx.*` effects on the container (`renderStyledHtml`) | Built* |
+| `LatteX.render(latex)` / `render(latex, RenderOptions)` | Built |
+| `RenderOptions` (scale / color / mathStyle) | Built |
+| `\lx[...]{...}` author syntax (validated, fail-loud) | Built |
+| Inline math — em-sizing + baseline alignment (`renderInline`) | Built |
+| `fx.*` effects on the container (`renderStyledHtml`) | Built |
 | Click action menu — Copy LaTeX / contextual Graph | Planned |
-| Native CLI (`lattex`, GraalVM) — argv/stdin → SVG, `-o`/`--help`/`--version` | Built (S7) |
+| Native CLI (`lattex`, GraalVM) — argv/stdin → SVG; flags `-o/--output`, `--batch`, `-0/--null`, `--inline`, `--scale`, `--macro`, `--color`, `-h/--help`, `-V/--version`, `--` | Built (S7) |
 | HTTP service wrapper | Planned / optional |
 | Browser / JS (WASM) build | Future |
 | Reference markdown plugins (remark/rehype, Python filter) | Future |
 | Real Graph *plotting* (beyond the menu affordance) | Future |
 
-\* *Built and demoed on review branches; merging to the mainline soon. The repo's
-top-level README still describes an earlier stubbed state — trust this table and the
-`examples/` pages.*
+Everything marked Built is on the mainline; this table and the top-level README
+describe the same state.
 
 ---
 

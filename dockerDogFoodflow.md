@@ -87,11 +87,32 @@ exact 40-character commit into the Git-less build context. Prerequisite: **Docke
 and nothing else** — no host JDK, no Gradle, no Chrome. Roughly a few minutes cold, ~227 MB
 final.
 
+**The recommended promotion path skips the fence by skipping the working tree.** The four
+fence lines exist because `docker build .` reads whatever is on disk. `git archive` reads the
+commit instead: export it to an empty directory and build from there.
+
+```sh
+SHA_FULL="$(git rev-parse origin/main)"
+SHA="$(git rev-parse --short "$SHA_FULL")"
+EXPORT="$(mktemp -d)"
+git archive "$SHA_FULL" | tar -x -C "$EXPORT"
+docker build --build-arg LATTEX_SOURCE_REVISION="$SHA_FULL" -t "lattex:main-$SHA" "$EXPORT"
+rm -rf "$EXPORT"
+```
+
+The export contains no `.git`, so the context is exactly the commit's tree: a dirty working
+tree, a wrong branch, or a stale host `build/` cannot leak in because none of them is there.
+`build.gradle.kts` cross-checks `LATTEX_SOURCE_REVISION` against `git rev-parse HEAD` only
+when `.git` exists in the project root; with no `.git` it stamps the value you pass, and that
+stamp is true by construction because the compiled tree came from that same sha. The fence
+above applies to live-checkout builds only; keep it when you build from a checkout, drop it
+when you build from an export.
+
 **Stage 1 — `eclipse-temurin:25-jdk AS build`**
 
 | line | effect | why you care |
 |---|---|---|
-| `COPY . .` | copies the *filtered* context | `.dockerignore` drops `.git`, `build`, `**/build`, `src/test`, `docs`, `examples`, `libs`, `*.md`, `*.html`, `*.png`, `*.gif` |
+| `COPY . .` | copies the *filtered* context | `.dockerignore` drops `.git`, `.gitignore`, `.gradle`, `build`, `**/build`, IDE files (`.idea`, `.vscode`, `*.iml`, `.DS_Store`), `/Input`, `/Output`, `bin`, `docs`, `examples`, `libs`, `src/test`, `tools`, `*.md`, `*.html`, `*.png`, `*.gif`, `*.zip`, `gradlew.bat` |
 | `./gradlew --no-daemon clean jar` | builds from source | `clean` guarantees exactly one jar for the `find` below |
 | `find build/libs … ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit` | selects the jar | pattern-matched, not hard-coded |
 
@@ -317,14 +338,32 @@ build — restart restarts the same container, it does not re-resolve the tag. R
 > and `-f` is the exception, not the other way round.
 
 ```sh
-docker stop -t 30 lattex-dogfood && docker rm lattex-dogfood
+STAMP="$(date +%Y%m%d)"
+# 1. Keep a way back: the image the live container ACTUALLY runs, under a dated tag. Read it
+#    off the container's pinned ID, so this is right whether or not Act III has already moved
+#    the alias (`docker tag lattex:dogfood ...` would capture the NEW image once it has).
+docker tag "$(docker inspect -f '{{.Image}}' lattex-dogfood)" "lattex:dogfood-rollback-$STAMP"
+# 2. The old container under a dated name, stopped, not removed.
+docker stop -t 30 lattex-dogfood && docker rename lattex-dogfood "lattex-dogfood-old-$STAMP"
 # `docker rm -f` only when the graceful stop has already failed — it kills a job mid-flight.
+docker update --restart no "lattex-dogfood-old-$STAMP"   # so a daemon restart does not revive it
+# 3. Recreate under the live name from the re-pointed alias.
 docker run -d --name lattex-dogfood --restart unless-stopped \
   --user "$(id -u):$(id -g)" \
   -v "$DOGFOOD_ROOT/Input:/lattex/input" \
   -v "$DOGFOOD_ROOT/Output:/lattex/output" \
   lattex:dogfood watch
 ```
+
+**Roll back.** Two routes, pick by what went wrong. If the new image is bad, retag and
+recreate: `docker tag "lattex:dogfood-rollback-$STAMP" lattex:dogfood`, then stop and
+rename the new container the same way and `docker run` again from the alias. If the new
+container is bad but the image is fine, or you just want the old one back fastest:
+`docker stop -t 30 lattex-dogfood && docker rename lattex-dogfood lattex-dogfood-bad-$STAMP`,
+then `docker rename "lattex-dogfood-old-$STAMP" lattex-dogfood && docker update --restart
+unless-stopped lattex-dogfood && docker start lattex-dogfood`. Only one container may hold
+each bind mount's watcher at a time, so stop one before starting the other. Prune the
+`-old-`/`-rollback-` leftovers once the new build has run clean for a while, not before.
 
 **Ask for the two IDs; do not read the `docker ps` image column.** An earlier version of this
 section claimed a bare hex ID appears there when the tag has moved. That is false, and it is
@@ -413,7 +452,6 @@ staleness: this image, and that vendored jar. Updating one says nothing about th
 | symptom | look here first |
 |---|---|
 | a valid expression is "invalid LaTeX" | **check `cli --version` before doubting the expression** |
-| smoke test red with no output | you are on an old smoke script with the hard-coded pin; update it |
 | first CLI argument is `watch`/`cli` | prefix explicit `cli` |
 | output owned by `10001` | pass `--user "$(id -u):$(id -g)"` |
 | watcher ignores your file | not a visible direct-child `*.tex` |
