@@ -564,14 +564,17 @@ public final class LayoutEngine {
         double penX = 0.0;
         double height = 0.0;
         double depth = 0.0;
-        MathClass prev = null; // previous atom's class (glue resets it to null)
+        // Previous ATOM's class. Explicit kerns and glue (Spacing) are not noads in
+        // TeX: mlist_to_hlist (TeX82 §760-761) leaves r_type untouched across them, so
+        // `a\!-\!a` keeps the Bin's medmuskip on both sides and the kerns add to it.
+        // Spacing therefore contributes its width but neither sets nor clears prev.
+        MathClass prev = null;
 
         for (int i = 0; i < n; i++) {
             MathNode item = items.get(i);
             if (item instanceof Spacing(var muWidth)) {
                 penX += muWidth * ctx.mu();
-                prev = null;
-                continue;
+                continue; // transparent to inter-atom spacing: prev is NOT reset
             }
             if (prev != null && cls[i] != null) {
                 penX += interAtomSpace(prev, cls[i], ctx);
