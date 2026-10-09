@@ -32,8 +32,8 @@ trip degrades to a typed `OUTPUT_CAP_EXCEEDED` diagnostic, never an escaped erro
 LatteX renders (every formula on it is regression-locked by the wild-corpus
 ratchet: 506/506 real-world formulas, 100%, and only allowed to go up). For the
 fx layer in motion, see the **[effects showcase](examples/effects.html)** for the
-general runtime grid and **[the fx gallery](examples/GALLERY.md)** for all 29
-production effects: 28 motion GIFs plus the deliberately static semantic `thread`
+general runtime grid and **[the fx gallery](examples/GALLERY.md)** for all 30
+production effects: 29 motion GIFs plus the deliberately static semantic `thread`
 reference. For the parallel MathML
 output, **[examples/mathml.html](examples/mathml.html)** shows each formula's SVG
 render beside its `toMathML()` serialization — same parse, two products.
@@ -105,13 +105,16 @@ the filtered Docker context deliberately contains no `.git` directory:
 ```bash
 docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" \
   -t lattex:local .
-mkdir -p Input Output
+mkdir -p Input Output      # local example only; see the dogfood root convention below
 ```
 
 `Input/` and `Output/` are operator data, not repository artifacts. They are
-excluded from the Docker build context; keep them out of commits (or place the
-same two folders at any absolute host path and change only the left side of the
-mounts below).
+excluded from the Docker build context; keep them out of commits. Creating them
+at the repository root is a local example for a first try. The convention the
+dogfood watcher actually uses is one root outside the repo,
+`$HOME/projects/dogfood/lattex/{Input,Output}`, as set out in
+[dockerDogFoodflow.md](dockerDogFoodflow.md) (Act V); any absolute host path
+works, changing only the left side of the mounts below.
 
 ### Setup, end to end — and how to tell your image has gone stale
 
@@ -142,8 +145,9 @@ test -z "$(git status --porcelain)" || { echo 'refusing: working tree is dirty';
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" \
   || { echo 'refusing: HEAD is not origin/main'; exit 1; }
 
-docker build --build-arg LATTEX_SOURCE_REVISION="$(git rev-parse HEAD)" \
-  -t "lattex:main-$(git rev-parse --short HEAD)" .
+SHA_FULL="$(git rev-parse HEAD)"; SRC=.     # the verify step below reuses both
+docker build --build-arg LATTEX_SOURCE_REVISION="$SHA_FULL" \
+  -t "lattex:main-$(git rev-parse --short "$SHA_FULL")" "$SRC"
 ```
 
 The fence is not ceremony: `docker build .` ships your **working tree**, so a name derived
@@ -152,20 +156,43 @@ from `origin/main` is a claim about a commit that may be nothing like what you b
 at its last value, `HEAD` still equals it, and the build is blessed by the very check meant
 to catch an unfetched remote.
 
+The two working-tree lines of the fence (clean tree, `HEAD` == `origin/main`) apply to
+**live-checkout** builds only. The recommended promotion path avoids the working tree
+altogether: export the exact commit with `git archive` into an empty directory and build
+there. The fetch line stays, and stays first: `origin/main` is still the thing being
+named, and an unfetched `origin/main` is stale on this path exactly as on the other.
+
+```bash
+git fetch origin main || { echo 'refusing: fetch failed, origin/main may be stale'; exit 1; }
+SHA_FULL="$(git rev-parse origin/main)"
+EXPORT="$(mktemp -d)"; SRC="$EXPORT"
+git archive "$SHA_FULL" | tar -x -C "$EXPORT"
+docker build --build-arg LATTEX_SOURCE_REVISION="$SHA_FULL" \
+  -t "lattex:main-$(git rev-parse --short "$SHA_FULL")" "$SRC"
+# keep $EXPORT until the verify step below has read its build.gradle.kts
+```
+
+The export has no `.git`, so the context is exactly the commit's tree and nothing else.
+`build.gradle.kts` cross-checks `LATTEX_SOURCE_REVISION` against `git rev-parse HEAD` only
+when a `.git` directory exists in the project root; without one it stamps the value you
+pass, which is true by construction because the tree it compiled came from that same sha.
+
 **Verify before you trust it.** Three checks, cheapest first:
 
 ```bash
-IMAGE="lattex:main-$(git rev-parse --short origin/main)"
+IMAGE="lattex:main-$(git rev-parse --short "$SHA_FULL")"   # $SHA_FULL and $SRC from the build step
 
 # 1. Does it render at all?
 docker run --rm "$IMAGE" cli '\frac{a}{b}' | head -1
 
-# 2. Does it report the version this source tree declares?
-docker run --rm "$IMAGE" cli --version      # -> lattex <version from build.gradle.kts>
+# 2. Does it report the version the built source declares?
+docker run --rm "$IMAGE" cli --version      # -> lattex <version from $SRC/build.gradle.kts>
 
 # 3. The full contract: modes, mounts, atomic claims, restart recovery, races.
-sh docker/smoke-test.sh "$IMAGE" build.gradle.kts "$(git rev-parse HEAD)"
+#    Compare against the tree you BUILT ($SRC), not whatever the working tree holds now.
+sh docker/smoke-test.sh "$IMAGE" "$SRC/build.gradle.kts" "$SHA_FULL"
 # -> "lattex Docker smoke: PASS"
+[ "$SRC" != . ] && rm -rf "$SRC"             # export path only: the export is spent
 ```
 
 Only after `PASS` should you move the moving tag:
@@ -252,13 +279,15 @@ and `docker run ... cli` selects CLI mode with no expression argument. Adding
 `watch` or `cli`; after that prefix, argv/stdin/stdout are passed to the shipped
 jar unchanged.
 
-`--help`, `--version`, `--batch`, `--inline`, `--scale`, `--macro`, `--color`,
-and `-o/--output` pass through to the jar unchanged. For a mounted source file,
-the container-only `cli --input FILE` adapter feeds that file to the same CLI's
-stdin. The input mount can therefore be read-only while output stays writable:
+`-h/--help`, `-V/--version`, `--batch`, `-0/--null`, `--inline`, `--scale`,
+`--macro`, `--color`, `-o/--output`, and `--` (end of options) pass through to the
+jar unchanged; the entrypoint intercepts only a leading `--input`. For a mounted
+source file, the container-only `cli --input FILE` adapter feeds that file to the
+same CLI's stdin. The input mount can therefore be read-only while output stays
+writable:
 
 ```bash
-DOGFOOD_ROOT="$PWD"                       # one explicit root; every command below reuses it
+DOGFOOD_ROOT="$PWD"   # local example; the dogfood convention is "$HOME/projects/dogfood/lattex" (dockerDogFoodflow.md, Act V)
 printf '%s\n' '\int_0^1 x^2\,dx' > "$DOGFOOD_ROOT/Input/integral.tex"
 
 docker run --rm \

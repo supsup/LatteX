@@ -3,10 +3,10 @@
 *(Looking for the math itself rather than the effects? The renderer tour is
 [showcase.html](showcase.html) — every formula on it ratchet-locked.)*
 
-The production `Effect` vocabulary currently has **29 real effects**: 28 work from
-the ordinary runtime and `unfold` additionally needs the host's interactive-expansion
-flag. Every one has a declared visual specimen captured with
-[BrewShot](https://github.com/supsup/BrewShot): 28 motion GIFs, plus one deliberately
+The production `Effect` vocabulary currently has **30 real effects**: 28 work from
+the ordinary runtime and `unfold` and `substitute` additionally need the host's
+interactive-expansion flag. Every one has a declared visual specimen captured with
+[BrewShot](https://github.com/supsup/BrewShot): 29 motion GIFs, plus one deliberately
 static `thread` reference that keeps all matching glyphs visible together. Captures use
 the effect's real path — page entry, trusted hover/click, moving pointer, semantic
 sidecar, or flag-enabled toggle — rather than making every interaction pretend to be
