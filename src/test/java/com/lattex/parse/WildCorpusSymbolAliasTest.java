@@ -119,12 +119,16 @@ class WildCorpusSymbolAliasTest {
     }
 
     @Test
-    void aBareHashCharacterIsUnaffected() {
-        // The symbol table's reverse code-point class map now knows U+0023; a
-        // literal '#' was already an ordinary atom and must stay one.
-        Atom bare = (Atom) MathParser.parse("#");
-        assertEquals('#', bare.codePoint());
-        assertEquals(MathClass.ORD, bare.mathClass());
+    void aBareHashCharacterIsNotTheEscapedSymbol() {
+        // \# is the ordinary symbol; a BARE '#' is TeX's macro-parameter character and
+        // is refused outside a definition (it was drawn as an ordinary atom until
+        // audit-20261012 finding 7; see MisplacedSpecialCharacterTest).
+        Atom escaped = (Atom) MathParser.parse("\\#");
+        assertEquals('#', escaped.codePoint());
+        assertEquals(MathClass.ORD, escaped.mathClass());
+        MathSyntaxException bare = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("#"));
+        assertTrue(bare.getMessage().contains("write \\# for"), bare.getMessage());
     }
 
     // ------------------------------------------------------------------

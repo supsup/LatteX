@@ -521,3 +521,23 @@ without complaint and drew the wrong thing.
   superscript, the prime goes where the operator's upper limit goes: beside an integral,
   and above a display-style `\sum`, as TeX sets it (write `\sum\nolimits'` to keep it at
   the side). Unprimed operators are unchanged.
+- **Behaviour change: a bare `&`, `%`, `#` or `$` is refused, not drawn.** These are
+  TeX's special characters with no meaning as a math character, and each used to fall
+  through to the ordinary-atom path: `a & b` outside an environment drew an ampersand,
+  `x % note` drew the percent sign *and the comment* as math, `#` drew a number sign, and
+  `$$x^2$$` (display delimiters are deliberately not stripped), `$x^2` and `a$ + $b`
+  drew literal dollar signs. Each is now a `PARSE_ERROR` with the caret on the character
+  and a message naming the escape that draws the glyph (`\&` `\%` `\#` `\$`). Nothing
+  that was meaningful moves: `&` still separates columns in every environment and in
+  `\bordermatrix`, `#1` is still a macro parameter and `#ff8800` a colour, a whole-input
+  `$…$` or `\(…\)` wrapper is still stripped, and text mode still reads its own
+  characters (`\text{50% off}`, `\text{a $x$ b}`). No row of either committed corpus
+  writes one of the four bare. LatteX does not read `%` comments; strip them before
+  rendering.
+
+**Limits.** The prime after a display-style `\sum` sits above it as TeX places it; there
+is no `\sideset`. Inside `\mathrm`, only letters and digits that are items of a math list
+join into a word: the letters of a script or fraction inside `\mathrm` are separate
+upright atoms (drawn the same, read letter by letter in the accessible label). The
+plain-text readers that take any character (`\operatorname{…}`, a colour name, a
+dimension) are unchanged and still accept the four specials as text.

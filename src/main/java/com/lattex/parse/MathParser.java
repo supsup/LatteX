@@ -62,7 +62,8 @@ import com.lattex.parse.Symbols.Sym;
  * </pre>
  *
  * <p>The lexer treats {@code { } ^ _ \\} specially and everything else as an
- * ordinary character (or the start of a control sequence). Malformed input
+ * ordinary character (or the start of a control sequence); the parser then refuses
+ * TeX's remaining specials {@code & % # $} where an atom is expected. Malformed input
  * throws {@link MathSyntaxException} naming the problem.
  */
 public final class MathParser {
@@ -1621,6 +1622,7 @@ public final class MathParser {
                 if (t.codePoint() == '~') {
                     yield new Spacing(6.0);
                 }
+                refuseMisplacedSpecial(t);
                 yield charAtom(t.codePoint());
             }
             case TEXT -> {
@@ -1635,6 +1637,47 @@ public final class MathParser {
             case RBRACE -> throw new MathSyntaxException("Unexpected '}' (unbalanced brace)");
             case EOF -> throw new MathSyntaxException("Unexpected end of input (expected an atom)");
         };
+    }
+
+    /**
+     * Refuses a TeX special character that reached the position of an ordinary atom.
+     *
+     * <p>Plain TeX gives ten characters a category other than "letter" or "other"
+     * (TeXbook Ch.7). Six already have their meaning here: {@code \\ { } ^ _} in the
+     * lexer and {@code ~} above. The other four have NO meaning as a math character,
+     * and until audit-20261012 finding 7 each fell through to {@link #charAtom} and
+     * was drawn as its glyph, silently:
+     * <ul>
+     *   <li>{@code &} outside a cell loop (every environment, {@code \bordermatrix}
+     *       and the argument rule take it before this point) is TeX's "Misplaced
+     *       alignment tab character";</li>
+     *   <li>{@code %} starts a comment, so {@code x % note} drew the note as math;</li>
+     *   <li>{@code #} is the macro-parameter character, legal only in a definition
+     *       body, which {@link MacroExpander} has consumed before the parser runs;</li>
+     *   <li>{@code $} is a math shift: {@code $$x^2$$} (display delimiters are
+     *       deliberately not stripped, see {@link #stripWholeInputMathWrapper}) and an
+     *       unpaired {@code $} drew literal dollar signs.</li>
+     * </ul>
+     * Each is a positioned refusal that names the escape which does draw the glyph.
+     * The escaped forms {@code \& \% \# \$} are SYMBOL commands and never come here,
+     * and a text argument reads its own characters ({@link #literalText}), so
+     * {@code \text{50% off}} and {@code \text{a $x$ b}} are untouched.
+     */
+    private static void refuseMisplacedSpecial(Token t) {
+        String problem = switch (t.codePoint()) {
+            case '&' -> "Misplaced '&': it separates columns inside an environment such as"
+                + " matrix or aligned; write \\& for a literal ampersand";
+            case '%' -> "Unexpected '%': it starts a comment in LaTeX, which LatteX does not"
+                + " read; write \\% for a percent sign";
+            case '#' -> "Unexpected '#': it is the macro-parameter character, valid only in a"
+                + " \\newcommand or \\def body; write \\# for a number sign";
+            case '$' -> "Unexpected '$': it is a math-mode delimiter, not part of a formula;"
+                + " pass the formula without $$...$$ around it, or write \\$ for a dollar sign";
+            default -> null;
+        };
+        if (problem != null) {
+            throw new MathSyntaxException(problem, t.offset());
+        }
     }
 
     /** Dispatches a control sequence. Assumes the current token is a COMMAND. */

@@ -2,8 +2,10 @@ package com.lattex.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.lattex.parse.MathSyntaxException;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -64,11 +66,13 @@ class MathDelimiterWrapperTest {
         // swallowed. The two spellings then diverge, and BOTH outcomes are correct — pinned
         // separately because a single assertion would have hidden the difference.
         //
-        // `$x^2` renders, with the dollar as a literal glyph. That is the PRE-EXISTING
-        // behaviour for a stray dollar and is deliberately unchanged here: this plan accepts a
-        // matched wrapper, it does not redefine what a lone dollar means.
-        assertNotEquals(LatteX.render("x^2"), LatteX.render("$x^2"),
-            "an unclosed $ must NOT strip — that would delete a character the author wrote");
+        // `$x^2` THROWS, with the caret on the dollar. It used to render with the dollar as a
+        // literal glyph; since audit-20261012 finding 7 a `$` that is not a whole-input wrapper
+        // is refused like TeX's other misplaced specials. Either way it is NOT stripped: a
+        // strip would have rendered `x^2` and deleted a character the author wrote.
+        MathSyntaxException unclosed = assertThrows(MathSyntaxException.class,
+            () -> LatteX.render("$x^2"), "an unclosed $ must NOT strip");
+        assertEquals(0, unclosed.offset(), "the refused character is the dollar itself");
 
         // `\(x^2` THROWS. Discovered by running it, not assumed: I first wrote this expecting a
         // render and the test failed. Failing loud is the better outcome and is now the pin —
@@ -87,18 +91,30 @@ class MathDelimiterWrapperTest {
         // The sharpest case. "$a$ + $b$" begins and ends with $, so a naive
         // starts-with-and-ends-with test would strip to "a$ + $b" — normalization EATING
         // content, which is the one failure this feature must never have.
-        assertNotEquals(LatteX.render("a$ + $b"), LatteX.render("$a$ + $b$"),
+        // Both spellings are refused now (a mid-formula $ is not drawn, audit-20261012
+        // finding 7), so the pin is on WHAT was parsed: the whole source, first dollar
+        // included. A strip would have parsed "a$ + $b" and put the caret at offset 1.
+        MathSyntaxException twoPairs = assertThrows(MathSyntaxException.class,
+            () -> LatteX.render("$a$ + $b$"));
+        assertEquals("$a$ + $b$", twoPairs.source(),
             "the first and last $ are not a matched pair; stripping them corrupts the source");
+        assertEquals(0, twoPairs.offset());
+        assertEquals(1, assertThrows(MathSyntaxException.class,
+            () -> LatteX.render("a$ + $b")).offset(), "control: the stripped spelling differs");
     }
 
     @Test
-    void displayDelimitersAreOutOfScopeAndUnchanged() {
+    void displayDelimitersAreOutOfScopeAndRefused() {
         // $$…$$ and \[…\] are DISPLAY maths. The crew agreed the inline pair only: accepting a
         // display delimiter and rendering it inline would accept a notation and then drop its
         // meaning — the same shape the RFC rejected for unnumbered `equation`. Pinned so the
-        // exclusion is a decision rather than an oversight.
-        assertNotEquals(LatteX.render("x^2"), LatteX.render("$$x^2$$"),
-            "$$…$$ is display maths and is deliberately NOT stripped");
+        // exclusion is a decision rather than an oversight. Not stripped used to mean "drawn
+        // as four literal dollar signs"; it now means refused, naming the delimiter
+        // (audit-20261012 finding 7).
+        MathSyntaxException display = assertThrows(MathSyntaxException.class,
+            () -> LatteX.render("$$x^2$$"), "$$…$$ is display maths and is deliberately NOT stripped");
+        assertEquals(0, display.offset());
+        assertTrue(display.getMessage().contains("$$"), display.getMessage());
     }
 
     @Test
@@ -120,6 +136,8 @@ class MathDelimiterWrapperTest {
         // Degenerate lengths. "$" alone has no pair; "$$" is the display opener, not an empty
         // inline wrapper. Neither may strip into nothing.
         assertTrue(LatteX.render("\\$").contains("<path"), "a lone escaped dollar renders");
-        assertNotEquals("", LatteX.render("$$"), "‘$$’ must not strip to empty");
+        MathSyntaxException empty = assertThrows(MathSyntaxException.class,
+            () -> LatteX.render("$$"), "‘$$’ must not strip to empty");
+        assertEquals("$$", empty.source());
     }
 }

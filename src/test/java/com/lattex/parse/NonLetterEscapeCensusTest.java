@@ -275,11 +275,15 @@ class NonLetterEscapeCensusTest {
     @Test
     void theAdditionsDidNotDisturbTheBareCharacters() {
         // CLASS_BY_CODEPOINT deliberately excludes ASCII, so four new ASCII rows
-        // must not reclassify any literal character. '%', '$' and '_' as BARE
-        // input keep exactly the behavior they had before the additions: '%' and
-        // '$' are ordinary atoms, '_' is the subscript operator.
-        assertEquals("A(%,ORD)", MathParserTest.pp(MathParser.parse("%")));
-        assertEquals("A($,ORD)", MathParserTest.pp(MathParser.parse("$")));
+        // must not reclassify any literal character: the escaped rows and the BARE
+        // characters are separate paths. Bare '_' is the subscript operator; bare
+        // '%' and '$' are TeX specials with no meaning as a math character and are
+        // refused (they were ordinary atoms until audit-20261012 finding 7; see
+        // MisplacedSpecialCharacterTest), each naming the escape that draws it.
+        assertTrue(assertThrows(MathSyntaxException.class, () -> MathParser.parse("%"))
+            .getMessage().contains("write \\% for"));
+        assertTrue(assertThrows(MathSyntaxException.class, () -> MathParser.parse("$"))
+            .getMessage().contains("write \\$ for"));
         assertEquals("SS(A(x,ORD),_A(y,ORD))", MathParserTest.pp(MathParser.parse("x_y")));
         assertTrue(Symbols.CLASS_BY_CODEPOINT.keySet().stream().allMatch(cp -> cp > 0x7F),
             "the reverse class map stays non-ASCII; ASCII belongs to classify()");
