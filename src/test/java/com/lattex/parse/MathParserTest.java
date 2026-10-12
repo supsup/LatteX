@@ -270,6 +270,41 @@ class MathParserTest {
     }
 
     @Test
+    void primeAfterABigOperatorIsItsSuperscript() {
+        // \sum'_{n} is \sum^{\prime}_{n} (audit-20261012 finding 6). The operator's limit
+        // loop did not know the prime, so this used to be a scriptless sum followed by
+        // SS(A(',ORD),_A(n,ORD)): an ASCII apostrophe carrying the lower limit.
+        assertEquals("Big(A(U+2211,OP),_A(n,ORD),^A(U+2032,ORD),DEFAULT)",
+            pp(MathParser.parse("\\sum'_{n}")));
+        assertEquals(MathParser.parse("\\sum^{\\prime}_{n\\le x} a_n"),
+            MathParser.parse("\\sum'_{n\\le x} a_n"));
+        // Primes and one explicit ^ merge in source order, as after an ordinary nucleus.
+        assertEquals(MathParser.parse("\\int^{\\prime b}_a"), MathParser.parse("\\int'_a^b"));
+        assertEquals(MathParser.parse("\\sum^{\\prime\\prime}"), MathParser.parse("\\sum''"));
+        assertEquals(MathParser.parse("\\sum\\nolimits^{\\prime}_n"),
+            MathParser.parse("\\sum\\nolimits'_n"));
+        // Controls: an unprimed operator is the tree it was, and two carets still refuse.
+        assertEquals("Big(A(U+2211,OP),_A(i,ORD),^A(n,ORD),DEFAULT)",
+            pp(MathParser.parse("\\sum_i^n")));
+        MathSyntaxException twice = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\sum'^a^b"));
+        assertEquals("Double superscript on operator", twice.getMessage());
+    }
+
+    @Test
+    void primeAfterABraceStackJoinsTheLabelAbove() {
+        // Same loop shape, same gap: \underbrace{x}' was the brace followed by A(',ORD).
+        assertEquals("Stk[UNDERBRACE](A(x,ORD),^A(U+2032,ORD))",
+            pp(MathParser.parse("\\underbrace{x}'")));
+        assertEquals(MathParser.parse("\\overbrace{x}^{\\prime n}_k"),
+            MathParser.parse("\\overbrace{x}'^n_k"));
+        // Controls: a labelled brace is the tree it was, and two carets still refuse.
+        assertEquals("Stk[OVERBRACE](A(x,ORD),^A(n,ORD))",
+            pp(MathParser.parse("\\overbrace{x}^{n}")));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\overbrace{x}^a^b"));
+    }
+
+    @Test
     void twoExplicitSuperscriptsStillThrow() {
         // Primes merge with one ^, but two explicit carets still error.
         assertThrows(MathSyntaxException.class, () -> MathParser.parse("f^2^3"));
