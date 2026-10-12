@@ -96,12 +96,12 @@ class TextControlSymbolTest {
 
     @Test
     void thinSpaceDecodesToAPlainSpaceNotARejectedEscape() {
-        // Pre-fix: \mathrm{J\,s} served "J\,s" (backslash-comma retained). Real
-        // corpus formulas (wild-corpus.tsv calculus-physics rows) rely on \, for
-        // unit spacing inside \mathrm{...} — decode, don't reject.
-        assertEquals("Txt[ROMAN](J s)", MathParserTest.pp(MathParser.parse("\\mathrm{J\\,s}")));
-        assertTrue(LatteX.toMathML("\\mathrm{J\\,s}").contains("<mtext>J s</mtext>"));
-        assertEquals("J s", ariaOf(LatteX.render("\\mathrm{J\\,s}")));
+        // Pre-fix: \text{J\,s} served "J\,s" (backslash-comma retained) — decode,
+        // don't reject. (\mathrm{J\,s}, the wild-corpus spelling, is MATH: its \, is
+        // math mode's own thin space, pinned in MathrmMathAlphabetTest.)
+        assertEquals("Txt[ROMAN](J s)", MathParserTest.pp(MathParser.parse("\\text{J\\,s}")));
+        assertTrue(LatteX.toMathML("\\text{J\\,s}").contains("<mtext>J s</mtext>"));
+        assertEquals("J s", ariaOf(LatteX.render("\\text{J\\,s}")));
     }
 
     // ---- unsupported escapes fail loud, never silently keep the backslash --

@@ -953,12 +953,13 @@ final class Symbols {
     /**
      * The text-family commands captured whole at lex time (so their inter-word
      * spaces survive math mode's whitespace stripping): {@code \text} and its
-     * shape variants, plus the math-mode upright {@code \mathrm}.
+     * shape variants. Every row is a TEXT-mode command in LaTeX. {@code \mathrm} is
+     * not one: it is a math alphabet whose argument is math, so it is registered with
+     * the font variants ({@link CommandRegistry}) and read by {@link MathVariant#roman}.
      */
     static final Map<String, TextStyle> TEXT_COMMANDS = Map.of(
         "text", TextStyle.ROMAN,
         "textrm", TextStyle.ROMAN,
-        "mathrm", TextStyle.ROMAN,
         // \textnormal takes \text semantics: LaTeX defines it as the document's
         // normal text font inside math, which — absent any document-class bold or
         // italic override, which this renderer does not model — is exactly the

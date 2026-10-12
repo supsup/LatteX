@@ -377,6 +377,9 @@ class AmsGapsTest {
         assertRenders("\\sum_{x(p)\\ \\mathrm{in\\ the\\ interval}}\\frac1p "
             + "=\\int_{\\mathrm{interval}}\\frac{dx}{x}+O(E(u))");
         assertEquals(new TextRun("in the interval", MathNode.TextStyle.ROMAN),
+            MathParser.parse("\\text{in\\ the\\ interval}"));
+        // \mathrm is math: its \ is math mode's control space between three roman words.
+        assertEquals(MathParser.parse("\\mathrm{in}\\ \\mathrm{the}\\ \\mathrm{interval}"),
             MathParser.parse("\\mathrm{in\\ the\\ interval}"));
         assertEquals(MathParser.parse("\\text{a b}"), MathParser.parse("\\text{a\\ b}"));
     }

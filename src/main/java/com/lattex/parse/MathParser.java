@@ -230,7 +230,7 @@ public final class MathParser {
                             // \newcommand{\textbf}{...} and reject the name via
                             // the typed built-in reservation policy, while the
                             // parser reads TeX's undelimited one-token form
-                            // (\mathrm u) or, with no token, reports the
+                            // (\text a) or, with no token, reports the
                             // established missing-text-argument error
                             // (parseUnbracedTextArgument).
                             i = lexTextArgument(s, name, i, out, start);
@@ -1313,12 +1313,12 @@ public final class MathParser {
     }
 
     /**
-     * The undelimited form of a text-family argument ({@code \mathrm u},
+     * The undelimited form of a text-family argument ({@code \text a},
      * {@code \text\%}): the one token becomes the {@link Kind#TEXT} payload the
-     * lexer would have captured from {@code \mathrm{u}} / {@code \text{\%}}, so the
+     * lexer would have captured from {@code \text{a}} / {@code \text{\%}}, so the
      * braced and unbraced spellings produce the SAME node — including the same
-     * refusal for a control word ({@code \mathrm\alpha} fails exactly as
-     * {@code \mathrm{\alpha}} does). The lexer only captures the braced form raw
+     * refusal for a control word ({@code \text\alpha} fails exactly as
+     * {@code \text{\alpha}} does). The lexer only captures the braced form raw
      * ({@link #lexTextArgument}); a text command with no {@code '{'} reaches here
      * as a COMMAND token.
      */
@@ -1903,6 +1903,14 @@ public final class MathParser {
                 // rewrite enclosed atoms to math-alphanumeric code points.
                 MathVariant.Style variant = FONT_VARIANTS.get(name);
                 MathNode arg = parseFontArg(name);
+                if (name.equals("mathrm")) {
+                    // \mathrm is the one math alphabet with no code points to remap to
+                    // (roman IS the base alphabet). Its argument is math like any other
+                    // variant's, so \mathrm{CaCO_3} and \mathrm{m/s^2} carry real
+                    // scripts; it used to be captured raw as text, which drew the '^'
+                    // and '_' as literal glyphs.
+                    return MathVariant.roman(arg);
+                }
                 return MathVariant.apply(variant, arg);
             }
             case ATOM_CLASS -> {
@@ -2507,8 +2515,8 @@ public final class MathParser {
      * {@link #textWithNestedMath(Token)} with the run style already resolved — the entry
      * for a NESTED text command, whose style depends on the one around it
      * ({@link #nestedTextStyle}). A nested text-mode command ({@code \text},
-     * {@code \textbf}, ... — plan 636d214f: the corpus writes
-     * {@code \mathrm{non\text{-}tail}}) splits the run like a {@code $} span does, and
+     * {@code \textbf}, ... — plan 636d214f: {@code \text{a \textbf{b}}}) splits the
+     * run like a {@code $} span does, and
      * its own argument is read by this same method, so math and further nesting inside
      * it keep working. The nesting continues this parser's depth, bounded by
      * {@link #MAX_DEPTH}.
@@ -2628,8 +2636,7 @@ public final class MathParser {
     /**
      * The style of a text command nested in another text-family argument, as LaTeX's
      * NFSS composes them, or a loud refusal where {@link TextStyle} cannot express the
-     * result. Inside {@code \mathrm} (a math font that leaves the text font alone) and
-     * inside upright roman text the inner command's own style is exact; {@code \text}
+     * result. Inside upright roman text the inner command's own style is exact; {@code \text}
      * and {@code \hbox} keep the surrounding text font; {@code \textnormal} resets to
      * roman; {@code \textrm} changes only the family, so it keeps bold or italic and
      * turns typewriter into roman. Any other pairing (bold italic, bold typewriter, ...)
@@ -2637,7 +2644,7 @@ public final class MathParser {
      */
     private static TextStyle nestedTextStyle(String outerName, TextStyle outer, String inner) {
         TextStyle own = TEXT_COMMANDS.get(inner);
-        if (outerName.equals("mathrm") || outer == TextStyle.ROMAN) {
+        if (outer == TextStyle.ROMAN) {
             return own;
         }
         TextStyle result = switch (inner) {
@@ -2677,9 +2684,9 @@ public final class MathParser {
      * gives {@code \,} its own sub-em {@link MathNode.Spacing} node (see
      * {@code Symbols.SPACES}), but {@link com.lattex.parse.MathNode.TextRun} is a
      * flat string with no sub-em spacing primitive to target, so the nearest
-     * faithful decode is an ordinary word-space — real-world unit expressions
-     * lean on it (e.g. {@code \mathrm{m\,s^{-1}}}, {@code \mathrm{J\,K^{-1}}} in
-     * the wild corpus) and a hard rejection there would be a regression, not a fix.
+     * faithful decode is an ordinary word-space ({@code \text{J\,s}}); a hard
+     * rejection there would be a regression, not a fix. ({@code \mathrm} is not text:
+     * its {@code \,} is math mode's own thin space.)
      *
      * <p>{@code \\} is deliberately NOT in this table. In standard LaTeX text mode
      * {@code \\} is a line break; LatteX's {@link com.lattex.parse.MathNode.TextRun}
@@ -2698,7 +2705,7 @@ public final class MathParser {
         '&', '&',
         ',', ' ',
         // The control space `\ ` is an interword space in text mode too
-        // (\mathrm{in\ the\ interval}); a TextRun's spaces are already significant, so
+        // (\text{in\ the\ interval}); a TextRun's spaces are already significant, so
         // it decodes to one plain space. Plan edbda088.
         ' ', ' ');
 
@@ -3053,8 +3060,8 @@ public final class MathParser {
 
     /**
      * {@link #indexOfTextMathOpener} plus a nested text-MODE command with a braced
-     * argument ({@code \text{…}}, {@code \textbf{…}}, … but not the math-only
-     * {@code \mathrm}): every point where a text run splits. Plan 636d214f.
+     * argument ({@code \text{…}}, {@code \textbf{…}}, …): every point where a text
+     * run splits. Plan 636d214f.
      */
     private static int indexOfTextOpener(String s, int from) {
         return scanTextMathDelimiter(s, from, 'T');
@@ -3086,12 +3093,11 @@ public final class MathParser {
                 }
                 if (j > i + 1 && CommandRegistry.hasGrammar(
                         s.substring(i + 1, j), CommandRegistry.GrammarKind.TEXT_ARGUMENT)) {
-                    String nested = s.substring(i + 1, j);
                     // nested text-family command: skip its whole braced argument
                     while (j < n && isWhitespace(s.charAt(j))) {
                         j++;
                     }
-                    if (want == 'T' && j < n && s.charAt(j) == '{' && !nested.equals("mathrm")) {
+                    if (want == 'T' && j < n && s.charAt(j) == '{') {
                         return i; // a nested text-mode command splits the run
                     }
                     if (j < n && s.charAt(j) == '{') {

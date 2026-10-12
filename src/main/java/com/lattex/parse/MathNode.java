@@ -743,7 +743,7 @@ public sealed interface MathNode {
      * Mathematical Alphanumeric Symbols, which the bundled math font provides.
      */
     enum TextStyle {
-        /** Upright roman (the font's plain glyphs) — {@code \text}, {@code \textrm}, {@code \mathrm}. */
+        /** Upright roman (the font's plain glyphs) — {@code \text}, {@code \textrm}, a {@code \mathrm} word. */
         ROMAN,
         /** Upright bold — {@code \textbf}. */
         BOLD,
@@ -756,7 +756,8 @@ public sealed interface MathNode {
     /**
      * A run of <em>text-mode</em> characters set as an upright (or {@link
      * TextStyle}-shaped) word — the {@code \text}/{@code \textrm}/{@code \textbf}/
-     * {@code \textit}/{@code \texttt} family and the math-mode {@code \mathrm}.
+     * {@code \textit}/{@code \texttt} family, and a word of roman letters inside the
+     * math alphabet {@code \mathrm} (see {@link MathVariant#roman}).
      *
      * <p>Text mode differs from math mode in two ways (TeXbook Ch.18): letters are
      * <strong>not</strong> italicised (roman by default, versus math's slanted

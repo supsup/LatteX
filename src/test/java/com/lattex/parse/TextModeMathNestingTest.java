@@ -212,13 +212,20 @@ class TextModeMathNestingTest {
         assertTrue(svg.startsWith("<svg"));
     }
 
-    // ---- form 4: \mathrm{\acute et} - undecided, stays a clear refusal ------------
+    // ---- form 4: \mathrm{\acute et} - \mathrm is a math alphabet, so the accent runs ---
 
     @Test
-    void mathAccentInsideMathrmStaysAClearRefusal() {
+    void mathAccentInsideMathrmIsAMathAccent() {
+        // Refused ("Unknown command in \mathrm: \acute") while \mathrm was lexed as text.
+        assertTrue(LatteX.render("H^j_{\\mathrm{\\acute et}}(X)").startsWith("<svg"));
+        assertEquals(
+            "L(" + MathParserTest.pp(MathVariant.upright(MathParser.parse("\\acute e")))
+                + " Txt[ROMAN](t))",
+            pp("\\mathrm{\\acute et}"));
+        // Control: a math accent in a TEXT command is still the clear refusal.
         MathSyntaxException e = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("H^j_{\\mathrm{\\acute et}}(X)"));
-        assertTrue(e.getMessage().contains("Unknown command in \\mathrm: \\acute"),
+            () -> MathParser.parse("H^j_{\\text{\\acute et}}(X)"));
+        assertTrue(e.getMessage().contains("Unknown command in \\text: \\acute"),
             e.getMessage());
     }
 }

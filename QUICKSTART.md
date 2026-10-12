@@ -118,14 +118,14 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > `<mi mathvariant="normal">Γ</mi>` and `<mo>−</mo>`, and the `thread`/`substitute`
 > effects and the accessible label still key on `x`.
 >
-> **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`/
-> `\mathrm`, and TeX's `\hbox`, which takes `\text`'s contract whole). The argument is *literal text*: plain characters (spaces preserved),
+> **Words inside math — `\text{…}`** (and `\textbf`/`\textit`/`\texttt`/`\textrm`,
+> and TeX's `\hbox`, which takes `\text`'s contract whole). The argument is *literal text*: plain characters (spaces preserved),
 > invisible grouping braces, `$…$` or `\(…\)` to re-enter math mode
 > (`\text{if $x>0$ then}`, `\text{If \(K\) is categorical}` — the two spellings
 > are the same toggle, and the math takes the surrounding style),
 > and an EXPLICIT set of control-symbol escapes that decode to their literal
 > character — `\$` `\%` `\#` `\_` `\&` `\{` `\}` — plus `\,` (thin space) and the
-> control space `\ ` (`\mathrm{in\ the\ interval}`), which decode to a plain space
+> control space `\ ` (`\text{in\ the\ interval}`), which decode to a plain space
 > (text runs have no sub-em spacing unit); a tie `~` is a space too. The accents
 > found in names — `\"` `\'` `` \` `` `\^` `\~` on one letter, bare or braced
 > (`K\"ahler`, `Poincar\'e`, `\'{e}tale`, `\'{\i}`) — become the precomposed
@@ -137,10 +137,15 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > `Unknown command in \text: \cite`), an unmapped control symbol (`\=`, `\.`),
 > `\\` (a line break in real LaTeX — text runs are single-line, so it has no
 > target and is rejected rather than silently dropped), or a trailing lone `\`.
-> A math accent inside `\mathrm` (`\mathrm{\acute et}`) is still refused; write
-> `\text{\'et}` or `\acute{\mathrm{e}}\mathrm{t}`.
 > Nothing is ever silently flattened *or* left with a stray backslash; wrap math
 > in `$…$` or `\(…\)` instead.
+>
+> **`\mathrm{…}` is math, not text.** As in LaTeX it is a math alphabet: its argument
+> is ordinary math set upright, so scripts attach (`\mathrm{CaCO_3}`, `\mathrm{m/s^2}`),
+> commands and math accents run (`\mathrm{\acute et}`, `\mathrm{J\,K^{-1}}`), a `-` is
+> the minus sign, and spaces are ignored (`\mathrm{a b}` is `ab`; write `\ ` or use
+> `\text` for a word space). A run of plain letters and digits is still one roman word
+> (`\mathrm{kg}`), in the SVG, the accessible label and MathML alike.
 >
 > **Braces around a one-token argument are optional, as in TeX.** An argument is
 > the next token — one character, one control sequence, or one `{…}` group — with
@@ -149,8 +154,8 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > mean exactly their braced forms, for every argument-taking command (environment
 > arguments, such as `\begin{array}`'s column spec, still need their braces). It is
 > ONE token: `x\pmod q r` is `x\pmod{q}r`, and `\mathrm dx` is `\mathrm{d}x`. A text
-> command's one token is still literal text (`\mathrm\alpha` fails exactly as
-> `\mathrm{\alpha}` does). With no token at all — end of input, `}`, `&` or `\\`
+> command's one token is still literal text (`\text\alpha` fails exactly as
+> `\text{\alpha}` does). With no token at all — end of input, `}`, `&` or `\\`
 > — the error is the usual typed one, with the caret on the spot where the argument
 > is missing; a cell or row boundary is never silently taken as an argument.
 >
@@ -250,8 +255,9 @@ two-sided carve-out lands. Fluid works today in any standalone embedding.)
 > (`h\vert_{Z=1}`) as well as a delimiter; `{\sf …}` and `{\tt …}` join `\rm \bf \it
 > \cal` as font declarations; esint's `\fint` (⨏), `\sqint`, `\ointclockwise` and
 > `\ointctrclockwise` are integrals with side limits; a text command nests inside
-> `\mathrm` or another text command (`\mathrm{non\text{-}tail}`, `\text{a \textbf{b}}`),
-> refusing only a style it cannot combine (bold inside italic). A `\displaystyle`-family,
+> another text command (`\text{a \textbf{b}}`), refusing only a style it cannot combine
+> (bold inside italic), and sits inside `\mathrm` as it does anywhere in math
+> (`\mathrm{non\text{-}tail}`). A `\displaystyle`-family,
 > `\color` or font switch now ends at `\right`, `\middle` and `\end` as well as at
 > `}`, `&` and `\\`. In amsmath environments (everything but `array` and `eqnarray`),
 > `\\ [x]` with a space is a row that starts with a bracket, not a spacing option —

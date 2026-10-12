@@ -168,6 +168,10 @@ class MathItalicDefaultTest {
     @Test
     void mathrmTextAndOperatorNamesKeepTheirUprightGlyphs() {
         assertEquals(List.of(gid('x')), glyphs("\\mathrm{x}"));
+        // A scripted \mathrm letter is an upright ATOM (not a text run): still roman s,
+        // and the 2 is a real superscript, so no caret glyph is drawn.
+        assertEquals(List.of(gid('s'), gid('2')), glyphs("\\mathrm{s^2}"));
+        assertEquals(List.of(gid(0x1D460), gid('2')), glyphs("s^2"), "control: a bare s is italic");
         assertEquals(List.of(gid('d')), glyphs("{\\rm d}"), "the legacy \\rm switch is upright");
         assertEquals(List.of(gid('s'), gid('i'), gid('n'), gid(0x1D465)), glyphs("\\sin x"));
         assertEquals(List.of(gid('l'), gid('c'), gid('m')), glyphs("\\operatorname{lcm}"));

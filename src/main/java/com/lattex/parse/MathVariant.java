@@ -234,6 +234,60 @@ public final class MathVariant {
         return rewrite(a -> new Atom(a.codePoint(), a.mathClass(), true), node);
     }
 
+    /**
+     * {@code \mathrm{…}}: a MATH alphabet, so its argument is ordinary math (scripts,
+     * commands and math spacing all work) with its Latin letters in the roman family.
+     * Every atom is marked {@link Atom#upright()}, exactly as {@link #upright} does for
+     * the legacy {@code \rm}; then each run of adjacent ASCII letters and digits in a
+     * math list becomes one roman {@link TextRun}. TeX sets adjacent characters of one
+     * family as a single kerned string (TeXbook Appendix G, rule 14), and one word is
+     * what {@code \mathrm{kg}} has always been here in the SVG, the accessible label and
+     * MathML, where separate atoms would read as spaced letters.
+     *
+     * <p>A letter that is not a list item of its own stays an upright atom: the nucleus
+     * of a script ({@code \mathrm{s^{-1}}}) keeps the single-character script attachment,
+     * and the letters inside a script, fraction or radical are not regrouped.
+     */
+    static MathNode roman(MathNode node) {
+        return romanWords(upright(node));
+    }
+
+    /** Joins each run of roman word characters in {@code node}'s math lists into a {@link TextRun}. */
+    private static MathNode romanWords(MathNode node) {
+        if (node instanceof Atom atom && isRomanWordChar(atom)) {
+            return new TextRun(Character.toString(atom.codePoint()), MathNode.TextStyle.ROMAN);
+        }
+        if (!(node instanceof MathList list)) {
+            return node;
+        }
+        List<MathNode> items = new ArrayList<>(list.items().size());
+        StringBuilder word = new StringBuilder();
+        for (MathNode child : list.items()) {
+            if (child instanceof Atom atom && isRomanWordChar(atom)) {
+                word.appendCodePoint(atom.codePoint());
+                continue;
+            }
+            flushRomanWord(word, items);
+            items.add(child instanceof MathList ? romanWords(child) : child);
+        }
+        flushRomanWord(word, items);
+        return items.size() == 1 ? items.get(0) : new MathList(items);
+    }
+
+    private static void flushRomanWord(StringBuilder word, List<MathNode> items) {
+        if (word.length() > 0) {
+            items.add(new TextRun(word.toString(), MathNode.TextStyle.ROMAN));
+            word.setLength(0);
+        }
+    }
+
+    /** An ordinary ASCII letter or digit: the characters TeX's {@code \mathrm} takes from family 0. */
+    private static boolean isRomanWordChar(Atom atom) {
+        int cp = atom.codePoint();
+        return atom.mathClass() == MathNode.MathClass.ORD
+            && ((cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z') || (cp >= '0' && cp <= '9'));
+    }
+
     /** Rebuilds {@code node} with {@code atomFn} applied to every {@link Atom} in it. */
     private static MathNode rewrite(UnaryOperator<Atom> atomFn, MathNode node) {
         return switch (node) {

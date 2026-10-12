@@ -319,7 +319,8 @@ public final class LayoutEngine {
      * glyphmap, substitute, the aria-label and MathML still key on {@code x}, not
      * {@code U+1D465}. Explicit variants ({@code \mathbf}, {@code \mathbb}, …) have already
      * moved their atoms out of ASCII and pass through untouched; roman words ({@code \sin},
-     * {@code \mathrm}, {@code \text}) are not atoms at all. The legacy {@code \rm} marks its
+     * {@code \text}, a {@code \mathrm} word) are not atoms at all. The legacy {@code \rm},
+     * and {@code \mathrm} for a letter that carries a script, mark their
      * atoms {@link Atom#upright()}, which straightens Latin letters only — like TeX's
      * {@code \rm}, which changes the family of class-7 characters and nothing else.
      */

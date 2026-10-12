@@ -277,6 +277,10 @@ final class CommandRegistry {
                 (name.equals("boldsymbol") || name.equals("bm"))
                     ? "\\" + name + "{\\alpha\\beta\\gamma}"
                     : "\\" + name + "{RQZ}"));
+        // \mathrm is a math alphabet like the rows above, but roman is the base
+        // alphabet, so there is no MathVariant.Style for it to map to: the parser
+        // reads its argument as math and sets the letters upright (MathVariant.roman).
+        add(out, "mathrm", Category.FONT_VARIANT, Handler.FONT_VARIANT, "\\mathrm{RQZ}");
         // Atom-class wrappers are indexed under SPACING: their entire observable
         // effect is the inter-atom glue the enclosing row inserts around them
         // (the glyphs are untouched), so the example puts the wrapper BETWEEN two

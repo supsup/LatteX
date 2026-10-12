@@ -199,7 +199,7 @@ class TextNestedMathTest {
 
     @Test
     void everyTextCommandOmitsOnlyDecodedEmptyFragmentsAndKeepsTrailingSpace() {
-        assertEquals(Set.of("text", "textrm", "mathrm", "textnormal", "hbox", "textbf", "textit",
+        assertEquals(Set.of("text", "textrm", "textnormal", "hbox", "textbf", "textit",
                 "texttt"),
             Symbols.TEXT_COMMANDS.keySet(), "sweep must cover every text command family");
 

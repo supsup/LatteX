@@ -491,3 +491,25 @@ overlap formulas); newly failing 0, compared formula by formula.
 **Limits.** A tag label read as text expands no macros; one that text mode refuses is
 re-read as math with the preset macros only, not ones defined inline earlier in the
 formula. `\tag*` is still unsupported.
+
+---
+
+### Parser audit: `\mathrm` reads math, a primed big operator, misplaced TeX specials
+
+Three findings from the 2026-10-12 read-only audit, each one input that rendered
+without complaint and drew the wrong thing.
+
+- **`\mathrm{…}` is a math alphabet, as in LaTeX.** It was registered beside `\text` and
+  its argument was captured raw, so `\mathrm{CaCO_3}`, `\mathrm{m/s^2}` and
+  `\mathrm{J\,K^{-1}}` drew a literal `_` and `^` (four wild-corpus rows, all "OK" on a
+  ratchet that only looks for a path). The argument is now parsed as math and set
+  upright: scripts attach, commands and math accents run (`\mathrm{\acute et}` and
+  `\mathrm{\alpha}` were refused), a `-` is the minus sign, `\,` is math's thin space,
+  and **spaces are ignored** (`\mathrm{a b}` is `ab`; write `\ ` or use `\text`). A run
+  of plain letters and digits is still one roman word, so `\mathrm{d}x`, `\mathrm{MSE}`
+  and every other letters-only use keeps its tree, SVG, accessible label and
+  `<mtext>` unchanged. The other seven text commands (`\text \textrm \textnormal \hbox
+  \textbf \textit \texttt`) are text mode in LaTeX and are untouched. `\mathrm` with
+  no argument now reports `\mathrm needs an argument` with the caret where the argument
+  is missing. In `examples/symbol-index.html` `\mathrm` moves from Text to Font
+  variants.

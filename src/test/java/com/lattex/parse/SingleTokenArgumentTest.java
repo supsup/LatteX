@@ -66,7 +66,8 @@ class SingleTokenArgumentTest {
 
     @Test
     void textArgumentCommandsTakeOneControlSequence() {
-        // \mathrm\alpha IS \mathrm{\alpha}: same tree or the same refusal.
+        // \mathrm\alpha IS \mathrm{\alpha}: same tree or the same refusal. (Both are the
+        // upright-marked \alpha now that \mathrm reads its argument as math.)
         assertSameAsBraced("\\text{\\%}", "\\text\\%");
         String braced = "\\mathrm{\\alpha}";
         String unbraced = "\\mathrm\\alpha";
@@ -171,6 +172,7 @@ class SingleTokenArgumentTest {
             new Probe("\\begin{matrix}\\hat\\\\b\\end{matrix}", 18),
             new Probe("{\\phantom}", 9),
             new Probe("\\mathbf", 7),
+            new Probe("\\mathrm", 7),
             new Probe("\\sqrt", 5));
         for (Probe probe : probes) {
             MathSyntaxException e = assertThrows(MathSyntaxException.class,
@@ -181,8 +183,8 @@ class SingleTokenArgumentTest {
         }
         // Text-argument commands keep their established message at the command.
         MathSyntaxException text = assertThrows(MathSyntaxException.class,
-            () -> MathParser.parse("\\mathrm"));
-        assertEquals("\\mathrm expects a '{...}' text argument", text.getMessage());
+            () -> MathParser.parse("\\textbf"));
+        assertEquals("\\textbf expects a '{...}' text argument", text.getMessage());
         assertEquals(0, text.offset());
         MathSyntaxException textBrace = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse("{\\text}"));
