@@ -67,12 +67,31 @@ class PrimePlacementTest {
             {"f''_n", "f^{\\prime\\prime}_n"},
             {"f_n''", "f^{\\prime\\prime}_n"},
             {"f'(x)", "f^{\\prime}(x)"},
+            // After a large operator too (audit-20261012 finding 6): the prime is the
+            // operator's superscript, placed wherever its upper limit goes.
+            {"\\sum'_{n}", "\\sum^{\\prime}_{n}"},
+            {"\\int'_a^b", "\\int^{\\prime b}_a"},
         };
         for (String[] p : pairs) {
             Layout a = layout(p[0]);
             Layout b = layout(p[1]);
             assertEquals(b.glyphs(), a.glyphs(), p[0] + " must draw exactly " + p[1]);
         }
+    }
+
+    @Test
+    void aPrimeAfterABigOperatorDrawsThePrimeNeverAnApostrophe() {
+        // Pre-fix the sum was followed by an ASCII apostrophe (U+0027) at text size with
+        // the lower limit hung on it as a subscript.
+        for (String latex : new String[] {"\\sum'_{n}", "\\int'_a^b"}) {
+            Layout l = layout(latex);
+            assertEquals(1, atoms(l, 0x2032).size(), latex + " draws one prime");
+            assertTrue(atoms(l, '\'').isEmpty(), latex + " draws no ASCII apostrophe");
+            assertEquals(FONT.scriptStyleAlternate(FONT.glyphId(0x2032), 1),
+                atoms(l, 0x2032).get(0).glyphId(), latex + ": the prime is set as a script");
+        }
+        // Control: the unprimed operator draws no prime at all.
+        assertTrue(atoms(layout("\\sum_{n}"), 0x2032).isEmpty());
     }
 
     @Test

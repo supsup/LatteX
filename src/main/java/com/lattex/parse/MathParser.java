@@ -1106,19 +1106,35 @@ public final class MathParser {
         return new SupSub(base, sup, sub);
     }
 
-    /** A large operator with optional {@code \limits}/{@code \nolimits} + limits. */
+    /**
+     * A large operator with optional {@code \limits}/{@code \nolimits} + limits.
+     *
+     * <p>A {@code '} after the operator is TeX's {@code ^{\prime}} (TeXbook Ch.16), exactly
+     * as after an ordinary nucleus ({@link #parseScripts}): primes accumulate and merge
+     * with one explicit {@code ^} into the operator's superscript, so {@code \sum'_{n}}
+     * is {@code \sum^{\prime}_{n}} and {@code \int'_a^b} is {@code \int^{\prime b}_a}.
+     * Being the superscript, the prime is placed wherever the operator's upper limit
+     * goes: beside an integral, above a display-style {@code \sum}, as TeX sets it. Before
+     * this the loop below did not know the prime, so the operator ended scriptless and
+     * the apostrophe became an ASCII U+0027 atom that the following scripts attached to.
+     */
     private MathNode parseBigOperator(Atom op) {
         LimitsMode mode = parseLimitsModifiers(LimitsMode.DEFAULT);
-        MathNode upper = null;
+        List<MathNode> upperItems = new ArrayList<>();
+        boolean explicitUpper = false;
         MathNode lower = null;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.SUP) {
-                if (upper != null) {
+            if (k == Kind.CHAR && peek().codePoint() == '\'') {
+                next();
+                upperItems.add(new Atom(0x2032, MathClass.ORD));
+            } else if (k == Kind.SUP) {
+                if (explicitUpper) {
                     throw new MathSyntaxException("Double superscript on operator");
                 }
                 next();
-                upper = parseScriptArg("upper limit");
+                explicitUpper = true;
+                upperItems.add(parseScriptArg("upper limit"));
             } else if (k == Kind.SUB) {
                 if (lower != null) {
                     throw new MathSyntaxException("Double subscript on operator");
@@ -1129,6 +1145,7 @@ public final class MathParser {
                 break;
             }
         }
+        MathNode upper = upperItems.isEmpty() ? null : wrap(upperItems);
         return new BigOperator(op, lower, upper, mode);
     }
 
