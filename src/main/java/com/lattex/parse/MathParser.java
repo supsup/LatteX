@@ -1035,27 +1035,17 @@ public final class MathParser {
      * {@code ^} (above the brace) and/or {@code _} (below it), mirroring
      * {@link #parseBigOperator}'s limit loop. The label sits at script size in
      * layout. A bare {@code \\underbrace{x}} with no script is left label-less.
-     * A {@code '} is {@code ^{\prime}} here too, joining the label above as in
-     * {@link #parseScripts}.
      */
     private MathNode parseStackLabel(MathNode.Stack st) {
         MathNode.Stack out = st;
-        List<MathNode> aboveItems = new ArrayList<>();
-        boolean explicitAbove = false;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.CHAR && peek().codePoint() == '\'') {
-                next();
-                aboveItems.add(new Atom(0x2032, MathClass.ORD));
-                out = out.withAbove(wrap(aboveItems));
-            } else if (k == Kind.SUP) {
-                if (explicitAbove) {
+            if (k == Kind.SUP) {
+                if (out.above() != null) {
                     throw new MathSyntaxException("Double superscript on \\" + braceCommand(st));
                 }
                 next();
-                explicitAbove = true;
-                aboveItems.add(parseScriptArg("brace label"));
-                out = out.withAbove(wrap(aboveItems));
+                out = out.withAbove(parseScriptArg("brace label"));
             } else if (k == Kind.SUB) {
                 if (out.below() != null) {
                     throw new MathSyntaxException("Double subscript on \\" + braceCommand(st));

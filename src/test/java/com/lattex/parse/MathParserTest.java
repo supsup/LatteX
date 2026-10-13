@@ -292,19 +292,6 @@ class MathParserTest {
     }
 
     @Test
-    void primeAfterABraceStackJoinsTheLabelAbove() {
-        // Same loop shape, same gap: \underbrace{x}' was the brace followed by A(',ORD).
-        assertEquals("Stk[UNDERBRACE](A(x,ORD),^A(U+2032,ORD))",
-            pp(MathParser.parse("\\underbrace{x}'")));
-        assertEquals(MathParser.parse("\\overbrace{x}^{\\prime n}_k"),
-            MathParser.parse("\\overbrace{x}'^n_k"));
-        // Controls: a labelled brace is the tree it was, and two carets still refuse.
-        assertEquals("Stk[OVERBRACE](A(x,ORD),^A(n,ORD))",
-            pp(MathParser.parse("\\overbrace{x}^{n}")));
-        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\overbrace{x}^a^b"));
-    }
-
-    @Test
     void twoExplicitSuperscriptsStillThrow() {
         // Primes merge with one ^, but two explicit carets still error.
         assertThrows(MathSyntaxException.class, () -> MathParser.parse("f^2^3"));

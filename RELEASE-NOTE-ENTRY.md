@@ -501,9 +501,12 @@ and drew the wrong thing.
 
 - **A prime after a big operator is its superscript.** `\sum'_{n\le x} a_n` used to
   parse as a scriptless sum followed by an ASCII apostrophe (U+0027) with the lower limit
-  hung on it; `\int'_a^b` and `\underbrace{x}'` took the same path. A `'` is TeX's
+  hung on it; `\int'_a^b` took the same path. A `'` is TeX's
   `^{\prime}` after an operator exactly as after a letter, so `\sum'_{n}` is now
   `\sum^{\prime}_{n}` and `\int'_a^b` is `\int^{\prime b}_a`, tree for tree. Being the
   superscript, the prime goes where the operator's upper limit goes: beside an integral,
   and above a display-style `\sum`, as TeX sets it (write `\sum\nolimits'` to keep it at
-  the side). Unprimed operators are unchanged.
+  the side). Unprimed operators are unchanged. A prime after `\underbrace{...}` or
+  `\overbrace{...}` is NOT changed here: those stacks draw a label on one side only, so a
+  superscript on an underbrace (or a subscript on an overbrace) is not drawn at all today, and
+  moving the prime there would lose it. That gap is a separate finding.

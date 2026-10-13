@@ -83,7 +83,7 @@ class PrimePlacementTest {
     void aPrimeAfterABigOperatorDrawsThePrimeNeverAnApostrophe() {
         // Pre-fix the sum was followed by an ASCII apostrophe (U+0027) at text size with
         // the lower limit hung on it as a subscript.
-        for (String latex : new String[] {"\\sum'_{n}", "\\int'_a^b", "\\underbrace{x}'"}) {
+        for (String latex : new String[] {"\\sum'_{n}", "\\int'_a^b"}) {
             Layout l = layout(latex);
             assertEquals(1, atoms(l, 0x2032).size(), latex + " draws one prime");
             assertTrue(atoms(l, '\'').isEmpty(), latex + " draws no ASCII apostrophe");
