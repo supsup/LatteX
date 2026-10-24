@@ -281,6 +281,25 @@ class MathMLTest {
     }
 
     @Test
+    void anExplicitLimitsPinsTheLimitsAboveAndBelow() {
+        // The <math> root is not display="block", so a MathML Core renderer sets it in compact
+        // style, where an operator the dictionary marks movablelimits (sum, prod, coprod, the big
+        // set and logic operators) has its munderover limits moved beside it. \sum\limits asks
+        // for stacked limits and the SVG stacks them, so its <mo> must turn movablelimits off.
+        String forced = LatteX.toMathML("\\sum\\limits_{i=1}^n i");
+        assertTrue(forced.contains("<munderover><mo movablelimits=\"false\">\u2211</mo>"), forced);
+        assertWellFormed(forced);
+        // DEFAULT keeps the dictionary's movablelimits: TeX's displaylimits behaviour.
+        String dflt = LatteX.toMathML("\\sum_{i=1}^n i");
+        assertTrue(dflt.contains("<munderover><mo>\u2211</mo>"), dflt);
+        assertFalse(dflt.contains("movablelimits"), dflt);
+        // An integral has no movablelimits in the dictionary, so \int\limits is unchanged.
+        String integral = LatteX.toMathML("\\int\\limits_0^1 f");
+        assertTrue(integral.contains("<munderover><mo>\u222B</mo>"), integral);
+        assertFalse(integral.contains("movablelimits"), integral);
+    }
+
+    @Test
     void aLabelledBraceKeepsItsBrace() {
         // Audit cb3b4518 F5. stackMathML emitted the brace <mo> only when the label was null,
         // so \underbrace{x+y}_{n} came out as <munder><mrow>x+y</mrow><mi>n</mi></munder>: the
