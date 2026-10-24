@@ -836,7 +836,10 @@ final class Symbols {
         m.put("top", new Sym(0x22A4, MathClass.ORD));     // ⊤
         m.put("bot", new Sym(0x22A5, MathClass.ORD));     // ⊥
         m.put("surd", new Sym(0x221A, MathClass.ORD));    // √
-        m.put("backslash", new Sym(0x2216, MathClass.ORD)); // ∖
+        // The reverse solidus, as the delimiter form already draws it; U+2216 is \setminus's
+        // SET MINUS, and sharing it also left a pasted ∖'s class to Map.copyOf iteration
+        // order (Ord here, Bin for \setminus). Audit cb3b4518 F11.
+        m.put("backslash", new Sym(0x5C, MathClass.ORD)); // \
         m.put("prime", new Sym(0x2032, MathClass.ORD));   // ′
         m.put("mho", new Sym(0x2127, MathClass.ORD));     // ℧
         m.put("Finv", new Sym(0x2132, MathClass.ORD));    // Ⅎ
