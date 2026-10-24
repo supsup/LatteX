@@ -250,6 +250,32 @@ class MathMLTest {
     }
 
     @Test
+    void aLabelledBraceKeepsItsBrace() {
+        // Audit cb3b4518 F5. stackMathML emitted the brace <mo> only when the label was null,
+        // so \underbrace{x+y}_{n} came out as <munder><mrow>x+y</mrow><mi>n</mi></munder>: the
+        // label sat directly under the base and the brace itself was gone. The SVG layout
+        // stacks base, brace, label (LayoutEngine.stackBox); MathML now nests the same way.
+        String ub = LatteX.toMathML("\\underbrace{x+y}_{n}");
+        int inner = ub.indexOf("<munder><munder>");
+        int brace = ub.indexOf("<mo>&#9183;</mo></munder>");
+        int label = ub.indexOf("<mi>n</mi>");
+        assertTrue(inner >= 0 && brace > inner && label > brace,
+            "underbrace nests base, brace, label: " + ub);
+        assertWellFormed(ub);
+        String ob = LatteX.toMathML("\\overbrace{x+y}^{n}");
+        inner = ob.indexOf("<mover><mover>");
+        brace = ob.indexOf("<mo>&#9182;</mo></mover>");
+        label = ob.indexOf("<mi>n</mi>");
+        assertTrue(inner >= 0 && brace > inner && label > brace,
+            "overbrace nests base, brace, label: " + ob);
+        assertWellFormed(ob);
+        // Control: a label-less brace is one level, brace directly on the base, as before.
+        String bare = LatteX.toMathML("\\underbrace{x+y}");
+        assertFalse(bare.contains("<munder><munder>"), bare);
+        assertTrue(bare.contains("<mo>&#9183;</mo></munder>"), bare);
+    }
+
+    @Test
     void cancelFamilyMapsToMencloseStrikesAndCanceltoUsesTheArrowNotation() {
         // Plain strikes carry the diagonal-strike notations.
         assertTrue(LatteX.toMathML("\\cancel{x}").contains("notation=\"updiagonalstrike\""),
