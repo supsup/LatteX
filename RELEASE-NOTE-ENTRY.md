@@ -524,6 +524,8 @@ the glyph) disagreed with what the SVG already drew.
   `\nolimits` beside, `\limits` stacked, and by default beside for the integral family
   (`\int \iint \iiint \oint \oiint \oiiint \idotsint \fint \sqint` and the clockwise
   contour integrals) and stacked for everything else, so `\sum` and `\prod` are unchanged.
+  An explicit `\limits` on a non-integral operator also emits
+  `<mo movablelimits="false">`, so the limits stay stacked as the SVG draws them.
 - **A labelled brace keeps its brace.** `\underbrace{x+y}_{n}` emitted the label directly
   under the base and no brace at all; `\overbrace{x+y}^{n}` likewise. The brace now
   stacks on the base and the label on the brace, the order the SVG draws.
@@ -538,3 +540,14 @@ the glyph) disagreed with what the SVG already drew.
   glyph, though its delimiter form (`\big\backslash`) already used U+005C. It is now
   U+005C in both. A pasted set-minus glyph is now Bin every run; while the two commands
   shared U+2216 its class depended on per-run map iteration order.
+
+**Still open after this entry.**
+
+- `multline` rows are still centred in MathML; the SVG sets the first row left and the
+  last row right.
+- `columnalign` is not part of MathML Core, so Chromium's native MathML ignores it and
+  still centres every cell; renderers that implement full MathML (or MathJax) honour it.
+- The `<math>` root carries no `display="block"`, so a MathML Core renderer sets it in
+  compact style and draws a default `\sum_{i=1}^n` with its limits beside the sign, where
+  a display-style SVG stacks them. A consumer that wants display layout must set
+  `display="block"` on the element itself.
