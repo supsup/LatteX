@@ -1188,9 +1188,15 @@ public final class LatteX {
             } + ">" + toMathML(l.body()) + "</mpadded>";
             case BigOperator(var op, var lower, var upper, var limits) -> {
                 String o = mo(op.codePoint());
-                // \nolimits (e.g. an inline integral) sets scripts to the SIDE —
-                // msub/msup/msubsup — matching the SVG; otherwise above/below.
-                boolean beside = limits == MathNode.LimitsMode.NOLIMITS;
+                // Scripts go to the SIDE (msub/msup/msubsup) by the SVG layout's own rule:
+                // always for \nolimits, never for \limits, and by default for the integral
+                // family, which keeps side limits even in display style (audit cb3b4518 F3).
+                // Otherwise above/below.
+                boolean beside = switch (limits) {
+                    case NOLIMITS -> true;
+                    case LIMITS -> false;
+                    case DEFAULT -> LayoutEngine.isIntegral(op.codePoint());
+                };
                 if (lower != null && upper != null) {
                     yield (beside ? "<msubsup>" : "<munderover>") + o
                         + toMathML(lower) + toMathML(upper) + (beside ? "</msubsup>" : "</munderover>");
