@@ -302,7 +302,7 @@ class MathMLTest {
     @Test
     void aLabelledBraceKeepsItsBrace() {
         // Audit cb3b4518 F5. stackMathML emitted the brace <mo> only when the label was null,
-        // so \underbrace{x+y}_{n} came out as <munder><mrow>x+y</mrow><mi>n</mi></munder>: the
+        // so \\underbrace{x+y}_{n} came out as <munder><mrow>x+y</mrow><mi>n</mi></munder>: the
         // label sat directly under the base and the brace itself was gone. The SVG layout
         // stacks base, brace, label (LayoutEngine.stackBox); MathML now nests the same way.
         String ub = LatteX.toMathML("\\underbrace{x+y}_{n}");
