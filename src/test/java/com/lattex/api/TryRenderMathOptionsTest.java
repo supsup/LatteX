@@ -3,7 +3,6 @@ package com.lattex.api;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
@@ -71,20 +70,52 @@ class TryRenderMathOptionsTest {
     }
 
     @Test
-    void theOneArgFormIsTheDefaultsOverload() {
+    void oneArgFormEqualsTwoArgWithDefaultsOnAnEffectSource() {
         String latex = "\\lx[fx.hover=thread,fx.enter=fade]{x + x^2}";
         assertEquals(LatteX.tryRenderMath(latex, RenderOptions.defaults()), LatteX.tryRenderMath(latex));
     }
 
     @Test
-    void interactiveExpansionIsRefusedLoudNotDroppedSilently() {
-        // The record has no slot for the pre-rendered hidden sibling payload that the flag
-        // produces, so honouring the flag is impossible here; dropping it would be the silent
-        // divergence from renderStyledHtml this overload must not have. Exactly IAE, not the
-        // LatteXException subtype: this is a host-configuration error, not an author one.
-        IllegalArgumentException ex = assertThrowsExactly(IllegalArgumentException.class,
-            () -> LatteX.tryRenderMath("x", RenderOptions.defaults().withInteractiveExpansion(true)));
-        assertTrue(ex.getMessage().contains("renderStyledHtml"), "names the path that honours it: " + ex.getMessage());
+    void textMathStyleFromTheHostReachesTheSeam() {
+        RenderOptions inline = host().inline();
+        String latex = "\\frac{a}{b} + \\sum_{i=1}^{n} i";
+        String svg = LatteX.tryRenderMath(latex, inline).orElseThrow().svg();
+        assertNotEquals(LatteX.render(latex, host()), svg, "control: text style changes the layout");
+        assertEquals(LatteX.render(latex, inline), svg, "byte-identical to render(latex, opts.inline())");
+    }
+
+    private static final String UNFOLD = "\\lx[fx.click=unfold]{\\sum_{i=1}^{4} f(i)}";
+    private static final String SUBSTITUTE = "\\lx[fx.click=substitute, fx.substitute-to=3]{x^2 + 2x + 1}";
+
+    /**
+     * The seam NEVER arms interactive expansion: with the host flag set it returns exactly the
+     * flag-off result, which is what renderStyledHtml produces with the flag off (its own
+     * javadoc: byte-identical to flag-on for any formula without an unfold or substitute
+     * directive). An unfold/substitute source degrades inert here, as it does on a flag-off
+     * page; a host that wants the effect uses renderStyledHtml. Refusing the flag instead
+     * would throw on every input, including "x", and a consumer wrapper that catches
+     * RuntimeException would swallow that and fall back to the split path this seam replaces.
+     */
+    @Test
+    void interactiveExpansionIsInertNeverArmedAndNeverRefused() {
+        RenderOptions flagOn = host().withInteractiveExpansion(true);
+        // Non-vacuity: the flag is live for the sibling on these very sources.
+        assertTrue(LatteX.renderStyledHtml(UNFOLD, flagOn).contains("data-lx-fx-expand=\""),
+            "control: renderStyledHtml arms unfold with the flag on");
+        assertTrue(LatteX.renderStyledHtml(SUBSTITUTE, flagOn).contains("data-lx-fx-substitute=\""),
+            "control: renderStyledHtml arms substitute with the flag on");
+
+        for (String latex : java.util.List.of("x", "\\frac{a}{b} + \\third", UNFOLD, SUBSTITUTE)) {
+            Optional<LatteX.RenderedMath> on = LatteX.tryRenderMath(latex, flagOn);
+            assertTrue(on.isPresent(), latex + ": the flag never refuses or fails the render");
+            assertEquals(LatteX.tryRenderMath(latex, host()), on, latex + ": flag-on == flag-off");
+            Map<String, String> attrs = on.get().containerAttrs();
+            for (String armed : java.util.List.of("data-lx-fx-expand", "data-lx-fx-substitute", "data-lx-var")) {
+                assertTrue(!attrs.containsKey(armed), latex + ": the seam never stamps " + armed + "; attrs=" + attrs);
+            }
+            assertTrue(LatteX.renderStyledHtml(latex, host()).contains(on.get().svg()),
+                latex + ": the SAME svg renderStyledHtml wraps with the flag off");
+        }
     }
 
     @Test
