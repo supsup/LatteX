@@ -6,8 +6,11 @@ ARG LATTEX_SOURCE_REVISION
 FROM eclipse-temurin:25-jdk AS build
 # Remove the eMudhra-affected roots before Gradle fetches anything (trust/README.md).
 COPY trust/ /opt/trust/
-RUN apt-get update \
+ARG TRUST_REFRESH=2026-10-23
+RUN echo "$TRUST_REFRESH" > /etc/lattex-trust-refresh \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && apt-get install -y --only-upgrade ca-certificates \
     && mkdir -p /usr/local/share/ca-certificates \
     && sh /opt/trust/distrust-os-sources.sh /usr/share/ca-certificates /usr/local/share/ca-certificates \
     && update-ca-certificates \
@@ -40,7 +43,9 @@ LABEL org.opencontainers.image.revision=${LATTEX_SOURCE_REVISION}
 
 # The shipped JRE and OS bundle: same removal as the build stage (trust/README.md).
 COPY trust/ /opt/trust/
-RUN apk add --no-cache --upgrade ca-certificates openssl \
+ARG TRUST_REFRESH=2026-10-23
+RUN echo "$TRUST_REFRESH" > /etc/lattex-trust-refresh \
+    && apk add --no-cache --upgrade ca-certificates openssl \
     && mkdir -p /usr/local/share/ca-certificates \
     && sh /opt/trust/distrust-os-sources.sh /usr/share/ca-certificates /usr/local/share/ca-certificates \
     && update-ca-certificates \
