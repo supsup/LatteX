@@ -213,6 +213,37 @@ class MathMLTest {
     }
 
     @Test
+    void tablesCarryTheirColumnAlignment() {
+        // Audit cb3b4518 F2. matrixMathML never read Matrix.columnAligns, so every table came
+        // out as a bare <mtable> and every cell was centred (MathML's default): the = signs of
+        // an aligned block did not line up and a cases body was centred. The parser computes
+        // the alignment and the SVG uses it; the MathML now states it on the table.
+        String aligned = LatteX.toMathML("\\begin{aligned} a &= b+c \\\\ &= d \\end{aligned}");
+        assertTrue(aligned.contains("<mtable columnalign=\"right left\">"), aligned);
+        String cases = LatteX.toMathML(
+            "\\begin{cases} x & \\text{if } x>0 \\\\ -x & \\text{otherwise} \\end{cases}");
+        assertTrue(cases.contains("<mtable columnalign=\"left left\">"), cases);
+        String array = LatteX.toMathML("\\begin{array}{lcr} a & b & c \\end{array}");
+        assertTrue(array.contains("<mtable columnalign=\"left center right\">"), array);
+        assertWellFormed(aligned);
+        assertWellFormed(cases);
+        assertWellFormed(array);
+        // Control: an all-centred grid states nothing; centre is already MathML's default.
+        String pm = LatteX.toMathML("\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}");
+        assertTrue(pm.contains("<mtable>"), pm);
+        assertFalse(pm.contains("columnalign"), pm);
+        // A \multicolumn cell aligned unlike the column it starts in says so on its own mtd;
+        // one aligned like its column inherits and says nothing.
+        String span = LatteX.toMathML(
+            "\\begin{array}{lr} \\multicolumn{2}{c}{h} \\\\ a & b \\end{array}");
+        assertTrue(span.contains("<mtd columnspan=\"2\" columnalign=\"center\">"), span);
+        String same = LatteX.toMathML(
+            "\\begin{array}{lr} \\multicolumn{2}{l}{h} \\\\ a & b \\end{array}");
+        assertTrue(same.contains("<mtd columnspan=\"2\">"), same);
+        assertWellFormed(span);
+    }
+
+    @Test
     void nolimitsPutsScriptsBesideNotAboveBelow() {
         // \sum_{i}^{n} keeps limits above/below (munderover); an explicit \nolimits sets
         // them to the side (msubsup), matching the SVG.
