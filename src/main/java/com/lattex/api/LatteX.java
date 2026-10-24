@@ -918,8 +918,49 @@ public final class LatteX {
      * @return the render-coupled pair, or empty on any failure
      */
     public static java.util.Optional<RenderedMath> tryRenderMath(String latex) {
+        return tryRenderMath(latex, RenderOptions.defaults());
+    }
+
+    /**
+     * {@link #tryRenderMath(String)} honouring the HOST's {@link RenderOptions}, with the same
+     * semantics {@link #renderStyledHtml(String, RenderOptions)} gives them: preset
+     * {@link RenderOptions#macros()} expand before parsing (inside an {@code \lx} body too);
+     * with no top-level {@code \lx} wrapper the host's scale, color and math style apply, while
+     * a wrapper still overrides the styling; {@link RenderOptions#fluid()} is a host flag that
+     * reaches the {@code <svg>} either way. The returned SVG is byte-identical to
+     * {@link #render(String, RenderOptions)} on the same arguments, and the container attributes
+     * (including {@code data-lx-glyphmap}) equal the ones {@code renderStyledHtml} stamps.
+     * Without this overload a consumer needing macros or fluid sizing had to go back to the
+     * split render + deprecated {@link #fxContainerAttrs} path, whose glyphmap can desync.
+     *
+     * <p><strong>{@link RenderOptions#interactiveExpansion()} is refused, not ignored.</strong>
+     * The flag's product is a pre-rendered hidden SIBLING {@code <svg>} payload that
+     * {@code renderStyledHtml} places inside its own container; {@link RenderedMath} has no slot
+     * for it, and stamping the expand marker without the payload would arm an effect the runtime
+     * cannot honour. Silently dropping the flag would make this overload diverge from its
+     * sibling without saying so, so a host that sets it gets an
+     * {@code IllegalArgumentException} naming {@code renderStyledHtml}. {@link
+     * RenderOptions#renderErrors()} is ignored here exactly as the throwing render API ignores it.
+     *
+     * <p>Failure semantics are the one-arg form's: ANY failure in parse, layout or emit,
+     * including a {@code StackOverflowError}, yields {@link java.util.Optional#empty()}.
+     *
+     * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
+     * @param opts  the host render options
+     * @return the render-coupled pair, or empty on any render failure
+     * @throws NullPointerException     if {@code opts} is null
+     * @throws IllegalArgumentException if {@code opts.interactiveExpansion()} is set (a host
+     *         configuration error, never an author-input failure: those are the empty result)
+     */
+    public static java.util.Optional<RenderedMath> tryRenderMath(String latex, RenderOptions opts) {
+        java.util.Objects.requireNonNull(opts, "opts");
+        if (opts.interactiveExpansion()) {
+            throw new IllegalArgumentException("tryRenderMath cannot carry the interactiveExpansion"
+                + " payload (RenderedMath has no slot for the pre-rendered sibling svg); use"
+                + " renderStyledHtml(latex, opts) for interactive expansion, or clear the flag");
+        }
         try {
-            return java.util.Optional.of(containRender(() -> renderMathPair(latex)));
+            return java.util.Optional.of(containRender(() -> renderMathPair(latex, opts)));
         } catch (RuntimeException containedOrTyped) {
             // containRender has already turned an Error into a MathSyntaxException, so this
             // one catch sees every failure the contract promises to absorb.
@@ -932,16 +973,17 @@ public final class LatteX {
      * inside too, unlike the throwing siblings, because this seam's contract absorbs parse
      * failures as well as layout and emit ones.
      */
-    private static RenderedMath renderMathPair(String latex) {
-        MathNode seamNode = MathParser.parse(latex);
+    private static RenderedMath renderMathPair(String latex, RenderOptions opts) {
+        MathNode seamNode = MathParser.parse(latex, opts.macros());
         EffectSpec fx = seamNode instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-        RenderOptions seamStyle = seamNode instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
+        RenderOptions seamStyle = seamNode instanceof StyledMath sm ? sm.style() : opts;
         MathNode seamBody = seamNode instanceof StyledMath sm ? sm.body() : seamNode;
         SfntFont font = FontHolder.FONT;
         LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
             DISPLAY_FONT_SIZE * seamStyle.scale(), seamStyle.mathStyle(), false);
         Layout layout = LayoutEngine.layout(seamBody, ctx);
-        String svg = SvgEmitter.emit(layout, font, describe(seamBody), seamStyle.color());
+        // fluid rides the HOST opts, never the \lx wrapper, exactly as in render(latex, opts).
+        String svg = SvgEmitter.emit(layout, font, describe(seamBody), seamStyle.color(), opts.fluid());
         // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
         // stamping decision, so the seam and the wrapper path cannot drift on whether
         // the sidecar rides the container. A literal THREAD check here silently left

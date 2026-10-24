@@ -250,6 +250,13 @@ real production `/docs` integration ran, minus its framework:
    structurally cannot carry the `data-lx-glyphmap` sidecar, so the glyphmap-reading
    effects (`thread`, `cancel`) render a container hook with no glyph data and sit
    silently inert — no exception, no warning, just an effect that never fires.
+   Host options (preset macros, scale/color, `fluid`) go through
+   `LatteX.tryRenderMath(latex, opts)`, which honours them exactly as
+   `renderStyledHtml(latex, opts)` does; it refuses `interactiveExpansion` with an
+   `IllegalArgumentException`, because the record has no slot for the pre-rendered
+   expansion payload — use `renderStyledHtml` for that effect. Both forms return
+   empty on any failure, a stack overflow included, so the caller's fallback is
+   always the plain source text.
    From a **non-JVM SSG** there is no CLI flag for this yet (a known gap — the
    binary emits bare SVG), but the runtime only reads *attributes*; it doesn't
    care who wrote them. A Hugo shortcode / 11ty filter can stamp the wrapper
