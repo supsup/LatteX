@@ -1354,7 +1354,20 @@ public final class LatteX {
                 sb.append(fenceMo(m.leftDelim()));
             }
         }
-        sb.append("<mtable>");
+        // Column alignment (audit cb3b4518 F2): the parser computes it (aligned is right/left
+        // pairs, cases left, array its l/c/r spec) and the SVG draws it; MathML centres every
+        // cell unless told, so a grid with any non-centre column states the full list.
+        boolean allCentred = m.columnAligns().stream()
+            .allMatch(a -> a == MathNode.ColumnAlign.CENTER);
+        if (allCentred) {
+            sb.append("<mtable>");
+        } else {
+            StringBuilder aligns = new StringBuilder();
+            for (MathNode.ColumnAlign a : m.columnAligns()) {
+                aligns.append(aligns.length() == 0 ? "" : " ").append(columnAlignValue(a));
+            }
+            sb.append("<mtable columnalign=\"").append(aligns).append("\">");
+        }
         for (int r = 0; r < m.rows().size(); r++) {
             var row = m.rows().get(r);
             // Plan 636d214f: a tagged row is MathML's labelled row, label first; a
@@ -1380,9 +1393,18 @@ public final class LatteX {
                     content = "<mrow>" + (before == null ? "" : toMathML(before.material()))
                         + content + (after == null ? "" : toMathML(after.material())) + "</mrow>";
                 }
-                sb.append(span != null && span.span() > 1
-                        ? "<mtd columnspan=\"" + span.span() + "\">" : "<mtd>")
-                  .append(content).append("</mtd>");
+                sb.append("<mtd");
+                if (span != null && span.span() > 1) {
+                    sb.append(" columnspan=\"").append(span.span()).append('"');
+                }
+                // A \multicolumn carries its own alignment; state it only where it differs
+                // from what the cell inherits from the table (centre when none was stated).
+                MathNode.ColumnAlign inherited = allCentred
+                    ? MathNode.ColumnAlign.CENTER : m.columnAligns().get(c);
+                if (span != null && span.align() != inherited) {
+                    sb.append(" columnalign=\"").append(columnAlignValue(span.align())).append('"');
+                }
+                sb.append('>').append(content).append("</mtd>");
                 c = last;
             }
             sb.append(tag == null ? "</mtr>" : "</mlabeledtr>");
@@ -1395,6 +1417,15 @@ public final class LatteX {
             sb.append("</mrow>");
         }
         return sb.toString();
+    }
+
+    /** The MathML {@code columnalign} keyword for a column alignment. */
+    private static String columnAlignValue(MathNode.ColumnAlign a) {
+        return switch (a) {
+            case LEFT -> "left";
+            case CENTER -> "center";
+            case RIGHT -> "right";
+        };
     }
 
     /**
