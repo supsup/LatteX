@@ -513,8 +513,7 @@ public final class LatteX {
      */
     private static String mathmlOrEmpty(MathNode body) {
         try {
-            return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
-                + toMathML(body) + "</math>";
+            return mathmlDocument(body);
         } catch (RuntimeException | StackOverflowError e) {
             return "";
         }
@@ -910,33 +909,48 @@ public final class LatteX {
      * <p>Failure semantics mirror the consumer-side {@code tryRender}: ANY failure (parse
      * error, layout overflow, emit fault) yields {@link java.util.Optional#empty()} so the
      * caller falls back to the plain source text — fail-inert, never a half-rendered pair.
+     * "Any" includes a {@code StackOverflowError}: the whole pipeline, parse included, runs
+     * inside {@link #containRender}, the same boundary every sibling render entry uses, so an
+     * {@code Error} becomes the typed failure and then the empty result instead of unwinding
+     * into the consumer's doc pipeline (plan lattex-seam-containment-parity).
      *
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @return the render-coupled pair, or empty on any failure
      */
     public static java.util.Optional<RenderedMath> tryRenderMath(String latex) {
         try {
-            MathNode node = MathParser.parse(latex);
-            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-            RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
-            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-            SfntFont font = FontHolder.FONT;
-            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
-            Layout layout = LayoutEngine.layout(body, ctx);
-            String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
-            // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
-            // stamping decision, so the seam and the wrapper path cannot drift on whether
-            // the sidecar rides the container. A literal THREAD check here silently left
-            // `cancel` inert on the split-wrapper consumer (it reads the sidecar to find
-            // the code point occurring exactly twice, and an absent map is not an error).
-            String glyphmap = usesGlyphmap(fx)
-                ? SvgEmitter.glyphmap(layout, font) : "";
-            String groupmap = precedenceGroupmap(fx, layout, font);
-            return java.util.Optional.of(new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap)));
-        } catch (RuntimeException e) {
+            return java.util.Optional.of(containRender(() -> renderMathPair(latex)));
+        } catch (RuntimeException containedOrTyped) {
+            // containRender has already turned an Error into a MathSyntaxException, so this
+            // one catch sees every failure the contract promises to absorb.
             return java.util.Optional.empty();
         }
+    }
+
+    /**
+     * The seam's pipeline, unguarded: callers run it inside {@link #containRender}. Parse is
+     * inside too, unlike the throwing siblings, because this seam's contract absorbs parse
+     * failures as well as layout and emit ones.
+     */
+    private static RenderedMath renderMathPair(String latex) {
+        MathNode seamNode = MathParser.parse(latex);
+        EffectSpec fx = seamNode instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+        RenderOptions seamStyle = seamNode instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
+        MathNode seamBody = seamNode instanceof StyledMath sm ? sm.body() : seamNode;
+        SfntFont font = FontHolder.FONT;
+        LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+            DISPLAY_FONT_SIZE * seamStyle.scale(), seamStyle.mathStyle(), false);
+        Layout layout = LayoutEngine.layout(seamBody, ctx);
+        String svg = SvgEmitter.emit(layout, font, describe(seamBody), seamStyle.color());
+        // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
+        // stamping decision, so the seam and the wrapper path cannot drift on whether
+        // the sidecar rides the container. A literal THREAD check here silently left
+        // `cancel` inert on the split-wrapper consumer (it reads the sidecar to find
+        // the code point occurring exactly twice, and an absent map is not an error).
+        String glyphmap = usesGlyphmap(fx)
+            ? SvgEmitter.glyphmap(layout, font) : "";
+        String groupmap = precedenceGroupmap(fx, layout, font);
+        return new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap));
     }
 
     /**
@@ -1112,11 +1126,24 @@ public final class LatteX {
      * @param latex a LaTeX math expression
      * @return {@code <math xmlns="http://www.w3.org/1998/Math/MathML">…</math>}
      * @throws LatteXException if {@code latex} does not parse (the exported supertype of
-     *         the concrete {@code com.lattex.parse.MathSyntaxException} thrown)
+     *         the concrete {@code com.lattex.parse.MathSyntaxException} thrown), or if the
+     *         serialization fails internally: parse and traversal run inside
+     *         {@link #containRender}, so a {@code StackOverflowError} or stray
+     *         {@code RuntimeException} arrives on this same typed channel with the original
+     *         failure as its cause, never as an escaping {@code Error} (plan
+     *         lattex-seam-containment-parity)
      */
     public static String toMathML(String latex) {
-        return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
-            + toMathML(MathParser.parse(latex)) + "</math>";
+        return containRender(() -> mathmlDocument(MathParser.parse(latex)));
+    }
+
+    /**
+     * Wraps one serialized node in the {@code <math>} root. The single producer for that
+     * wrapper, shared by the public {@link #toMathML(String)} and the fail-soft fragment
+     * helper, so the two can never disagree on the root element.
+     */
+    private static String mathmlDocument(MathNode node) {
+        return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">" + toMathML(node) + "</math>";
     }
 
     /** Serializes one node to Presentation-MathML markup (no {@code <math>} wrapper). */
