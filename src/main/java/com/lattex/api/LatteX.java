@@ -1460,14 +1460,25 @@ public final class LatteX {
         return sb.toString();
     }
 
-    /** MathML for a stacked annotation (under/over-brace, overset/underset). */
+    /**
+     * MathML for a stacked annotation (under/over-brace, overset/underset). A brace is
+     * stacked on the base first and its label, when present, on the brace, the same
+     * outward order as {@code LayoutEngine.stackBox} (audit cb3b4518 F5: the brace was
+     * emitted only when the label was null, so a labelled brace lost the brace).
+     */
     private static String stackMathML(MathNode.Stack st) {
         String base = toMathML(st.base());
         return switch (st.kind()) {
-            case UNDERBRACE -> "<munder>" + base
-                + (st.below() == null ? "<mo>&#9183;</mo>" : toMathML(st.below())) + "</munder>";
-            case OVERBRACE -> "<mover>" + base
-                + (st.above() == null ? "<mo>&#9182;</mo>" : toMathML(st.above())) + "</mover>";
+            case UNDERBRACE -> {
+                String braced = "<munder>" + base + "<mo>&#9183;</mo></munder>";
+                yield st.below() == null ? braced
+                    : "<munder>" + braced + toMathML(st.below()) + "</munder>";
+            }
+            case OVERBRACE -> {
+                String braced = "<mover>" + base + "<mo>&#9182;</mo></mover>";
+                yield st.above() == null ? braced
+                    : "<mover>" + braced + toMathML(st.above()) + "</mover>";
+            }
             case STACKREL, OVERSET -> "<mover>" + base + toMathML(st.above()) + "</mover>";
             case UNDERSET -> "<munder>" + base + toMathML(st.below()) + "</munder>";
         };
