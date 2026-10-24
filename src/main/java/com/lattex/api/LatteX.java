@@ -1197,6 +1197,16 @@ public final class LatteX {
                     case LIMITS -> false;
                     case DEFAULT -> LayoutEngine.isIntegral(op.codePoint());
                 };
+                // An explicit \limits must stay stacked in a compact-style (non-block) <math>
+                // too, where MathML Core moves munderover limits beside an operator the
+                // dictionary marks movablelimits (sum, prod, coprod, the big set/logic
+                // operators). DEFAULT keeps the dictionary value, TeX's displaylimits; an
+                // integral is not movablelimits in the dictionary and needs nothing.
+                if (limits == MathNode.LimitsMode.LIMITS
+                        && !LayoutEngine.isIntegral(op.codePoint())) {
+                    o = "<mo movablelimits=\"false\">"
+                        + xmlEscape(Character.toString(op.codePoint())) + "</mo>";
+                }
                 if (lower != null && upper != null) {
                     yield (beside ? "<msubsup>" : "<munderover>") + o
                         + toMathML(lower) + toMathML(upper) + (beside ? "</msubsup>" : "</munderover>");
