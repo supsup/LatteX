@@ -12,6 +12,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 
@@ -218,6 +219,34 @@ class MathMLTest {
         assertTrue(LatteX.toMathML("\\sum_{i=1}^n i").contains("<munderover>"));
         String nolim = LatteX.toMathML("\\int\\nolimits_a^b f");
         assertTrue(nolim.contains("<msubsup>"), "\\nolimits should emit msubsup: " + nolim);
+    }
+
+    @Test
+    void integralsKeepSideLimitsAsTheSvgDoes() {
+        // Audit cb3b4518 F3. The SVG layout sets an integral's limits BESIDE it by default,
+        // even in display style (LayoutEngine.isIntegral); the MathML emitter only did so for an
+        // explicit \nolimits, so the two outputs of one parse disagreed: \int_0^1 came out as
+        // <munderover>, stacking 0 and 1 under and over the sign.
+        String i = LatteX.toMathML("\\int_0^1 f");
+        assertTrue(i.contains("<msubsup><mo>\u222B</mo>"), "\\int_0^1 sets its limits beside: " + i);
+        assertFalse(i.contains("<munderover>"), "\\int_0^1 must not stack its limits: " + i);
+        // The whole integral family, inside and outside the U+222B..U+2233 block.
+        for (String cmd : List.of("iint", "iiint", "oint", "oiint", "oiiint", "idotsint",
+                "fint", "sqint", "ointclockwise", "ointctrclockwise")) {
+            String m = LatteX.toMathML("\\" + cmd + "_a^b f");
+            assertTrue(m.contains("<msubsup>") && !m.contains("<munderover>"),
+                "\\" + cmd + " sets its limits beside: " + m);
+        }
+        // One limit only: msub / msup, never munder / mover.
+        String lower = LatteX.toMathML("\\oint_C f");
+        assertTrue(lower.contains("<msub><mo>\u222E</mo>") && !lower.contains("<munder>"), lower);
+        String upper = LatteX.toMathML("\\int^b f");
+        assertTrue(upper.contains("<msup><mo>\u222B</mo>") && !upper.contains("<mover>"), upper);
+        // An explicit \limits still stacks an integral's limits, as in the SVG.
+        String forced = LatteX.toMathML("\\int\\limits_0^1 f");
+        assertTrue(forced.contains("<munderover><mo>\u222B</mo>"), "\\limits stacks: " + forced);
+        // A non-integral operator keeps the default above/below form.
+        assertTrue(LatteX.toMathML("\\prod_{i=1}^n x").contains("<munderover>"));
     }
 
     @Test
