@@ -927,19 +927,30 @@ public final class LatteX {
      * with no top-level {@code \lx} wrapper the host's scale, color and math style apply, while
      * a wrapper still overrides the styling; {@link RenderOptions#fluid()} is a host flag that
      * reaches the {@code <svg>} either way. The returned SVG is byte-identical to
-     * {@link #render(String, RenderOptions)} on the same arguments, and the container attributes
-     * (including {@code data-lx-glyphmap}) equal the ones {@code renderStyledHtml} stamps.
+     * {@link #render(String, RenderOptions)} on the same arguments, and the
+     * {@code data-lx-glyphmap} sidecar equals the one {@code renderStyledHtml} stamps. The
+     * map is NOT the whole of that container: it carries the {@code data-lx-fx-*} effect
+     * attributes and the renderer-derived sidecars, while {@code renderStyledHtml}'s own
+     * {@code <span>} additionally stamps the semantics ({@code data-lx-intent},
+     * {@code data-lx-concept}, each {@code data.*} entry as {@code data-lx-<key>}, and
+     * {@code aria-label}), which this record does not carry.
      * Without this overload a consumer needing macros or fluid sizing had to go back to the
      * split render + deprecated {@link #fxContainerAttrs} path, whose glyphmap can desync.
      *
-     * <p><strong>{@link RenderOptions#interactiveExpansion()} is refused, not ignored.</strong>
-     * The flag's product is a pre-rendered hidden SIBLING {@code <svg>} payload that
-     * {@code renderStyledHtml} places inside its own container; {@link RenderedMath} has no slot
-     * for it, and stamping the expand marker without the payload would arm an effect the runtime
-     * cannot honour. Silently dropping the flag would make this overload diverge from its
-     * sibling without saying so, so a host that sets it gets an
-     * {@code IllegalArgumentException} naming {@code renderStyledHtml}. {@link
-     * RenderOptions#renderErrors()} is ignored here exactly as the throwing render API ignores it.
+     * <p><strong>This seam never arms interactive expansion.</strong> With
+     * {@link RenderOptions#interactiveExpansion()} set, the result is exactly the flag-off
+     * result: no pre-rendered payload, no {@code data-lx-fx-expand} /
+     * {@code data-lx-fx-substitute} / {@code data-lx-var} marker. That is what
+     * {@code renderStyledHtml} produces with the flag off, and its own contract makes that
+     * byte-identical to flag-on for every formula without an {@code unfold} or
+     * {@code substitute} directive; a formula WITH one degrades inert, as it does on any
+     * flag-off page. The flag's product is a hidden SIBLING {@code <svg>} that
+     * {@link RenderedMath} has no slot for, so a host that needs those effects uses
+     * {@code renderStyledHtml}. The flag is deliberately not refused: a refusal would throw on
+     * every input, and a consumer wrapper that catches {@code RuntimeException} would swallow
+     * it and fall back to the split path this overload exists to replace.
+     * {@link RenderOptions#renderErrors()} is ignored here exactly as the throwing render API
+     * ignores it.
      *
      * <p>Failure semantics are the one-arg form's: ANY failure in parse, layout or emit,
      * including a {@code StackOverflowError}, yields {@link java.util.Optional#empty()}.
@@ -947,17 +958,11 @@ public final class LatteX {
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @param opts  the host render options
      * @return the render-coupled pair, or empty on any render failure
-     * @throws NullPointerException     if {@code opts} is null
-     * @throws IllegalArgumentException if {@code opts.interactiveExpansion()} is set (a host
-     *         configuration error, never an author-input failure: those are the empty result)
+     * @throws NullPointerException if {@code opts} is null
      */
     public static java.util.Optional<RenderedMath> tryRenderMath(String latex, RenderOptions opts) {
         java.util.Objects.requireNonNull(opts, "opts");
-        if (opts.interactiveExpansion()) {
-            throw new IllegalArgumentException("tryRenderMath cannot carry the interactiveExpansion"
-                + " payload (RenderedMath has no slot for the pre-rendered sibling svg); use"
-                + " renderStyledHtml(latex, opts) for interactive expansion, or clear the flag");
-        }
+        // opts.interactiveExpansion() is intentionally never read: see the javadoc.
         try {
             return java.util.Optional.of(containRender(() -> renderMathPair(latex, opts)));
         } catch (RuntimeException containedOrTyped) {

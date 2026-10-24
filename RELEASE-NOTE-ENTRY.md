@@ -513,11 +513,20 @@ and drew the wrong thing.
 
 ---
 
-### The two seams outside the containment boundary are inside it now
+### Every public render entry is inside the containment boundary now, parse included
 
-`containRender` is the library's "never let an `Error` escape onto a live page" boundary, and
-every render entry point used it except two:
+`containRender` is the library's "never let an `Error` escape onto a live page" boundary. Two
+public seams did not use it at all, and the throwing render entries used it only after parsing.
+(`renderWithDiagnostics` was never affected: it has its own catch-all.)
 
+- **The throwing siblings parsed outside the boundary.** `render`, `renderInlineResult`,
+  `renderFragment` and `renderStyledHtml` wrapped layout and emit but ran `MathParser.parse`
+  before entering `containRender`, and the deprecated `fxContainerAttrs` had no boundary at all.
+  The parser's 512-level depth limit bounds its own recursion, not the stack the caller has
+  left, so an overflow during parse escaped as an `Error`. Each now parses inside the boundary
+  (the one-argument forms delegate, so they are covered too). A syntax error still arrives as
+  the same `MathSyntaxException` instance; a stray untyped exception thrown during parse now
+  arrives as a `MathSyntaxException` with the original as its cause, as layout ones always did.
 - **`tryRenderMath` caught `RuntimeException` but not `StackOverflowError`.** It is the
   sanctioned producer path for a consumer that owns its own wrapper (Stafficy's `/docs` seam),
   and its contract is "empty on any failure"; an overflow unwound straight through that
@@ -539,6 +548,13 @@ needing preset macros or fluid sizing had to fall back to the split render plus 
 `fxContainerAttrs`, whose glyphmap can desync from the SVG. The overload honours macros,
 host scale/color/math style (a source `\lx` wrapper still overrides styling) and `fluid`; its
 SVG is byte-identical to `render(latex, opts)` and its glyphmap to the `renderStyledHtml(latex,
-opts)` stamp. It refuses `interactiveExpansion` with an `IllegalArgumentException` instead of
-dropping it silently: that flag's product is a hidden sibling SVG that `RenderedMath` has no
-slot for. The one-argument form is now this overload with default options, output unchanged.
+opts)` stamp. The attribute map is not the whole `renderStyledHtml` container: it omits the
+`\lx` semantics (`data-lx-intent`, `data-lx-concept`, `data.*`, `aria-label`).
+
+**The seam never arms interactive expansion.** With `interactiveExpansion` set it returns
+exactly its flag-off result: no pre-rendered payload and no `data-lx-fx-expand`,
+`data-lx-fx-substitute` or `data-lx-var` marker. That matches `renderStyledHtml` with the flag
+off, which is byte-identical to flag-on for every formula without an `unfold` or `substitute`
+directive; a formula with one stays inert, as on any flag-off page. Hosts that need those two
+effects use `renderStyledHtml`. The one-argument form is now this overload with default
+options, output unchanged.
