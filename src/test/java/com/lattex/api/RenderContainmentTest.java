@@ -72,6 +72,47 @@ class RenderContainmentTest {
         assertNotNull(ex.getMessage());
     }
 
+    /**
+     * Plan lattex-seam-containment-parity, round 2: the throwing siblings used to run their
+     * PARSE outside {@code containRender} (only layout + emit were inside), so the boundary held
+     * only while {@code MathParser.MAX_DEPTH} happened to fit the caller's remaining stack. A
+     * legal 500-deep input on a starved stack (see {@link StackStarved}) overflows inside the
+     * parse; every public throwing entry must deliver that as the typed channel with the Error
+     * as its cause, never as an escaping {@code StackOverflowError}.
+     */
+    @Test
+    @SuppressWarnings("deprecation")
+    void aParseStageOverflowInEveryThrowingSiblingArrivesTyped() {
+        String deep = StackStarved.DEEP;
+        java.util.Map<String, java.util.concurrent.Callable<?>> entries = new java.util.LinkedHashMap<>();
+        entries.put("render(String)", () -> LatteX.render(deep));
+        entries.put("render(String, RenderOptions)", () -> LatteX.render(deep, RenderOptions.defaults()));
+        entries.put("renderInlineResult", () -> LatteX.renderInlineResult(deep));
+        entries.put("renderFragment", () -> LatteX.renderFragment(deep, 20.0));
+        entries.put("renderStyledHtml(String, RenderOptions)",
+            () -> LatteX.renderStyledHtml(deep, RenderOptions.defaults()));
+        entries.put("fxContainerAttrs", () -> LatteX.fxContainerAttrs(deep));
+
+        // Positive half on a normal stack (also the class warm-up StackStarved requires).
+        for (java.util.Map.Entry<String, java.util.concurrent.Callable<?>> e : entries.entrySet()) {
+            try {
+                assertNotNull(e.getValue().call(), e.getKey() + " renders the deep input on a normal stack");
+            } catch (Exception ex) {
+                throw new AssertionError(e.getKey() + " failed on a normal stack", ex);
+            }
+        }
+        StackStarved.assertFixtureOverflows("the bare parse every sibling runs first",
+            () -> com.lattex.parse.MathParser.parse(deep));
+
+        for (java.util.Map.Entry<String, java.util.concurrent.Callable<?>> e : entries.entrySet()) {
+            StackStarved.Outcome o = StackStarved.run(e.getValue());
+            assertTrue(o.threw() && o.thrown() instanceof MathSyntaxException,
+                e.getKey() + " must contain a parse-stage overflow as MathSyntaxException: " + o.describe());
+            assertTrue(StackStarved.overflowed(o.thrown()),
+                e.getKey() + " keeps the StackOverflowError as the cause: " + o.describe());
+        }
+    }
+
     @Test
     void parseErrorsKeepTheirPositionalDiagnostics() {
         // End-to-end: a genuine syntax error through render() still carries its
