@@ -346,34 +346,30 @@ public final class LatteX {
         // L8: preset macros expand before parsing. A top-level \lx wrapper below may
         // override the STYLING options, but macros are not part of the \lx
         // sub-language, so the caller's notation pack applies inside the body too.
-        MathNode node = MathParser.parse(latex, opts.macros());
-
-        // A top-level \lx wrapper carries its own validated RenderOptions in the
-        // source; that style is what we apply (it overrides `opts`), and we render
-        // the wrapped body under a context seeded from it.
-        //
-        // The wrapper's fx.* (effects) and semantics (intent / concept / a11y.label
-        // / data.*) are validated and stored on the node but are DELIBERATELY NOT
-        // emitted into the SVG here — they ride the trusted container built by
-        // renderStyledHtml, which keeps the emitter's SVG alphabet unchanged.
-        RenderOptions style = opts;
-        MathNode body = node;
-        if (node instanceof StyledMath sm) {
-            style = sm.style();
-            body = sm.body();
-        }
-
-        final RenderOptions fStyle = style;
-        final MathNode fBody = body;
+        // The parse runs INSIDE the boundary (plan lattex-seam-containment-parity): MAX_DEPTH
+        // bounds the parser's recursion, not the caller's remaining stack, so a parse-stage
+        // StackOverflowError must be contained like a layout one.
         return containRender(() -> {
+            MathNode node = MathParser.parse(latex, opts.macros());
+
+            // A top-level \lx wrapper carries its own validated RenderOptions in the
+            // source; that style is what we apply (it overrides `opts`), and we render
+            // the wrapped body under a context seeded from it.
+            //
+            // The wrapper's fx.* (effects) and semantics (intent / concept / a11y.label
+            // / data.*) are validated and stored on the node but are DELIBERATELY NOT
+            // emitted into the SVG here — they ride the trusted container built by
+            // renderStyledHtml, which keeps the emitter's SVG alphabet unchanged.
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * fStyle.scale(), fStyle.mathStyle(), false);
-            Layout layout = LayoutEngine.layout(fBody, ctx);
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+            Layout layout = LayoutEngine.layout(body, ctx);
             // fluid is a HOST flag (like interactiveExpansion): it reads from the
             // caller's opts even when a \lx wrapper overrides the styling, and it is
             // NOT part of the \lx sub-language — an author can never turn it on.
-            return SvgEmitter.emit(layout, font, describe(fBody), fStyle.color(), opts.fluid());
+            return SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
         });
     }
 
@@ -403,11 +399,11 @@ public final class LatteX {
      */
     public static InlineSvgResult renderInlineResult(String latex) {
         RenderOptions opts = RenderOptions.defaults().inline();
-        MathNode node = MathParser.parse(latex);
-        RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-        final RenderOptions fStyle = style;
         return containRender(() -> {
+            // Parse inside the boundary too (plan lattex-seam-containment-parity).
+            MathNode node = MathParser.parse(latex);
+            RenderOptions fStyle = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             double fontSize = DISPLAY_FONT_SIZE * fStyle.scale();
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
@@ -471,13 +467,12 @@ public final class LatteX {
                 "fontSizePx must be a finite value in (0, " + MAX_FRAGMENT_FONT_SIZE
                     + "]; got: " + fontSizePx);
         }
+        return containRender(() -> {
+        // Parse inside the boundary too (plan lattex-seam-containment-parity).
         MathNode node = MathParser.parse(latex);
         // A top-level \lx wrapper is transparent here: render the body; the wrapper's
         // container metadata rides the consumer's own wrapper, not the fragment.
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-
-        final MathNode fBody = body;
-        return containRender(() -> {
+        final MathNode fBody = node instanceof StyledMath sm ? sm.body() : node;
         SfntFont font = FontHolder.FONT;
         LayoutContext ctx = new LayoutContext(font, font.mathConstants(), fontSizePx);
         Layout layout = LayoutEngine.layout(fBody, ctx);
@@ -574,15 +569,16 @@ public final class LatteX {
         // is no top-level \lx wrapper the host's scale/color/mathStyle apply. A source
         // \lx wrapper still overrides the STYLING (macros are not part of the \lx
         // sub-language, so the notation pack applies inside the body regardless).
-        MathNode node = MathParser.parse(latex, opts.macros());
-        EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-        Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
-
-        // Lay out once, and reuse the layout for BOTH the SVG and the glyphmap — the
-        // sidecar's path indices must line up with this exact emission.
-        RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
         return containRender(() -> {
+            // Parse inside the boundary too (plan lattex-seam-containment-parity).
+            MathNode node = MathParser.parse(latex, opts.macros());
+            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+            Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
+
+            // Lay out once, and reuse the layout for BOTH the SVG and the glyphmap — the
+            // sidecar's path indices must line up with this exact emission.
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
@@ -860,9 +856,12 @@ public final class LatteX {
      */
     @Deprecated
     public static String fxContainerAttrs(String latex) {
-        MathNode node = MathParser.parse(latex);
-        EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-        return fxAttrs(fx);
+        // Deprecated but live (see above), so it gets the same boundary as every sibling.
+        return containRender(() -> {
+            MathNode node = MathParser.parse(latex);
+            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+            return fxAttrs(fx);
+        });
     }
 
     /**
