@@ -510,3 +510,31 @@ and drew the wrong thing.
   `\overbrace{...}` is NOT changed here: those stacks draw a label on one side only, so a
   superscript on an underbrace (or a subscript on an overbrace) is not drawn at all today, and
   moving the prime there would lose it. That gap is a separate finding.
+
+---
+
+### MathML audit: integral limits, labelled braces, table alignment, `\backslash`
+
+Four findings from the 2026-10-12 read-only audit (plan cb3b4518), where the MathML (or
+the glyph) disagreed with what the SVG already drew.
+
+- **Integrals keep their limits beside the sign in MathML.** `\int_0^1 f` emitted
+  `<munderover>`, stacking 0 and 1 under and over the integral, while the SVG sets an
+  integral's limits beside it in every style. The emitter now uses the layout's own rule:
+  `\nolimits` beside, `\limits` stacked, and by default beside for the integral family
+  (`\int \iint \iiint \oint \oiint \oiiint \idotsint \fint \sqint` and the clockwise
+  contour integrals) and stacked for everything else, so `\sum` and `\prod` are unchanged.
+- **A labelled brace keeps its brace.** `\underbrace{x+y}_{n}` emitted the label directly
+  under the base and no brace at all; `\overbrace{x+y}^{n}` likewise. The brace now
+  stacks on the base and the label on the brace, the order the SVG draws.
+- **Tables state their column alignment.** Every `<mtable>` was bare, so MathML centred
+  every cell: the `=` signs of `aligned` did not line up and `cases` bodies were centred.
+  A grid with any non-centre column now carries `columnalign` (`right left` pairs for
+  `aligned`, `left` for `cases`, the `l`/`c`/`r` spec for `array`), and a `\multicolumn`
+  cell aligned unlike its column carries its own. All-centred grids (`matrix`, `pmatrix`,
+  `\substack`) are byte-unchanged. Column and row rules (`|`, `\hline`) are still not
+  expressed in MathML.
+- **`\backslash` draws a backslash.** It mapped to U+2216 SET MINUS, the `\setminus`
+  glyph, though its delimiter form (`\big\backslash`) already used U+005C. It is now
+  U+005C in both. A pasted set-minus glyph is now Bin every run; while the two commands
+  shared U+2216 its class depended on per-run map iteration order.
