@@ -139,10 +139,34 @@
     ctx.stroke();
   }
 
+  // Handcrafted DOM is not trusted: missing/empty/malformed values keep the
+  // historical defaults. Only WHOLE ASCII decimal strings are accepted (no
+  // partial parse, signs, whitespace, exponents or Unicode digits). Saturating
+  // accumulation bounds even huge digit strings without numeric overflow.
+  function boundedFxDecimal(el, attr, fallback, min, max) {
+    var raw = el.getAttribute(attr);
+    if (typeof raw !== 'string' || !raw.length || /[^0-9]/.test(raw)) { return fallback; }
+    var n = 0;
+    for (var i = 0; i < raw.length; i++) {
+      n = Math.min(max, n * 10 + raw.charCodeAt(i) - 48);
+    }
+    return Math.max(min, n);
+  }
+  function boltOptions(el) {
+    return {
+      bolts: boundedFxDecimal(el, 'data-lx-fx-bolts', 2, 1, 8),
+      intensity: boundedFxDecimal(el, 'data-lx-fx-intensity', 100, 0, 300)
+    };
+  }
+  function boltEffect(name) { return name === 'lightning' || name === 'storm'; }
+
   // The confluence: two rivers of lightning arc IN from the left- and right-mid
   // viewport edges and converge on the element's centre, flash, then fade. A
   // lazily-created, pointer-events-none body overlay — never inside the <svg>.
   function lightning(el) {
+    var options = boltOptions(el); // re-read on EVERY direct/event/public play
+    if (options.intensity === 0) { return; } // before ANY effect work
+    var strength = options.intensity / 100;
     var r = el.getBoundingClientRect();
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     var vw = window.innerWidth, vh = window.innerHeight;
@@ -159,13 +183,19 @@
     var ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
 
+    // The bolts converge on where the equation WAS at trigger time (fixed
+    // overlay) — if the page scrolls the anchor is gone, so end the show
+    // immediately rather than strike a phantom (Charles, 2026-07-06).
+    var die = scrollKillable(function () { canvas.remove(); });
+
     // Reduced motion: one faint static arc from each side, no flicker, no flash.
+    // Nonzero knobs cannot amplify this branch.
     if (reduced) {
       ctx.globalAlpha = 0.45;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       sources.forEach(function (s) { stroke(ctx, jagged(s[0], s[1], cx, cy, 8, 6)); });
-      setTimeout(function () { canvas.remove(); }, 400);
+      setTimeout(die, 400);
       return;
     }
 
@@ -174,12 +204,14 @@
       ctx.clearRect(0, 0, vw, vh);
       ctx.strokeStyle = color;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 12;
+      // Appearance only: fixed caps of 48px glow, 12px stroke and alpha 1.
+      // Intensity never changes geometry, random draws or scheduling.
+      ctx.shadowBlur = Math.min(48, 12 * strength);
       sources.forEach(function (s) {
-        for (var k = 0; k < 2; k++) { // 2 forked bolts per side
+        for (var k = 0; k < options.bolts; k++) { // bounded forked bolts per side
           var pts = jagged(s[0], s[1], cx, cy, 12, 18 + k * 10);
-          ctx.lineWidth = 2 + k;
-          ctx.globalAlpha = 0.9;
+          ctx.lineWidth = Math.min(12, (2 + k) * strength);
+          ctx.globalAlpha = Math.min(1, 0.9 * strength);
           stroke(ctx, pts, Math.floor(pts.length * progress));
         }
       });
@@ -188,16 +220,11 @@
         var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rad);
         g.addColorStop(0, color);
         g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = Math.min(1, strength);
         ctx.fillStyle = g;
         ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
       }
     }
-
-    // The bolts converge on where the equation WAS at trigger time (fixed
-    // overlay) — if the page scrolls the anchor is gone, so end the show
-    // immediately rather than strike a phantom (Charles, 2026-07-06).
-    var die = scrollKillable(function () { canvas.remove(); });
 
     var t0 = performance.now();
     function frame(now) {
@@ -221,6 +248,10 @@
   // bolt canvas are three SEPARATE pointer-events-none body overlays; nothing
   // is ever written into the element's <svg> (the containment contract holds).
   function storm(el) {
+    var options = boltOptions(el); // independent DOM bounds on every play
+    if (options.intensity === 0) { return; } // no overlays, canvas or listeners
+    // Reduced motion owns its unchanged gentle appearance at EVERY nonzero value.
+    var strength = reduced ? 1 : options.intensity / 100;
     var r = el.getBoundingClientRect();
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     var vw = window.innerWidth, vh = window.innerHeight;
@@ -266,13 +297,15 @@
     var boltGlow = (authored && authored.toLowerCase() !== 'currentcolor')
       ? authored : '#8fc2ff';
     function heatFilter(level) {
-      var outer = 6 + level * 22;                 // coloured halo: 6 → 28px
-      var warm = 4 + level * 16;                  // warm/amber mid layer
-      var core = level * 12;                      // white-hot core (0 at rest)
+      // Default halos stay 6..28 / 4..20 / 0..12px. Fixed maximums are
+      // 84 / 60 / 36px and alpha .95, even at the maximum authored strength.
+      var outer = Math.min(84, (6 + level * 22) * strength);
+      var warm = Math.min(60, (4 + level * 16) * strength);
+      var core = Math.min(36, level * 12 * strength);
       return 'drop-shadow(0 0 ' + outer + 'px ' + color + ')'
         + ' drop-shadow(0 0 ' + warm + 'px ' + heatTint + ')'
         + ' drop-shadow(0 0 ' + core + 'px rgba(255,255,255,'
-        + (0.35 + level * 0.6).toFixed(3) + '))';
+        + Math.min(0.95, (0.35 + level * 0.6) * strength).toFixed(3) + '))';
     }
     // Smooth the ramp between strike bumps (restored on cleanup).
     var filter0 = el.style.filter, trans0 = el.style.transition;
@@ -306,16 +339,16 @@
     if (reduced) {
       backdrop.style.setProperty('--lx-dark', '0.5');
       el.style.filter = heatFilter(0.3); // gentle steady glow, no pulsing
-      requestAnimationFrame(function () { backdrop.style.opacity = '1'; });
+      requestAnimationFrame(function () { if (!dead) { backdrop.style.opacity = String(Math.min(1, strength)); } });
       sctx.globalAlpha = 0.55; sctx.strokeStyle = boltColor;
       sctx.shadowColor = boltGlow; sctx.shadowBlur = 10; sctx.lineWidth = 2;
       stroke(sctx, jagged(0, vh / 2, cx, cy, 8, 6));
-      setTimeout(function () { backdrop.style.opacity = '0'; }, 520);
+      setTimeout(function () { if (!dead) { backdrop.style.opacity = '0'; } }, 520);
       setTimeout(cleanup, 950);
       return;
     }
 
-    requestAnimationFrame(function () { backdrop.style.opacity = '1'; });
+    requestAnimationFrame(function () { if (!dead) { backdrop.style.opacity = String(Math.min(1, strength)); } });
 
     // One strike: quickly draw converging jagged bolts to the centre, then at
     // convergence FLASH the backdrop bright (~70ms) — drop its darkness, pulse
@@ -327,17 +360,20 @@
         if (dead) { return; } // scrolled away mid-strike: overlays already gone
         var p = Math.min(1, (now - t0) / DRAW);
         sctx.clearRect(0, 0, vw, vh);
-        sctx.strokeStyle = boltColor; sctx.shadowColor = boltGlow; sctx.shadowBlur = 16;
+        sctx.strokeStyle = boltColor; sctx.shadowColor = boltGlow;
+        // Fixed appearance caps; no intensity-dependent work or random branches.
+        sctx.shadowBlur = Math.min(48, 16 * strength);
         sources.forEach(function (s) {
-          for (var k = 0; k < 2; k++) { // 2 forked bolts per source
+          for (var k = 0; k < options.bolts; k++) { // bounded forked bolts per source
             var pts = jagged(s[0], s[1], cx, cy, 12, 18 + k * 10);
-            sctx.lineWidth = 2 + k; sctx.globalAlpha = 0.9;
+            sctx.lineWidth = Math.min(12, (2 + k) * strength);
+            sctx.globalAlpha = Math.min(1, 0.9 * strength);
             stroke(sctx, pts, Math.floor(pts.length * p));
           }
         });
         if (p < 1) { requestAnimationFrame(frame); return; }
         backdrop.style.setProperty('--lx-dark', '0.55'); // night lights up
-        flash.style.opacity = '1';
+        flash.style.opacity = String(Math.min(1, strength));
         el.style.filter = heatFilter(level); // charge pulses the math hotter
         setTimeout(function () {
           if (dead) { return; } // never re-heat the equation after teardown
@@ -2658,13 +2694,17 @@
       var click = el.getAttribute('data-lx-fx-click');
       var dur = el.getAttribute('data-lx-fx-duration') || '400ms';
       var glowColor = el.getAttribute('data-lx-fx-glow-color');
+      // Zero disables ONLY lightning/storm triggers. Mixed keyframe/semantic
+      // triggers keep their listeners and any enter pre-hide behavior unchanged.
+      var boltsOff = (boltEffect(enter) || boltEffect(hover) || boltEffect(click))
+        && boundedFxDecimal(el, 'data-lx-fx-intensity', 100, 0, 300) === 0;
 
       // Author-set glow colour drives both the glow keyframe (via the CSS var)
       // and the lightning strike colour.
       if (glowColor) { el.style.setProperty('--lx-glow-color', glowColor); }
 
       // enter: play once on load.
-      if (enter) {
+      if (enter && !(boltsOff && boltEffect(enter))) {
         play(el, enter, dur);
         // Arming effects animate nothing at arm time; enter means "play on load",
         // so fire the cascade once now (reduced-motion is honored inside it).
@@ -2681,11 +2721,11 @@
         }
       }
       // hover: play on each mouseenter.
-      if (hover) {
+      if (hover && !(boltsOff && boltEffect(hover))) {
         el.addEventListener('mouseenter', function () { play(el, hover, dur); });
       }
       // click: play on each click (and show it's interactive).
-      if (click) {
+      if (click && !(boltsOff && boltEffect(click))) {
         el.style.cursor = 'pointer';
         el.addEventListener('click', function () { play(el, click, dur); });
       }
@@ -2737,6 +2777,8 @@
   // nor stores anything back from the hook.
   if (typeof window !== 'undefined' && typeof window.__lxTestHook === 'function') {
     window.__lxTestHook({
+      lightning: lightning,
+      storm: storm,
       placement: placement,
       setPathDelta: setPathDelta,
       clearPathDelta: clearPathDelta,
