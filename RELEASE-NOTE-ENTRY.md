@@ -513,6 +513,54 @@ and drew the wrong thing.
 
 ---
 
+### Every public render entry is inside the containment boundary now, parse included
+
+`containRender` is the library's "never let an `Error` escape onto a live page" boundary. Two
+public seams did not use it at all, and the throwing render entries used it only after parsing.
+(`renderWithDiagnostics` was never affected: it has its own catch-all.)
+
+- **The throwing siblings parsed outside the boundary.** `render`, `renderInlineResult`,
+  `renderFragment` and `renderStyledHtml` wrapped layout and emit but ran `MathParser.parse`
+  before entering `containRender`, and the deprecated `fxContainerAttrs` had no boundary at all.
+  The parser's 512-level depth limit bounds its own recursion, not the stack the caller has
+  left, so an overflow during parse escaped as an `Error`. Each now parses inside the boundary
+  (the one-argument forms delegate, so they are covered too). A syntax error still arrives as
+  the same `MathSyntaxException` instance; a stray untyped exception thrown during parse now
+  arrives as a `MathSyntaxException` with the original as its cause, as layout ones always did.
+- **`tryRenderMath` caught `RuntimeException` but not `StackOverflowError`.** It is the
+  sanctioned producer path for a consumer that owns its own wrapper (Stafficy's `/docs` seam),
+  and its contract is "empty on any failure"; an overflow unwound straight through that
+  contract into the consumer's pipeline. It now runs parse, layout and emit inside
+  `containRender` and returns `Optional.empty()` for an overflow like any other failure.
+- **`toMathML(String)` had no guard at all.** It now throws an overflow or a stray internal
+  exception as the same typed `LatteXException` it already threw for a parse error, with the
+  original failure as the cause. Parse errors arrive exactly as before.
+
+The overflow is pinned with a real one, not an injected throw: a legal input nesting
+`\text{$...$}` 500 deep (under the parser's 512-level limit) on a thread with a minimum-size
+stack, which is how the overflow reaches production, on a host thread already deep in its own
+frames. Each level re-enters the parser through a long frame chain, so the overflow survives
+the JIT; 500 plain nested braces overflowed only while the parser was still interpreted. Each such test first
+proves the bare parse really overflows on that stack, so it cannot pass by no longer reaching
+the Error. `anyFailureYieldsEmptyNeverAHalfPair` now checks the Error case its name always
+promised, and the hostile-input corpus runs through both seams.
+
+**New: `tryRenderMath(latex, RenderOptions)`.** The seam had no options overload, so a consumer
+needing preset macros or fluid sizing had to fall back to the split render plus the deprecated
+`fxContainerAttrs`, whose glyphmap can desync from the SVG. The overload honours macros,
+host scale/color/math style (a source `\lx` wrapper still overrides styling) and `fluid`; its
+SVG is byte-identical to `render(latex, opts)` and its glyphmap to the `renderStyledHtml(latex,
+opts)` stamp. The attribute map is not the whole `renderStyledHtml` container: it omits the
+`\lx` semantics (`data-lx-intent`, `data-lx-concept`, `data.*`, `aria-label`).
+
+**The seam never arms interactive expansion.** With `interactiveExpansion` set it returns
+exactly its flag-off result: no pre-rendered payload and no `data-lx-fx-expand`,
+`data-lx-fx-substitute` or `data-lx-var` marker. That matches `renderStyledHtml` with the flag
+off, which is byte-identical to flag-on for every formula without an `unfold` or `substitute`
+directive; a formula with one stays inert, as on any flag-off page. Hosts that need those two
+effects use `renderStyledHtml`. The one-argument form is now this overload with default
+options, output unchanged.
+
 ### MathML audit: integral limits, labelled braces, table alignment, `\backslash`
 
 Four findings from the 2026-10-12 read-only audit (plan cb3b4518), where the MathML (or

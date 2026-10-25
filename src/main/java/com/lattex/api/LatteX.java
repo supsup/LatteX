@@ -346,34 +346,30 @@ public final class LatteX {
         // L8: preset macros expand before parsing. A top-level \lx wrapper below may
         // override the STYLING options, but macros are not part of the \lx
         // sub-language, so the caller's notation pack applies inside the body too.
-        MathNode node = MathParser.parse(latex, opts.macros());
-
-        // A top-level \lx wrapper carries its own validated RenderOptions in the
-        // source; that style is what we apply (it overrides `opts`), and we render
-        // the wrapped body under a context seeded from it.
-        //
-        // The wrapper's fx.* (effects) and semantics (intent / concept / a11y.label
-        // / data.*) are validated and stored on the node but are DELIBERATELY NOT
-        // emitted into the SVG here — they ride the trusted container built by
-        // renderStyledHtml, which keeps the emitter's SVG alphabet unchanged.
-        RenderOptions style = opts;
-        MathNode body = node;
-        if (node instanceof StyledMath sm) {
-            style = sm.style();
-            body = sm.body();
-        }
-
-        final RenderOptions fStyle = style;
-        final MathNode fBody = body;
+        // The parse runs INSIDE the boundary (plan lattex-seam-containment-parity): MAX_DEPTH
+        // bounds the parser's recursion, not the caller's remaining stack, so a parse-stage
+        // StackOverflowError must be contained like a layout one.
         return containRender(() -> {
+            MathNode node = MathParser.parse(latex, opts.macros());
+
+            // A top-level \lx wrapper carries its own validated RenderOptions in the
+            // source; that style is what we apply (it overrides `opts`), and we render
+            // the wrapped body under a context seeded from it.
+            //
+            // The wrapper's fx.* (effects) and semantics (intent / concept / a11y.label
+            // / data.*) are validated and stored on the node but are DELIBERATELY NOT
+            // emitted into the SVG here — they ride the trusted container built by
+            // renderStyledHtml, which keeps the emitter's SVG alphabet unchanged.
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * fStyle.scale(), fStyle.mathStyle(), false);
-            Layout layout = LayoutEngine.layout(fBody, ctx);
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+            Layout layout = LayoutEngine.layout(body, ctx);
             // fluid is a HOST flag (like interactiveExpansion): it reads from the
             // caller's opts even when a \lx wrapper overrides the styling, and it is
             // NOT part of the \lx sub-language — an author can never turn it on.
-            return SvgEmitter.emit(layout, font, describe(fBody), fStyle.color(), opts.fluid());
+            return SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
         });
     }
 
@@ -403,11 +399,11 @@ public final class LatteX {
      */
     public static InlineSvgResult renderInlineResult(String latex) {
         RenderOptions opts = RenderOptions.defaults().inline();
-        MathNode node = MathParser.parse(latex);
-        RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-        final RenderOptions fStyle = style;
         return containRender(() -> {
+            // Parse inside the boundary too (plan lattex-seam-containment-parity).
+            MathNode node = MathParser.parse(latex);
+            RenderOptions fStyle = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             double fontSize = DISPLAY_FONT_SIZE * fStyle.scale();
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
@@ -471,13 +467,12 @@ public final class LatteX {
                 "fontSizePx must be a finite value in (0, " + MAX_FRAGMENT_FONT_SIZE
                     + "]; got: " + fontSizePx);
         }
+        return containRender(() -> {
+        // Parse inside the boundary too (plan lattex-seam-containment-parity).
         MathNode node = MathParser.parse(latex);
         // A top-level \lx wrapper is transparent here: render the body; the wrapper's
         // container metadata rides the consumer's own wrapper, not the fragment.
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-
-        final MathNode fBody = body;
-        return containRender(() -> {
+        final MathNode fBody = node instanceof StyledMath sm ? sm.body() : node;
         SfntFont font = FontHolder.FONT;
         LayoutContext ctx = new LayoutContext(font, font.mathConstants(), fontSizePx);
         Layout layout = LayoutEngine.layout(fBody, ctx);
@@ -513,8 +508,7 @@ public final class LatteX {
      */
     private static String mathmlOrEmpty(MathNode body) {
         try {
-            return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
-                + toMathML(body) + "</math>";
+            return mathmlDocument(body);
         } catch (RuntimeException | StackOverflowError e) {
             return "";
         }
@@ -575,15 +569,16 @@ public final class LatteX {
         // is no top-level \lx wrapper the host's scale/color/mathStyle apply. A source
         // \lx wrapper still overrides the STYLING (macros are not part of the \lx
         // sub-language, so the notation pack applies inside the body regardless).
-        MathNode node = MathParser.parse(latex, opts.macros());
-        EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-        Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
-
-        // Lay out once, and reuse the layout for BOTH the SVG and the glyphmap — the
-        // sidecar's path indices must line up with this exact emission.
-        RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
         return containRender(() -> {
+            // Parse inside the boundary too (plan lattex-seam-containment-parity).
+            MathNode node = MathParser.parse(latex, opts.macros());
+            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+            Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
+
+            // Lay out once, and reuse the layout for BOTH the SVG and the glyphmap — the
+            // sidecar's path indices must line up with this exact emission.
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
@@ -862,9 +857,12 @@ public final class LatteX {
      */
     @Deprecated
     public static String fxContainerAttrs(String latex) {
-        MathNode node = MathParser.parse(latex);
-        EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-        return fxAttrs(fx);
+        // Deprecated but live (see above), so it gets the same boundary as every sibling.
+        return containRender(() -> {
+            MathNode node = MathParser.parse(latex);
+            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+            return fxAttrs(fx);
+        });
     }
 
     /**
@@ -911,33 +909,95 @@ public final class LatteX {
      * <p>Failure semantics mirror the consumer-side {@code tryRender}: ANY failure (parse
      * error, layout overflow, emit fault) yields {@link java.util.Optional#empty()} so the
      * caller falls back to the plain source text — fail-inert, never a half-rendered pair.
+     * "Any" includes a {@code StackOverflowError}: the whole pipeline, parse included, runs
+     * inside {@link #containRender}, the same boundary every sibling render entry uses, so an
+     * {@code Error} becomes the typed failure and then the empty result instead of unwinding
+     * into the consumer's doc pipeline (plan lattex-seam-containment-parity).
      *
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @return the render-coupled pair, or empty on any failure
      */
     public static java.util.Optional<RenderedMath> tryRenderMath(String latex) {
+        return tryRenderMath(latex, RenderOptions.defaults());
+    }
+
+    /**
+     * {@link #tryRenderMath(String)} honouring the HOST's {@link RenderOptions}, with the same
+     * semantics {@link #renderStyledHtml(String, RenderOptions)} gives them: preset
+     * {@link RenderOptions#macros()} expand before parsing (inside an {@code \lx} body too);
+     * with no top-level {@code \lx} wrapper the host's scale, color and math style apply, while
+     * a wrapper still overrides the styling; {@link RenderOptions#fluid()} is a host flag that
+     * reaches the {@code <svg>} either way. The returned SVG is byte-identical to
+     * {@link #render(String, RenderOptions)} on the same arguments, and the
+     * {@code data-lx-glyphmap} sidecar equals the one {@code renderStyledHtml} stamps. The
+     * map is NOT the whole of that container: it carries the {@code data-lx-fx-*} effect
+     * attributes and the renderer-derived sidecars, while {@code renderStyledHtml}'s own
+     * {@code <span>} additionally stamps the semantics ({@code data-lx-intent},
+     * {@code data-lx-concept}, each {@code data.*} entry as {@code data-lx-<key>}, and
+     * {@code aria-label}), which this record does not carry.
+     * Without this overload a consumer needing macros or fluid sizing had to go back to the
+     * split render + deprecated {@link #fxContainerAttrs} path, whose glyphmap can desync.
+     *
+     * <p><strong>This seam never arms interactive expansion.</strong> With
+     * {@link RenderOptions#interactiveExpansion()} set, the result is exactly the flag-off
+     * result: no pre-rendered payload, no {@code data-lx-fx-expand} /
+     * {@code data-lx-fx-substitute} / {@code data-lx-var} marker. That is what
+     * {@code renderStyledHtml} produces with the flag off, and its own contract makes that
+     * byte-identical to flag-on for every formula without an {@code unfold} or
+     * {@code substitute} directive; a formula WITH one degrades inert, as it does on any
+     * flag-off page. The flag's product is a hidden SIBLING {@code <svg>} that
+     * {@link RenderedMath} has no slot for, so a host that needs those effects uses
+     * {@code renderStyledHtml}. The flag is deliberately not refused: a refusal would throw on
+     * every input, and a consumer wrapper that catches {@code RuntimeException} would swallow
+     * it and fall back to the split path this overload exists to replace.
+     * {@link RenderOptions#renderErrors()} is ignored here exactly as the throwing render API
+     * ignores it.
+     *
+     * <p>Failure semantics are the one-arg form's: ANY failure in parse, layout or emit,
+     * including a {@code StackOverflowError}, yields {@link java.util.Optional#empty()}.
+     *
+     * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
+     * @param opts  the host render options
+     * @return the render-coupled pair, or empty on any render failure
+     * @throws NullPointerException if {@code opts} is null
+     */
+    public static java.util.Optional<RenderedMath> tryRenderMath(String latex, RenderOptions opts) {
+        java.util.Objects.requireNonNull(opts, "opts");
+        // opts.interactiveExpansion() is intentionally never read: see the javadoc.
         try {
-            MathNode node = MathParser.parse(latex);
-            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-            RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
-            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-            SfntFont font = FontHolder.FONT;
-            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
-            Layout layout = LayoutEngine.layout(body, ctx);
-            String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
-            // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
-            // stamping decision, so the seam and the wrapper path cannot drift on whether
-            // the sidecar rides the container. A literal THREAD check here silently left
-            // `cancel` inert on the split-wrapper consumer (it reads the sidecar to find
-            // the code point occurring exactly twice, and an absent map is not an error).
-            String glyphmap = usesGlyphmap(fx)
-                ? SvgEmitter.glyphmap(layout, font) : "";
-            String groupmap = precedenceGroupmap(fx, layout, font);
-            return java.util.Optional.of(new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap)));
-        } catch (RuntimeException e) {
+            return java.util.Optional.of(containRender(() -> renderMathPair(latex, opts)));
+        } catch (RuntimeException containedOrTyped) {
+            // containRender has already turned an Error into a MathSyntaxException, so this
+            // one catch sees every failure the contract promises to absorb.
             return java.util.Optional.empty();
         }
+    }
+
+    /**
+     * The seam's pipeline, unguarded: callers run it inside {@link #containRender}. Parse is
+     * inside too, unlike the throwing siblings, because this seam's contract absorbs parse
+     * failures as well as layout and emit ones.
+     */
+    private static RenderedMath renderMathPair(String latex, RenderOptions opts) {
+        MathNode seamNode = MathParser.parse(latex, opts.macros());
+        EffectSpec fx = seamNode instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+        RenderOptions seamStyle = seamNode instanceof StyledMath sm ? sm.style() : opts;
+        MathNode seamBody = seamNode instanceof StyledMath sm ? sm.body() : seamNode;
+        SfntFont font = FontHolder.FONT;
+        LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+            DISPLAY_FONT_SIZE * seamStyle.scale(), seamStyle.mathStyle(), false);
+        Layout layout = LayoutEngine.layout(seamBody, ctx);
+        // fluid rides the HOST opts, never the \lx wrapper, exactly as in render(latex, opts).
+        String svg = SvgEmitter.emit(layout, font, describe(seamBody), seamStyle.color(), opts.fluid());
+        // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
+        // stamping decision, so the seam and the wrapper path cannot drift on whether
+        // the sidecar rides the container. A literal THREAD check here silently left
+        // `cancel` inert on the split-wrapper consumer (it reads the sidecar to find
+        // the code point occurring exactly twice, and an absent map is not an error).
+        String glyphmap = usesGlyphmap(fx)
+            ? SvgEmitter.glyphmap(layout, font) : "";
+        String groupmap = precedenceGroupmap(fx, layout, font);
+        return new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap));
     }
 
     /**
@@ -1120,11 +1180,24 @@ public final class LatteX {
      * @param latex a LaTeX math expression
      * @return {@code <math xmlns="http://www.w3.org/1998/Math/MathML">…</math>}
      * @throws LatteXException if {@code latex} does not parse (the exported supertype of
-     *         the concrete {@code com.lattex.parse.MathSyntaxException} thrown)
+     *         the concrete {@code com.lattex.parse.MathSyntaxException} thrown), or if the
+     *         serialization fails internally: parse and traversal run inside
+     *         {@link #containRender}, so a {@code StackOverflowError} or stray
+     *         {@code RuntimeException} arrives on this same typed channel with the original
+     *         failure as its cause, never as an escaping {@code Error} (plan
+     *         lattex-seam-containment-parity)
      */
     public static String toMathML(String latex) {
-        return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
-            + toMathML(MathParser.parse(latex)) + "</math>";
+        return containRender(() -> mathmlDocument(MathParser.parse(latex)));
+    }
+
+    /**
+     * Wraps one serialized node in the {@code <math>} root. The single producer for that
+     * wrapper, shared by the public {@link #toMathML(String)} and the fail-soft fragment
+     * helper, so the two can never disagree on the root element.
+     */
+    private static String mathmlDocument(MathNode node) {
+        return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">" + toMathML(node) + "</math>";
     }
 
     /** Serializes one node to Presentation-MathML markup (no {@code <math>} wrapper). */

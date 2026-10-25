@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.lattex.parse.MathParser;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -93,10 +94,31 @@ class RenderedMathSeamTest {
             "seam sidecar == renderStyledHtml stamp: " + glyphmap);
     }
 
+    /**
+     * The name promises ANY failure, so the body must reach the failure the old catch could not
+     * see (plan lattex-seam-containment-parity): a {@code StackOverflowError} is an
+     * {@code Error}, not a {@code RuntimeException}, and the seam used to catch only the latter,
+     * so an overflow unwound straight through the "never throws" contract into the consumer's
+     * doc pipeline. The overflow here is real, not injected: a legal 500-deep input on a starved
+     * stack, with the bare parse proven to overflow on that stack as the fixture-reach control.
+     */
     @Test
     void anyFailureYieldsEmptyNeverAHalfPair() {
         assertTrue(LatteX.tryRenderMath("\\frac{a}{").isEmpty(), "parse error -> empty");
         assertTrue(LatteX.tryRenderMath("\\notacommand{x}").isEmpty(), "unknown command -> empty");
+
+        // Positive half on a ROOMY stack (and the class warm-up StackStarved requires): the
+        // deep input is legal, so an empty result below can only come from the starved stack.
+        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(DEEP)",
+            () -> LatteX.tryRenderMath(StackStarved.DEEP));
+        assertTrue(((Optional<?>) rendered).isPresent(), "the 500-deep input renders on a roomy stack");
+        StackStarved.assertFixtureOverflows("the bare parse tryRenderMath runs first",
+            () -> MathParser.parse(StackStarved.DEEP));
+
+        StackStarved.Outcome starved = StackStarved.run(() -> LatteX.tryRenderMath(StackStarved.DEEP));
+        assertFalse(starved.threw(),
+            "an Error escaped tryRenderMath, whose contract is empty-on-any-failure: " + starved.describe());
+        assertEquals(Optional.empty(), starved.value(), "stack overflow -> empty, never a half pair");
     }
 
     @Test
