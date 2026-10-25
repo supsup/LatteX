@@ -534,7 +534,7 @@ the glyph) disagreed with what the SVG already drew.
   A grid with any non-centre column now carries `columnalign` (`right left` pairs for
   `aligned`, `left` for `cases`, the `l`/`c`/`r` spec for `array`), and a `\multicolumn`
   cell aligned unlike its column carries its own. All-centred grids (`matrix`, `pmatrix`,
-  `\substack`) are byte-unchanged. Column and row rules (`|`, `\hline`) are still not
+  `\substack`) with no differently aligned `\multicolumn` cell are byte-unchanged. Column and row rules (`|`, `\hline`) are still not
   expressed in MathML.
 - **`\backslash` draws a backslash.** It mapped to U+2216 SET MINUS, the `\setminus`
   glyph, though its delimiter form (`\big\backslash`) already used U+005C. It is now

@@ -325,9 +325,11 @@ class OutputCapPostconditionTest {
         // (Punct|`\ `|Ord gains 3mu); with rowBox's prev-reset restored the tree
         // reproduces 2e5442e3... exactly. The mid-display/mid-fluid goldens move by the
         // Ord|\quad|Op thin space before \int (+3mu = 6.6667 units, 667.1862 -> 673.8529).
-        // Re-pinned 2026-10-25 for audit cb3b4518 F11 (\\backslash -> U+005C); proved sole
-        // cause by passing at 84b9aef (every audit fix but the glyph change), which
-        // reproduces def81e06... exactly.
+        // Re-pinned 2026-10-25 for audit cb3b4518 F11 (\\backslash -> U+005C). That the
+        // glyph change is the SOLE cause of the move is the author's reading, NOT a
+        // measurement: a probe at 84b9aef was once cited as reproducing def81e06..., but that
+        // tree's test sources do not compile (an illegal escape in a MathMLTest comment,
+        // fixed in 60e2073) and the probe's XML was not retained (review lattex 1100 E1).
         assertEquals("30ff4ad7ad4b79ce0a63d59eb5c9e5426b67b923900683957a5464009a9964a6", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
