@@ -15,22 +15,39 @@ import java.util.concurrent.Callable;
  * same input really does overflow on this stack. Without that control a green result could
  * mean only that the input stopped being deep enough to reach an overflow.
  *
- * <p>Hazard note for anyone extending this: run the same call on the normal test thread
- * FIRST. A {@code StackOverflowError} inside a static initializer marks that class
- * permanently erroneous for the whole JVM, which would poison every later test; warming up
- * on a full stack initializes the classes before the starved run can interrupt them.
+ * <p>Hazard note for anyone extending this: run the same call through
+ * {@link #assertSucceedsOnRoomyStack} FIRST. A {@code StackOverflowError} inside a static
+ * initializer marks that class permanently erroneous for the whole JVM, which would poison
+ * every later test; warming up on a roomy stack initializes the classes before the starved
+ * run can interrupt them.
  */
 final class StackStarved {
 
     /** Requested stack; the JVM rounds a request below its platform minimum up to the minimum. */
     static final long STACK_BYTES = 64L * 1024L;
 
+    /** Requested stack for the positive half: roomy, so even an all-interpreted first run fits. */
+    static final long ROOMY_STACK_BYTES = 256L * 1024L * 1024L;
+
     /**
-     * Nested braces 500 deep: just under the parser's 512-level {@code MAX_DEPTH}, so the
-     * input is legal and renders on a normal stack (the positive half of the fixture), but
-     * the parser's recursion is deep enough to exhaust a minimum-size thread stack.
+     * {@code \text{$\text{$ ... y ... $}$}} nested 500 deep: one {@code MAX_DEPTH} level per
+     * nesting (the {@code parseNucleus} for each {@code \text}), so 501 levels stay under the
+     * parser's 512-level limit and the input is legal (TextNestedMathTest pins that 600 levels
+     * trip the guard, i.e. the parse reaches level 512 on an ordinary stack).
+     *
+     * <p>Why this construct and not nested braces (round 3): every level re-enters the parser
+     * through a long frame chain, parseMath(4-arg) then parseTopLevel, parseComponent,
+     * parseNucleus, parseNucleusInner (TEXT arm), textWithNestedMath twice, and the
+     * parseMath(span, depth) overload chain back to parseMath(4-arg), roughly eleven frames per
+     * level, several of them fat (try/catch, many locals). Nested braces cost about four lean
+     * frames per level (parseComponent, parseNucleus, parseNucleusInner, parseGroup). 500
+     * levels of braces DID overflow a minimum-size stack while the parser was still interpreted,
+     * and stopped overflowing once the JIT had compiled it: the fixture-reach control caught
+     * exactly that in the first gradle run. This construct is chosen for a margin of several
+     * times that, compiled or not. The parse result collapses to the single atom y (a one-item
+     * run returns its item), so layout and emit stay trivial and the overflow is in the parse.
      */
-    static final String DEEP = "{".repeat(500) + "x" + "}".repeat(500);
+    static final String DEEP = "\\text{$".repeat(500) + "y" + "$}".repeat(500);
 
     /** What the starved call did: exactly one of {@code value} / {@code thrown} is meaningful. */
     record Outcome(Object value, Throwable thrown) {
@@ -50,6 +67,24 @@ final class StackStarved {
 
     /** Runs {@code call} on a starved-stack thread and reports what it returned or threw. */
     static Outcome run(Callable<?> call) {
+        return runWithStack(call, STACK_BYTES, "lattex-stack-starved");
+    }
+
+    /**
+     * The positive half: {@code call} must return normally on a ROOMY stack. Run off the test
+     * thread so the result does not depend on the test runner's own stack size or on how much
+     * of the parser the JIT has compiled yet. It also initializes every class the call touches,
+     * which is the warm-up the starved run relies on.
+     */
+    static Object assertSucceedsOnRoomyStack(String what, Callable<?> call) {
+        Outcome o = runWithStack(call, ROOMY_STACK_BYTES, "lattex-stack-roomy");
+        if (o.threw()) {
+            throw new AssertionError(what + " must succeed on a roomy stack but " + o.describe(), o.thrown());
+        }
+        return o.value();
+    }
+
+    private static Outcome runWithStack(Callable<?> call, long stackBytes, String name) {
         Object[] value = new Object[1];
         Throwable[] thrown = new Throwable[1];
         Thread worker = new Thread(null, () -> {
@@ -58,7 +93,7 @@ final class StackStarved {
             } catch (Throwable t) { // NOPMD - the point is to observe an escaping Error
                 thrown[0] = t;
             }
-        }, "lattex-stack-starved", STACK_BYTES);
+        }, name, stackBytes);
         worker.start();
         try {
             worker.join(60_000L);

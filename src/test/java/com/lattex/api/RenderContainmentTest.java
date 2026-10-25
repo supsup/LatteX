@@ -93,13 +93,10 @@ class RenderContainmentTest {
             () -> LatteX.renderStyledHtml(deep, RenderOptions.defaults()));
         entries.put("fxContainerAttrs", () -> LatteX.fxContainerAttrs(deep));
 
-        // Positive half on a normal stack (also the class warm-up StackStarved requires).
+        // Positive half on a roomy stack (also the class warm-up StackStarved requires).
         for (java.util.Map.Entry<String, java.util.concurrent.Callable<?>> e : entries.entrySet()) {
-            try {
-                assertNotNull(e.getValue().call(), e.getKey() + " renders the deep input on a normal stack");
-            } catch (Exception ex) {
-                throw new AssertionError(e.getKey() + " failed on a normal stack", ex);
-            }
+            assertNotNull(StackStarved.assertSucceedsOnRoomyStack(e.getKey(), e.getValue()),
+                e.getKey() + " renders the deep input on a roomy stack");
         }
         StackStarved.assertFixtureOverflows("the bare parse every sibling runs first",
             () -> com.lattex.parse.MathParser.parse(deep));

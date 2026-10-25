@@ -107,10 +107,11 @@ class RenderedMathSeamTest {
         assertTrue(LatteX.tryRenderMath("\\frac{a}{").isEmpty(), "parse error -> empty");
         assertTrue(LatteX.tryRenderMath("\\notacommand{x}").isEmpty(), "unknown command -> empty");
 
-        // Positive half on a NORMAL stack (and the class warm-up StackStarved requires): the
+        // Positive half on a ROOMY stack (and the class warm-up StackStarved requires): the
         // deep input is legal, so an empty result below can only come from the starved stack.
-        assertTrue(LatteX.tryRenderMath(StackStarved.DEEP).isPresent(),
-            "the 500-deep input renders on a normal stack");
+        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(DEEP)",
+            () -> LatteX.tryRenderMath(StackStarved.DEEP));
+        assertTrue(((Optional<?>) rendered).isPresent(), "the 500-deep input renders on a roomy stack");
         StackStarved.assertFixtureOverflows("the bare parse tryRenderMath runs first",
             () -> MathParser.parse(StackStarved.DEEP));
 

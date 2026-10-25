@@ -139,9 +139,13 @@ class HostileInputHardeningTest {
      */
     @Test
     void aStackOverflowInEitherSeamArrivesOnItsTypedChannel() {
-        // Positive half on a normal stack, which is also the class warm-up StackStarved needs.
-        assertTrue(LatteX.tryRenderMath(StackStarved.DEEP).isPresent(), "deep input renders normally");
-        assertTrue(LatteX.toMathML(StackStarved.DEEP).startsWith("<math"), "deep input serializes normally");
+        // Positive half on a roomy stack, which is also the class warm-up StackStarved needs.
+        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(DEEP)",
+            () -> LatteX.tryRenderMath(StackStarved.DEEP));
+        assertTrue(((java.util.Optional<?>) rendered).isPresent(), "deep input renders on a roomy stack");
+        Object mathml = StackStarved.assertSucceedsOnRoomyStack("toMathML(DEEP)",
+            () -> LatteX.toMathML(StackStarved.DEEP));
+        assertTrue(((String) mathml).startsWith("<math"), "deep input serializes on a roomy stack");
         StackStarved.assertFixtureOverflows("the bare parse both seams run first",
             () -> com.lattex.parse.MathParser.parse(StackStarved.DEEP));
 

@@ -536,9 +536,11 @@ public seams did not use it at all, and the throwing render entries used it only
   exception as the same typed `LatteXException` it already threw for a parse error, with the
   original failure as the cause. Parse errors arrive exactly as before.
 
-The overflow is pinned with a real one, not an injected throw: a legal 500-deep input (under
-the parser's 512-level limit) on a thread with a minimum-size stack, which is how the overflow
-reaches production, on a host thread already deep in its own frames. Each such test first
+The overflow is pinned with a real one, not an injected throw: a legal input nesting
+`\text{$...$}` 500 deep (under the parser's 512-level limit) on a thread with a minimum-size
+stack, which is how the overflow reaches production, on a host thread already deep in its own
+frames. Each level re-enters the parser through a long frame chain, so the overflow survives
+the JIT; 500 plain nested braces overflowed only while the parser was still interpreted. Each such test first
 proves the bare parse really overflows on that stack, so it cannot pass by no longer reaching
 the Error. `anyFailureYieldsEmptyNeverAHalfPair` now checks the Error case its name always
 promised, and the hostile-input corpus runs through both seams.

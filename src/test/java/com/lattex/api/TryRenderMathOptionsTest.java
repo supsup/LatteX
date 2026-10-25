@@ -125,7 +125,9 @@ class TryRenderMathOptionsTest {
 
     @Test
     void anOverflowThroughTheOptionsOverloadIsStillEmpty() {
-        assertTrue(LatteX.tryRenderMath(StackStarved.DEEP, host()).isPresent(), "deep input renders normally");
+        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(DEEP, host())",
+            () -> LatteX.tryRenderMath(StackStarved.DEEP, host()));
+        assertTrue(((Optional<?>) rendered).isPresent(), "deep input renders on a roomy stack");
         StackStarved.assertFixtureOverflows("the bare parse the overload runs first",
             () -> com.lattex.parse.MathParser.parse(StackStarved.DEEP, host().macros()));
         StackStarved.Outcome o = StackStarved.run(() -> LatteX.tryRenderMath(StackStarved.DEEP, host()));
