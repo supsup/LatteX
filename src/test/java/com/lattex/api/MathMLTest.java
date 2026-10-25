@@ -12,6 +12,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 
@@ -212,12 +213,116 @@ class MathMLTest {
     }
 
     @Test
+    void tablesCarryTheirColumnAlignment() {
+        // Audit cb3b4518 F2. matrixMathML never read Matrix.columnAligns, so every table came
+        // out as a bare <mtable> and every cell was centred (MathML's default): the = signs of
+        // an aligned block did not line up and a cases body was centred. The parser computes
+        // the alignment and the SVG uses it; the MathML now states it on the table.
+        String aligned = LatteX.toMathML("\\begin{aligned} a &= b+c \\\\ &= d \\end{aligned}");
+        assertTrue(aligned.contains("<mtable columnalign=\"right left\">"), aligned);
+        String cases = LatteX.toMathML(
+            "\\begin{cases} x & \\text{if } x>0 \\\\ -x & \\text{otherwise} \\end{cases}");
+        assertTrue(cases.contains("<mtable columnalign=\"left left\">"), cases);
+        String array = LatteX.toMathML("\\begin{array}{lcr} a & b & c \\end{array}");
+        assertTrue(array.contains("<mtable columnalign=\"left center right\">"), array);
+        assertWellFormed(aligned);
+        assertWellFormed(cases);
+        assertWellFormed(array);
+        // Control: an all-centred grid states nothing; centre is already MathML's default.
+        String pm = LatteX.toMathML("\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}");
+        assertTrue(pm.contains("<mtable>"), pm);
+        assertFalse(pm.contains("columnalign"), pm);
+        // A \multicolumn cell aligned unlike the column it starts in says so on its own mtd;
+        // one aligned like its column inherits and says nothing.
+        String span = LatteX.toMathML(
+            "\\begin{array}{lr} \\multicolumn{2}{c}{h} \\\\ a & b \\end{array}");
+        assertTrue(span.contains("<mtd columnspan=\"2\" columnalign=\"center\">"), span);
+        String same = LatteX.toMathML(
+            "\\begin{array}{lr} \\multicolumn{2}{l}{h} \\\\ a & b \\end{array}");
+        assertTrue(same.contains("<mtd columnspan=\"2\">"), same);
+        assertWellFormed(span);
+    }
+
+    @Test
     void nolimitsPutsScriptsBesideNotAboveBelow() {
         // \sum_{i}^{n} keeps limits above/below (munderover); an explicit \nolimits sets
         // them to the side (msubsup), matching the SVG.
         assertTrue(LatteX.toMathML("\\sum_{i=1}^n i").contains("<munderover>"));
         String nolim = LatteX.toMathML("\\int\\nolimits_a^b f");
         assertTrue(nolim.contains("<msubsup>"), "\\nolimits should emit msubsup: " + nolim);
+    }
+
+    @Test
+    void integralsKeepSideLimitsAsTheSvgDoes() {
+        // Audit cb3b4518 F3. The SVG layout sets an integral's limits BESIDE it by default,
+        // even in display style (LayoutEngine.isIntegral); the MathML emitter only did so for an
+        // explicit \nolimits, so the two outputs of one parse disagreed: \int_0^1 came out as
+        // <munderover>, stacking 0 and 1 under and over the sign.
+        String i = LatteX.toMathML("\\int_0^1 f");
+        assertTrue(i.contains("<msubsup><mo>\u222B</mo>"), "\\int_0^1 sets its limits beside: " + i);
+        assertFalse(i.contains("<munderover>"), "\\int_0^1 must not stack its limits: " + i);
+        // The whole integral family, inside and outside the U+222B..U+2233 block.
+        for (String cmd : List.of("iint", "iiint", "oint", "oiint", "oiiint", "idotsint",
+                "fint", "sqint", "ointclockwise", "ointctrclockwise")) {
+            String m = LatteX.toMathML("\\" + cmd + "_a^b f");
+            assertTrue(m.contains("<msubsup>") && !m.contains("<munderover>"),
+                "\\" + cmd + " sets its limits beside: " + m);
+        }
+        // One limit only: msub / msup, never munder / mover.
+        String lower = LatteX.toMathML("\\oint_C f");
+        assertTrue(lower.contains("<msub><mo>\u222E</mo>") && !lower.contains("<munder>"), lower);
+        String upper = LatteX.toMathML("\\int^b f");
+        assertTrue(upper.contains("<msup><mo>\u222B</mo>") && !upper.contains("<mover>"), upper);
+        // An explicit \limits still stacks an integral's limits, as in the SVG.
+        String forced = LatteX.toMathML("\\int\\limits_0^1 f");
+        assertTrue(forced.contains("<munderover><mo>\u222B</mo>"), "\\limits stacks: " + forced);
+        // A non-integral operator keeps the default above/below form.
+        assertTrue(LatteX.toMathML("\\prod_{i=1}^n x").contains("<munderover>"));
+    }
+
+    @Test
+    void anExplicitLimitsPinsTheLimitsAboveAndBelow() {
+        // The <math> root is not display="block", so a MathML Core renderer sets it in compact
+        // style, where an operator the dictionary marks movablelimits (sum, prod, coprod, the big
+        // set and logic operators) has its munderover limits moved beside it. \sum\limits asks
+        // for stacked limits and the SVG stacks them, so its <mo> must turn movablelimits off.
+        String forced = LatteX.toMathML("\\sum\\limits_{i=1}^n i");
+        assertTrue(forced.contains("<munderover><mo movablelimits=\"false\">\u2211</mo>"), forced);
+        assertWellFormed(forced);
+        // DEFAULT keeps the dictionary's movablelimits: TeX's displaylimits behaviour.
+        String dflt = LatteX.toMathML("\\sum_{i=1}^n i");
+        assertTrue(dflt.contains("<munderover><mo>\u2211</mo>"), dflt);
+        assertFalse(dflt.contains("movablelimits"), dflt);
+        // An integral has no movablelimits in the dictionary, so \int\limits is unchanged.
+        String integral = LatteX.toMathML("\\int\\limits_0^1 f");
+        assertTrue(integral.contains("<munderover><mo>\u222B</mo>"), integral);
+        assertFalse(integral.contains("movablelimits"), integral);
+    }
+
+    @Test
+    void aLabelledBraceKeepsItsBrace() {
+        // Audit cb3b4518 F5. stackMathML emitted the brace <mo> only when the label was null,
+        // so \\underbrace{x+y}_{n} came out as <munder><mrow>x+y</mrow><mi>n</mi></munder>: the
+        // label sat directly under the base and the brace itself was gone. The SVG layout
+        // stacks base, brace, label (LayoutEngine.stackBox); MathML now nests the same way.
+        String ub = LatteX.toMathML("\\underbrace{x+y}_{n}");
+        int inner = ub.indexOf("<munder><munder>");
+        int brace = ub.indexOf("<mo>&#9183;</mo></munder>");
+        int label = ub.indexOf("<mi>n</mi>");
+        assertTrue(inner >= 0 && brace > inner && label > brace,
+            "underbrace nests base, brace, label: " + ub);
+        assertWellFormed(ub);
+        String ob = LatteX.toMathML("\\overbrace{x+y}^{n}");
+        inner = ob.indexOf("<mover><mover>");
+        brace = ob.indexOf("<mo>&#9182;</mo></mover>");
+        label = ob.indexOf("<mi>n</mi>");
+        assertTrue(inner >= 0 && brace > inner && label > brace,
+            "overbrace nests base, brace, label: " + ob);
+        assertWellFormed(ob);
+        // Control: a label-less brace is one level, brace directly on the base, as before.
+        String bare = LatteX.toMathML("\\underbrace{x+y}");
+        assertFalse(bare.contains("<munder><munder>"), bare);
+        assertTrue(bare.contains("<mo>&#9183;</mo></munder>"), bare);
     }
 
     @Test

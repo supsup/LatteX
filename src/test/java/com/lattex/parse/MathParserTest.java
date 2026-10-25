@@ -732,9 +732,15 @@ class MathParserTest {
             MathParser.parse("\\ulcorner")).mathClass());
         assertEquals(MathClass.CLOSE, assertInstanceOf(Atom.class,
             MathParser.parse("\\urcorner")).mathClass());
-        // \backslash is an ordinary symbol (∖).
-        assertEquals(MathClass.ORD, assertInstanceOf(Atom.class,
-            MathParser.parse("\\backslash")).mathClass());
+        // \backslash is an ordinary symbol: the reverse solidus U+005C, the glyph its own
+        // delimiter form already uses (CommandRegistry.delimiterCodePointFor). It mapped to
+        // U+2216 SET MINUS, the \setminus glyph (audit cb3b4518 F11).
+        assertEquals(new Atom(0x5C, MathClass.ORD), MathParser.parse("\\backslash"));
+        assertEquals(new Atom(0x2216, MathClass.BIN), MathParser.parse("\\setminus"));
+        // With \backslash off U+2216, a pasted ∖ has one class left: Bin, like \setminus.
+        // While \backslash shared the code point the pasted glyph's class was whichever of
+        // the two Map.copyOf iteration put first, which varies per JVM run.
+        assertEquals(MathClass.BIN, Symbols.classForCodePoint(0x2216));
     }
 
     @Test
