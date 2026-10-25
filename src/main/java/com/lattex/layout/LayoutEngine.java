@@ -82,8 +82,10 @@ public final class LayoutEngine {
     /** True for any integral-family operator — keeps side limits even in display
      *  style. Covers the contiguous block ∫..∳ (U+222B..U+2233: \int \iint \iiint
      *  \oint \oiint \oiiint \ointclockwise \ointctrclockwise) plus \idotsint
-     *  (U+2A0C), \fint (U+2A0F) and \sqint (U+2A16). */
-    private static boolean isIntegral(int cp) {
+     *  (U+2A0C), \fint (U+2A0F) and \sqint (U+2A16). Public so the MathML emitter
+     *  (LatteX.toMathML) places limits by this same rule (audit cb3b4518 F3); the
+     *  package is not exported from the module, so this is not public API. */
+    public static boolean isIntegral(int cp) {
         return (cp >= INTEGRAL_CODEPOINT && cp <= INTEGRAL_CODEPOINT_MAX)
             || cp == QUAD_INTEGRAL_CODEPOINT
             || cp == AVERAGE_INTEGRAL_CODEPOINT

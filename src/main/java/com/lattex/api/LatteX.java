@@ -1261,9 +1261,25 @@ public final class LatteX {
             } + ">" + toMathML(l.body()) + "</mpadded>";
             case BigOperator(var op, var lower, var upper, var limits) -> {
                 String o = mo(op.codePoint());
-                // \nolimits (e.g. an inline integral) sets scripts to the SIDE —
-                // msub/msup/msubsup — matching the SVG; otherwise above/below.
-                boolean beside = limits == MathNode.LimitsMode.NOLIMITS;
+                // Scripts go to the SIDE (msub/msup/msubsup) by the SVG layout's own rule:
+                // always for \nolimits, never for \limits, and by default for the integral
+                // family, which keeps side limits even in display style (audit cb3b4518 F3).
+                // Otherwise above/below.
+                boolean beside = switch (limits) {
+                    case NOLIMITS -> true;
+                    case LIMITS -> false;
+                    case DEFAULT -> LayoutEngine.isIntegral(op.codePoint());
+                };
+                // An explicit \limits must stay stacked in a compact-style (non-block) <math>
+                // too, where MathML Core moves munderover limits beside an operator the
+                // dictionary marks movablelimits (sum, prod, coprod, the big set/logic
+                // operators). DEFAULT keeps the dictionary value, TeX's displaylimits; an
+                // integral is not movablelimits in the dictionary and needs nothing.
+                if (limits == MathNode.LimitsMode.LIMITS
+                        && !LayoutEngine.isIntegral(op.codePoint())) {
+                    o = "<mo movablelimits=\"false\">"
+                        + xmlEscape(Character.toString(op.codePoint())) + "</mo>";
+                }
                 if (lower != null && upper != null) {
                     yield (beside ? "<msubsup>" : "<munderover>") + o
                         + toMathML(lower) + toMathML(upper) + (beside ? "</msubsup>" : "</munderover>");
@@ -1421,7 +1437,20 @@ public final class LatteX {
                 sb.append(fenceMo(m.leftDelim()));
             }
         }
-        sb.append("<mtable>");
+        // Column alignment (audit cb3b4518 F2): the parser computes it (aligned is right/left
+        // pairs, cases left, array its l/c/r spec) and the SVG draws it; MathML centres every
+        // cell unless told, so a grid with any non-centre column states the full list.
+        boolean allCentred = m.columnAligns().stream()
+            .allMatch(a -> a == MathNode.ColumnAlign.CENTER);
+        if (allCentred) {
+            sb.append("<mtable>");
+        } else {
+            StringBuilder aligns = new StringBuilder();
+            for (MathNode.ColumnAlign a : m.columnAligns()) {
+                aligns.append(aligns.length() == 0 ? "" : " ").append(columnAlignValue(a));
+            }
+            sb.append("<mtable columnalign=\"").append(aligns).append("\">");
+        }
         for (int r = 0; r < m.rows().size(); r++) {
             var row = m.rows().get(r);
             // Plan 636d214f: a tagged row is MathML's labelled row, label first; a
@@ -1447,9 +1476,18 @@ public final class LatteX {
                     content = "<mrow>" + (before == null ? "" : toMathML(before.material()))
                         + content + (after == null ? "" : toMathML(after.material())) + "</mrow>";
                 }
-                sb.append(span != null && span.span() > 1
-                        ? "<mtd columnspan=\"" + span.span() + "\">" : "<mtd>")
-                  .append(content).append("</mtd>");
+                sb.append("<mtd");
+                if (span != null && span.span() > 1) {
+                    sb.append(" columnspan=\"").append(span.span()).append('"');
+                }
+                // A \multicolumn carries its own alignment; state it only where it differs
+                // from what the cell inherits from the table (centre when none was stated).
+                MathNode.ColumnAlign inherited = allCentred
+                    ? MathNode.ColumnAlign.CENTER : m.columnAligns().get(c);
+                if (span != null && span.align() != inherited) {
+                    sb.append(" columnalign=\"").append(columnAlignValue(span.align())).append('"');
+                }
+                sb.append('>').append(content).append("</mtd>");
                 c = last;
             }
             sb.append(tag == null ? "</mtr>" : "</mlabeledtr>");
@@ -1462,6 +1500,15 @@ public final class LatteX {
             sb.append("</mrow>");
         }
         return sb.toString();
+    }
+
+    /** The MathML {@code columnalign} keyword for a column alignment. */
+    private static String columnAlignValue(MathNode.ColumnAlign a) {
+        return switch (a) {
+            case LEFT -> "left";
+            case CENTER -> "center";
+            case RIGHT -> "right";
+        };
     }
 
     /**
@@ -1527,14 +1574,25 @@ public final class LatteX {
         return sb.toString();
     }
 
-    /** MathML for a stacked annotation (under/over-brace, overset/underset). */
+    /**
+     * MathML for a stacked annotation (under/over-brace, overset/underset). A brace is
+     * stacked on the base first and its label, when present, on the brace, the same
+     * outward order as {@code LayoutEngine.stackBox} (audit cb3b4518 F5: the brace was
+     * emitted only when the label was null, so a labelled brace lost the brace).
+     */
     private static String stackMathML(MathNode.Stack st) {
         String base = toMathML(st.base());
         return switch (st.kind()) {
-            case UNDERBRACE -> "<munder>" + base
-                + (st.below() == null ? "<mo>&#9183;</mo>" : toMathML(st.below())) + "</munder>";
-            case OVERBRACE -> "<mover>" + base
-                + (st.above() == null ? "<mo>&#9182;</mo>" : toMathML(st.above())) + "</mover>";
+            case UNDERBRACE -> {
+                String braced = "<munder>" + base + "<mo>&#9183;</mo></munder>";
+                yield st.below() == null ? braced
+                    : "<munder>" + braced + toMathML(st.below()) + "</munder>";
+            }
+            case OVERBRACE -> {
+                String braced = "<mover>" + base + "<mo>&#9182;</mo></mover>";
+                yield st.above() == null ? braced
+                    : "<mover>" + braced + toMathML(st.above()) + "</mover>";
+            }
             case STACKREL, OVERSET -> "<mover>" + base + toMathML(st.above()) + "</mover>";
             case UNDERSET -> "<munder>" + base + toMathML(st.below()) + "</munder>";
         };
