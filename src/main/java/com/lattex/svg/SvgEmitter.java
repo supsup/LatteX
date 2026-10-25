@@ -477,7 +477,8 @@ public final class SvgEmitter {
      * XML-escapes the aria-label text. The shared
      * {@link com.lattex.parse.OutputLegality} policy runs FIRST (plan cfd12523),
      * so this boundary shares the SINGLE code-point legality policy with the MathML
-     * and styled-HTML surfaces: illegal C0 controls (e.g. a NUL — the class
+     * and styled-HTML surfaces: characters outside the XML 1.0 Char production
+     * (U+FFFE, U+FFFF, and illegal C0 controls such as a NUL, the class
      * Sirentide's fuzzer caught) are stripped and an unpaired surrogate fails loud;
      * legal whitespace (tab/newline) is preserved. The four-metachar escaping then
      * happens exactly once, here.

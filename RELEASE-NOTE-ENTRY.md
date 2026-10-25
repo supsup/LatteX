@@ -510,3 +510,21 @@ and drew the wrong thing.
   `\overbrace{...}` is NOT changed here: those stacks draw a label on one side only, so a
   superscript on an underbrace (or a subscript on an overbrace) is not drawn at all today, and
   moving the prime there would lose it. That gap is a separate finding.
+
+---
+
+### U+FFFE and U+FFFF no longer reach MathML or SVG
+
+The shared output-legality policy checked only C0 controls and surrogates, so the two BMP
+noncharacters U+FFFE and U+FFFF passed straight into MathML text and the SVG `aria-label`,
+and an XML 1.0 parser rejected the document. `OutputLegality` now expresses the whole XML
+1.0 `Char` production once, as `isXmlChar(int)`, and every XML boundary uses it.
+
+- **The two noncharacters are stripped**, exactly as an illegal C0 control already was, at
+  every boundary that runs the shared policy: MathML, the SVG `aria-label`, and the
+  styled-HTML a11y and `data-lx-*` attributes. A lone surrogate still fails loud.
+- **Legal characters at the edges are unchanged**: U+D7FF, U+E000, U+FFFD, and astral code
+  points up to U+10FFFF (as valid surrogate pairs) are preserved verbatim.
+- **The interactive endpoint validator uses the same predicate.** Its `aria-label` check
+  carried a private C0-only copy of the rule; it now refuses any label outside the `Char`
+  production through `OutputLegality.isXmlLegal`.

@@ -1475,7 +1475,8 @@ public final class LatteX {
     /**
      * XML-escapes text content / attribute values for MathML output. The shared
      * {@link com.lattex.parse.OutputLegality} policy runs FIRST (plan cfd12523):
-     * illegal C0 controls are stripped and an unpaired surrogate fails loud, so the
+     * characters outside the XML 1.0 Char production (C0 controls, U+FFFE, U+FFFF)
+     * are stripped and an unpaired surrogate fails loud, so the
      * serialized MathML is legal XML 1.0 — a raw NUL can no longer leak (LTX-06).
      * The four-metachar escaping then happens exactly once, here.
      */
