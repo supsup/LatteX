@@ -815,14 +815,15 @@ public final class LatteX {
      * Stafficy's {@code /docs} math seam is the reference consumer).
      *
      * <p>Returns {@code ""} when the source carries no top-level {@code \lx[fx.*]}
-     * annotations, else a <em>leading-space-prefixed</em> run of only the five
-     * {@code data-lx-fx-*} attributes (enter/hover/click/duration/glow-color, in that
-     * order) — never {@code data-lx-intent}/{@code concept}/{@code data.*}/
+     * annotations, else a <em>leading-space-prefixed</em> run of only the seven
+     * {@code data-lx-fx-*} attributes (enter/hover/click/duration/glow-color/bolts/intensity,
+     * in that order) — never {@code data-lx-intent}/{@code concept}/{@code data.*}/
      * {@code aria-*}, which ride {@link #renderStyledHtml}'s own container instead.
      * Every value is parse-time validated (effects are the closed {@code Effect}
      * vocabulary, duration matches {@code \d{1,5}ms}, glow-color is
-     * {@code currentColor} or a canonical hex literal), so no raw author string
-     * reaches an attribute.
+     * {@code currentColor} or a canonical hex literal, bolts/intensity are bounded ASCII
+     * decimals), so no raw author string reaches an attribute. Omitted numeric knobs
+     * produce no attributes; runtime defaults remain 2 bolts and 100 percent intensity.
      *
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @return {@code ""} or a leading-space-prefixed {@code data-lx-fx-*} attribute run
@@ -870,7 +871,7 @@ public final class LatteX {
      * The render-coupled seam record: the self-contained SVG document plus the container
      * attributes derived from the SAME parse+layout, as a key→value map. The consumer (the
      * Stafficy {@code /docs} markdown converter) stamps each entry onto ITS OWN wrapper
-     * element; the key set is pinned by the container-output contract (the five
+     * element; the key set is pinned by the container-output contract (the seven
      * {@code data-lx-fx-*} plus {@code data-lx-glyphmap}), so nothing re-encodes and the
      * reflective bridge stays name-agnostic. Values are parse-validated (effects: closed
      * vocabulary; duration: {@code \d{1,5}ms}; glow: {@code currentColor|#rrggbb}; glyphmap:
@@ -888,7 +889,7 @@ public final class LatteX {
         public RenderedMath {
             java.util.Objects.requireNonNull(svg, "svg");
             // Order-PRESERVING defensive copy: the historical stamp order (enter/hover/
-            // click, duration, glow, glyphmap) is load-bearing — the deprecated string
+            // click, duration, glow, explicit numeric knobs, glyphmap) is load-bearing — the deprecated string
             // seam is byte-identical to this map joined in iteration order. Map.copyOf
             // would be immutable but randomize iteration, breaking that equivalence, so
             // copy through a LinkedHashMap and wrap unmodifiable.
@@ -943,7 +944,8 @@ public final class LatteX {
      * THE single container-attribute producer: {@link #fxAttrs} (the string form
      * {@link #openTag} and the deprecated seam join) derives from this map, so the record
      * form and the string form cannot drift. Insertion order is the historical stamp order
-     * (enter/hover/click, duration, glow, glyphmap) so the joined string stays byte-identical.
+     * (enter/hover/click, duration, glow, explicit numeric knobs, glyphmap) so omitted knobs
+     * leave the joined string byte-identical to the predecessor.
      */
     private static Map<String, String> containerAttrMap(EffectSpec fx, String glyphmap, String groupmap) {
         Map<String, String> attrs = new java.util.LinkedHashMap<>();
@@ -953,6 +955,12 @@ public final class LatteX {
         }
         fx.durationValue().ifPresent(v -> attrs.put("data-lx-fx-duration", v));
         fx.glowColorValue().ifPresent(c -> attrs.put("data-lx-fx-glow-color", c.svgValue()));
+        if (fx.bolts() != null) {
+            attrs.put("data-lx-fx-bolts", Integer.toString(fx.bolts()));
+        }
+        if (fx.intensity() != null) {
+            attrs.put("data-lx-fx-intensity", Integer.toString(fx.intensity()));
+        }
         if (glyphmap != null && !glyphmap.isEmpty()) {
             attrs.put("data-lx-glyphmap", glyphmap);
         }
@@ -965,14 +973,14 @@ public final class LatteX {
     /**
      * The shared fx-attribute stamping source consumed by BOTH {@link #openTag} and
      * {@link #fxContainerAttrs} — one producer, so the wrapper form and the seam form
-     * cannot drift. Emits only the container contract's five {@code data-lx-fx-*}
+     * cannot drift. Emits only the container contract's seven {@code data-lx-fx-*}
      * attributes, each value validated at parse time.
      */
     private static String fxAttrs(EffectSpec fx) {
         // Derived from containerAttrMap — the ONE producer (record seam + string form share
         // it, so they cannot drift). Values are parse-validated; the glow colour's svgValue()
         // is currentColor or a canonical #rrggbb literal — a safe attribute VALUE.
-        // Empty sidecars: fxAttrs stamps only the fx-* / duration / glow attrs; openTag
+        // Empty sidecars: fxAttrs stamps only the fx-* attrs, including numeric knobs; openTag
         // stamps the glyphmap/groupmap sidecars separately (and the deprecated seam never
         // carried them).
         StringBuilder sb = new StringBuilder();
