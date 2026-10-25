@@ -30,6 +30,10 @@ import org.junit.jupiter.api.Test;
  */
 class HostileInputHardeningTest {
 
+    /** The two DESIGNATED structured positives (corpus indices 0 and 1); asserted by name per seam. */
+    private static final String POSITIVE_SUM_FRAC = "\\frac{a}{b} + \\sum_{i=1}^n x_i^2";
+    private static final String POSITIVE_MIDDLE = "P\\left(A=2\\middle|\\frac{A^2}{B}>4\\right)";
+
     private static final Pattern TAG = Pattern.compile("<([a-zA-Z][a-zA-Z0-9]*)");
 
     private static void assertInvariants(String label, String svg) {
@@ -55,8 +59,8 @@ class HostileInputHardeningTest {
         List<String> corpus = new ArrayList<>();
         // POSITIVE renders FIRST (the mixed-fixture rule): the same fixture must
         // prove the pipeline still renders real math within the caps.
-        corpus.add("\\frac{a}{b} + \\sum_{i=1}^n x_i^2");
-        corpus.add("P\\left(A=2\\middle|\\frac{A^2}{B}>4\\right)");
+        corpus.add(POSITIVE_SUM_FRAC);
+        corpus.add(POSITIVE_MIDDLE);
         // Hostile: garbage commands, deep nesting, wide rows, unterminated groups,
         // literal control chars in the INPUT, seeded-random ASCII soup (deterministic).
         corpus.add("x y");
@@ -128,6 +132,16 @@ class HostileInputHardeningTest {
         }
         assertTrue(seamOk >= 2, "positive renders succeeded through tryRenderMath, got " + seamOk);
         assertTrue(mathmlOk >= 2, "positive serializations succeeded through toMathML, got " + mathmlOk);
+        // The generic count above can be met by the plain-atom inputs (x y, abc) even if BOTH
+        // structured positives broke, so each designated positive is asserted by name, per seam.
+        for (String positive : new String[] {POSITIVE_SUM_FRAC, POSITIVE_MIDDLE}) {
+            String label = shortLabel(positive);
+            java.util.Optional<LatteX.RenderedMath> rm = LatteX.tryRenderMath(positive);
+            assertTrue(rm.isPresent(), label + ": designated positive must render through tryRenderMath");
+            assertInvariants(label + " [tryRenderMath positive]", rm.get().svg());
+            String mml = LatteX.toMathML(positive);
+            assertTrue(mml.startsWith("<math"), label + ": designated positive must serialize through toMathML");
+        }
     }
 
     /**

@@ -96,15 +96,38 @@ final class StackStarved {
         }, name, stackBytes);
         worker.start();
         try {
-            worker.join(60_000L);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError("interrupted waiting for the starved-stack call", e);
+            try {
+                worker.join(60_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("interrupted waiting for the starved-stack call", e);
+            }
+            if (worker.isAlive()) {
+                throw new AssertionError("starved-stack call did not finish within 60s");
+            }
+            return new Outcome(value[0], thrown[0]);
+        } finally {
+            // No worker outlives the call: on timeout or interrupt, interrupt it and join it
+            // (bounded). A no-op on the success path, where the worker has already ended. The
+            // interrupt is cooperative (never Thread.stop), so a worker that ignores it is
+            // reported rather than silently leaked.
+            if (worker.isAlive()) {
+                worker.interrupt();
+                boolean wasInterrupted = Thread.interrupted();
+                try {
+                    worker.join(5_000L);
+                } catch (InterruptedException e) {
+                    wasInterrupted = true;
+                } finally {
+                    if (wasInterrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                if (worker.isAlive()) {
+                    System.err.println("StackStarved: worker " + name + " ignored interrupt and is still alive");
+                }
+            }
         }
-        if (worker.isAlive()) {
-            throw new AssertionError("starved-stack call did not finish within 60s");
-        }
-        return new Outcome(value[0], thrown[0]);
     }
 
     /** Whether {@code t} is, or is caused by, a {@code StackOverflowError}. */
