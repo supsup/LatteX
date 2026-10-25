@@ -325,7 +325,10 @@ class OutputCapPostconditionTest {
         // (Punct|`\ `|Ord gains 3mu); with rowBox's prev-reset restored the tree
         // reproduces 2e5442e3... exactly. The mid-display/mid-fluid goldens move by the
         // Ord|\quad|Op thin space before \int (+3mu = 6.6667 units, 667.1862 -> 673.8529).
-        assertEquals("def81e064b5bd2e9259fcc31a3c3e6b6cbfcc298a7f724b5d3863ecb2a03cebb", hex.toString(),
+        // Re-pinned 2026-10-25 for audit cb3b4518 F11 (\\backslash -> U+005C); proved sole
+        // cause by passing at 84b9aef (every audit fix but the glyph change), which
+        // reproduces def81e06... exactly.
+        assertEquals("30ff4ad7ad4b79ce0a63d59eb5c9e5426b67b923900683957a5464009a9964a6", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
     }
