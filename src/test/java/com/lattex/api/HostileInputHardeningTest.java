@@ -30,10 +30,13 @@ import org.junit.jupiter.api.Test;
  */
 class HostileInputHardeningTest {
 
+    /** The two DESIGNATED structured positives (corpus indices 0 and 1); asserted by name per seam. */
+    private static final String POSITIVE_SUM_FRAC = "\\frac{a}{b} + \\sum_{i=1}^n x_i^2";
+    private static final String POSITIVE_MIDDLE = "P\\left(A=2\\middle|\\frac{A^2}{B}>4\\right)";
+
     private static final Pattern TAG = Pattern.compile("<([a-zA-Z][a-zA-Z0-9]*)");
 
-    private static void assertInvariants(String label, RenderResult r) {
-        String svg = r.svg();
+    private static void assertInvariants(String label, String svg) {
         assertTrue(svg.length() <= 2_000_000, label + ": output within cap");
         for (int i = 0; i < svg.length(); i++) {
             char c = svg.charAt(i);
@@ -48,13 +51,16 @@ class HostileInputHardeningTest {
         }
     }
 
-    @Test
-    void fuzzCorpusNeverEscapesAndKeepsTheAlphabet() {
+    /**
+     * The shared hostile corpus: POSITIVE renders first (indices 0 and 1, the mixed-fixture
+     * rule), then the hostile set. One builder so every public seam faces the same inputs.
+     */
+    private static List<String> hostileCorpus() {
         List<String> corpus = new ArrayList<>();
         // POSITIVE renders FIRST (the mixed-fixture rule): the same fixture must
         // prove the pipeline still renders real math within the caps.
-        corpus.add("\\frac{a}{b} + \\sum_{i=1}^n x_i^2");
-        corpus.add("P\\left(A=2\\middle|\\frac{A^2}{B}>4\\right)");
+        corpus.add(POSITIVE_SUM_FRAC);
+        corpus.add(POSITIVE_MIDDLE);
         // Hostile: garbage commands, deep nesting, wide rows, unterminated groups,
         // literal control chars in the INPUT, seeded-random ASCII soup (deterministic).
         corpus.add("x y");
@@ -74,18 +80,98 @@ class HostileInputHardeningTest {
             }
             corpus.add(sb.toString());
         }
+        return corpus;
+    }
 
+    @Test
+    void fuzzCorpusNeverEscapesAndKeepsTheAlphabet() {
+        List<String> corpus = hostileCorpus();
         int okCount = 0;
         for (String input : corpus) {
             // NEVER an Error: renderWithDiagnostics must classify, not throw.
             RenderResult r = LatteX.renderWithDiagnostics(input);
-            assertInvariants(shortLabel(input), r);
+            assertInvariants(shortLabel(input), r.svg());
             if (r.diagnostics().outcome() == Outcome.OK) {
                 okCount++;
             }
         }
         // The POSITIVE half of the mixed fixture: real math rendered fine.
         assertTrue(okCount >= 2, "positive renders succeeded alongside the hostile set");
+    }
+
+    /**
+     * Plan lattex-seam-containment-parity: the two seams that used to bypass the
+     * {@code containRender} boundary face the SAME hostile corpus as
+     * {@code renderWithDiagnostics}. {@code tryRenderMath} must classify every input into
+     * present-or-empty and never throw; {@code toMathML(String)} must either serialize or throw
+     * the typed {@code LatteXException} channel, never anything else. The positives at the head
+     * of the corpus must still succeed through both seams (the mixed-fixture rule).
+     */
+    @Test
+    void bothSeamsFaceTheHostileCorpusWithoutEscaping() {
+        List<String> corpus = hostileCorpus();
+        int seamOk = 0;
+        int mathmlOk = 0;
+        for (String input : corpus) {
+            String label = shortLabel(input);
+            java.util.Optional<LatteX.RenderedMath> rm = LatteX.tryRenderMath(input);
+            if (rm.isPresent()) {
+                seamOk++;
+                assertInvariants(label + " [tryRenderMath]", rm.get().svg());
+            }
+            try {
+                String mml = LatteX.toMathML(input);
+                assertTrue(mml.startsWith("<math"), label + ": toMathML yields a <math> element");
+                mathmlOk++;
+            } catch (LatteXException typed) {
+                // the typed channel: fine
+            } catch (RuntimeException untyped) {
+                throw new AssertionError(label + ": toMathML escaped an untyped "
+                    + untyped.getClass().getName(), untyped);
+            }
+        }
+        assertTrue(seamOk >= 2, "positive renders succeeded through tryRenderMath, got " + seamOk);
+        assertTrue(mathmlOk >= 2, "positive serializations succeeded through toMathML, got " + mathmlOk);
+        // The generic count above can be met by the plain-atom inputs (x y, abc) even if BOTH
+        // structured positives broke, so each designated positive is asserted by name, per seam.
+        for (String positive : new String[] {POSITIVE_SUM_FRAC, POSITIVE_MIDDLE}) {
+            String label = shortLabel(positive);
+            java.util.Optional<LatteX.RenderedMath> rm = LatteX.tryRenderMath(positive);
+            assertTrue(rm.isPresent(), label + ": designated positive must render through tryRenderMath");
+            assertInvariants(label + " [tryRenderMath positive]", rm.get().svg());
+            String mml = LatteX.toMathML(positive);
+            assertTrue(mml.startsWith("<math"), label + ": designated positive must serialize through toMathML");
+        }
+    }
+
+    /**
+     * Plan lattex-seam-containment-parity, the headline: a REAL {@code StackOverflowError}
+     * (legal deep input on a starved stack, see {@link StackStarved}) through either seam
+     * arrives on that seam's typed failure channel. Before the fix {@code toMathML(String)} had
+     * no guard at all and {@code tryRenderMath} caught only {@code RuntimeException}, so the
+     * Error escaped both.
+     */
+    @Test
+    void aStackOverflowInEitherSeamArrivesOnItsTypedChannel() {
+        // Positive half on a roomy stack, which is also the class warm-up StackStarved needs.
+        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(DEEP)",
+            () -> LatteX.tryRenderMath(StackStarved.DEEP));
+        assertTrue(((java.util.Optional<?>) rendered).isPresent(), "deep input renders on a roomy stack");
+        Object mathml = StackStarved.assertSucceedsOnRoomyStack("toMathML(DEEP)",
+            () -> LatteX.toMathML(StackStarved.DEEP));
+        assertTrue(((String) mathml).startsWith("<math"), "deep input serializes on a roomy stack");
+        StackStarved.assertFixtureOverflows("the bare parse both seams run first",
+            () -> com.lattex.parse.MathParser.parse(StackStarved.DEEP));
+
+        StackStarved.Outcome mml = StackStarved.run(() -> LatteX.toMathML(StackStarved.DEEP));
+        assertTrue(mml.threw() && mml.thrown() instanceof LatteXException,
+            "toMathML must contain an overflow into LatteXException: " + mml.describe());
+        assertTrue(StackStarved.overflowed(mml.thrown()),
+            "the contained failure keeps the StackOverflowError as its cause: " + mml.describe());
+
+        StackStarved.Outcome seam = StackStarved.run(() -> LatteX.tryRenderMath(StackStarved.DEEP));
+        assertTrue(!seam.threw() && java.util.Optional.empty().equals(seam.value()),
+            "tryRenderMath must turn an overflow into Optional.empty: " + seam.describe());
     }
 
     @Test
