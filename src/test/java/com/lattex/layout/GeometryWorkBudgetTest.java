@@ -44,10 +44,12 @@ class GeometryWorkBudgetTest {
 
     @Test
     void ordinaryRulesAndRepeatedSeparatorsKeepTheirInk() {
-        String source = "\\begin{array}{|c@{\\begin{array}{||c|}x\\end{array}}|}"
-            + "a\\\\b\\end{array}";
+        // Separator material and a vertical rule cannot share one column boundary.
+        // Put the repeated separator between two real columns, with outer bars apart.
+        String source = "\\begin{array}{|c@{\\begin{array}{||c|}x\\end{array}}c|}"
+            + "a&b\\\\c&d\\end{array}";
         Layout result = layout(source);
-        assertEquals(4, result.glyphs().size(), "two cells plus the separator on BOTH rows");
+        assertEquals(6, result.glyphs().size(), "four cells plus the separator on BOTH rows");
         assertEquals(8, result.rules().size(), "two outer bars plus three separator bars per row");
         assertTrue(layout("\\begin{array}{c}\\hdashline x\\end{array}").rules().size() > 0);
         String colored = "\\textcolor{red}{" + source + "}";
