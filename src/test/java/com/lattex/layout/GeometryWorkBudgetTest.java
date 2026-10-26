@@ -94,6 +94,47 @@ class GeometryWorkBudgetTest {
     }
 
     @Test
+    void ruleCapacityPrecheckRefusesBeforeAnyGlyphOrRuleAppend() {
+        // Construct the shared originals unbound, leaving exactly one rule slot below.
+        PositionedGlyph glyph = new PositionedGlyph(1, 0, 0, 1);
+        Rule polygon = Rule.polygon(new double[] {0, 0, 1, 0, 0, 1}, null);
+        Box shared = new Box(List.of(glyph), List.of(polygon, polygon), 1, 1, 0);
+        RenderWorkBudget.withLayoutBudget(() -> {
+            for (int i = 0; i < 99_999; i++) {
+                new Rule(0, 0, 1, 1);
+            }
+            List<PositionedGlyph> glyphs = new ArrayList<>();
+            List<Rule> rules = new ArrayList<>();
+            assertWorkCap(() -> shared.drawInto(glyphs, rules, 0, 0));
+            // Without the rule precheck, the glyph and first rule would be appended
+            // before the second rule's canonical constructor refuses the stamp.
+            assertTrue(glyphs.isEmpty(), "rule precheck must precede every glyph append");
+            assertTrue(rules.isEmpty(), "rule precheck must precede every rule append");
+            return null;
+        });
+    }
+
+    @Test
+    void glyphCapacityPrecheckRefusesBeforeAnyGlyphOrRuleAppend() {
+        // Two requested copies must refuse with one slot left, not after a partial stamp.
+        PositionedGlyph glyph = new PositionedGlyph(1, 0, 0, 1);
+        Rule rule = new Rule(0, 0, 1, 1);
+        Box shared = new Box(List.of(glyph, glyph), List.of(rule), 1, 1, 0);
+        RenderWorkBudget.withLayoutBudget(() -> {
+            for (int i = 0; i < 399_999; i++) {
+                new PositionedGlyph(1, 0, 0, 1);
+            }
+            List<PositionedGlyph> glyphs = new ArrayList<>();
+            List<Rule> rules = new ArrayList<>();
+            assertWorkCap(() -> shared.drawInto(glyphs, rules, 0, 0));
+            // Removing only the glyph precheck permits one append before refusal.
+            assertTrue(glyphs.isEmpty(), "glyph precheck must precede every glyph append");
+            assertTrue(rules.isEmpty(), "glyph precheck must precede every rule append");
+            return null;
+        });
+    }
+
+    @Test
     void glyphCopiesAndColorRebuildsUseTheSameCumulativeAllowance() {
         PositionedGlyph original = new PositionedGlyph(1, 0, 0, 1);
         Box shared = new Box(Collections.nCopies(1_000, original), List.of(), 1, 1, 0);
