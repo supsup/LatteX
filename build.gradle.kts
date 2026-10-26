@@ -33,7 +33,7 @@ group = "com.lattex"
 //
 // 0.12.0 (2026-08-06) was the FIRST tagged release. Release history lives in
 // RELEASE_NOTES.md rather than accumulating here.
-version = "0.13.0-SNAPSHOT"
+version = "0.13.0"
 
 java {
     toolchain {
