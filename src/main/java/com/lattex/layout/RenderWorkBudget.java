@@ -2,11 +2,13 @@ package com.lattex.layout;
 
 import com.lattex.parse.MathNode;
 import com.lattex.parse.MathSyntaxException;
+import java.util.function.Supplier;
 
 /**
  * Internal render preflight shared by SVG layout and MathML serialization. Public only
  * so the API implementation can call into this unexported package; no mutable state
- * survives a call.
+ * survives a call. Layout additionally binds a cumulative allocation allowance for
+ * every primitive producer and copy, including geometry without text payload.
  *
  * <p>Tokens and boxes do not measure text: one TextRun token can request thousands of
  * glyphs, and a shared array separator can be stamped on every row. Charge UTF-16
@@ -21,6 +23,57 @@ public final class RenderWorkBudget {
     private static final long MAX_LAYOUT_COPY_UNITS = 2_000_000;
     private static final long MAX_MATHML_UNITS = 2_000_000;
     private static final long MAX_MATHML_COPY_UNITS = 16_000_000;
+
+    // Cumulative construction events, not the final retained primitive count. A flat
+    // 96k-atom layout creates 288k glyph placements (producer, row, final flattening);
+    // even one color-copy layer fits under 400k. Rules have their own 100k allowance
+    // because a tiny AST can generate or repeatedly stamp very large rule lists.
+    // These bound work and object counts, not bytes or a promise about arbitrary heaps.
+    static final long MAX_GLYPH_ALLOCATIONS = 400_000;
+    static final long MAX_RULE_ALLOCATIONS = 100_000;
+    private static final ScopedValue<Allocations> ALLOCATIONS = ScopedValue.newInstance();
+
+    private static final class Allocations {
+        long glyphs;
+        long rules;
+    }
+
+    /** Synchronous render-local binding; nested calls and failures restore the caller. */
+    static <T> T withLayoutBudget(Supplier<T> action) {
+        return ScopedValue.where(ALLOCATIONS, new Allocations()).call(action::get);
+    }
+
+    static void chargeGlyph() {
+        if (ALLOCATIONS.isBound()) {
+            Allocations current = ALLOCATIONS.get();
+            current.glyphs = charge(current.glyphs, 1, MAX_GLYPH_ALLOCATIONS,
+                "glyph allocations");
+        }
+    }
+
+    static void chargeRule() {
+        if (ALLOCATIONS.isBound()) {
+            Allocations current = ALLOCATIONS.get();
+            current.rules = charge(current.rules, 1, MAX_RULE_ALLOCATIONS,
+                "rule allocations");
+        }
+    }
+
+    // Capacity prechecks reserve nothing: canonical constructors charge each event
+    // exactly once. Used before producer loops and polygon clone/translation work.
+    static void requireGlyphs(long count) {
+        if (ALLOCATIONS.isBound()) {
+            charge(ALLOCATIONS.get().glyphs, count, MAX_GLYPH_ALLOCATIONS,
+                "glyph allocations");
+        }
+    }
+
+    static void requireRules(long count) {
+        if (ALLOCATIONS.isBound()) {
+            charge(ALLOCATIONS.get().rules, count, MAX_RULE_ALLOCATIONS,
+                "rule allocations");
+        }
+    }
 
     private final boolean mathml;
     private long textUnits;

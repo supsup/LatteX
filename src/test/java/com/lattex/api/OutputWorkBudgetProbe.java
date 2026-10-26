@@ -7,6 +7,14 @@ public final class OutputWorkBudgetProbe {
     private OutputWorkBudgetProbe() { }
 
     static String witness(String command) {
+        if (command.equals("dashed")) {
+            return "\\begin{array}{c}\\hdashline\\hspace{1000000000em}\\end{array}";
+        }
+        if (command.equals("separator")) {
+            String inner = "\\begin{array}{" + "|".repeat(10_000) + "c}x\\end{array}";
+            return "\\begin{array}{c@{" + inner + "}}"
+                + "x\\\\".repeat(999) + "x\\end{array}";
+        }
         // ~9.5k source chars, 900 macro calls, ~900 text tokens/boxes, but 4.5M
         // materialized characters. Parser splice volume is intentionally well below
         // its limit: a TextRun's payload, rather than token count, is the multiplier.
@@ -35,6 +43,12 @@ public final class OutputWorkBudgetProbe {
             } catch (MathSyntaxException cap) {
                 if (!cap.isCapExceeded() || !cap.getMessage().contains("output work budget")) {
                     throw new AssertionError("expected allocation-time output work refusal", cap);
+                }
+                if (args[1].equals("dashed") && !cap.getMessage().contains("dashed rule geometry")) {
+                    throw new AssertionError("dashes must refuse before their producer loop", cap);
+                }
+                if (args[1].equals("separator") && !cap.getMessage().contains("rule allocations")) {
+                    throw new AssertionError("separator copies must hit cumulative rule accounting", cap);
                 }
             }
             if (!LatteX.render("\\frac{x^2}{2}+\\text{healthy}").startsWith("<svg")

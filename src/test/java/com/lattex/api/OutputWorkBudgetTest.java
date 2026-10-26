@@ -28,30 +28,42 @@ class OutputWorkBudgetTest {
     void svgAndMathMLRefuseAmplificationInSmallHeapForks() throws Exception {
         for (String mode : List.of("svg", "mathml")) {
             for (String command : List.of("text", "textbf")) {
-                Path log = temporary.resolve(mode + "-" + command + ".log");
-                String javaName = System.getProperty("os.name").startsWith("Windows")
-                    ? "java.exe" : "java";
-                String java = Path.of(System.getProperty("java.home"), "bin", javaName).toString();
-                ProcessBuilder builder = new ProcessBuilder(java, "-Xmx48m", "-cp", probeClasspath(),
-                    OutputWorkBudgetProbe.class.getName(), mode, command)
-                    .redirectErrorStream(true).redirectOutput(log.toFile());
-                // The heap bound must not be replaced or supplemented by ambient flags.
-                builder.environment().remove("JAVA_TOOL_OPTIONS");
-                builder.environment().remove("JDK_JAVA_OPTIONS");
-                builder.environment().remove("_JAVA_OPTIONS");
-                Process fork = builder.start();
-                try {
-                    assertTrue(fork.waitFor(30, TimeUnit.SECONDS), "small-heap probe timed out");
-                    String output = Files.readString(log, StandardCharsets.UTF_8);
-                    assertEquals(0, fork.exitValue(), output);
-                    assertEquals("OUTPUT_WORK_CAP_OK " + mode + " " + command,
-                        output.strip(), "typed cap, never OOM or an unrelated parser cap");
-                } finally {
-                    if (fork.isAlive()) {
-                        fork.destroyForcibly();
-                        fork.waitFor(5, TimeUnit.SECONDS);
-                    }
-                }
+                assertSmallHeapProbe(mode, command);
+            }
+        }
+    }
+
+    @Test
+    void geometryWithoutTextRefusesBeforeAllocationInSmallHeapForks() throws Exception {
+        // The disabled-accounting mutant must fail only in these bounded forks,
+        // never by constructing a billion-rule witness in the test worker JVM.
+        assertSmallHeapProbe("svg", "dashed");
+        assertSmallHeapProbe("svg", "separator");
+    }
+
+    private void assertSmallHeapProbe(String mode, String command) throws Exception {
+        Path log = temporary.resolve(mode + "-" + command + ".log");
+        String javaName = System.getProperty("os.name").startsWith("Windows")
+            ? "java.exe" : "java";
+        String java = Path.of(System.getProperty("java.home"), "bin", javaName).toString();
+        ProcessBuilder builder = new ProcessBuilder(java, "-Xmx48m", "-cp", probeClasspath(),
+            OutputWorkBudgetProbe.class.getName(), mode, command)
+            .redirectErrorStream(true).redirectOutput(log.toFile());
+        // The heap bound must not be replaced or supplemented by ambient flags.
+        builder.environment().remove("JAVA_TOOL_OPTIONS");
+        builder.environment().remove("JDK_JAVA_OPTIONS");
+        builder.environment().remove("_JAVA_OPTIONS");
+        Process fork = builder.start();
+        try {
+            assertTrue(fork.waitFor(30, TimeUnit.SECONDS), "small-heap probe timed out");
+            String output = Files.readString(log, StandardCharsets.UTF_8);
+            assertEquals(0, fork.exitValue(), output);
+            assertEquals("OUTPUT_WORK_CAP_OK " + mode + " " + command,
+                output.strip(), "typed cap, never OOM or an unrelated parser cap");
+        } finally {
+            if (fork.isAlive()) {
+                fork.destroyForcibly();
+                fork.waitFor(5, TimeUnit.SECONDS);
             }
         }
     }

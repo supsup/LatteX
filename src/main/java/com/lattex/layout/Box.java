@@ -46,6 +46,10 @@ record Box(List<PositionedGlyph> glyphs, List<Rule> rules,
      * coordinate space (dy positive = further down).
      */
     void drawInto(List<PositionedGlyph> outGlyphs, List<Rule> outRules, double dx, double dy) {
+        // Reject the entire stamp before translating/cloning any polygon arrays.
+        // Canonical constructors charge the actual copies, so these do not reserve.
+        RenderWorkBudget.requireGlyphs(glyphs.size());
+        RenderWorkBudget.requireRules(rules.size());
         for (PositionedGlyph g : glyphs) {
             // unmappedCodePoint rides through the translate: every author glyph reaches the final
             // Layout via this copy, so dropping it here would leave the diagnostic reporting only

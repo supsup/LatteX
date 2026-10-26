@@ -1,5 +1,6 @@
 package com.lattex.layout;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -59,6 +60,12 @@ class ResourceCapDirectTest {
             () -> LayoutEngine.layout(flatList(150_000), ctx));
         assertTrue(ex.isCapExceeded(), "box-budget trip is typed as a resource cap");
         assertTrue(ex.getMessage().contains("box budget"), ex.getMessage());
+    }
+
+    @Test
+    void directNinetySixThousandFlatAtomsRetainLayoutAcceptance() {
+        LayoutContext ctx = new LayoutContext(FONT, FONT.mathConstants(), 40.0);
+        assertEquals(96_000, LayoutEngine.layout(flatList(96_000), ctx).glyphs().size());
     }
 
     @Test
