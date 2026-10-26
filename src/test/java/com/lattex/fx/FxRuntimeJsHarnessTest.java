@@ -74,6 +74,157 @@ class FxRuntimeJsHarnessTest {
         return context.eval(Source.create("js", script));
     }
 
+    // ---- Slice 1: bounded lightning/storm work and appearance ------------------
+
+    private record BoltRun(String work, String geometry, String appearance,
+                           int strokes, int segments, int gradients,
+                           double alpha, double width, double blur, String filters) {}
+
+    /** Fresh clocks/queues and the SAME seed for each run. Work survives teardown. */
+    private BoltRun boltRun(String effect, String bolts, String intensity,
+                            String route, boolean reducedMotion) throws IOException {
+        try (Context run = Context.newBuilder("js").build()) {
+            if (reducedMotion) {
+                run.eval("js", "globalThis.__lxStubReducedMotion = true;");
+            }
+            run.eval(source("/com/lattex/fx/harness-dom-stub.js", "harness-dom-stub.js"));
+            run.eval("js", "globalThis.__lxTestHook = function (fx) { globalThis.__fx = fx; };");
+            run.eval(source("/com/lattex/fx/lattex-fx.js", "lattex-fx.js"));
+            Value el = run.eval("js", "globalThis.__bolt = __lxMakeEl({}); __lxSeedRandom(173); __bolt");
+            el.getMember("setAttribute").execute("data-lx-fx-hover", effect);
+            if (bolts != null) { el.getMember("setAttribute").execute("data-lx-fx-bolts", bolts); }
+            if (intensity != null) { el.getMember("setAttribute").execute("data-lx-fx-intensity", intensity); }
+            switch (route) {
+                case "direct" -> run.getBindings("js").getMember("__fx").getMember(effect).execute(el);
+                case "play" -> run.getBindings("js").getMember("__fx").getMember("play")
+                    .execute(el, effect, "400ms");
+                case "event" -> {
+                    run.eval("js", "document.querySelectorAll = function (sel) {"
+                        + " return sel === '.lx-math' ? [__bolt] : []; }; __fx.init();");
+                    el.getMember("__fire").execute("mouseenter");
+                }
+                case "public" -> assertTrue(run.eval("js", "LatteXFx.play(__bolt)").asBoolean());
+                default -> throw new AssertionError("unknown route " + route);
+            }
+            // Interleave strike timers with monotonically advancing RAF timestamps.
+            run.eval("js", "for (var turn = 0; turn < 12; turn++) {"
+                + " __lxRunTimeouts(1); __lxFlushRaf(100); }");
+            assertEquals(0, run.eval("js", "__lxBodyChildren()").asInt(), "run really completed");
+            assertEquals(0, run.eval("js", "__lxActiveTimeouts()").asInt(), "no hidden pending work");
+            assertEquals(0, run.eval("js", "__lxScrollListeners()").asInt());
+            Value work = run.eval("js", "__lxWorkSnapshot()");
+            Value caps = run.eval("js", "({"
+                + "alpha: Math.max(0, ...__lxCanvasStrokes.map(s => s.alpha)),"
+                + "width: Math.max(0, ...__lxCanvasStrokes.map(s => s.width)),"
+                + "blur: Math.max(0, ...__lxCanvasStrokes.map(s => s.blur)) })");
+            return new BoltRun(run.eval("js", "JSON.stringify(__lxWorkSnapshot())").asString(),
+                run.eval("js", "JSON.stringify(__lxCanvasStrokes.map(s => s.points))").asString(),
+                run.eval("js", "JSON.stringify(__lxCanvasStrokes)").asString(),
+                work.getMember("strokes").asInt(), work.getMember("segments").asInt(),
+                work.getMember("gradients").asInt(), caps.getMember("alpha").asDouble(),
+                caps.getMember("width").asDouble(), caps.getMember("blur").asDouble(),
+                run.eval("js", "JSON.stringify(__lxFilterWrites)").asString());
+        }
+    }
+
+    @Test
+    void boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork() throws IOException {
+        for (String effect : new String[]{"lightning", "storm"}) {
+            assertEquals(boltRun(effect, null, null, "play", false),
+                boltRun(effect, "2", "100", "play", false), effect);
+        }
+    }
+
+    @Test
+    void handcraftedBoltBoundsChangeActualGeometryForBothEffectsOnEveryRoute() throws IOException {
+        for (String effect : new String[]{"lightning", "storm"}) {
+            for (String route : new String[]{"direct", "play", "event", "public"}) {
+                BoltRun min = boltRun(effect, "1", "100", route, false);
+                BoltRun max = boltRun(effect, "8", "100", route, false);
+                assertTrue(min.strokes() > 0 && min.segments() > 0, effect + route);
+                assertEquals(min.strokes() * 8, max.strokes(), "actual bounded bolt count");
+                assertEquals(min.segments() * 8, max.segments(), "actual bounded segment work");
+                assertEquals(min, boltRun(effect, "0", "100", route, false), "DOM min clamps");
+                assertEquals(max, boltRun(effect, "9", "100", route, false), "DOM max clamps");
+                assertEquals(max, boltRun(effect, "9".repeat(400), "100", route, false),
+                    "huge whole decimals saturate without overflow");
+            }
+        }
+    }
+
+    @Test
+    void malformedDomKnobsUseDefaultsWithoutPartialParsing() throws IOException {
+        String[] malformed = {"", "+2", "-1", "2.5", "2e1", "2px", " 2", "2 ",
+            "2\n", "٢", "0x2", "Infinity", "NaN", "2;3"};
+        for (String effect : new String[]{"lightning", "storm"}) {
+            BoltRun defaults = boltRun(effect, null, null, "play", false);
+            for (String raw : malformed) {
+                assertEquals(defaults, boltRun(effect, raw, raw, "play", false), effect + raw);
+            }
+            assertEquals(boltRun(effect, "8", "300", "play", false),
+                boltRun(effect, "00008", "000300", "play", false), "whole leading zeros are decimal");
+        }
+    }
+
+    @Test
+    void intensityChangesOnlyBoundedAppearanceAtIdenticalSeedClockAndBolts() throws IOException {
+        for (String effect : new String[]{"lightning", "storm"}) {
+            BoltRun normal = boltRun(effect, "8", "100", "play", false);
+            BoltRun bright = boltRun(effect, "8", "300", "play", false);
+            assertEquals(normal.work(), bright.work(), "ALL cumulative work must match: " + effect);
+            assertEquals(normal.geometry(), bright.geometry(), "intensity cannot alter geometry");
+            assertFalse(normal.appearance().equals(bright.appearance()), "appearance really changes");
+            assertEquals(0.9, normal.alpha(), 0.0001, "default alpha preserved");
+            assertEquals(9, normal.width(), 0.0001, "default 2+k width preserved at eight bolts");
+            assertEquals(1, bright.alpha(), 0.0001);
+            assertEquals(12, bright.width(), 0.0001, "fixed stroke cap");
+            assertTrue(bright.blur() <= 48 && bright.blur() > normal.blur(), "fixed glow cap");
+            assertEquals(bright, boltRun(effect, "8", "301", "play", false));
+            assertEquals(bright, boltRun(effect, "8", "9".repeat(400), "play", false));
+            BoltRun faint = boltRun(effect, "8", "1", "play", false);
+            assertEquals(normal.work(), faint.work(), "positive low intensity also preserves work");
+            assertTrue(faint.alpha() < normal.alpha() && faint.width() < normal.width());
+            if (effect.equals("lightning")) {
+                assertTrue(normal.gradients() > 0, "convergence really exercises radial gradients");
+            } else {
+                assertTrue(normal.filters().contains("28px") && normal.filters().contains("20px"),
+                    "default climax halos preserved");
+                assertTrue(bright.filters().contains("84px") && bright.filters().contains("60px")
+                    && bright.filters().contains("36px"), "storm climax reaches fixed halo caps");
+                Matcher halo = Pattern.compile("drop-shadow\\(0 0 ([0-9.]+)px").matcher(bright.filters());
+                while (halo.find()) {
+                    assertTrue(Double.parseDouble(halo.group(1)) <= 84, "all storm halos are bounded");
+                }
+            }
+        }
+    }
+
+    @Test
+    void reducedMotionWinsOverAllNonzeroBoltAndIntensityValues() throws IOException {
+        for (String effect : new String[]{"lightning", "storm"}) {
+            BoltRun gentle = boltRun(effect, "1", "1", "play", true);
+            assertEquals(gentle, boltRun(effect, "8", "300", "play", true));
+            assertEquals(effect.equals("lightning") ? 2 : 1, gentle.strokes(),
+                "the original faint static reduced branch remains in control");
+            assertEquals(2, gentle.width(), 0.0001);
+            assertEquals(effect.equals("lightning") ? 0.45 : 0.55, gentle.alpha(), 0.0001);
+        }
+    }
+
+    @Test
+    void harnessCanvasGradientRetainsMeaningfulStopsAndCountsWorkCumulatively() {
+        Value result = makeEl("(function () { var c = document.createElement('canvas');"
+            + " var ctx = c.getContext('2d'); var g = ctx.createRadialGradient(1,2,0,1,2,8);"
+            + " g.addColorStop(0, '#fff'); g.addColorStop(1, 'transparent');"
+            + " document.body.appendChild(c); c.remove(); return g; })()");
+        assertEquals(2, result.getMember("stops").getArraySize());
+        assertEquals("#fff", result.getMember("stops").getArrayElement(0).getArrayElement(1).asString());
+        assertEquals(2, makeEl("__lxWorkSnapshot().colorStops").asInt());
+        assertEquals(1, makeEl("__lxWorkSnapshot().canvases").asInt());
+        assertEquals(1, makeEl("__lxWorkSnapshot().bodyAppends").asInt());
+        assertEquals(0, makeEl("__lxBodyChildren()").asInt(), "cumulative work survives removal");
+    }
+
     // ---- pin 0: the public page API (plan 51051447) -----------------------------
 
     @Test

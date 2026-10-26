@@ -31,6 +31,7 @@ class ContainerDriftTest {
         "aria-label",
         "data-lx-fx-enter", "data-lx-fx-hover", "data-lx-fx-click",
         "data-lx-fx-duration", "data-lx-fx-glow-color",
+        "data-lx-fx-bolts", "data-lx-fx-intensity",
         "data-lx-glyphmap", "data-lx-groupmap",
         // The graph-* metadata (LxOptionsParser stamps `graph.*` options as hyphenated
         // `data-lx-graph-<key>` for the host-side plotter). These are HYPHENATED, so they
@@ -232,12 +233,60 @@ class ContainerDriftTest {
         assertNoInjection(tag, "substitute marker");
     }
 
+    @Test
+    void numericFxNamesAreExactMembersAndTheirValuesAreBoundedAsciiDecimals() {
+        for (String effect : List.of("lightning", "storm")) {
+            for (int[] values : new int[][]{{1, 0}, {2, 100}, {8, 300}}) {
+                String latex = "\\lx[fx.hover=" + effect + ", fx.bolts=" + values[0]
+                    + ", fx.intensity=" + values[1] + "]{x}";
+                String tag = openTagOf(LatteX.renderStyledHtml(latex));
+                List<String> names = attrNames(tag);
+                for (String name : List.of("data-lx-fx-bolts", "data-lx-fx-intensity")) {
+                    assertTrue(names.contains(name), "explicit knob must actually stamp " + name);
+                    assertTrue(ALLOWED_EXACT.contains(name), "exact entry is load-bearing: " + name);
+                    assertTrue(!DATA_ATTR.matcher(name).matches(), "identifier lane stays closed: " + name);
+                }
+                assertValue(tag, "data-lx-fx-bolts", "[1-8]");
+                assertValue(tag, "data-lx-fx-intensity", "0|[1-9][0-9]?|[12][0-9]{2}|300");
+                assertTrue(tag.contains("data-lx-fx-bolts=\"" + values[0] + "\""), tag);
+                assertTrue(tag.contains("data-lx-fx-intensity=\"" + values[1] + "\""), tag);
+                for (String name : names) {
+                    assertTrue(isAllowed(name), "numeric knob drift: " + name);
+                }
+                assertNoInjection(tag, latex);
+            }
+        }
+        for (String name : List.of("data-lx-fx-strikes", "data-lx-fx-arc",
+                "data-lx-fx-lightning-bolts", "data-lx-fx-intensity-extra")) {
+            assertTrue(!isAllowed(name), "no broad hyphenated-name admission: " + name);
+        }
+    }
+
+    @Test
+    void numericKnobInjectionIsRejectedBeforeAnyContainerCanBeStamped() {
+        for (String effect : List.of("lightning", "storm")) {
+            for (String key : List.of("fx.bolts", "fx.intensity")) {
+                for (String value : List.of("\"2 onload=evil\"", "\"<script>\"",
+                        "\"2&x\"", "\"2\"onclick=evil", "\"2>\"")) {
+                    MathSyntaxException error = org.junit.jupiter.api.Assertions.assertThrows(
+                        MathSyntaxException.class, () -> LatteX.renderStyledHtml(
+                            "\\lx[fx.hover=" + effect + "," + key + "=" + value + "]{x}"));
+                    assertTrue(error.getMessage().contains(key), error.getMessage());
+                    assertTrue(error.getMessage().contains(key.equals("fx.bolts") ? "1..8" : "0..300"),
+                        error.getMessage());
+                }
+            }
+        }
+    }
+
     // ---- battery -----------------------------------------------------------------------
 
     private static List<String> positiveBattery() {
         return List.of(
             "\\frac{a}{b}",                                            // bare, no data attrs
             "\\lx[fx.enter=glow]{x}",
+            "\\lx[fx.hover=lightning, fx.bolts=1, fx.intensity=0]{x}",
+            "\\lx[fx.click=storm, fx.bolts=8, fx.intensity=300]{x}",
             "\\lx[fx.hover=thread]{x + x}",                            // glyphmap sidecar
             "\\lx[fx.enter=cancel]{\\frac{x}{x}}",                     // glyphmap sidecar (2nd consumer)
             "\\lx[fx.click=shatter]{x}",

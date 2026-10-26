@@ -41,11 +41,17 @@ class FxRuntimeLifecycleTest {
     private Value fx;
 
     private void boot(boolean reducedMotion) throws IOException {
+        boot(reducedMotion, "");
+    }
+
+    private void boot(boolean reducedMotion, String beforeRuntime) throws IOException {
+        if (context != null) { context.close(); }
         context = Context.newBuilder("js").build();
         if (reducedMotion) {
             context.eval(Source.create("js", "globalThis.__lxStubReducedMotion = true;"));
         }
         context.eval(source("/com/lattex/fx/harness-dom-stub.js", "harness-dom-stub.js"));
+        context.eval(Source.create("js", beforeRuntime));
         context.eval(Source.create("js",
             "globalThis.__lxTestHook = function (internals) { globalThis.__lxInternals = internals; };"));
         context.eval(source("/com/lattex/fx/lattex-fx.js", "lattex-fx.js"));
@@ -74,6 +80,143 @@ class FxRuntimeLifecycleTest {
 
     private int intOf(String expr) {
         return js(expr).asInt();
+    }
+
+    // ---- Slice 1: no-work initialization and stale-callback fences -------------
+
+    private String work() {
+        return js("JSON.stringify(__lxWorkSnapshot())").asString();
+    }
+
+    private void finishBoltRun() {
+        js("for (var turn = 0; turn < 12; turn++) { __lxRunTimeouts(1); __lxFlushRaf(100); }");
+    }
+
+    @Test
+    void zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute() throws IOException {
+        for (boolean reducedMotion : new boolean[]{false, true}) {
+            // The ordinary DOMContentLoaded bootstrap listener belongs to the APP,
+            // not to a target effect. Compare target deltas against this baseline.
+            boot(reducedMotion, "document.readyState = 'loading';");
+            js("__lxFireDocument('DOMContentLoaded')");
+            String baseline = work();
+            assertEquals(1, intOf("__lxWorkSnapshot().listenerAdds"), "common bootstrap counted");
+            for (String effect : new String[]{"lightning", "storm"}) {
+                boot(reducedMotion, "document.readyState = 'loading';"
+                    + " globalThis.__zero = __lxMakeEl({'data-lx-fx-enter':'" + effect + "',"
+                    + " 'data-lx-fx-hover':'" + effect + "', 'data-lx-fx-click':'" + effect + "',"
+                    + " 'data-lx-fx-bolts':'8', 'data-lx-fx-intensity':'0'}, 2);"
+                    + " document.querySelectorAll = function (sel) {"
+                    + " return sel === '.lx-math' ? [__zero] : []; };");
+                assertEquals(baseline, work(), "no eager target work before DOM ready");
+                js("__lxFireDocument('DOMContentLoaded')");
+                assertEquals(baseline, work(), "zero target initialization adds NOTHING: " + effect);
+                js("__zero.__fire('mouseenter'); __zero.__fire('click'); LatteXFx.play(__zero)");
+                fx.getMember(effect).execute(js("__zero"));
+                fx.getMember("play").execute(js("__zero"), effect, "400ms");
+                finishBoltRun();
+                assertEquals(baseline, work(), "zero direct/event/public paths add NOTHING");
+                assertEquals("", valueOrEmpty(js("__zero.style.opacity")), "equation stays visible");
+                assertEquals("", valueOrEmpty(js("__zero.style.cursor")), "no inert click affordance");
+                assertEquals(0, intOf("__lxBodyChildren()"));
+                assertEquals(0, intOf("__lxScrollListeners()"));
+            }
+        }
+    }
+
+    @Test
+    void everyPlayRereadsBoundsAndZeroEvenForPreviouslyArmedEvents() throws IOException {
+        for (String effect : new String[]{"lightning", "storm"}) {
+            for (String route : new String[]{"direct", "play", "hover", "click", "public"}) {
+                boot(false);
+                Value el = js("globalThis.__changing = __lxMakeEl({'data-lx-fx-hover':'" + effect
+                    + "', 'data-lx-fx-click':'" + effect + "', 'data-lx-fx-bolts':'1',"
+                    + " 'data-lx-fx-intensity':'100'});"
+                    + " document.querySelectorAll = function (sel) {"
+                    + " return sel === '.lx-math' ? [__changing] : []; }; __lxInternals.init(); __changing");
+                String trigger = switch (route) {
+                    case "direct" -> "__lxInternals." + effect + "(__changing)";
+                    case "play" -> "__lxInternals.play(__changing, '" + effect + "', '400ms')";
+                    case "hover" -> "__changing.__fire('mouseenter')";
+                    case "click" -> "__changing.__fire('click')";
+                    case "public" -> "LatteXFx.play(__changing)";
+                    default -> throw new AssertionError(route);
+                };
+                js(trigger);
+                finishBoltRun();
+                int first = intOf("__lxWorkSnapshot().strokes");
+                assertTrue(first > 0, "positive control " + effect + route);
+                el.getMember("setAttribute").execute("data-lx-fx-bolts", "999999999999999999999999999");
+                el.getMember("setAttribute").execute("data-lx-fx-intensity", "300");
+                js(trigger);
+                finishBoltRun();
+                assertEquals(first * 8, intOf("__lxWorkSnapshot().strokes") - first,
+                    "updated DOM clamps on replay, including armed event closures: " + effect + route);
+                el.getMember("setAttribute").execute("data-lx-fx-intensity", "000");
+                String beforeZero = work();
+                js(trigger);
+                finishBoltRun();
+                assertEquals(beforeZero, work(), "updated zero must do no work: " + effect + route);
+            }
+        }
+    }
+
+    @Test
+    void zeroOnlyDisablesBoltTriggersAndPreservesMixedPrehiddenKeyframes() throws IOException {
+        boot(false);
+        js("globalThis.__mixed = __lxMakeEl({'data-lx-fx-enter':'fade',"
+            + " 'data-lx-fx-hover':'lightning', 'data-lx-fx-click':'pulse', 'data-lx-fx-intensity':'0'});"
+            + " __mixed.style.opacity = '0';"
+            + " document.querySelectorAll = function (sel) { return sel === '.lx-math' ? [__mixed] : []; };"
+            + " __lxInternals.init();");
+        assertEquals("0", js("__mixed.style.opacity").asString(), "preserve unrelated enter pre-hide");
+        assertTrue(js("__mixed.style.animation").asString().startsWith("lx-fade "));
+        assertEquals(2, intOf("__lxWorkSnapshot().listenerAdds"), "fade pin and pulse click only");
+        String beforeHover = work();
+        js("__mixed.__fire('mouseenter')");
+        assertEquals(beforeHover, work(), "zero lightning has no hover listener");
+        js("__mixed.__fire('animationend'); __mixed.__fire('click')");
+        assertEquals("1", js("__mixed.style.opacity").asString(), "normal fade reveal retained");
+        assertTrue(js("__mixed.style.animation").asString().startsWith("lx-pulse "));
+        assertEquals("pointer", js("__mixed.style.cursor").asString());
+    }
+
+    @Test
+    void boltScrollTeardownParksAlreadyQueuedCallbacksInBothMotionModes() throws IOException {
+        for (boolean reducedMotion : new boolean[]{false, true}) {
+            for (String effect : new String[]{"lightning", "storm"}) {
+                for (boolean midStrike : new boolean[]{false, true}) {
+                    boot(reducedMotion);
+                    Value el = js("globalThis.__scrollBolt = __lxMakeEl({'data-lx-fx-bolts':'8',"
+                        + " 'data-lx-fx-intensity':'300'});"
+                        + " __scrollBolt.style.filter = 'pristine'; __scrollBolt.style.transition = 'original'; __scrollBolt");
+                    fx.getMember("play").execute(el, effect, "400ms");
+                    assertTrue(intOf("__lxBodyChildren()") > 0, "positive control: overlays exist");
+                    if (midStrike && !reducedMotion) {
+                        js("__lxRunTimeouts(1); __lxFlushRaf(14)");
+                        assertTrue(intOf("__lxWorkSnapshot().strokes") > 0, "actual strike drawn");
+                    }
+                    js("__lxFireScroll(0, 10)");
+                    assertEquals(0, intOf("__lxBodyChildren()"), "scroll removes all fixed overlays");
+                    assertEquals(0, intOf("__lxScrollListeners()"));
+                    assertEquals("pristine", js("__scrollBolt.style.filter").asString());
+                    assertEquals("original", js("__scrollBolt.style.transition").asString());
+                    // Executing an already queued callback counts as rafRun. It must
+                    // perform NO drawing, DOM/style writes, or new scheduling.
+                    String parked = js("(function () { var w = __lxWorkSnapshot();"
+                        + " delete w.rafRun; return JSON.stringify(w); })()").asString();
+                    finishBoltRun();
+                    assertEquals(parked, js("(function () { var w = __lxWorkSnapshot();"
+                        + " delete w.rafRun; return JSON.stringify(w); })()").asString(),
+                        "queued callbacks cannot resurrect work: " + effect + reducedMotion + midStrike);
+                    assertEquals(0, intOf("__lxActiveTimeouts()"));
+                    assertEquals(0, intOf("__lxBodyChildren()"));
+                    assertEquals("pristine", js("__scrollBolt.style.filter").asString());
+                    assertFalse(js("LatteXFx.destroy(__scrollBolt)").asBoolean(),
+                        "Slice 1 does not expand the public destroy contract");
+                }
+            }
+        }
     }
 
     // ---- hologram: full teardown (review HIGH) ---------------------------------
