@@ -178,9 +178,14 @@ jobs:
         include:
         - lane: lattex-budget
           repository: supsup/LatteX
-          sha: df3853b069300889348b67b9dfc2e156e77fe90e
+          sha: 3aed24e8f17dbfbb1fccd4384c0d7c62ee26ef63
           base: 3718dc43ec8de09e8717f348b634cacfdd754018
           plan: 5d34cd44-5e72-43b5-a17e-7d383b4e7bd7
+        - lane: sirentide-policy
+          repository: supsup/Sirentide
+          sha: e4378057d79c1ee838090b8292aefb10dfcba03b
+          base: 2f0fc0646be884451d8268a5cd77c88ff534aa9f
+          plan: 17ae2f2f-ef14-4eb8-9d52-07f625408d2f
     env:
       SOURCE_SHA: "${{ matrix.sha }}"
       SOURCE_REPOSITORY: "${{ matrix.repository }}"
@@ -190,6 +195,213 @@ jobs:
       LATTEX_REQUIRE_BROWSER: '1'
       SIRENTIDE_REQUIRE_CHROME: '1'
       BREWSHOT_CHROME_ARGS: "--no-sandbox"
+      CAUSAL_SPECS_JSON: "{\"lattex-budget\": {\"mutants\": [{\"id\": \"omit-layout-preflight\",
+        \"path\": \"src/main/java/com/lattex/layout/LayoutEngine.java\", \"before_utf8\":
+        \"        RenderWorkBudget.checkLayout(root);\", \"after_utf8\": \"        //
+        causal mutant: omit layout preflight\", \"starting_file_sha256\": \"ad109cca9bdfd07cfeb49972fcab79df32e2e61aa140b618c7dfb86ce03cf5b5\",
+        \"tests\": [\"com.lattex.api.OutputWorkBudgetTest.svgAndMathMLRefuseAmplificationInSmallHeapForks\"],
+        \"failure_names\": [\"com.lattex.api.OutputWorkBudgetTest.svgAndMathMLRefuseAmplificationInSmallHeapForks\"],
+        \"semantic_any\": [\"text amplification must fail in preflight\"]}, {\"id\":
+        \"omit-mathml-preflight\", \"path\": \"src/main/java/com/lattex/api/LatteX.java\",
+        \"before_utf8\": \"        RenderWorkBudget.checkMathML(node);\", \"after_utf8\":
+        \"        // causal mutant: omit MathML preflight\", \"starting_file_sha256\":
+        \"957373f0200c244ab131184215e002880846a1cb11e1965c4c6ea1a223485529\", \"tests\":
+        [\"com.lattex.api.OutputWorkBudgetTest.svgAndMathMLRefuseAmplificationInSmallHeapForks\"],
+        \"failure_names\": [\"com.lattex.api.OutputWorkBudgetTest.svgAndMathMLRefuseAmplificationInSmallHeapForks\"],
+        \"semantic_any\": [\"text amplification must fail in preflight\", \"hostile
+        output was accepted\"]}, {\"id\": \"omit-dashed-precheck\", \"path\": \"src/main/java/com/lattex/layout/LayoutEngine.java\",
+        \"before_utf8\": \"        double requested = Math.ceil(width / step) + 1;\",
+        \"after_utf8\": \"        double requested = 0;\", \"starting_file_sha256\":
+        \"ad109cca9bdfd07cfeb49972fcab79df32e2e61aa140b618c7dfb86ce03cf5b5\", \"tests\":
+        [\"com.lattex.api.OutputWorkBudgetTest.geometryWithoutTextRefusesBeforeAllocationInSmallHeapForks\"],
+        \"failure_names\": [\"com.lattex.api.OutputWorkBudgetTest.geometryWithoutTextRefusesBeforeAllocationInSmallHeapForks\"],
+        \"semantic_any\": [\"dashes must refuse before their producer loop\"]}, {\"id\":
+        \"box-rule-precheck-omission\", \"path\": \"src/main/java/com/lattex/layout/Box.java\",
+        \"before_utf8\": \"        RenderWorkBudget.requireRules(rules.size());\",
+        \"after_utf8\": \"        // causal mutant: omit box-rule-precheck-omission\",
+        \"starting_file_sha256\": \"05523c2df3a93731c630dd649022559562613ee281372e9213c71a8f8e70bccd\",
+        \"tests\": [\"com.lattex.layout.GeometryWorkBudgetTest.ruleCapacityPrecheckRefusesBeforeAnyGlyphOrRuleAppend\"],
+        \"failure_names\": [\"com.lattex.layout.GeometryWorkBudgetTest.ruleCapacityPrecheckRefusesBeforeAnyGlyphOrRuleAppend\"],
+        \"semantic_any\": [\"rule precheck must precede every glyph append\"]}, {\"id\":
+        \"box-glyph-precheck-omission\", \"path\": \"src/main/java/com/lattex/layout/Box.java\",
+        \"before_utf8\": \"        RenderWorkBudget.requireGlyphs(glyphs.size());\",
+        \"after_utf8\": \"        // causal mutant: omit box-glyph-precheck-omission\",
+        \"starting_file_sha256\": \"05523c2df3a93731c630dd649022559562613ee281372e9213c71a8f8e70bccd\",
+        \"tests\": [\"com.lattex.layout.GeometryWorkBudgetTest.glyphCapacityPrecheckRefusesBeforeAnyGlyphOrRuleAppend\"],
+        \"failure_names\": [\"com.lattex.layout.GeometryWorkBudgetTest.glyphCapacityPrecheckRefusesBeforeAnyGlyphOrRuleAppend\"],
+        \"semantic_any\": [\"glyph precheck must precede every glyph append\"]}, {\"id\":
+        \"canonical-rule-charge-omission\", \"path\": \"src/main/java/com/lattex/layout/Rule.java\",
+        \"before_utf8\": \"        RenderWorkBudget.chargeRule();\", \"after_utf8\":
+        \"        // causal mutant: omit canonical-rule-charge-omission\", \"starting_file_sha256\":
+        \"f6a289545167b5574a422d5adba975fc3e5668fb2b2cbb9c9368c4b83c25dac1\", \"tests\":
+        [\"com.lattex.layout.GeometryWorkBudgetTest.nestedAndExceptionalBindingsRestoreOuterAndUnboundLifetimes\"],
+        \"failure_names\": [\"com.lattex.layout.GeometryWorkBudgetTest.nestedAndExceptionalBindingsRestoreOuterAndUnboundLifetimes\"],
+        \"semantic_any\": [\"Expected com.lattex.parse.MathSyntaxException to be thrown,
+        but nothing was thrown\"]}, {\"id\": \"canonical-glyph-charge-omission\",
+        \"path\": \"src/main/java/com/lattex/layout/PositionedGlyph.java\", \"before_utf8\":
+        \"        RenderWorkBudget.chargeGlyph();\", \"after_utf8\": \"        //
+        causal mutant: omit canonical-glyph-charge-omission\", \"starting_file_sha256\":
+        \"822ec82b8ed269b1b95a86d59983251a62921abb44a220f39f169eaec7ac4ba7\", \"tests\":
+        [\"com.lattex.layout.GeometryWorkBudgetTest.glyphCopiesAndColorRebuildsUseTheSameCumulativeAllowance\"],
+        \"failure_names\": [\"com.lattex.layout.GeometryWorkBudgetTest.glyphCopiesAndColorRebuildsUseTheSameCumulativeAllowance\"],
+        \"semantic_any\": [\"Expected com.lattex.parse.MathSyntaxException to be thrown,
+        but nothing was thrown\"]}, {\"id\": \"shared-allocation-state-mutant\", \"path\":
+        \"src/main/java/com/lattex/layout/RenderWorkBudget.java\", \"before_utf8\":
+        \"    static <T> T withLayoutBudget(Supplier<T> action) {\\n        return
+        ScopedValue.where(ALLOCATIONS, new Allocations()).call(action::get);\\n    }\",
+        \"after_utf8\": \"    private static final Allocations SHARED_ALLOCATIONS
+        = new Allocations();\\n\\n    static <T> T withLayoutBudget(Supplier<T> action)
+        {\\n        return ScopedValue.where(ALLOCATIONS, SHARED_ALLOCATIONS).call(action::get);\\n
+        \   }\", \"starting_file_sha256\": \"e71975b3399101599841c34b8b2682a8e1532c28fd489accb2c0b2e10934a769\",
+        \"tests\": [\"com.lattex.layout.GeometryWorkBudgetTest.concurrentRendersHaveIndependentCumulativeAllowances\"],
+        \"failure_names\": [\"com.lattex.layout.GeometryWorkBudgetTest.concurrentRendersHaveIndependentCumulativeAllowances\"],
+        \"semantic_any\": [\"output work budget\"], \"semantic_all\": [\"output work
+        budget\", \"rule allocations\"], \"failure_types\": [\"java.util.concurrent.ExecutionException\"]}],
+        \"healthy_tests\": [\"com.lattex.layout.GeometryWorkBudgetTest\", \"com.lattex.layout.ResourceCapDirectTest\",
+        \"com.lattex.api.OutputWorkBudgetTest\", \"com.lattex.api.MathMLTest\"]},
+        \"sirentide-policy\": {\"mutants\": [{\"id\": \"omit-dropped-statement-helper\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"        Diagnostics dropped = droppedStatementCaveat(ir, dsl, ok);\", \"after_utf8\":
+        \"        Diagnostics dropped = null;\", \"starting_file_sha256\": \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.sourceAndFontCaveatsComposeIdenticallyOnSingleAndMultiFramePaths\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceAndFontCaveatsComposeIdenticallyOnSingleAndMultiFramePaths\"],
+        \"semantic_any\": [\"dropped statement(s)\"]}, {\"id\": \"omit-numeric-row-helper\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"        Diagnostics rows = xyNumericRowCaveat(ir, dsl, ok);\", \"after_utf8\":
+        \"        Diagnostics rows = null;\", \"starting_file_sha256\": \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.framesAlsoKeepNumericRowAndHeatmapInputCaveats\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.framesAlsoKeepNumericRowAndHeatmapInputCaveats\"],
+        \"semantic_any\": [\"xychart numeric row issue(s)\"]}, {\"id\": \"omit-heatmap-helper\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"        Diagnostics heat = heatmapInputCaveat(ir, dsl, ok);\", \"after_utf8\":
+        \"        Diagnostics heat = null;\", \"starting_file_sha256\": \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.framesAlsoKeepNumericRowAndHeatmapInputCaveats\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.framesAlsoKeepNumericRowAndHeatmapInputCaveats\"],
+        \"semantic_any\": [\"heatmap input issue(s)\"]}, {\"id\": \"omit-emission-carrier\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"        return withFontCoverageCaveat(ok);\", \"after_utf8\": \"        return
+        ok;\", \"starting_file_sha256\": \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"fragment guard refused\"]}, {\"id\": \"omit-fragment-carrier\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"        ok = withFragmentGuardCaveat(ok);\", \"after_utf8\": \"        //
+        causal mutant: omit fragment refusal carrier\", \"starting_file_sha256\":
+        \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\", \"tests\":
+        [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"fragment guard refused\"]}, {\"id\": \"bypass-single-frame-success-policy\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"                return new FramesResult(java.util.List.of(base), successfulDiagnostics(ir,
+        dsl, math,\\n                        \\\"Rendered successfully (single frame
+        — the diagram has no play-through steps).\\\"));\", \"after_utf8\": \"                return
+        new FramesResult(java.util.List.of(base), new Diagnostics(Outcome.OK, STAGE_EMIT,\\n
+        \                       \\\"Rendered successfully (single frame — the diagram
+        has no play-through steps).\\\", -1, \\\"\\\"));\", \"starting_file_sha256\":
+        \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\", \"tests\":
+        [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"expected: <3> but was: <-1>\"]}, {\"id\": \"bypass-multi-frame-success-policy\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"            return new FramesResult(java.util.List.copyOf(frames),\\n                successfulDiagnostics(ir,
+        dsl, math, \\\"Rendered successfully.\\\"));\", \"after_utf8\": \"            return
+        new FramesResult(java.util.List.copyOf(frames),\\n                new Diagnostics(Outcome.OK,
+        STAGE_EMIT, \\\"Rendered successfully.\\\", -1, \\\"\\\"));\", \"starting_file_sha256\":
+        \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\", \"tests\":
+        [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"expected: <3> but was: <-1>\"]}, {\"id\": \"leak-two-arg-frame-refusal-collector\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"            return renderFramesWithDiagnosticsArmed(dsl, math);\\n        }
+        finally {\\n            com.sirentide.contract.FragmentGuard.Refusals.disarm();\\n
+        \           com.sirentide.font.EmittedText.disarm();\\n        }\", \"after_utf8\":
+        \"            return renderFramesWithDiagnosticsArmed(dsl, math);\\n        }
+        finally {\\n            // causal mutant: omit frame refusal finally disarm\\n
+        \           com.sirentide.font.EmittedText.disarm();\\n        }\", \"starting_file_sha256\":
+        \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\", \"tests\":
+        [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"completed render disarms refusals\"]}, {\"id\": \"leak-two-arg-frame-emitted-collector\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"            return renderFramesWithDiagnosticsArmed(dsl, math);\\n        }
+        finally {\\n            com.sirentide.contract.FragmentGuard.Refusals.disarm();\\n
+        \           com.sirentide.font.EmittedText.disarm();\\n        }\", \"after_utf8\":
+        \"            return renderFramesWithDiagnosticsArmed(dsl, math);\\n        }
+        finally {\\n            com.sirentide.contract.FragmentGuard.Refusals.disarm();\\n
+        \           // causal mutant: omit frame emitted-text finally disarm\\n        }\",
+        \"starting_file_sha256\": \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"completed render disarms emitted text\"]}, {\"id\": \"omit-plain-render-refusal-suspension\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"        // A top-level plain render takes the no-allocation fast path (suspended
+        == false).\\n        boolean suspended = com.sirentide.font.EmittedText.enterPlainRender();\\n
+        \       boolean refusalsSuspended = com.sirentide.contract.FragmentGuard.Refusals.enterPlainRender();\",
+        \"after_utf8\": \"        // A top-level plain render takes the no-allocation
+        fast path (suspended == false).\\n        boolean suspended = com.sirentide.font.EmittedText.enterPlainRender();\\n
+        \       boolean refusalsSuspended = false;\", \"starting_file_sha256\": \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"29 chars\"]}, {\"id\": \"omit-plain-render-emitted-text-suspension\",
+        \"path\": \"src/main/java/com/sirentide/api/Sirentide.java\", \"before_utf8\":
+        \"        // A top-level plain render takes the no-allocation fast path (suspended
+        == false).\\n        boolean suspended = com.sirentide.font.EmittedText.enterPlainRender();\\n
+        \       boolean refusalsSuspended = com.sirentide.contract.FragmentGuard.Refusals.enterPlainRender();\",
+        \"after_utf8\": \"        // A top-level plain render takes the no-allocation
+        fast path (suspended == false).\\n        boolean suspended = false;\\n        boolean
+        refusalsSuspended = com.sirentide.contract.FragmentGuard.Refusals.enterPlainRender();\",
+        \"starting_file_sha256\": \"47634f2d0ae28f3df9138fd69e38178390f148e074be294d4687e41e439892b8\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"U+1F680\"]}, {\"id\": \"remove-nested-render-call\",
+        \"path\": \"src/test/java/com/sirentide/FramesDiagnosticsTest.java\", \"before_utf8\":
+        \"                nestedSvgs.add(Sirentide.render(\\\"flowchart TD\\\\nN[$\U0001F680$]\\\\n\\\",
+        (inner, innerSize) -> {\\n                    innerCalls.add(inner);\\n                    return
+        Optional.of(new MathFragment(\\\"<circle cx=\\\\\\\"7\\\\\\\" cy=\\\\\\\"7\\\\\\\"
+        r=\\\\\\\"3\\\\\\\"/>\\\", 40, 12, 4));\\n                }));\", \"after_utf8\":
+        \"                // causal control: omit nested plain render entirely\",
+        \"starting_file_sha256\": \"087a92d59550fbfebf37be0872db86dcff2968b32e60b32ca8ce27ff79f443c9\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"nested plain render must invoke its rocket renderer once\"]},
+        {\"id\": \"nested-render-reaches-no-inner-work\", \"path\": \"src/test/java/com/sirentide/FramesDiagnosticsTest.java\",
+        \"before_utf8\": \"                nestedSvgs.add(Sirentide.render(\\\"flowchart
+        TD\\\\nN[$\U0001F680$]\\\\n\\\", (inner, innerSize) -> {\\n                    innerCalls.add(inner);\\n
+        \                   return Optional.of(new MathFragment(\\\"<circle cx=\\\\\\\"7\\\\\\\"
+        cy=\\\\\\\"7\\\\\\\" r=\\\\\\\"3\\\\\\\"/>\\\", 40, 12, 4));\\n                }));\",
+        \"after_utf8\": \"                nestedSvgs.add(Sirentide.render(\\\"not-a-diagram\\\\n\\\",
+        (inner, innerSize) -> {\\n                    innerCalls.add(inner);\\n                    return
+        Optional.of(new MathFragment(\\\"<circle cx=\\\\\\\"7\\\\\\\" cy=\\\\\\\"7\\\\\\\"
+        r=\\\\\\\"3\\\\\\\"/>\\\", 40, 12, 4));\\n                }));\", \"starting_file_sha256\":
+        \"087a92d59550fbfebf37be0872db86dcff2968b32e60b32ca8ce27ff79f443c9\", \"tests\":
+        [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"nested plain render must invoke its rocket renderer once\"]},
+        {\"id\": \"nested-output-inert-after-observed-callback\", \"path\": \"src/test/java/com/sirentide/FramesDiagnosticsTest.java\",
+        \"before_utf8\": \"                nestedSvgs.add(Sirentide.render(\\\"flowchart
+        TD\\\\nN[$\U0001F680$]\\\\n\\\", (inner, innerSize) -> {\\n                    innerCalls.add(inner);\\n
+        \                   return Optional.of(new MathFragment(\\\"<circle cx=\\\\\\\"7\\\\\\\"
+        cy=\\\\\\\"7\\\\\\\" r=\\\\\\\"3\\\\\\\"/>\\\", 40, 12, 4));\\n                }));\",
+        \"after_utf8\": \"                nestedSvgs.add(Sirentide.render(\\\"flowchart
+        TD\\\\nN[$\U0001F680$]\\\\n\\\", (inner, innerSize) -> {\\n                    innerCalls.add(inner);\\n
+        \                   return Optional.of(new MathFragment(\\\"<circle cx=\\\\\\\"7\\\\\\\"
+        cy=\\\\\\\"7\\\\\\\" r=\\\\\\\"3\\\\\\\"/>\\\", 40, 12, 4));\\n                }));\\n
+        \               nestedSvgs.set(0, Sirentide.render(\\\"not-a-diagram\\\\n\\\"));\",
+        \"starting_file_sha256\": \"087a92d59550fbfebf37be0872db86dcff2968b32e60b32ca8ce27ff79f443c9\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"nested plain render must emit its node instead of an
+        inert shell\"]}, {\"id\": \"nested-accepted-empty-fragment-has-no-label-ink\",
+        \"path\": \"src/test/java/com/sirentide/FramesDiagnosticsTest.java\", \"before_utf8\":
+        \"                    return Optional.of(new MathFragment(\\\"<circle cx=\\\\\\\"7\\\\\\\"
+        cy=\\\\\\\"7\\\\\\\" r=\\\\\\\"3\\\\\\\"/>\\\", 40, 12, 4));\", \"after_utf8\":
+        \"                    return Optional.of(new MathFragment(\\\"<g/>\\\", 40,
+        12, 4));\", \"starting_file_sha256\": \"087a92d59550fbfebf37be0872db86dcff2968b32e60b32ca8ce27ff79f443c9\",
+        \"tests\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"failure_names\": [\"com.sirentide.FramesDiagnosticsTest.sourceFragmentAndFontCaveatsKeepTheirOrderAndRenderLifetimeOnBothFrameBranches\"],
+        \"semantic_any\": [\"nested plain render must emit its refused rocket label
+        ink\"]}], \"healthy_tests\": [\"com.sirentide.FramesDiagnosticsTest\", \"com.sirentide.cli.CliBatchTest\",
+        \"com.sirentide.cli.StrictPngFlagMatrixTest\"]}}"
     steps:
     - name: Check out exact product source with release history
       uses: actions/checkout@v4
@@ -253,7 +465,8 @@ jobs:
       id: build
       run: |
         python3 - <<'PY'
-        SPECS = {'lattex-budget': {'mutants': [{'id': 'omit-layout-preflight', 'path': 'src/main/java/com/lattex/layout/LayoutEngine.java', 'before_utf8': '        RenderWorkBudget.checkLayout(root);', 'after_utf8': '        // causal mutant: omit layout preflight', 'starting_file_sha256': 'ad109cca9bdfd07cfeb49972fcab79df32e2e61aa140b618c7dfb86ce03cf5b5', 'tests': ['com.lattex.api.OutputWorkBudgetTest.svgAndMathMLRefuseAmplificationInSmallHeapForks'], 'failure_names': ['com.lattex.api.OutputWorkBudgetTest.svgAndMathMLRefuseAmplificationInSmallHeapForks'], 'semantic_any': ['text amplification must fail in preflight', 'OutOfMemoryError']}, {'id': 'omit-mathml-preflight', 'path': 'src/main/java/com/lattex/api/LatteX.java', 'before_utf8': '        RenderWorkBudget.checkMathML(node);', 'after_utf8': '        // causal mutant: omit MathML preflight', 'starting_file_sha256': '957373f0200c244ab131184215e002880846a1cb11e1965c4c6ea1a223485529', 'tests': ['com.lattex.api.OutputWorkBudgetTest.svgAndMathMLRefuseAmplificationInSmallHeapForks'], 'failure_names': ['com.lattex.api.OutputWorkBudgetTest.svgAndMathMLRefuseAmplificationInSmallHeapForks'], 'semantic_any': ['text amplification must fail in preflight', 'OutOfMemoryError', 'hostile output was accepted']}, {'id': 'omit-dashed-precheck', 'path': 'src/main/java/com/lattex/layout/LayoutEngine.java', 'before_utf8': '        double requested = Math.ceil(width / step) + 1;', 'after_utf8': '        double requested = 0;', 'starting_file_sha256': 'ad109cca9bdfd07cfeb49972fcab79df32e2e61aa140b618c7dfb86ce03cf5b5', 'tests': ['com.lattex.api.OutputWorkBudgetTest.geometryWithoutTextRefusesBeforeAllocationInSmallHeapForks'], 'failure_names': ['com.lattex.api.OutputWorkBudgetTest.geometryWithoutTextRefusesBeforeAllocationInSmallHeapForks'], 'semantic_any': ['dashes must refuse before their producer loop', 'OutOfMemoryError']}, {'id': 'omit-rule-charge', 'path': 'src/main/java/com/lattex/layout/RenderWorkBudget.java', 'before_utf8': '            current.rules = charge(current.rules, 1, MAX_RULE_ALLOCATIONS,', 'after_utf8': '            charge(current.rules, 1, MAX_RULE_ALLOCATIONS,', 'starting_file_sha256': 'e71975b3399101599841c34b8b2682a8e1532c28fd489accb2c0b2e10934a769', 'tests': ['com.lattex.api.OutputWorkBudgetTest.geometryWithoutTextRefusesBeforeAllocationInSmallHeapForks'], 'failure_names': ['com.lattex.api.OutputWorkBudgetTest.geometryWithoutTextRefusesBeforeAllocationInSmallHeapForks'], 'semantic_any': ['separator copies must hit cumulative rule accounting', 'expected allocation-time output work refusal', 'OutOfMemoryError']}], 'healthy_tests': ['com.lattex.layout.GeometryWorkBudgetTest', 'com.lattex.layout.ResourceCapDirectTest', 'com.lattex.api.OutputWorkBudgetTest', 'com.lattex.api.MathMLTest']}}
+        import json,os
+        SPECS=json.loads(os.environ['CAUSAL_SPECS_JSON'])
         """Embedded in the temporary hosted workflow; never execute on the shared Mac."""
         import collections
         import datetime
@@ -385,9 +598,12 @@ jobs:
                     for case in failed:
                         assert len(case['failures']) == 1, case
                         failure = case['failures'][0]
-                        assert failure['type'] in ('java.lang.AssertionError', 'org.opentest4j.AssertionFailedError'), failure
+                        assert failure['type'] in mutation.get('failure_types', ['java.lang.AssertionError', 'org.opentest4j.AssertionFailedError']), failure
                         text = (failure['message'] or '')+'\n'+(failure['text'] or '')
                         assert 'small-heap probe timed out' not in text, 'timeout is not semantic proof'
+                        assert 'OutOfMemoryError' not in text, 'OOM is not accepted deciding proof'
+                        assert 'budget binding rendezvous timed out' not in text, 'rendezvous timeout is not proof'
+                        assert all(token in text for token in mutation.get('semantic_all', [])), text
                         assert any(token in text for token in mutation['semantic_any']), text
                     red['validatedSemanticKill'] = True
                     persist()
@@ -475,8 +691,8 @@ jobs:
           product/build/brewshot-refs/
         if-no-files-found: error
         retention-days: 14
-    if: "${{ startsWith(github.event.head_commit.message, 'ci: collect budget causal')
-      }}"
+    if: "${{ startsWith(github.event.head_commit.message, 'ci: collect review-repair
+      causal') }}"
   effects-proportional:
     name: lattex-effects native browser proportional observations
     runs-on: ubuntu-latest
