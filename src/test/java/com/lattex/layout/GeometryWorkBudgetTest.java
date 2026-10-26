@@ -134,23 +134,49 @@ class GeometryWorkBudgetTest {
     @Test
     void concurrentRendersHaveIndependentCumulativeAllowances() throws Exception {
         CountDownLatch together = new CountDownLatch(2);
+        CountDownLatch firstCharged = new CountDownLatch(1);
+        CountDownLatch secondCharged = new CountDownLatch(1);
         try (var executor = Executors.newFixedThreadPool(2)) {
-            var first = executor.submit(() -> independentWork(together));
-            var second = executor.submit(() -> independentWork(together));
+            var first = executor.submit(() ->
+                independentWork(together, null, firstCharged, secondCharged));
+            var second = executor.submit(() ->
+                independentWork(together, firstCharged, secondCharged, null));
             assertEquals(70_000, first.get(10, TimeUnit.SECONDS).intValue());
             assertEquals(70_000, second.get(10, TimeUnit.SECONDS).intValue());
         }
     }
 
-    private static int independentWork(CountDownLatch together) throws InterruptedException {
-        together.countDown();
-        assertTrue(together.await(5, TimeUnit.SECONDS));
+    private static int independentWork(CountDownLatch together, CountDownLatch predecessor,
+                                       CountDownLatch charged, CountDownLatch successor) {
         return RenderWorkBudget.withLayoutBudget(() -> {
-            for (int i = 0; i < 70_000; i++) {
-                new Rule(0, 0, 1, 1);
+            // Both bindings stay active through both batches. Serialize the charges so a
+            // shared-counter mutant cannot pass through scheduling or lost-update races.
+            together.countDown();
+            await(together);
+            if (predecessor != null) {
+                await(predecessor);
+            }
+            try {
+                for (int i = 0; i < 70_000; i++) {
+                    new Rule(0, 0, 1, 1);
+                }
+            } finally {
+                charged.countDown();
+            }
+            if (successor != null) {
+                await(successor);
             }
             assertEquals(1, layout("x").glyphs().size());
             return 70_000;
         });
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertTrue(latch.await(5, TimeUnit.SECONDS), "budget binding rendezvous timed out");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("budget binding rendezvous interrupted", interrupted);
+        }
     }
 }
