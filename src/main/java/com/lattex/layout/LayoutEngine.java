@@ -114,6 +114,7 @@ public final class LayoutEngine {
 
     /** Lays out a math tree at the origin; returns positioned glyphs/rules + bbox. */
     public static Layout layout(MathNode root, LayoutContext ctx) {
+        RenderWorkBudget.checkLayout(root);
         LAYOUT_BOXES.get()[0] = 0; // fresh L10 box budget per top-level layout
         Box box = layoutBox(root, ctx);
         List<PositionedGlyph> glyphs = new ArrayList<>();

@@ -35,6 +35,22 @@ class ResourceCapDirectTest {
     }
 
     @Test
+    void repeatedTextAndOperatorNamesRefuseBeforeGlyphAllocation() {
+        LayoutContext ctx = new LayoutContext(FONT, FONT.mathConstants(), 40.0);
+        for (MathNode payload : List.of(
+                new MathNode.TextRun("a".repeat(50_001), MathNode.TextStyle.ROMAN),
+                new MathNode.OperatorName("a".repeat(50_001), false))) {
+            MathNode repeated = new MathNode.MathList(List.of(payload, payload));
+            MathSyntaxException ex = assertThrows(MathSyntaxException.class,
+                () -> LayoutEngine.layout(repeated, ctx));
+            assertTrue(ex.isCapExceeded());
+            assertTrue(ex.getMessage().contains("output work budget"), ex.getMessage());
+            assertTrue(LayoutEngine.layout(MathNode.Atom.ord('x'), ctx).glyphs().size() == 1,
+                "a refused render must not poison the next layout");
+        }
+    }
+
+    @Test
     void layoutBoxBudgetTripsOnAWideShallowTree() {
         // ~150k atoms: shallow (depth 2, under the depth guard) but past the 100k box
         // budget — exactly the fan-out the depth guard can't see. Must trip as a cap.
