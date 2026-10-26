@@ -843,6 +843,445 @@ jobs:
         retention-days: 14
     if: "${{ startsWith(github.event.head_commit.message, 'ci: collect effects browser')
       }}"
+  effects-causal:
+    name: lattex-effects exact-source causal and restored gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+        - lane: lattex-effects
+          repository: supsup/LatteX
+          sha: 4419e1696e5f97920de2df96f13a2bd8a82bde5d
+          base: 3718dc43ec8de09e8717f348b634cacfdd754018
+          plan: 364ff77a-79b1-4cb4-ba6b-03bb6e2ee223
+    env:
+      SOURCE_SHA: "${{ matrix.sha }}"
+      SOURCE_REPOSITORY: "${{ matrix.repository }}"
+      SOURCE_BASE: "${{ matrix.base }}"
+      SOURCE_PLAN: "${{ matrix.plan }}"
+      SOURCE_LANE: "${{ matrix.lane }}"
+      LATTEX_REQUIRE_BROWSER: '1'
+      SIRENTIDE_REQUIRE_CHROME: '1'
+      BREWSHOT_CHROME_ARGS: "--no-sandbox"
+      CAUSAL_SPECS_JSON: '{"lattex-effects": {"mutants": [{"id": "dom-upper-saturation",
+        "path": "src/main/resources/com/lattex/fx/lattex-fx.js", "before_utf8": "      n
+        = Math.min(max, n * 10 + raw.charCodeAt(i) - 48);", "after_utf8": "      n
+        = Math.min(max + 1, n * 10 + raw.charCodeAt(i) - 48);", "starting_file_sha256":
+        "52f962ad7e0445e30ecadc43dcf8fec3589e32df6b83ba19203db328038d02a2", "tests":
+        ["com.lattex.fx.FxRuntimeJsHarnessTest.handcraftedBoltBoundsChangeActualGeometryForBothEffectsOnEveryRoute",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"],
+        "failure_names": ["com.lattex.fx.FxRuntimeJsHarnessTest.handcraftedBoltBoundsChangeActualGeometryForBothEffectsOnEveryRoute"],
+        "failure_types": ["org.opentest4j.AssertionFailedError"], "semantic_any":
+        ["DOM max clamps"], "semantic_all": ["DOM max clamps", "FxRuntimeJsHarnessTest.java:148"],
+        "expected_phase_names": ["com.lattex.fx.FxRuntimeJsHarnessTest.handcraftedBoltBoundsChangeActualGeometryForBothEffectsOnEveryRoute",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"]},
+        {"id": "dom-malformed-prefix-acceptance", "path": "src/main/resources/com/lattex/fx/lattex-fx.js",
+        "before_utf8": "    if (typeof raw !== ''string'' || !raw.length || /[^0-9]/.test(raw))
+        { return fallback; }", "after_utf8": "    if (typeof raw !== ''string'' ||
+        !raw.length || !/^[0-9]+/.test(raw)) { return fallback; }\n    raw = /^[0-9]+/.exec(raw)[0];",
+        "starting_file_sha256": "52f962ad7e0445e30ecadc43dcf8fec3589e32df6b83ba19203db328038d02a2",
+        "tests": ["com.lattex.fx.FxRuntimeJsHarnessTest.malformedDomKnobsUseDefaultsWithoutPartialParsing",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"],
+        "failure_names": ["com.lattex.fx.FxRuntimeJsHarnessTest.malformedDomKnobsUseDefaultsWithoutPartialParsing"],
+        "failure_types": ["org.opentest4j.AssertionFailedError"], "semantic_any":
+        ["lightning2.5"], "semantic_all": ["lightning2.5", "FxRuntimeJsHarnessTest.java:162"],
+        "expected_phase_names": ["com.lattex.fx.FxRuntimeJsHarnessTest.malformedDomKnobsUseDefaultsWithoutPartialParsing",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"]},
+        {"id": "zero-init-setup-suppression", "path": "src/main/resources/com/lattex/fx/lattex-fx.js",
+        "before_utf8": "      var boltsOff = (boltEffect(enter) || boltEffect(hover)
+        || boltEffect(click))\n        && boundedFxDecimal(el, ''data-lx-fx-intensity'',
+        100, 0, 300) === 0;", "after_utf8": "      var boltsOff = false;", "starting_file_sha256":
+        "52f962ad7e0445e30ecadc43dcf8fec3589e32df6b83ba19203db328038d02a2", "tests":
+        ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"],
+        "failure_names": ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute"],
+        "failure_types": ["org.opentest4j.AssertionFailedError"], "semantic_any":
+        ["zero target initialization adds NOTHING: lightning"], "semantic_all": ["zero
+        target initialization adds NOTHING: lightning", "FxRuntimeLifecycleTest.java:113"],
+        "expected_phase_names": ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"]},
+        {"id": "zero-lightning-direct-work-guard", "path": "src/main/resources/com/lattex/fx/lattex-fx.js",
+        "before_utf8": "    if (options.intensity === 0) { return; } // before ANY
+        effect work", "after_utf8": "    /* causal mutant: lightning zero work guard
+        omitted */", "starting_file_sha256": "52f962ad7e0445e30ecadc43dcf8fec3589e32df6b83ba19203db328038d02a2",
+        "tests": ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"],
+        "failure_names": ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute"],
+        "failure_types": ["org.opentest4j.AssertionFailedError"], "semantic_any":
+        ["zero direct/event/public paths add NOTHING"], "semantic_all": ["zero direct/event/public
+        paths add NOTHING", "FxRuntimeLifecycleTest.java:118"], "expected_phase_names":
+        ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"]},
+        {"id": "zero-storm-direct-work-guard", "path": "src/main/resources/com/lattex/fx/lattex-fx.js",
+        "before_utf8": "    if (options.intensity === 0) { return; } // no overlays,
+        canvas or listeners", "after_utf8": "    /* causal mutant: storm zero work
+        guard omitted */", "starting_file_sha256": "52f962ad7e0445e30ecadc43dcf8fec3589e32df6b83ba19203db328038d02a2",
+        "tests": ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"],
+        "failure_names": ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute"],
+        "failure_types": ["org.opentest4j.AssertionFailedError"], "semantic_any":
+        ["zero direct/event/public paths add NOTHING"], "semantic_all": ["zero direct/event/public
+        paths add NOTHING", "FxRuntimeLifecycleTest.java:118"], "expected_phase_names":
+        ["com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"]},
+        {"id": "lightning-intensity-work-multiplier", "path": "src/main/resources/com/lattex/fx/lattex-fx.js",
+        "before_utf8": "        for (var k = 0; k < options.bolts; k++) { // bounded
+        forked bolts per side", "after_utf8": "        for (var k = 0; k < options.bolts
+        * Math.max(1, strength); k++) { // causal intensity work multiplier", "starting_file_sha256":
+        "52f962ad7e0445e30ecadc43dcf8fec3589e32df6b83ba19203db328038d02a2", "tests":
+        ["com.lattex.fx.FxRuntimeJsHarnessTest.intensityChangesOnlyBoundedAppearanceAtIdenticalSeedClockAndBolts",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"],
+        "failure_names": ["com.lattex.fx.FxRuntimeJsHarnessTest.intensityChangesOnlyBoundedAppearanceAtIdenticalSeedClockAndBolts"],
+        "failure_types": ["org.opentest4j.AssertionFailedError"], "semantic_any":
+        ["ALL cumulative work must match: lightning"], "semantic_all": ["ALL cumulative
+        work must match: lightning", "FxRuntimeJsHarnessTest.java:174"], "expected_phase_names":
+        ["com.lattex.fx.FxRuntimeJsHarnessTest.intensityChangesOnlyBoundedAppearanceAtIdenticalSeedClockAndBolts",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"]},
+        {"id": "storm-reduced-strength-precedence", "path": "src/main/resources/com/lattex/fx/lattex-fx.js",
+        "before_utf8": "    var strength = reduced ? 1 : options.intensity / 100;",
+        "after_utf8": "    var strength = options.intensity / 100;", "starting_file_sha256":
+        "52f962ad7e0445e30ecadc43dcf8fec3589e32df6b83ba19203db328038d02a2", "tests":
+        ["com.lattex.fx.FxRuntimeJsHarnessTest.reducedMotionWinsOverAllNonzeroBoltAndIntensityValues",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"],
+        "failure_names": ["com.lattex.fx.FxRuntimeJsHarnessTest.reducedMotionWinsOverAllNonzeroBoltAndIntensityValues"],
+        "failure_types": ["org.opentest4j.AssertionFailedError"], "semantic_any":
+        ["BoltRun[", "filters=", "drop-shadow("], "semantic_all": ["BoltRun[", "filters=",
+        "drop-shadow(", "FxRuntimeJsHarnessTest.java:206"], "expected_phase_names":
+        ["com.lattex.fx.FxRuntimeJsHarnessTest.reducedMotionWinsOverAllNonzeroBoltAndIntensityValues",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork"]}],
+        "healthy_tests": ["com.lattex.api.FxContainerAttrsTest.explicitNumericKnobsHaveOneOrderedStampAcrossMapStringAndWrapper",
+        "com.lattex.api.FxContainerAttrsTest.omittedKnobsMatchExactPredecessorWrapperAndSvgBytes",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.boltDefaultsPreserveExplicitTwoAndOneHundredAppearanceAndWork",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.handcraftedBoltBoundsChangeActualGeometryForBothEffectsOnEveryRoute",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.intensityChangesOnlyBoundedAppearanceAtIdenticalSeedClockAndBolts",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.malformedDomKnobsUseDefaultsWithoutPartialParsing",
+        "com.lattex.fx.FxRuntimeJsHarnessTest.reducedMotionWinsOverAllNonzeroBoltAndIntensityValues",
+        "com.lattex.fx.FxRuntimeLifecycleTest.zeroIntensityDoesNoTargetWorkAtActualInitializationOrAnyPlayRoute"],
+        "expected_healthy_cases": 8}}'
+    steps:
+    - name: Check out exact product source with release history
+      uses: actions/checkout@v4
+      with:
+        repository: "${{ matrix.repository }}"
+        ref: "${{ matrix.sha }}"
+        path: product
+        fetch-depth: 0
+        fetch-tags: true
+        persist-credentials: false
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '25'
+    - name: Verify checkout and capture source commitment
+      run: |
+        python3 - <<'PY'
+        import hashlib, json, os, pathlib, subprocess
+        root = pathlib.Path('product')
+        def git(*args):
+            return subprocess.check_output(['git', *args], cwd=root)
+        head = git('rev-parse', 'HEAD').decode().strip()
+        assert head == os.environ['SOURCE_SHA'], (head, os.environ['SOURCE_SHA'])
+        assert git('status', '--porcelain', '-z') == b'', 'dirty initial checkout'
+        paths = git('ls-files', '-z').split(b'\0')
+        files = []
+        for raw in paths:
+            if raw:
+                path = root / os.fsdecode(raw)
+                files.append({'path': os.fsdecode(raw),
+                              'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+        result = {'repository': os.environ['SOURCE_REPOSITORY'], 'sourceSha': head,
+                  'sourceTree': git('rev-parse', 'HEAD^{tree}').decode().strip(),
+                  'base': os.environ['SOURCE_BASE'], 'plan': os.environ['SOURCE_PLAN'],
+                  'lane': os.environ['SOURCE_LANE'], 'harnessSha': os.environ['GITHUB_SHA'],
+                  'runId': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                  'sourceFiles': files}
+        pathlib.Path('evidence').mkdir()
+        pathlib.Path('evidence/source-manifest.json').write_text(json.dumps(result, indent=2)+'\n')
+        PY
+    - name: Install Sirentide's required Chrome and fonts
+      if: matrix.repository == 'supsup/Sirentide'
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y fonts-liberation fonts-dejavu-core fonts-noto-core
+        wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        sudo apt-get install -y /tmp/chrome.deb
+        google-chrome-stable --version
+    - name: Require Chrome
+      run: google-chrome --version
+    - name: LatteX exported-surface self-test and exact base comparison
+      if: matrix.repository == 'supsup/LatteX'
+      working-directory: product
+      run: |
+        set -euo pipefail
+        tools/exported-api/self-test.sh
+        tools/exported-api/check.sh "$SOURCE_BASE" "$SOURCE_SHA"
+    - name: Prove healthy, semantic mutant failure, byte restoration and restored
+        full build
+      id: build
+      run: |
+        python3 - <<'PY'
+        import json,os
+        SPECS=json.loads(os.environ['CAUSAL_SPECS_JSON'])
+        """Embedded in the temporary hosted workflow; never execute on the shared Mac."""
+        import collections
+        import datetime
+        import hashlib
+        import json
+        import os
+        import pathlib
+        import shutil
+        import subprocess
+        import traceback
+        import xml.etree.ElementTree as ET
+
+
+        root = pathlib.Path('product')
+        evidence = pathlib.Path('evidence')
+        spec = SPECS[os.environ['SOURCE_LANE']]
+        records = []
+        originals = {}
+        outcome = {'state': 'running', 'sourceSha': os.environ['SOURCE_SHA'],
+                   'harnessSha': os.environ['GITHUB_SHA'], 'lane': os.environ['SOURCE_LANE'],
+                   'runId': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                   'phases': records}
+
+
+        def git(*args):
+            return subprocess.check_output(['git', *args], cwd=root)
+
+
+        def sha(raw):
+            return hashlib.sha256(raw).hexdigest()
+
+
+        def persist():
+            (evidence / 'causal-result.json').write_text(json.dumps(outcome, indent=2)+'\n')
+
+
+        def execute(label, selectors=None, full=False):
+            dest = evidence / label
+            dest.mkdir()
+            command = ['./gradlew', 'clean', 'build' if full else ':test']
+            for selector in selectors or []:
+                command.extend(['--tests', selector])
+            command.extend(['--no-daemon', '--no-build-cache', '--rerun-tasks', '--stacktrace'])
+            record = {'label': label, 'command': command,
+                      'started': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+            records.append(record)
+            persist()
+            with (dest / 'command.log').open('wb') as log:
+                completed = subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT)
+            record.update(exitCode=completed.returncode,
+                          finished=datetime.datetime.now(datetime.timezone.utc).isoformat())
+            files = sorted(root.glob('build/test-results/**/TEST-*.xml'))
+            cases = []
+            seen = set()
+            for path in files:
+                target = dest / path.relative_to(root)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, target)
+                tree = ET.parse(path).getroot()
+                testcases = list(tree.iter('testcase'))
+                for suite in tree.iter('testsuite'):
+                    if 'tests' in suite.attrib:
+                        assert int(suite.get('tests')) == len(suite.findall('testcase')), str(path)
+                    for attribute, tag in [('failures', 'failure'), ('errors', 'error'), ('skipped', 'skipped')]:
+                        if attribute in suite.attrib:
+                            actual = sum(len(case.findall(tag)) for case in suite.findall('testcase'))
+                            assert int(suite.get(attribute)) == actual, (str(path), attribute)
+                for case in testcases:
+                    name = case.get('name', '')
+                    normalized = name[:-2] if name.endswith('()') else name
+                    identity = (str(path.relative_to(root)), case.get('classname'), name)
+                    assert identity not in seen, identity
+                    seen.add(identity)
+                    cases.append({'identity': identity, 'qualifiedName': case.get('classname', '')+'.'+normalized,
+                                  'failures': [dict(type=f.get('type'), message=f.get('message'), text=f.text)
+                                               for f in case.findall('failure')],
+                                  'errors': [dict(type=f.get('type'), message=f.get('message'), text=f.text)
+                                             for f in case.findall('error')],
+                                  'skips': len(case.findall('skipped'))})
+            record.update(xmlFiles=len(files), cases=cases, caseCount=len(cases))
+            (dest / 'result.json').write_text(json.dumps(record, indent=2)+'\n')
+            persist()
+            assert files and cases, ('No fresh executed XML', label)
+            assert all(not c['errors'] and not c['skips'] for c in cases), ('errors/skips', label)
+            return record
+
+
+        def healthy(record, expected=None):
+            assert record['exitCode'] == 0, ('healthy command failed', record['label'])
+            assert all(not c['failures'] for c in record['cases']), ('healthy test failed', record['label'])
+            names = [c['qualifiedName'] for c in record['cases']]
+            for name in expected or []:
+                assert names.count(name) == 1, ('missing/duplicate named control', name, names)
+            assert git('status', '--porcelain', '-z') == b'', 'healthy command changed source checkout'
+            record['validatedHealthy'] = True
+            persist()
+
+
+        try:
+            assert git('rev-parse', 'HEAD').decode().strip() == os.environ['SOURCE_SHA']
+            assert git('status', '--porcelain', '-z') == b'', 'initial source is dirty'
+            for mutation in spec['mutants']:
+                path = root / mutation['path']
+                raw = path.read_bytes()
+                assert sha(raw) == mutation['starting_file_sha256'], mutation['id']
+                assert raw.count(mutation['before_utf8'].encode()) == 1, mutation['id']
+                originals[mutation['path']] = raw
+            all_names = sorted({n for m in spec['mutants'] for n in m['failure_names']})
+            first = execute('healthy-focused', spec['healthy_tests'])
+            healthy(first, all_names)
+            if 'expected_healthy_cases' in spec:
+                assert first['caseCount'] == spec['expected_healthy_cases'], first['caseCount']
+            for mutation in spec['mutants']:
+                path = root / mutation['path']
+                original = originals[mutation['path']]
+                assert path.read_bytes() == original
+                after = original.replace(mutation['before_utf8'].encode(), mutation['after_utf8'].encode(), 1)
+                audit = {'id': mutation['id'], 'path': mutation['path'], 'originalSha256': sha(original),
+                         'mutatedSha256': sha(after), 'mutation': mutation}
+                (evidence / (mutation['id']+'-mutation.json')).write_text(json.dumps(audit, indent=2)+'\n')
+                try:
+                    path.write_bytes(after)
+                    assert git('diff', '--name-only').decode().splitlines() == [mutation['path']]
+                    (evidence / (mutation['id']+'-source.diff')).write_bytes(git('diff', '--', mutation['path']))
+                    red = execute(mutation['id']+'-mutant', mutation['tests'])
+                    if 'expected_phase_names' in mutation:
+                        assert sorted(c['qualifiedName'] for c in red['cases']) == sorted(mutation['expected_phase_names']), ('missing controls', mutation['id'])
+                    assert red['exitCode'] != 0, ('mutant survived', mutation['id'])
+                    failed = [c for c in red['cases'] if c['failures']]
+                    assert {c['qualifiedName'] for c in failed} == set(mutation['failure_names']), failed
+                    for case in failed:
+                        assert len(case['failures']) == 1, case
+                        failure = case['failures'][0]
+                        assert failure['type'] in mutation.get('failure_types', ['java.lang.AssertionError', 'org.opentest4j.AssertionFailedError']), failure
+                        text = (failure['message'] or '')+'\n'+(failure['text'] or '')
+                        assert 'small-heap probe timed out' not in text, 'timeout is not semantic proof'
+                        assert 'OutOfMemoryError' not in text, 'OOM is not accepted deciding proof'
+                        assert 'budget binding rendezvous timed out' not in text, 'rendezvous timeout is not proof'
+                        assert all(token in text for token in mutation.get('semantic_all', [])), text
+                        assert any(token in text for token in mutation['semantic_any']), text
+                    red['validatedSemanticKill'] = True
+                    persist()
+                finally:
+                    path.write_bytes(original)
+                    assert path.read_bytes() == original, 'byte restoration failed'
+                    assert git('diff', '--exit-code') == b'', 'unexpected source change after restoration'
+                restored = execute(mutation['id']+'-restored', mutation['tests'])
+                healthy(restored, mutation.get('expected_phase_names', mutation['failure_names']))
+            final = execute('restored-full-build', full=True)
+            healthy(final)
+            outcome['state'] = 'passed'
+        except BaseException:
+            outcome['state'] = 'failed'
+            outcome['failure'] = traceback.format_exc()
+            raise
+        finally:
+            for relative, original in originals.items():
+                (root / relative).write_bytes(original)
+            outcome['sourceRestored'] = all((root / p).read_bytes() == raw for p, raw in originals.items())
+            outcome['finalSourceStatusHex'] = git('status', '--porcelain', '-z').hex()
+            persist()
+            assert outcome['sourceRestored'] and not outcome['finalSourceStatusHex'], 'source conservation failed'
+
+        PY
+    - name: Require hermetic tracked and untracked product tree
+      working-directory: product
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          git status --porcelain
+          git diff
+          exit 1
+        fi
+    - name: Capture fresh XML census, even when build fails
+      if: always()
+      env:
+        BUILD_OUTCOME: "${{ steps.build.outcome }}"
+      run: |
+        python3 - <<'PY'
+        import collections, hashlib, json, os, pathlib, xml.etree.ElementTree as ET
+        root = pathlib.Path('product')
+        evidence = pathlib.Path('evidence')
+        evidence.mkdir(exist_ok=True)
+        xmls = sorted(root.glob('**/build/test-results/**/TEST-*.xml'))
+        counts = collections.Counter()
+        unique = set()
+        failures = []
+        artifacts = []
+        for path in xmls:
+            parsed = ET.parse(path).getroot()
+            cases = list(parsed.iter('testcase'))
+            for case in cases:
+                unique.add((str(path.relative_to(root)), case.get('classname'), case.get('name')))
+                counts['cases'] += 1
+                for kind in ('failure', 'error', 'skipped'):
+                    elements = case.findall(kind)
+                    counts[kind] += len(elements)
+                    if kind != 'skipped':
+                        for item in elements:
+                            failures.append({'file': str(path.relative_to(root)), 'class': case.get('classname'),
+                                             'name': case.get('name'), 'kind': kind,
+                                             'message': item.get('message'), 'text': item.text})
+            artifacts.append({'path': str(path.relative_to(root)), 'cases': len(cases),
+                              'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+        result = {'sourceSha': os.environ['SOURCE_SHA'], 'repository': os.environ['SOURCE_REPOSITORY'],
+                  'lane': os.environ['SOURCE_LANE'], 'buildOutcome': os.environ['BUILD_OUTCOME'],
+                  'xmlFiles': len(xmls), 'cases': counts['cases'], 'uniqueCases': len(unique),
+                  'failures': counts['failure'], 'errors': counts['error'], 'skipped': counts['skipped'],
+                  'xml': artifacts, 'failureDetails': failures}
+        (evidence/'xml-census.json').write_text(json.dumps(result, indent=2)+'\n')
+        print(json.dumps({k: v for k,v in result.items() if k not in ('xml', 'failureDetails')}, indent=2))
+        assert xmls and counts['cases'], 'no executed JUnit XML; build is not verified'
+        assert counts['failure'] == counts['error'] == 0, 'JUnit reported failures/errors'
+        assert counts['skipped'] == 0, 'skipped tests require explicit disposition'
+        PY
+    - name: Upload source commitment and complete JUnit evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: causal-${{ matrix.lane }}-${{ matrix.sha }}
+        path: |
+          evidence/
+          product/**/build/test-results/**/TEST-*.xml
+          product/**/build/reports/tests/
+          product/build/brewshot-refs/
+        if-no-files-found: error
+        retention-days: 14
+    if: "${{ startsWith(github.event.head_commit.message, 'ci: collect effects causal')
+      }}"
 'on':
   push:
     branches:
