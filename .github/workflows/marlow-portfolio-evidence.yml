@@ -1,0 +1,184 @@
+name: marlow-portfolio-evidence
+
+# Temporary verification orchestration. NEVER MERGE this branch.
+# Product source stays at the fixed published SHAs below, outside this harness tree.
+on:
+  push:
+    branches: [marlow/portfolio-evidence-20261026]
+    paths: [.github/workflows/marlow-portfolio-evidence.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  full-gate:
+    name: ${{ matrix.lane }} exact-source full gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - lane: lattex-effects
+            repository: supsup/LatteX
+            sha: 4419e1696e5f97920de2df96f13a2bd8a82bde5d
+            base: 3718dc43ec8de09e8717f348b634cacfdd754018
+            plan: 364ff77a-79b1-4cb4-ba6b-03bb6e2ee223
+          - lane: lattex-budget
+            repository: supsup/LatteX
+            sha: df3853b069300889348b67b9dfc2e156e77fe90e
+            base: 3718dc43ec8de09e8717f348b634cacfdd754018
+            plan: 5d34cd44-5e72-43b5-a17e-7d383b4e7bd7
+          - lane: sirentide-diamond
+            repository: supsup/Sirentide
+            sha: 40b710ad8f02aee349c59087a159b36de0fc4e4b
+            base: 2f0fc0646be884451d8268a5cd77c88ff534aa9f
+            plan: 008a9c97-f25d-4351-b0c2-102b322c0970
+          - lane: sirentide-policy
+            repository: supsup/Sirentide
+            sha: 593887a9bb74307eef138950af41b49948bd66ab
+            base: 2f0fc0646be884451d8268a5cd77c88ff534aa9f
+            plan: 17ae2f2f-ef14-4eb8-9d52-07f625408d2f
+    env:
+      SOURCE_SHA: ${{ matrix.sha }}
+      SOURCE_REPOSITORY: ${{ matrix.repository }}
+      SOURCE_BASE: ${{ matrix.base }}
+      SOURCE_PLAN: ${{ matrix.plan }}
+      SOURCE_LANE: ${{ matrix.lane }}
+      LATTEX_REQUIRE_BROWSER: '1'
+      SIRENTIDE_REQUIRE_CHROME: '1'
+      BREWSHOT_CHROME_ARGS: --no-sandbox
+    steps:
+      - name: Check out exact product source with release history
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.sha }}
+          path: product
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Verify checkout and capture source commitment
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          root = pathlib.Path('product')
+          def git(*args):
+              return subprocess.check_output(['git', *args], cwd=root)
+          head = git('rev-parse', 'HEAD').decode().strip()
+          assert head == os.environ['SOURCE_SHA'], (head, os.environ['SOURCE_SHA'])
+          assert git('status', '--porcelain', '-z') == b'', 'dirty initial checkout'
+          paths = git('ls-files', '-z').split(b'\0')
+          files = []
+          for raw in paths:
+              if raw:
+                  path = root / os.fsdecode(raw)
+                  files.append({'path': os.fsdecode(raw),
+                                'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+          result = {'repository': os.environ['SOURCE_REPOSITORY'], 'sourceSha': head,
+                    'sourceTree': git('rev-parse', 'HEAD^{tree}').decode().strip(),
+                    'base': os.environ['SOURCE_BASE'], 'plan': os.environ['SOURCE_PLAN'],
+                    'lane': os.environ['SOURCE_LANE'], 'harnessSha': os.environ['GITHUB_SHA'],
+                    'runId': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                    'sourceFiles': files}
+          pathlib.Path('evidence').mkdir()
+          pathlib.Path('evidence/source-manifest.json').write_text(json.dumps(result, indent=2)+'\n')
+          PY
+
+      - name: Install Sirentide's required Chrome and fonts
+        if: matrix.repository == 'supsup/Sirentide'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y fonts-liberation fonts-dejavu-core fonts-noto-core
+          wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y /tmp/chrome.deb
+          google-chrome-stable --version
+
+      - name: Require Chrome
+        run: google-chrome --version
+
+      - name: LatteX exported-surface self-test and exact base comparison
+        if: matrix.repository == 'supsup/LatteX'
+        working-directory: product
+        run: |
+          set -euo pipefail
+          tools/exported-api/self-test.sh
+          tools/exported-api/check.sh "$SOURCE_BASE" "$SOURCE_SHA"
+
+      - name: Force full build and browser-required suite
+        id: build
+        working-directory: product
+        run: ./gradlew build --no-daemon --stacktrace --rerun-tasks
+
+      - name: Require hermetic tracked and untracked product tree
+        working-directory: product
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git diff
+            exit 1
+          fi
+
+      - name: Capture fresh XML census, even when build fails
+        if: always()
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          python3 - <<'PY'
+          import collections, hashlib, json, os, pathlib, xml.etree.ElementTree as ET
+          root = pathlib.Path('product')
+          evidence = pathlib.Path('evidence')
+          evidence.mkdir(exist_ok=True)
+          xmls = sorted(root.glob('**/build/test-results/**/TEST-*.xml'))
+          counts = collections.Counter()
+          unique = set()
+          failures = []
+          artifacts = []
+          for path in xmls:
+              parsed = ET.parse(path).getroot()
+              cases = list(parsed.iter('testcase'))
+              for case in cases:
+                  unique.add((str(path.relative_to(root)), case.get('classname'), case.get('name')))
+                  counts['cases'] += 1
+                  for kind in ('failure', 'error', 'skipped'):
+                      elements = case.findall(kind)
+                      counts[kind] += len(elements)
+                      if kind != 'skipped':
+                          for item in elements:
+                              failures.append({'file': str(path.relative_to(root)), 'class': case.get('classname'),
+                                               'name': case.get('name'), 'kind': kind,
+                                               'message': item.get('message'), 'text': item.text})
+              artifacts.append({'path': str(path.relative_to(root)), 'cases': len(cases),
+                                'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+          result = {'sourceSha': os.environ['SOURCE_SHA'], 'repository': os.environ['SOURCE_REPOSITORY'],
+                    'lane': os.environ['SOURCE_LANE'], 'buildOutcome': os.environ['BUILD_OUTCOME'],
+                    'xmlFiles': len(xmls), 'cases': counts['cases'], 'uniqueCases': len(unique),
+                    'failures': counts['failure'], 'errors': counts['error'], 'skipped': counts['skipped'],
+                    'xml': artifacts, 'failureDetails': failures}
+          (evidence/'xml-census.json').write_text(json.dumps(result, indent=2)+'\n')
+          print(json.dumps({k: v for k,v in result.items() if k not in ('xml', 'failureDetails')}, indent=2))
+          assert xmls and counts['cases'], 'no executed JUnit XML; build is not verified'
+          assert counts['failure'] == counts['error'] == 0, 'JUnit reported failures/errors'
+          assert counts['skipped'] == 0, 'skipped tests require explicit disposition'
+          PY
+
+      - name: Upload source commitment and complete JUnit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.lane }}-${{ matrix.sha }}
+          path: |
+            evidence/
+            product/**/build/test-results/**/TEST-*.xml
+            product/**/build/reports/tests/
+            product/build/brewshot-refs/
+          if-no-files-found: error
+          retention-days: 14
