@@ -455,6 +455,24 @@ UNTRUSTED input: caps on source length, nesting depth, layout box count, and out
 stripping so the output stays within the `svg/g/path/rect` alphabet — a cap trip surfaces
 as `OUTPUT_CAP_EXCEEDED`, never an escaped error.
 
+SVG layout and MathML also preflight materialized work before allocating glyphs or
+markup. Each render allows 100,000 UTF-16 units of text/operator-name payload,
+counted per occurrence after macro expansion (including repeated array separators).
+Spaces and surrogate pairs count conservatively. A bounded AST walk also charges
+ancestor copying; MathML includes XML escaping and table/tag overhead, with a
+2,000,000-unit markup estimate and a separate copying allowance. These are
+conservative work limits, so deeply wrapped or markup-heavy input may be refused
+even when its final string would be smaller. Ordinary accepted output is unchanged;
+`toMathML` reports a typed resource-cap exception, and diagnostic SVG rendering
+reports `OUTPUT_CAP_EXCEEDED`. Each call has a fresh budget.
+
+SVG layout also charges actual primitive construction, including translated and
+colored copies: at most 400,000 glyph placements and 100,000 rules per render.
+This covers generated dashed rules and separators reused across table rows,
+whose geometry can grow without a large text payload. Excessive or non-finite
+rule geometry is refused before its producer loop. These are construction-count
+limits, not a guarantee that every admitted render fits an arbitrary heap size.
+
 ```java
 try {
     String svg = com.lattex.api.LatteX.render(userInput);

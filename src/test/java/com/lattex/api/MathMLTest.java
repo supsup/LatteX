@@ -24,6 +24,43 @@ import org.junit.jupiter.api.Test;
  */
 class MathMLTest {
 
+    @Test
+    void repeatedTextPayloadIsAResourceCapAndNextCallRemainsHealthy() {
+        MathSyntaxException cap = assertThrows(MathSyntaxException.class,
+            () -> LatteX.toMathML(OutputWorkBudgetProbe.witness("text")));
+        assertTrue(cap.isCapExceeded());
+        assertTrue(cap.getMessage().contains("output work budget"), cap.getMessage());
+        assertWellFormed(LatteX.toMathML("\\text{healthy} + x^2"));
+    }
+
+    @Test
+    void escapedTextAndRecursiveConcatenationAreBudgetedBeforeMaterialization() {
+        // Under the text/source limits, and less than 2M final output characters:
+        // escaping plus repeatedly copying a long descendant is its own work axis.
+        String source = "\\boxed{".repeat(20) + "\\text{" + "\"".repeat(90_000) + "}"
+            + "}".repeat(20);
+        MathSyntaxException cap = assertThrows(MathSyntaxException.class,
+            () -> LatteX.toMathML(source));
+        assertTrue(cap.isCapExceeded());
+        assertTrue(cap.getMessage().contains("MathML copying"), cap.getMessage());
+        String healthy = LatteX.toMathML("\\boxed{\\text{\"<&>}} ");
+        assertTrue(healthy.contains("&quot;&lt;&amp;&gt;"));
+        assertWellFormed(healthy);
+    }
+
+    @Test
+    void arraySeparatorPayloadIsChargedOnEveryRow() {
+        String source = "\\begin{array}{c@{\\text{" + "a".repeat(5_000) + "}}}"
+            + "x\\\\".repeat(24) + "x\\end{array}";
+        MathSyntaxException cap = assertThrows(MathSyntaxException.class,
+            () -> LatteX.toMathML(source));
+        assertTrue(cap.isCapExceeded());
+        assertTrue(cap.getMessage().contains("output work budget"), cap.getMessage());
+        assertTrue(LatteX.renderWithDiagnostics(source).diagnostics().outcome()
+            == Outcome.OUTPUT_CAP_EXCEEDED);
+        assertWellFormed(LatteX.toMathML("\\begin{array}{c@{\\text{ok}}}x\\\\x\\end{array}"));
+    }
+
     /// Overload carrying the corpus coordinate, so a sweep failure names the ROW that produced it
     /// rather than only the emitted XML (plan bc50471c).
     private static void assertWellFormed(String xml, String where) {

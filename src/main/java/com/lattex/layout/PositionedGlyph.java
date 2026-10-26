@@ -44,6 +44,10 @@ public record PositionedGlyph(int glyphId, double originX, double baselineY, dou
                               Color color, int sourceCodePoint, int fenceDepth,
                               int unmappedCodePoint) {
 
+    public PositionedGlyph {
+        RenderWorkBudget.chargeGlyph();
+    }
+
     /** A glyph with no source token — a construction glyph (not an author atom). */
     public static final int NO_SOURCE = -1;
 
