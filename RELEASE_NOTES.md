@@ -6,6 +6,13 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
+### Render work is bounded before glyph and MathML allocation
+
+Repeated text macros and array separators now consume a fresh per-render materialized-work
+budget before glyph lists or MathML strings are built. Excessive work produces a typed resource
+cap instead of waiting for the final SVG-size check. The conservative budget also bounds traversal,
+XML escaping and ancestor copying; ordinary accepted output is unchanged.
+
 ### `\begin{equation}` renders, and says it dropped the number
 
 LatteX already rendered everything *inside* a display wrapper; only the outermost container was
