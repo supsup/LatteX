@@ -466,6 +466,13 @@ even when its final string would be smaller. Ordinary accepted output is unchang
 `toMathML` reports a typed resource-cap exception, and diagnostic SVG rendering
 reports `OUTPUT_CAP_EXCEEDED`. Each call has a fresh budget.
 
+SVG layout also charges actual primitive construction, including translated and
+colored copies: at most 400,000 glyph placements and 100,000 rules per render.
+This covers generated dashed rules and separators reused across table rows,
+whose geometry can grow without a large text payload. Excessive or non-finite
+rule geometry is refused before its producer loop. These are construction-count
+limits, not a guarantee that every admitted render fits an arbitrary heap size.
+
 ```java
 try {
     String svg = com.lattex.api.LatteX.render(userInput);

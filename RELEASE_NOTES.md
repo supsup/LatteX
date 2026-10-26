@@ -13,6 +13,11 @@ budget before glyph lists or MathML strings are built. Excessive work produces a
 cap instead of waiting for the final SVG-size check. The conservative budget also bounds traversal,
 XML escaping and ancestor copying; ordinary accepted output is unchanged.
 
+Layout additionally charges every generated glyph/rule and its copies against
+render-local construction limits. Dashed-rule geometry is checked before its
+producer loop, and repeated table-separator stamps share one cumulative allowance.
+This closes geometry amplification that text and AST counts alone cannot measure.
+
 ### `\begin{equation}` renders, and says it dropped the number
 
 LatteX already rendered everything *inside* a display wrapper; only the outermost container was

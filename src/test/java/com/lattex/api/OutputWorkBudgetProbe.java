@@ -44,6 +44,10 @@ public final class OutputWorkBudgetProbe {
                 if (!cap.isCapExceeded() || !cap.getMessage().contains("output work budget")) {
                     throw new AssertionError("expected allocation-time output work refusal", cap);
                 }
+                if ((args[1].equals("text") || args[1].equals("textbf"))
+                        && !cap.getMessage().contains("materialized text")) {
+                    throw new AssertionError("text amplification must fail in preflight", cap);
+                }
                 if (args[1].equals("dashed") && !cap.getMessage().contains("dashed rule geometry")) {
                     throw new AssertionError("dashes must refuse before their producer loop", cap);
                 }
