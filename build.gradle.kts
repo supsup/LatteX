@@ -63,10 +63,11 @@ dependencies {
     testImplementation("org.graalvm.polyglot:js-community:24.2.2")
 }
 
-// Hermetic `test` (plan 32148cc8 S2, reviewer F1): every test — including the
-// examples/-page GENERATORS (tagged "examples") and the BrewShot capture tests
-// (tagged "capture") — runs in the normal suite, so their security / runtime /
-// alphabet / safe-evaluator / grammar-pin assertions ALWAYS execute in CI.
+// Hermetic `test` (plan 32148cc8 S2, reviewer F1): every test, including the
+// examples/-page GENERATORS (tagged "examples"), runs in the core suite, so their security /
+// runtime / alphabet / safe-evaluator / grammar-pin assertions ALWAYS execute in CI. The
+// BrewShot capture tests (tagged "capture") are the one exception: they run in `browserTest`,
+// which `check` depends on (see the block inside tasks.test and below; plan 8b7596e0).
 // Hermeticity comes from WHERE they write, not from excluding assertions: under
 // `test` the generators write into build/examples and the captures into build/,
 // so `./gradlew test` never touches the working tree. Only `generateExamples`
