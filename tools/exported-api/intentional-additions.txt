@@ -57,11 +57,3 @@ public type com.lattex.api.MathStyle
 # 7-argument constructor is retained deliberately so no construction site moves.
 public constructor com.lattex.api.Diagnostics(com.lattex.api.Outcome,java.lang.String,java.lang.String,int,java.lang.String,int,java.lang.String,java.util.List)
 public method com.lattex.api.Diagnostics#caveats():java.util.List
-
-# --- 2026-10-27  tryRenderMath(latex, RenderOptions), recorded after the fact (plan 1615d52b)
-#
-# WHY: added 2026-10-24 by 1f097f5 (plan 6e471764, renderStyledHtml parity) and landed by
-# push, so the PR-only gate never saw it. Found by the one-time check.sh 4dd6e2b..main
-# reconcile that plan 1615d52b required. It is the options-taking twin of the already
-# exported tryRenderMath(String); the addition is deliberate, so it is ledgered, not reverted.
-public static method com.lattex.api.LatteX#tryRenderMath(java.lang.String,com.lattex.api.RenderOptions):java.util.Optional
