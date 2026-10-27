@@ -11,13 +11,17 @@ on:
   pull_request:
 
 jobs:
+  # Runs on PRs AND on pushes to main. PR-only meant a change landed on main
+  # (direct push, or a merge whose result differs from the PR's merge
+  # candidate) never passed this gate (plan 1615d52b).
   exported-surface:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          # fetch-depth: 0 for the base..head diff this job actually needs.
+          # fetch-depth: 0 for the base..head diff this job actually needs: on a
+          # PR the base sha, on a push to main github.event.before. Full history
+          # makes both reachable without guessing a depth.
           #
           # fetch-tags IS NOT NEEDED BY THIS JOB TODAY — it is here so this
           # checkout stops being a TRAP (review lattex/830, Confluence). A bare
@@ -39,10 +43,32 @@ jobs:
       - name: Prove the exported-surface detector fires and clears causally
         run: tools/exported-api/self-test.sh
       - name: Reject undeclared public/protected additions in exported packages
-        run: >-
-          tools/exported-api/check.sh
-          "${{ github.event.pull_request.base.sha }}"
-          "${{ github.sha }}"
+        # PR: base = the PR base sha (unchanged). Push to main: base = the
+        # pre-push tip (github.event.before). A missing or all-zero `before`
+        # (new ref, some force pushes) has no base to compare against, so the
+        # job FAILS rather than skips: a skipped gate on main is the hole this
+        # job exists to close. An unreachable `before` (force push that dropped
+        # it) also fails, via the explicit check below.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          TIP_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$PUSH_BEFORE_SHA"
+            if [ -z "$base" ] || [ -z "${base//0/}" ]; then
+              echo "::error::exported-surface: push has no usable base (github.event.before='$base'). Refusing to skip the gate; run tools/exported-api/check.sh against the last gated main commit by hand."
+              exit 1
+            fi
+          fi
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "::error::exported-surface: base commit $base is not in the checkout (force push?). Refusing to skip the gate."
+            exit 1
+          fi
+          tools/exported-api/check.sh "$base" "$TIP_SHA"
 
   build:
     runs-on: ubuntu-latest
