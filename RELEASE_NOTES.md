@@ -31,7 +31,7 @@ its final output would exceed a limit. A known typed refusal is 2,000 text-macro
 calls with 32 singleton brace groups around one math atom: 132,000 cumulative
 tokens, although the final tree would contain only 2,000 atoms. Pure-math text
 macro amplification now has a distinct parsed-token output-work refusal before
-render preflight. Runtime verification of this repair is pending.
+render preflight.
 
 Layout additionally charges every generated glyph/rule and its copies against
 render-local construction limits. Dashed-rule geometry is checked before its
