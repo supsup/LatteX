@@ -22,6 +22,17 @@ text charge theirs without being billed again by their parents. MathML estimates
 actual atom markup and separate table wrappers, avoiding the former premature flat-formula cap.
 The fragment API keeps its existing fail-soft MathML contract and SVG-size limit.
 
+The parser separately bounds cumulative expanded-token work at 100,000 non-EOF
+tokens per public parse, before each parser builds its AST. Internal text-math
+re-parses share this counter; reentrant public calls have fresh counters. This
+conservative parser-work policy is separate from the 100,000 literal UTF-16-unit
+allowance: deeply bracketed or repeatedly re-parsed text math may be refused before
+its final output would exceed a limit. A known typed refusal is 2,000 text-macro
+calls with 32 singleton brace groups around one math atom: 132,000 cumulative
+tokens, although the final tree would contain only 2,000 atoms. Pure-math text
+macro amplification now has a distinct parsed-token output-work refusal before
+render preflight. Runtime verification of this repair is pending.
+
 Layout additionally charges every generated glyph/rule and its copies against
 render-local construction limits. Dashed-rule geometry is checked before its
 producer loop, and repeated table-separator stamps share one cumulative allowance.

@@ -1,6 +1,7 @@
 package com.lattex.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,7 +29,8 @@ class OutputWorkBudgetTest {
     void svgAndMathMLRefuseAmplificationInSmallHeapForks() throws Exception {
         for (String mode : List.of("svg", "mathml")) {
             for (String command : List.of("text", "textbf", "decoded-tilde", "decoded-braces",
-                    "decoded-escape", "decoded-dollar", "decoded-nested")) {
+                    "decoded-escape", "decoded-dollar", "decoded-nested",
+                    "parsed-dollar", "parsed-paren")) {
                 assertSmallHeapProbe(mode, command);
             }
         }
@@ -218,20 +220,80 @@ class OutputWorkBudgetTest {
     @Test
     void decodeWorkFollowsNestedParsersAndIsFreshAfterFailure() {
         String payload = "a".repeat(40_000);
-        String nested = "\\text{$\\text{" + payload + "}$}";
-        String definition = "\\newcommand{\\nested}{" + nested + "}";
-        assertEquals(MathParser.parse(("\\text{" + payload + "}").repeat(2)),
-            MathParser.parse(definition + "\\nested ".repeat(2)),
-            "80k literal units admit without counting the surrounding math spans again");
-        String source = definition + "\\nested ".repeat(3);
+        for (boolean paren : List.of(false, true)) {
+            String nested = "\\text{" + (paren ? "\\(" : "$") + "\\text{" + payload + "}"
+                + (paren ? "\\)" : "$") + "}";
+            String definition = "\\newcommand{\\nested}{" + nested + "}";
+            assertEquals(MathParser.parse(("\\text{" + payload + "}").repeat(2)),
+                MathParser.parse(definition + "\\nested ".repeat(2)),
+                "80k literal units admit without counting the surrounding math spans again");
+            String source = definition + "\\nested ".repeat(3);
+            assertTrue(source.length() < 100_000);
+            // Each nested parser decodes 40k, for 120k actual literal work. Resetting
+            // the shared counter or dropping the cap flag in either delimiter's
+            // nested-span rewrap would incorrectly admit or misclassify it.
+            MathSyntaxException failure = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse(source));
+            assertTrue(failure.isCapExceeded());
+            assertTrue(failure.getMessage().contains("materialized text during parse"));
+        }
+        assertTrue(LatteX.toMathML("\\text{$\\text{healthy}$}").contains("healthy"));
+    }
+
+    @Test
+    void capRefusedTagTextCannotRetryAsMath() {
+        String definition = "\\newcommand{\\zzq}{\\tag{" + "a".repeat(40_000) + "}}";
+        String source = definition + "\\begin{gather}x\\zzq\\\\x\\zzq\\\\x\\zzq\\end{gather}";
         assertTrue(source.length() < 100_000);
-        // Each nested parser decodes 40k, for 120k actual literal work. Resetting
-        // the shared counter at each recursive parse would incorrectly admit it.
+        // The third label exceeds 100k literal work. Retrying that refusal as
+        // 40k math atoms would fit the token allowance and incorrectly accept it.
         MathSyntaxException failure = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse(source));
         assertTrue(failure.isCapExceeded());
         assertTrue(failure.getMessage().contains("materialized text during parse"));
-        assertTrue(LatteX.toMathML("\\text{$\\text{healthy}$}").contains("healthy"));
+    }
+
+    @Test
+    void cumulativeParsedTokenBoundaryIsIndependentOfSourceLength() {
+        String definition = "\\newcommand{\\zzq}{\\text{$" + "x".repeat(999) + "$}}";
+        String below = definition + "\\zzq ".repeat(99) + "x".repeat(999);
+        String at = definition + "\\zzq ".repeat(100);
+        String above = at + "x";
+        for (String source : List.of(below, at, above)) {
+            assertTrue(source.length() < 100_000);
+        }
+        // 99 TEXT + 999 root atoms + 99*999 inner atoms = 99,999 tokens.
+        // 100 TEXT + 100*999 inner atoms = 100,000; one root atom makes 100,001.
+        // Definitions disappear before this counter, and EOF never consumes work.
+        assertEquals(1_098, ((MathNode.MathList) MathParser.parse(below)).items().size());
+        assertEquals(100, ((MathNode.MathList) MathParser.parse(at)).items().size());
+        assertParsedTokenCap(above);
+        // A failed scope cannot poison a later public parse. No render/preflight
+        // participates in this direct ordinary-source boundary admit control.
+        assertEquals(99_999,
+            ((MathNode.MathList) MathParser.parse("x".repeat(99_999))).items().size());
+        MathSyntaxException oldSourceCap = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("x".repeat(100_001)));
+        assertFalse(oldSourceCap.isCapExceeded(), "the existing source-length guard is unchanged");
+        assertTrue(oldSourceCap.getMessage().contains("input too long"));
+    }
+
+    @Test
+    void conservativeParsedTokenPolicyRefusesSmallOutputWithRepeatedBraces() {
+        String source = "\\newcommand{\\zzq}{\\text{$" + "{".repeat(32) + "x"
+            + "}".repeat(32) + "$}}" + "\\zzq ".repeat(2_000);
+        assertEquals(10_093, source.length());
+        // 2,000 root TEXT + 2,000*65 inner tokens = 132,000 work tokens.
+        // Singleton braces collapse to only 2,000 final atoms: this is the named
+        // conservative policy refusal, not an output-size or literal-text refusal.
+        assertParsedTokenCap(source);
+    }
+
+    private static void assertParsedTokenCap(String source) {
+        MathSyntaxException failure = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse(source));
+        assertTrue(failure.isCapExceeded());
+        assertTrue(failure.getMessage().contains("output work budget exceeded: parsed tokens during parse"));
     }
 
     @Test
@@ -245,10 +307,29 @@ class OutputWorkBudgetTest {
         assertTrue(result[0].startsWith("<svg"));
         assertTrue(result[0].contains("<path"));
         assertEquals(LatteX.toMathML("y"), result[1]);
+
+        String literalDeep = ("\\text{" + "a".repeat(100) + "$").repeat(500)
+            + "y" + "$}".repeat(500);
+        assertTrue(literalDeep.length() < 100_000);
+        // Parse only: rendering this nested literal tree has a separate copying
+        // allowance. Counting an enclosing raw payload again would refuse 50k.
+        assertTrue(StackStarved.assertSucceedsOnRoomyStack(
+            "500 levels charge only their own 100 literal units",
+            () -> MathParser.parse(literalDeep)) instanceof MathNode.MathList);
+        String source = "\\newcommand{\\zzq}{" + literalDeep + "}"
+            + "\\text{" + "b".repeat(5_000) + "}" + "\\zzq ".repeat(2);
+        assertTrue(source.length() < 100_000);
+        // 5k + two 50k payloads = 105k actual literal work, but only 1,003
+        // non-EOF parsed tokens. Depth and source length stay within their caps.
+        MathSyntaxException failure = (MathSyntaxException) StackStarved.assertSucceedsOnRoomyStack(
+            "500-deep literal amplification refuses with its typed decode reason",
+            () -> assertThrows(MathSyntaxException.class, () -> MathParser.parse(source)));
+        assertTrue(failure.isCapExceeded());
+        assertTrue(failure.getMessage().contains("materialized text during parse"));
     }
 
     @Test
-    void independentReentrantParseHasItsOwnDecodeAllowance() {
+    void independentReentrantParseHasItsOwnWorkAllowance() {
         List<String> environments = new java.util.ArrayList<>() {
             @Override public boolean add(String name) {
                 MathParser.parse("\\text{" + "b".repeat(60_000) + "}");
@@ -260,6 +341,18 @@ class OutputWorkBudgetTest {
         MathParser.parse("\\text{" + "a".repeat(60_000) + "}\\begin{align}x\\end{align}",
             java.util.Map.of(), environments);
         assertEquals(List.of("align"), environments);
+
+        List<String> tokenEnvironments = new java.util.ArrayList<>() {
+            @Override public boolean add(String name) {
+                MathParser.parse("x".repeat(60_000));
+                return super.add(name);
+            }
+        };
+        // Both outer and reentrant public calls use over half the token allowance.
+        // Sharing counters would refuse even though each independent call fits.
+        MathParser.parse("x".repeat(60_000) + "\\begin{align}x\\end{align}",
+            java.util.Map.of(), tokenEnvironments);
+        assertEquals(List.of("align"), tokenEnvironments);
     }
 
     @Test

@@ -463,6 +463,16 @@ inside a literal segment count before decoding. This prevents repeated decoded m
 text from exhausting the heap before render preflight can run without repeatedly
 charging a nested math payload at every enclosing level.
 
+A separate conservative parser-work allowance permits 100,000 cumulative non-EOF
+tokens after lexing and macro expansion, counted once for each parser before its
+AST is built. Internal re-parses of text math share this allowance; an independent
+public parse, including a reentrant call, gets a fresh allowance. This is separate
+from the 100,000 literal UTF-16 units above. Deeply bracketed or repeatedly re-parsed
+text math may be refused before its final output would exceed a limit. For example,
+2,000 calls to a text macro containing `$x$` with 32 singleton brace groups around
+`x` consume 132,000 work tokens despite collapsing to only 2,000 final atoms; that
+shape receives a typed parsed-token output-work refusal.
+
 SVG layout and MathML also preflight materialized work before allocating glyphs or
 markup. Each render allows 100,000 UTF-16 units of text/operator-name payload,
 counted per occurrence after macro expansion (including repeated array separators).

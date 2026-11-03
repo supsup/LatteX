@@ -178,6 +178,7 @@ public final class MathParser {
 
     private static final class TextDecodeWork {
         long units;
+        long parsedTokens;
 
         void charge(int amount) {
             if (amount > MAX_TEXT_DECODE_UNITS - units) {
@@ -185,6 +186,23 @@ public final class MathParser {
                     "output work budget exceeded: materialized text during parse");
             }
             units += amount;
+        }
+
+        // Count actual expanded input once per parser, not raw TEXT payloads at
+        // every enclosing level. This conservative work policy also counts braces
+        // that later collapse; it is separate from the literal-decoding allowance.
+        void chargeParsedTokens(List<Token> tokens) {
+            long amount = 0;
+            for (Token token : tokens) {
+                if (token.kind() != Kind.EOF) {
+                    amount++;
+                }
+            }
+            if (amount > (long) MacroExpander.MAX_MACRO_OUTPUT_TOKENS - parsedTokens) {
+                throw MathSyntaxException.capExceeded(
+                    "output work budget exceeded: parsed tokens during parse");
+            }
+            parsedTokens += amount;
         }
     }
 
@@ -202,6 +220,7 @@ public final class MathParser {
      */
     private MathParser(String src, Map<String, String> macros) {
         this.tokens = MacroExpander.expand(lex(src), macros);
+        TEXT_DECODE_WORK.get().chargeParsedTokens(tokens);
         this.source = src;
         this.presetMacros = macros;
     }
@@ -671,6 +690,9 @@ public final class MathParser {
         try {
             return textWithNestedMath(Token.text("tag", raw, offset), TextStyle.ROMAN);
         } catch (MathSyntaxException textRefused) {
+            if (textRefused.isCapExceeded()) {
+                throw textRefused;
+            }
             try {
                 return parseMath(raw, depth, presetMacros);
             } catch (MathSyntaxException mathRefused) {
@@ -2600,6 +2622,9 @@ public final class MathParser {
                 try {
                     items.add(parseMath(span, depth));
                 } catch (MathSyntaxException e) {
+                    if (e.isCapExceeded()) {
+                        throw e;
+                    }
                     String shown = paren ? "\\(" + span + "\\)" : "$" + span + "$";
                     throw MathSyntaxException.withUnsupportedKind(
                         "in \\" + t.name() + " nested math '" + shown + "': " + e.getMessage(),

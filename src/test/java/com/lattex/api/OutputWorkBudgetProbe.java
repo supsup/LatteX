@@ -15,6 +15,18 @@ public final class OutputWorkBudgetProbe {
             return "\\begin{array}{c@{" + inner + "}}"
                 + "x\\\\".repeat(999) + "x\\end{array}";
         }
+        if (command.startsWith("parsed-")) {
+            String atoms = "x".repeat(20_000);
+            String payload = switch (command) {
+                case "parsed-dollar" -> "$" + atoms + "$";
+                case "parsed-paren" -> "\\(" + atoms + "\\)";
+                default -> throw new AssertionError("unknown parsed-token witness: " + command);
+            };
+            // 4,000 root TEXT tokens plus 20,000 tokens per re-parsed math span.
+            // Zero literal text: the fifth span must hit 104,000 cumulative tokens
+            // before its AST is allocated, independently of render preflight.
+            return "\\newcommand{\\zzq}{\\text{" + payload + "}}" + "\\zzq ".repeat(4_000);
+        }
         if (command.startsWith("decoded-")) {
             String letters = "a".repeat(20_000);
             String payload = switch (command) {
@@ -67,6 +79,10 @@ public final class OutputWorkBudgetProbe {
                 if (args[1].equals("separator") && !cap.getMessage().contains("rule allocations")) {
                     throw new AssertionError("separator copies must hit cumulative rule accounting", cap);
                 }
+                if (args[1].startsWith("parsed-")
+                        && !cap.getMessage().contains("parsed tokens during parse")) {
+                    throw new AssertionError("pure math must hit the parser token-work cap", cap);
+                }
             }
             if (!LatteX.render("\\frac{x^2}{2}+\\text{healthy}").startsWith("<svg")
                     || !LatteX.toMathML("x^2").contains("<msup>")) {
@@ -75,10 +91,10 @@ public final class OutputWorkBudgetProbe {
         }
         if (mode.equals("svg")) {
             RenderResult result = LatteX.renderWithDiagnostics(hostile);
-            boolean text = args[1].equals("text") || args[1].equals("textbf")
-                || args[1].startsWith("decoded-");
+            boolean parse = args[1].equals("text") || args[1].equals("textbf")
+                || args[1].startsWith("decoded-") || args[1].startsWith("parsed-");
             if (result.diagnostics().outcome() != Outcome.OUTPUT_CAP_EXCEEDED
-                    || !result.diagnostics().stage().equals(text ? "parse" : "layout")
+                    || !result.diagnostics().stage().equals(parse ? "parse" : "layout")
                     || LatteX.tryRenderMath(hostile).isPresent()) {
                 throw new AssertionError("diagnostic/fail-soft seams lost the output cap");
             }
