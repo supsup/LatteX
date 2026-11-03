@@ -148,6 +148,9 @@ public final class RenderWorkBudget {
             case MathNode.TextRun _ -> 15 + 6 * payload; // escaped <mtext>
             case MathNode.OperatorName _ -> 9 + 6 * payload; // escaped <mo>
             case MathNode.Spacing _, MathNode.MiddleDelim _, MathNode.SizedDelim _ -> 96;
+            // The serializer returns the child's String directly for these nodes:
+            // no wrapper markup is emitted. Traversal and child work still count.
+            case MathNode.ClassOverride _, MathNode.StyledMath _, MathNode.StyleSwitch _ -> 0;
             // Fixed tags/attributes/helper wrappers for compound nodes; descendants
             // contribute separately. Text-bearing leaves never take this allowance.
             default -> 256;

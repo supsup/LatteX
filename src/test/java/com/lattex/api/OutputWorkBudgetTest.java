@@ -243,4 +243,19 @@ class OutputWorkBudgetTest {
             java.util.Map.of(), environments);
         assertEquals(List.of("align"), environments);
     }
+
+    @Test
+    void serializerTransparentWrappersDoNotConsumeMarkupAllowance() {
+        String definition = "\\newcommand{\\z}{\\mathord{x}}";
+        String ordinary = definition + "\\z ".repeat(8);
+        assertEquals(LatteX.toMathML(ordinary), LatteX.renderFragment(ordinary, 12).mathml());
+
+        String repeated = definition + "\\phantom{" + "\\z ".repeat(8_000) + "}";
+        assertTrue(repeated.length() < 100_000);
+        String mathml = LatteX.toMathML(repeated);
+        assertEquals(8_000, mathml.split("<mi>x</mi>", -1).length - 1,
+            "all repeated atoms remain, despite transparent class wrappers");
+        assertEquals(mathml, LatteX.renderFragment(repeated, 12).mathml(),
+            "phantom isolates MathML calibration from the independent SVG cap");
+    }
 }
