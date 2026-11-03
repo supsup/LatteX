@@ -1,0 +1,24 @@
+# One-time historical reconcile of 4dd6e2b..main (plan 1615d52b). NOT read by CI or check.sh.
+#
+# Until plan 1615d52b, the exported-surface gate ran on pull requests only, and every merge
+# since 4dd6e2b landed by push, so no landed change passed it. The one-time reconcile
+# `check.sh 4dd6e2b <tip>` found exactly one exported addition that the ledger never recorded.
+# It is approved here, AFTER THE FACT, with its reason.
+#
+# Why this is a separate file and not a line in intentional-additions.txt (Marlow, lattex 1188):
+# the detector reads only the lines that are NEW in the tip ledger relative to the base ledger,
+# and fails a new line that matches no addition in that same diff. On the first push gated by
+# the new workflow, base = the previous main tip, where this method already exists, so a new
+# ledger line for it would be an UNUSED intention and fail the gate on its own first land.
+# The live ledger keeps its per-diff meaning; this record keeps the audit.
+#
+# Reproduce the reconcile with this record as the explicit tip allowlist:
+#   cat tools/exported-api/intentional-additions.txt \
+#       tools/exported-api/historical-reconcile-4dd6e2b.txt > "$TMPDIR/reconcile-allowlist.txt"
+#   tools/exported-api/check.sh 4dd6e2b HEAD "$TMPDIR/reconcile-allowlist.txt"
+#
+# --- tryRenderMath(latex, RenderOptions)
+# Added 2026-10-24 by 1f097f5 (plan 6e471764, renderStyledHtml parity) and landed by push.
+# It is the options-taking twin of the already exported tryRenderMath(String). Deliberate, so
+# it is approved here rather than reverted.
+public static method com.lattex.api.LatteX#tryRenderMath(java.lang.String,com.lattex.api.RenderOptions):java.util.Optional

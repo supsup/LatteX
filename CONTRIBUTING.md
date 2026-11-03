@@ -46,23 +46,26 @@ This subset is a contract with downstream HTML sanitizers (LatteX SVG must pass 
 ## Build & test
 
 ```bash
-./gradlew build      # compile + test
-./gradlew test       # tests only
+./gradlew build        # compile + check: core tests AND browser pins
+./gradlew check        # core `test` + `browserTest` (no jar/javadoc assembly)
+./gradlew test         # core suite only: never launches a browser
+./gradlew browserTest  # the real-browser BrewShot pins only
 ```
 
 Java 25 toolchain, provisioned by Gradle. Keep the build dependency-light and the tests deterministic (env-scrubbed — no ambient state).
 
-> **Local browser warning:** the normal `./gradlew test` and `./gradlew build`
-> suites include LatteX's real-browser BrewShot pins. When Chrome is installed,
-> those tests launch it headlessly to check the effects page, fx lifecycle, and
-> GIF liveness; BrewShot 0.9 starts it with `--no-startup-window`. Without Chrome,
-> a local run assumption-skips the browser pins, so a green local build may omit
-> them. CI sets `LATTEX_REQUIRE_BROWSER=1`, which makes browser absence fail closed;
-> the variable does not opt into a separate browser suite. There is no supported
-> Chrome-free command that represents the full verification gate: excluding the
-> `capture` tag is incomplete because the lifecycle tests are intentionally
-> untagged. Use an isolated Java container without Chrome only when you deliberately
-> want the local no-browser lane.
+> **Local browser warning:** the core `./gradlew test` task excludes the
+> `capture` tag and never launches Chrome. LatteX's real-browser BrewShot pins
+> (effects page, fx lifecycle, GIF liveness, fx gallery, rendered-error blob,
+> interactive-math runtime) all carry `@Tag("capture")` and run in the separate
+> `browserTest` task, which `check` (and therefore `build`) depends on. So a green
+> `./gradlew test` is NOT the full verification gate; `check` or `build` is. When
+> Chrome is installed, `browserTest` launches it headlessly; BrewShot 0.9 starts it
+> with `--no-startup-window`. Without Chrome, a local run assumption-skips the
+> browser pins, so a green local `check`/`build` may still omit them. CI sets
+> `LATTEX_REQUIRE_BROWSER=1`, which makes browser absence fail closed instead of
+> skipping; the variable does not select which tests run (the task split does
+> that). There is no supported Chrome-free command that represents the full gate.
 
 ### The fx-runtime JS harness
 
