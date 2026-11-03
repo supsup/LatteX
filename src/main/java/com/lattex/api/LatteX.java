@@ -1,5 +1,7 @@
 package com.lattex.api;
 
+import com.lattex.layout.RenderWorkBudget;
+
 import java.util.List;
 
 import java.util.ArrayList;
@@ -1189,6 +1191,7 @@ public final class LatteX {
      * helper, so the two can never disagree on the root element.
      */
     private static String mathmlDocument(MathNode node) {
+        RenderWorkBudget.checkMathML(node);
         return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">" + toMathML(node) + "</math>";
     }
 

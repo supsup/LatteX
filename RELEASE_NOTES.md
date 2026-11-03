@@ -6,7 +6,37 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
-_Nothing yet._
+**0.14.0-SNAPSHOT**
+
+### Render work is bounded before glyph and MathML allocation
+
+Repeated text macros and array separators now consume a fresh per-render materialized-work
+budget before glyph lists or MathML strings are built. Excessive work produces a typed resource
+cap instead of waiting for the final SVG-size check. The conservative budget also bounds traversal,
+XML escaping and ancestor copying; admitted output bytes are unchanged.
+
+Raw literal text work is also charged before decoding, on a shared parse-local
+allowance, so decoded macro splices cannot allocate all their expanded strings before
+the render budget runs. Each level charges its own literal segments; nested math and
+text charge theirs without being billed again by their parents. MathML estimates use
+actual atom markup and separate table wrappers, avoiding the former premature flat-formula cap.
+The fragment API keeps its existing fail-soft MathML contract and SVG-size limit.
+
+The parser separately bounds cumulative expanded-token work at 100,000 non-EOF
+tokens per public parse, before each parser builds its AST. Internal text-math
+re-parses share this counter; reentrant public calls have fresh counters. This
+conservative parser-work policy is separate from the 100,000 literal UTF-16-unit
+allowance: deeply bracketed or repeatedly re-parsed text math may be refused before
+its final output would exceed a limit. A known typed refusal is 2,000 text-macro
+calls with 32 singleton brace groups around one math atom: 132,000 cumulative
+tokens, although the final tree would contain only 2,000 atoms. Pure-math text
+macro amplification now has a distinct parsed-token output-work refusal before
+render preflight.
+
+Layout additionally charges every generated glyph/rule and its copies against
+render-local construction limits. Dashed-rule geometry is checked before its
+producer loop, and repeated table-separator stamps share one cumulative allowance.
+This closes geometry amplification that text and AST counts alone cannot measure.
 
 ---
 

@@ -114,6 +114,11 @@ public final class LayoutEngine {
 
     /** Lays out a math tree at the origin; returns positioned glyphs/rules + bbox. */
     public static Layout layout(MathNode root, LayoutContext ctx) {
+        RenderWorkBudget.checkLayout(root);
+        return RenderWorkBudget.withLayoutBudget(() -> layoutWithBudget(root, ctx));
+    }
+
+    private static Layout layoutWithBudget(MathNode root, LayoutContext ctx) {
         LAYOUT_BOXES.get()[0] = 0; // fresh L10 box budget per top-level layout
         Box box = layoutBox(root, ctx);
         List<PositionedGlyph> glyphs = new ArrayList<>();
@@ -2567,8 +2572,11 @@ public final class LayoutEngine {
         if (count <= 0) {
             return;
         }
+        RenderWorkBudget.requireRules(count);
         double block = count * thick + (count - 1) * thick; // bars + inter-bar gaps
         double x0 = regionStart + (gap - block) / 2.0;
+        requireFiniteRuleGeometry(regionStart, gap, thick, topY, spanH, block, x0,
+            x0 + (count - 1) * 2.0 * thick);
         for (int k = 0; k < count; k++) {
             rules.add(new Rule(x0 + k * 2.0 * thick, topY, thick, spanH));
         }
@@ -2581,18 +2589,46 @@ public final class LayoutEngine {
      */
     private static void addHorizontalRule(List<Rule> rules, double x, double y, double width,
                                           double thick, boolean dashed, double em) {
+        requireFiniteRuleGeometry(x, y, width, thick);
         if (!dashed) {
             rules.add(new Rule(x, y, width, thick));
             return;
         }
         double dash = 0.25 * em;
         double gap = 0.18 * em;
+        double step = dash + gap;
         double cursor = x;
         double end = x + width;
+        requireFiniteRuleGeometry(x, y, width, thick, em, dash, step, end);
+        if (width <= 0) {
+            return;
+        }
+        // A finite bound on the requested dashes prevents an enormous partial list.
+        // One extra slot covers endpoint/subtraction rounding; the loop below keeps
+        // the original geometry for accepted input. Constructors still charge once.
+        double requested = Math.ceil(width / step) + 1;
+        if (!(dash > 0) || !(step > 0) || !(x + step > x)
+                || !(end + step > end) || !Double.isFinite(requested)
+                || requested > RenderWorkBudget.MAX_RULE_ALLOCATIONS) {
+            throw MathSyntaxException.capExceeded("output work budget exceeded: dashed rule geometry");
+        }
+        RenderWorkBudget.requireRules((long) requested);
         while (cursor < end) {
+            double next = cursor + step;
+            if (!(next > cursor) || !Double.isFinite(next)) {
+                throw MathSyntaxException.capExceeded("output work budget exceeded: dashed rule progress");
+            }
             double w = Math.min(dash, end - cursor);
             rules.add(new Rule(cursor, y, w, thick));
-            cursor += dash + gap;
+            cursor = next;
+        }
+    }
+
+    private static void requireFiniteRuleGeometry(double... values) {
+        for (double value : values) {
+            if (!Double.isFinite(value)) {
+                throw MathSyntaxException.capExceeded("output work budget exceeded: nonfinite rule geometry");
+            }
         }
     }
 
