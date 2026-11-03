@@ -455,16 +455,26 @@ UNTRUSTED input: caps on source length, nesting depth, layout box count, and out
 stripping so the output stays within the `svg/g/path/rect` alphabet — a cap trip surfaces
 as `OUTPUT_CAP_EXCEEDED`, never an escaped error.
 
+Before decoding text arguments, the parser also allows 100,000 UTF-16 units of raw
+text-argument work per parse, counted on every occurrence after macro expansion.
+The same allowance follows nested math spans and text commands. Braces, escapes,
+and math toggles count as work too; deeply nested text can reach this conservative
+limit before its decoded text does. This prevents repeated decoded macro text from
+exhausting the heap before render preflight can run.
+
 SVG layout and MathML also preflight materialized work before allocating glyphs or
 markup. Each render allows 100,000 UTF-16 units of text/operator-name payload,
 counted per occurrence after macro expansion (including repeated array separators).
 Spaces and surrogate pairs count conservatively. A bounded AST walk also charges
-ancestor copying; MathML includes XML escaping and table/tag overhead, with a
+ancestor copying; MathML counts atom markup separately from compound wrappers and
+includes XML escaping and table/tag overhead, with a
 2,000,000-unit markup estimate and a separate copying allowance. These are
 conservative work limits, so deeply wrapped or markup-heavy input may be refused
-even when its final string would be smaller. Ordinary accepted output is unchanged;
+even when its final string would be smaller. Admitted output bytes are unchanged;
 `toMathML` reports a typed resource-cap exception, and diagnostic SVG rendering
-reports `OUTPUT_CAP_EXCEEDED`. Each call has a fresh budget.
+reports `OUTPUT_CAP_EXCEEDED` (including at the parse stage). Each call has a fresh
+budget. `renderFragment` retains its existing fail-soft contract: a MathML failure
+leaves its MathML string empty without discarding successfully rendered SVG.
 
 SVG layout also charges actual primitive construction, including translated and
 colored copies: at most 400,000 glyph placements and 100,000 rules per render.

@@ -168,6 +168,25 @@ public final class MathParser {
         }
     }
 
+    // Expanded TEXT tokens can share their raw payload while decoding produces a new
+    // retained String on each occurrence. Bound that work BEFORE decoding, including
+    // substring/nested-math paths. The same allowance follows recursive parseMath
+    // calls; a fresh allowance for every $ span would reopen the amplification.
+    private static final long MAX_TEXT_DECODE_UNITS = 100_000;
+    private static final ScopedValue<TextDecodeWork> TEXT_DECODE_WORK = ScopedValue.newInstance();
+
+    private static final class TextDecodeWork {
+        long units;
+
+        void charge(int amount) {
+            if (amount > MAX_TEXT_DECODE_UNITS - units) {
+                throw MathSyntaxException.capExceeded(
+                    "output work budget exceeded: materialized text during parse");
+            }
+            units += amount;
+        }
+    }
+
     private MathParser(String src) {
         this(src, Map.of());
     }
@@ -430,11 +449,14 @@ public final class MathParser {
                 "input too long: " + latex.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
-        if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                && LxOptionsParser.looksLikeTopLevelLx(latex)) {
-            return LxOptionsParser.parseLx(latex.strip(), macros);
-        }
-        return parseMath(latex, 0, macros);
+        String source = latex;
+        return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
+            if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                    && LxOptionsParser.looksLikeTopLevelLx(source)) {
+                return LxOptionsParser.parseLx(source.strip(), macros);
+            }
+            return parseMath(source, 0, macros);
+        });
     }
 
     /**
@@ -481,11 +503,13 @@ public final class MathParser {
                 "input too long: " + stripped.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
-        if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
-            return LxOptionsParser.parseLx(stripped.strip(), macros);
-        }
-        return parseMath(stripped, 0, macros, numberedEnvironmentSink);
+        return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
+            if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                    && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
+                return LxOptionsParser.parseLx(stripped.strip(), macros);
+            }
+            return parseMath(stripped, 0, macros, numberedEnvironmentSink);
+        });
     }
 
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */
@@ -517,6 +541,10 @@ public final class MathParser {
     /** As above, additionally reporting numbered display environments into a caller-owned sink. */
     static MathNode parseMath(String latex, int initialDepth, Map<String, String> macros,
                               Collection<String> numberedEnvironmentSink) {
+        if (!TEXT_DECODE_WORK.isBound()) {
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(
+                () -> parseMath(latex, initialDepth, macros, numberedEnvironmentSink));
+        }
         try {
             MathParser parser = new MathParser(latex, macros);
             parser.numberedEnvironmentSink = numberedEnvironmentSink;
@@ -2532,6 +2560,7 @@ public final class MathParser {
      */
     private MathNode textWithNestedMath(Token t, TextStyle style) {
         String raw = t.text(); // verbatim, braces included (lexTextArgument keeps them)
+        TEXT_DECODE_WORK.get().charge(raw.length());
         if (indexOfTextOpener(raw, 0) < 0) {
             return new TextRun(literalText(raw, t), style); // fast path: one literal run
         }

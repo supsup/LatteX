@@ -15,6 +15,18 @@ public final class OutputWorkBudgetProbe {
             return "\\begin{array}{c@{" + inner + "}}"
                 + "x\\\\".repeat(999) + "x\\end{array}";
         }
+        if (command.startsWith("decoded-")) {
+            String letters = "a".repeat(20_000);
+            String payload = switch (command) {
+                case "decoded-tilde" -> "~" + letters;
+                case "decoded-braces" -> "{" + letters + "}";
+                case "decoded-escape" -> "\\%" + letters;
+                case "decoded-dollar" -> letters + "$x$";
+                case "decoded-nested" -> "$\\text{~" + letters + "}$";
+                default -> throw new AssertionError("unknown decoded witness: " + command);
+            };
+            return "\\newcommand{\\zzq}{\\text{" + payload + "}}" + "\\zzq ".repeat(4_000);
+        }
         // ~9.5k source chars, 900 macro calls, ~900 text tokens/boxes, but 4.5M
         // materialized characters. Parser splice volume is intentionally well below
         // its limit: a TextRun's payload, rather than token count, is the multiplier.
@@ -44,7 +56,8 @@ public final class OutputWorkBudgetProbe {
                 if (!cap.isCapExceeded() || !cap.getMessage().contains("output work budget")) {
                     throw new AssertionError("expected allocation-time output work refusal", cap);
                 }
-                if ((args[1].equals("text") || args[1].equals("textbf"))
+                if ((args[1].equals("text") || args[1].equals("textbf")
+                        || args[1].startsWith("decoded-"))
                         && !cap.getMessage().contains("materialized text")) {
                     throw new AssertionError("text amplification must fail in preflight", cap);
                 }
@@ -62,8 +75,10 @@ public final class OutputWorkBudgetProbe {
         }
         if (mode.equals("svg")) {
             RenderResult result = LatteX.renderWithDiagnostics(hostile);
+            boolean text = args[1].equals("text") || args[1].equals("textbf")
+                || args[1].startsWith("decoded-");
             if (result.diagnostics().outcome() != Outcome.OUTPUT_CAP_EXCEEDED
-                    || !result.diagnostics().stage().equals("layout")
+                    || !result.diagnostics().stage().equals(text ? "parse" : "layout")
                     || LatteX.tryRenderMath(hostile).isPresent()) {
                 throw new AssertionError("diagnostic/fail-soft seams lost the output cap");
             }

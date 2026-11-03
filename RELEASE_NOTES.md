@@ -13,7 +13,14 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 Repeated text macros and array separators now consume a fresh per-render materialized-work
 budget before glyph lists or MathML strings are built. Excessive work produces a typed resource
 cap instead of waiting for the final SVG-size check. The conservative budget also bounds traversal,
-XML escaping and ancestor copying; ordinary accepted output is unchanged.
+XML escaping and ancestor copying; admitted output bytes are unchanged.
+
+Raw text-argument work is also charged before decoding or reparsing nested math,
+on a shared parse-local allowance, so decoded macro splices cannot allocate all
+their expanded strings before the render budget runs. Syntax inside a text argument
+counts toward this conservative work allowance. MathML estimates use actual atom
+markup and separate table wrappers, avoiding the former premature flat-formula cap.
+The fragment API keeps its existing fail-soft MathML contract and SVG-size limit.
 
 Layout additionally charges every generated glyph/rule and its copies against
 render-local construction limits. Dashed-rule geometry is checked before its

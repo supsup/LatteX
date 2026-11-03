@@ -27,7 +27,8 @@ class OutputWorkBudgetTest {
     @Test
     void svgAndMathMLRefuseAmplificationInSmallHeapForks() throws Exception {
         for (String mode : List.of("svg", "mathml")) {
-            for (String command : List.of("text", "textbf")) {
+            for (String command : List.of("text", "textbf", "decoded-tilde", "decoded-braces",
+                    "decoded-escape", "decoded-dollar", "decoded-nested")) {
                 assertSmallHeapProbe(mode, command);
             }
         }
@@ -162,5 +163,84 @@ class OutputWorkBudgetTest {
             () -> RenderWorkBudget.checkLayout(wide)).isCapExceeded());
         assertTrue(assertThrows(MathSyntaxException.class,
             () -> RenderWorkBudget.checkMathML(wide)).isCapExceeded());
+    }
+
+    @Test
+    void ordinaryWideMathMLIsPresentInDirectAndFragmentResults() {
+        String row = String.join("&", java.util.Collections.nCopies(100, "x"));
+        String array = "\\begin{array}{" + "c".repeat(100) + "}"
+            + String.join("\\\\", java.util.Collections.nCopies(100, row)) + "\\end{array}";
+        for (String source : List.of("x".repeat(20_000), array)) {
+            String mathml = LatteX.toMathML(source);
+            assertTrue(mathml.startsWith("<math "));
+            assertTrue(mathml.endsWith("</math>"));
+            // Preserve SVG's independent 2M-character cap: repeated inline font
+            // outlines can exceed it before MathML runs. A real phantom renders
+            // the SAME large body without ink, while preserving all its MathML.
+            String fragmentSource = "\\phantom{" + source + "}";
+            assertEquals(LatteX.toMathML(fragmentSource),
+                LatteX.renderFragment(fragmentSource, 12).mathml(),
+                "ordinary assistive output must not silently degrade");
+        }
+        for (String source : List.of("x".repeat(256),
+                "\\begin{array}{cc}a&b\\\\c&d\\end{array}")) {
+            assertEquals(LatteX.toMathML(source), LatteX.renderFragment(source, 12).mathml(),
+                "inked ordinary fragments keep their full assistive output too");
+        }
+    }
+
+    @Test
+    void independentCopyAndMarkupLimitsHaveSpecificOracles() {
+        MathNode deep = new MathNode.TextRun("a".repeat(2_000), MathNode.TextStyle.ROMAN);
+        for (int i = 0; i < 350; i++) {
+            deep = new MathNode.Boxed(deep);
+        }
+        MathNode copying = deep;
+        assertTrue(assertThrows(MathSyntaxException.class,
+            () -> RenderWorkBudget.checkLayout(copying)).getMessage().contains("layout copying"));
+        assertTrue(assertThrows(MathSyntaxException.class,
+            () -> RenderWorkBudget.checkMathML(copying)).getMessage().contains("MathML copying"));
+        MathNode markup = new MathNode.MathList(java.util.Collections.nCopies(8_000,
+            new MathNode.Boxed(MathNode.Atom.ord('x'))));
+        assertTrue(assertThrows(MathSyntaxException.class,
+            () -> RenderWorkBudget.checkMathML(markup)).getMessage().contains("MathML markup"));
+    }
+
+    @Test
+    void genuinelyAmplifiedTextStillRefusesThroughDirectMathML() {
+        MathSyntaxException failure = assertThrows(MathSyntaxException.class,
+            () -> LatteX.toMathML(OutputWorkBudgetProbe.witness("decoded-nested")));
+        assertTrue(failure.isCapExceeded());
+        assertTrue(failure.getMessage().contains("materialized text during parse"));
+        assertTrue(LatteX.toMathML("\\text{healthy}").contains("healthy"));
+    }
+
+    @Test
+    void decodeWorkFollowsNestedParsersAndIsFreshAfterFailure() {
+        String nested = "\\text{$\\text{" + "a".repeat(40_000) + "}$}";
+        String source = nested + nested;
+        assertTrue(source.length() < 100_000);
+        // Final text is only 80k, but decoding both outer and inner arguments is
+        // over 100k work. A counter reset at each nested parser would admit it.
+        MathSyntaxException failure = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse(source));
+        assertTrue(failure.isCapExceeded());
+        assertTrue(failure.getMessage().contains("materialized text during parse"));
+        assertTrue(LatteX.toMathML("\\text{$\\text{healthy}$}").contains("healthy"));
+    }
+
+    @Test
+    void independentReentrantParseHasItsOwnDecodeAllowance() {
+        List<String> environments = new java.util.ArrayList<>() {
+            @Override public boolean add(String name) {
+                MathParser.parse("\\text{" + "b".repeat(60_000) + "}");
+                return super.add(name);
+            }
+        };
+        // The caller-owned environment sink can enter the public parser again.
+        // Each independent call admits 60k; sharing the outer allowance would cap.
+        MathParser.parse("\\text{" + "a".repeat(60_000) + "}\\begin{align}x\\end{align}",
+            java.util.Map.of(), environments);
+        assertEquals(List.of("align"), environments);
     }
 }

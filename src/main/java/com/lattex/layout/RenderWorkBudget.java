@@ -92,7 +92,9 @@ public final class RenderWorkBudget {
 
     /** Refuses excessive materialized markup/ancestor copying before serialization. */
     public static void checkMathML(MathNode root) {
-        new RenderWorkBudget(true).visit(root, 1);
+        RenderWorkBudget budget = new RenderWorkBudget(true);
+        budget.units(0, 0, 64); // document <math xmlns=...> wrapper
+        budget.visit(root, 1);
     }
 
     private static long charge(long used, long amount, long limit, String kind) {
@@ -103,19 +105,16 @@ public final class RenderWorkBudget {
         return used + amount;
     }
 
-    private void units(long payload, int depth) {
+    private void units(long payload, int depth, long markup) {
         textUnits = charge(textUnits, payload, MAX_TEXT_UNITS, "materialized text");
         if (mathml) {
-            // xmlEscape expands a UTF-16 unit by at most 6 (&quot;). 256 units per
-            // node/cell/row cover current fixed tags, attributes, numeric widths and
-            // fences, plus the document root. Table columnalign is charged separately.
-            long markup = 256 + 6 * payload; // payload <= String.length(): no overflow
             outputUnits = charge(outputUnits, markup, MAX_MATHML_UNITS, "MathML markup");
-            // Each ancestor copies its descendants into a concatenation or builder.
-            // Four copies per level also allow builder growth/toString and temporary
-            // helper wrappers (stack braces, negations, table separators). This is a
-            // conservative work policy, not an exact byte-size prediction.
-            copyUnits = charge(copyUnits, markup * 4 * (depth + 1),
+            // One logical descendant copy per ancestor, plus the document wrapper.
+            // This is a work policy, not an allocation-byte prediction. Inflating
+            // every ordinary atom to 256 chars and four copies refused a flat 5208
+            // atoms despite its ~52k actual output. Use the leaf's actual markup and
+            // separately account table wrappers instead of hiding them in each leaf.
+            copyUnits = charge(copyUnits, markup * (depth + 1),
                 MAX_MATHML_COPY_UNITS, "MathML copying");
         } else {
             // Box composition copies glyph placements through ancestors. Include one
@@ -124,6 +123,35 @@ public final class RenderWorkBudget {
             copyUnits = charge(copyUnits, (payload + 1) * 4 * (depth + 1),
                 MAX_LAYOUT_COPY_UNITS, "layout copying");
         }
+    }
+
+    private static long mathmlMarkup(MathNode node, long payload) {
+        return switch (node) {
+            case MathNode.Atom atom -> {
+                int cp = atom.codePoint() == '-' ? 0x2212 : atom.codePoint();
+                int escaped = switch (cp) {
+                    case '&' -> 5;
+                    case '<', '>' -> 4;
+                    case '"' -> 6;
+                    default -> Character.charCount(cp);
+                };
+                int tags = switch (atom.mathClass()) {
+                    case ORD -> Character.isLetter(cp)
+                        && ((cp >= 0x0391 && cp <= 0x03A9) || (atom.upright() && cp < 0x80))
+                        ? 30 : 9;
+                    case OPEN, CLOSE -> 22;
+                    default -> 9;
+                };
+                yield tags + escaped;
+            }
+            case MathNode.MathList _ -> 13; // <mrow></mrow>
+            case MathNode.TextRun _ -> 15 + 6 * payload; // escaped <mtext>
+            case MathNode.OperatorName _ -> 9 + 6 * payload; // escaped <mo>
+            case MathNode.Spacing _, MathNode.MiddleDelim _, MathNode.SizedDelim _ -> 96;
+            // Fixed tags/attributes/helper wrappers for compound nodes; descendants
+            // contribute separately. Text-bearing leaves never take this allowance.
+            default -> 256;
+        };
     }
 
     private void visit(MathNode node, int depth) {
@@ -142,7 +170,7 @@ public final class RenderWorkBudget {
             case MathNode.OperatorName o -> o.name().length();
             default -> 0;
         };
-        units(payload, depth);
+        units(payload, depth, mathml ? mathmlMarkup(node, payload) : 0);
         int child = depth + 1;
         // Exhaustiveness is intentional: a new text-bearing node must choose its
         // materialized traversal here, rather than silently bypassing the budget.
@@ -181,13 +209,21 @@ public final class RenderWorkBudget {
             case MathNode.CdArrow n -> { visit(n.labelA(), child); visit(n.labelB(), child); }
             case MathNode.Matrix n -> matrix(n, child);
             case MathNode.BorderMatrix n -> {
+                if (mathml) {
+                    units(0, child, 96); // header row/corner cell
+                }
                 visit(n.corner(), child);
-                n.columnLabels().forEach(label -> visit(label, child));
+                for (MathNode label : n.columnLabels()) {
+                    if (mathml) {
+                        units(0, child, 16); // header <mtd>
+                    }
+                    visit(label, child);
+                }
                 for (int r = 0; r < n.rowCount(); r++) {
-                    units(0, child); // row markup
+                    units(0, child, 96); // row and row-label cell
                     visit(n.rowLabels().get(r), child);
                     for (MathNode cell : n.body().get(r)) {
-                        units(0, child); // cell markup/fences
+                        units(0, child, 128); // cell and up to two stretchy fences
                         visit(cell, child);
                     }
                 }
@@ -197,13 +233,13 @@ public final class RenderWorkBudget {
 
     private void matrix(MathNode.Matrix matrix, int depth) {
         for (int c = 0; c < matrix.columnCount(); c++) {
-            units(0, depth); // columnalign attribute, including empty tables
+            units(0, depth, 16); // columnalign attribute, including empty tables
         }
         for (int r = 0; r < matrix.rows().size(); r++) {
-            units(0, depth); // row and optional label-cell markup
+            units(0, depth, 96); // row and optional label-cell markup
             visit(matrix.rowTags().get(r), depth);
             for (MathNode cell : matrix.rows().get(r)) {
-                units(0, depth); // cell/span/alignment attributes
+                units(0, depth, 96); // cell/span/alignment/separator wrapper
                 visit(cell, depth);
             }
             // Do not deduplicate shared separator ASTs. Layout creates the boundary
