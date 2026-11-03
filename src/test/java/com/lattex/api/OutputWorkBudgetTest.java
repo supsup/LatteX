@@ -217,16 +217,34 @@ class OutputWorkBudgetTest {
 
     @Test
     void decodeWorkFollowsNestedParsersAndIsFreshAfterFailure() {
-        String nested = "\\text{$\\text{" + "a".repeat(40_000) + "}$}";
-        String source = nested + nested;
+        String payload = "a".repeat(40_000);
+        String nested = "\\text{$\\text{" + payload + "}$}";
+        String definition = "\\newcommand{\\nested}{" + nested + "}";
+        assertEquals(MathParser.parse(("\\text{" + payload + "}").repeat(2)),
+            MathParser.parse(definition + "\\nested ".repeat(2)),
+            "80k literal units admit without counting the surrounding math spans again");
+        String source = definition + "\\nested ".repeat(3);
         assertTrue(source.length() < 100_000);
-        // Final text is only 80k, but decoding both outer and inner arguments is
-        // over 100k work. A counter reset at each nested parser would admit it.
+        // Each nested parser decodes 40k, for 120k actual literal work. Resetting
+        // the shared counter at each recursive parse would incorrectly admit it.
         MathSyntaxException failure = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse(source));
         assertTrue(failure.isCapExceeded());
         assertTrue(failure.getMessage().contains("materialized text during parse"));
         assertTrue(LatteX.toMathML("\\text{$\\text{healthy}$}").contains("healthy"));
+    }
+
+    @Test
+    void deeplyNestedMathSpansOnlyChargeTheirOwnLiteralSegments() {
+        // This legal 500-deep input collapses to y. Use the existing roomy-stack
+        // positive venue so this checks accounting, independently of host stack size.
+        String[] result = (String[]) StackStarved.assertSucceedsOnRoomyStack(
+            "500-deep text remains admitted by the output budget", () -> new String[] {
+                LatteX.render(StackStarved.DEEP), LatteX.toMathML(StackStarved.DEEP)
+            });
+        assertTrue(result[0].startsWith("<svg"));
+        assertTrue(result[0].contains("<path"));
+        assertEquals(LatteX.toMathML("y"), result[1]);
     }
 
     @Test

@@ -37,8 +37,11 @@ class MathMLTest {
     void escapedTextAndRecursiveConcatenationAreBudgetedBeforeMaterialization() {
         // Under the text/source limits, and less than 2M final output characters:
         // escaping plus repeatedly copying a long descendant is its own work axis.
-        String source = "\\boxed{".repeat(20) + "\\text{" + "\"".repeat(90_000) + "}"
-            + "}".repeat(20);
+        String payload = "\\text{" + "\"".repeat(90_000) + "}";
+        // Twenty wrappers cost about 11.9M logical copies and must still admit;
+        // forty cross the independent 16M copy allowance with the same final text.
+        assertWellFormed(LatteX.toMathML("\\boxed{".repeat(20) + payload + "}".repeat(20)));
+        String source = "\\boxed{".repeat(40) + payload + "}".repeat(40);
         MathSyntaxException cap = assertThrows(MathSyntaxException.class,
             () -> LatteX.toMathML(source));
         assertTrue(cap.isCapExceeded());

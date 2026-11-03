@@ -169,9 +169,10 @@ public final class MathParser {
     }
 
     // Expanded TEXT tokens can share their raw payload while decoding produces a new
-    // retained String on each occurrence. Bound that work BEFORE decoding, including
-    // substring/nested-math paths. The same allowance follows recursive parseMath
-    // calls; a fresh allowance for every $ span would reopen the amplification.
+    // retained String on each occurrence. Bound each literal segment BEFORE decoding.
+    // A parent hands nested math/text to its child without billing that payload again.
+    // The allowance follows recursive parseMath calls; resetting it for every $ span
+    // would reopen the amplification.
     private static final long MAX_TEXT_DECODE_UNITS = 100_000;
     private static final ScopedValue<TextDecodeWork> TEXT_DECODE_WORK = ScopedValue.newInstance();
 
@@ -2560,7 +2561,6 @@ public final class MathParser {
      */
     private MathNode textWithNestedMath(Token t, TextStyle style) {
         String raw = t.text(); // verbatim, braces included (lexTextArgument keeps them)
-        TEXT_DECODE_WORK.get().charge(raw.length());
         if (indexOfTextOpener(raw, 0) < 0) {
             return new TextRun(literalText(raw, t), style); // fast path: one literal run
         }
@@ -2774,6 +2774,7 @@ public final class MathParser {
      * command inside {@code \text}.
      */
     private static String literalText(String s, Token t) {
+        TEXT_DECODE_WORK.get().charge(s.length());
         if (s.indexOf('{') < 0 && s.indexOf('}') < 0 && s.indexOf('\\') < 0
                 && s.indexOf('~') < 0) {
             return s;

@@ -15,11 +15,11 @@ budget before glyph lists or MathML strings are built. Excessive work produces a
 cap instead of waiting for the final SVG-size check. The conservative budget also bounds traversal,
 XML escaping and ancestor copying; admitted output bytes are unchanged.
 
-Raw text-argument work is also charged before decoding or reparsing nested math,
-on a shared parse-local allowance, so decoded macro splices cannot allocate all
-their expanded strings before the render budget runs. Syntax inside a text argument
-counts toward this conservative work allowance. MathML estimates use actual atom
-markup and separate table wrappers, avoiding the former premature flat-formula cap.
+Raw literal text work is also charged before decoding, on a shared parse-local
+allowance, so decoded macro splices cannot allocate all their expanded strings before
+the render budget runs. Each level charges its own literal segments; nested math and
+text charge theirs without being billed again by their parents. MathML estimates use
+actual atom markup and separate table wrappers, avoiding the former premature flat-formula cap.
 The fragment API keeps its existing fail-soft MathML contract and SVG-size limit.
 
 Layout additionally charges every generated glyph/rule and its copies against

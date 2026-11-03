@@ -455,12 +455,13 @@ UNTRUSTED input: caps on source length, nesting depth, layout box count, and out
 stripping so the output stays within the `svg/g/path/rect` alphabet — a cap trip surfaces
 as `OUTPUT_CAP_EXCEEDED`, never an escaped error.
 
-Before decoding text arguments, the parser also allows 100,000 UTF-16 units of raw
-text-argument work per parse, counted on every occurrence after macro expansion.
-The same allowance follows nested math spans and text commands. Braces, escapes,
-and math toggles count as work too; deeply nested text can reach this conservative
-limit before its decoded text does. This prevents repeated decoded macro text from
-exhausting the heap before render preflight can run.
+Before decoding literal text segments, the parser also allows 100,000 UTF-16 units
+of raw literal work per parse, counted on every occurrence after macro expansion.
+The same allowance follows nested math spans and text commands: each level charges
+only its own literal segments, while its children charge theirs. Braces and escapes
+inside a literal segment count before decoding. This prevents repeated decoded macro
+text from exhausting the heap before render preflight can run without repeatedly
+charging a nested math payload at every enclosing level.
 
 SVG layout and MathML also preflight materialized work before allocating glyphs or
 markup. Each render allows 100,000 UTF-16 units of text/operator-name payload,
