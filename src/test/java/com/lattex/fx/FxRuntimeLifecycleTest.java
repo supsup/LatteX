@@ -105,12 +105,15 @@ class FxRuntimeLifecycleTest {
                 boot(reducedMotion, "document.readyState = 'loading';"
                     + " globalThis.__zero = __lxMakeEl({'data-lx-fx-enter':'" + effect + "',"
                     + " 'data-lx-fx-hover':'" + effect + "', 'data-lx-fx-click':'" + effect + "',"
-                    + " 'data-lx-fx-bolts':'8', 'data-lx-fx-intensity':'0'}, 2);"
+                    + " 'data-lx-fx-bolts':'8', 'data-lx-fx-intensity':'0',"
+                    + " 'data-lx-fx-glow-color':'#336699'}, 2);"
                     + " document.querySelectorAll = function (sel) {"
                     + " return sel === '.lx-math' ? [__zero] : []; };");
                 assertEquals(baseline, work(), "no eager target work before DOM ready");
                 js("__lxFireDocument('DOMContentLoaded')");
                 assertEquals(baseline, work(), "zero target initialization adds NOTHING: " + effect);
+                assertEquals("", js("__zero.style.getPropertyValue('--lx-glow-color')").asString(),
+                    "disabled-only targets do not initialize the glow colour");
                 js("__zero.__fire('mouseenter'); __zero.__fire('click'); LatteXFx.play(__zero)");
                 fx.getMember(effect).execute(js("__zero"));
                 fx.getMember("play").execute(js("__zero"), effect, "400ms");
@@ -165,11 +168,14 @@ class FxRuntimeLifecycleTest {
     void zeroOnlyDisablesBoltTriggersAndPreservesMixedPrehiddenKeyframes() throws IOException {
         boot(false);
         js("globalThis.__mixed = __lxMakeEl({'data-lx-fx-enter':'fade',"
-            + " 'data-lx-fx-hover':'lightning', 'data-lx-fx-click':'pulse', 'data-lx-fx-intensity':'0'});"
+            + " 'data-lx-fx-hover':'lightning', 'data-lx-fx-click':'pulse', 'data-lx-fx-intensity':'0',"
+            + " 'data-lx-fx-glow-color':'#336699'});"
             + " __mixed.style.opacity = '0';"
             + " document.querySelectorAll = function (sel) { return sel === '.lx-math' ? [__mixed] : []; };"
             + " __lxInternals.init();");
         assertEquals("0", js("__mixed.style.opacity").asString(), "preserve unrelated enter pre-hide");
+        assertEquals("#336699", js("__mixed.style.getPropertyValue('--lx-glow-color')").asString(),
+            "mixed targets retain the glow colour for surviving effects");
         assertTrue(js("__mixed.style.animation").asString().startsWith("lx-fade "));
         assertEquals(2, intOf("__lxWorkSnapshot().listenerAdds"), "fade pin and pulse click only");
         String beforeHover = work();

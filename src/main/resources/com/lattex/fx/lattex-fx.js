@@ -2698,10 +2698,15 @@
       // triggers keep their listeners and any enter pre-hide behavior unchanged.
       var boltsOff = (boltEffect(enter) || boltEffect(hover) || boltEffect(click))
         && boundedFxDecimal(el, 'data-lx-fx-intensity', 100, 0, 300) === 0;
+      var allTriggersOff = boltsOff
+        && (!enter || boltEffect(enter))
+        && (!hover || boltEffect(hover))
+        && (!click || boltEffect(click));
 
       // Author-set glow colour drives both the glow keyframe (via the CSS var)
-      // and the lightning strike colour.
-      if (glowColor) { el.style.setProperty('--lx-glow-color', glowColor); }
+      // and the lightning strike colour. Disabled-only targets need no style
+      // initialization; mixed targets keep the colour for their surviving effects.
+      if (glowColor && !allTriggersOff) { el.style.setProperty('--lx-glow-color', glowColor); }
 
       // enter: play once on load.
       if (enter && !(boltsOff && boltEffect(enter))) {
