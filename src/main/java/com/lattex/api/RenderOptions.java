@@ -54,11 +54,13 @@ import java.util.regex.Pattern;
  *                  empty-SVG result. This flag is not part of the author-controlled
  *                  {@code \lx} option language and never changes throwing
  *                  {@link LatteX#render(String, RenderOptions)}.
+ * @param copySource host-only exact authored-source capability, off in every
+ *                   older constructor; participates in record identity/reflection
  */
 public record RenderOptions(double scale, Color color, MathStyle mathStyle,
                             java.util.Map<String, String> macros,
                             boolean interactiveExpansion, boolean fluid,
-                            boolean renderErrors) {
+                            boolean renderErrors, boolean copySource) {
 
     /** Lower clamp for {@link #scale()} — below this glyphs collapse to nothing. */
     public static final double MIN_SCALE = 0.1;
@@ -103,7 +105,14 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
         this(scale, color, mathStyle, macros, interactiveExpansion, fluid, false);
     }
 
-    /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style, expansion off, fixed-size. */
+    /** Seven-arg compatibility constructor: authored-source exposure remains off. */
+    public RenderOptions(double scale, Color color, MathStyle mathStyle,
+                         java.util.Map<String, String> macros,
+                         boolean interactiveExpansion, boolean fluid, boolean renderErrors) {
+        this(scale, color, mathStyle, macros, interactiveExpansion, fluid, renderErrors, false);
+    }
+
+    /** The default options: authored-source exposure is off, as in all older constructors. */
     public static RenderOptions defaults() {
         return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY,
             java.util.Map.of(), false, false, false);
@@ -112,19 +121,19 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
     /** A copy with a different scale (must be in {@code [MIN_SCALE, MAX_SCALE]}). */
     public RenderOptions withScale(double newScale) {
         return new RenderOptions(newScale, color, mathStyle, macros,
-            interactiveExpansion, fluid, renderErrors);
+            interactiveExpansion, fluid, renderErrors, copySource);
     }
 
     /** A copy with a different color. */
     public RenderOptions withColor(Color newColor) {
         return new RenderOptions(scale, newColor, mathStyle, macros,
-            interactiveExpansion, fluid, renderErrors);
+            interactiveExpansion, fluid, renderErrors, copySource);
     }
 
     /** A copy with a different math style. */
     public RenderOptions withMathStyle(MathStyle newStyle) {
         return new RenderOptions(scale, color, newStyle, macros,
-            interactiveExpansion, fluid, renderErrors);
+            interactiveExpansion, fluid, renderErrors, copySource);
     }
 
     /**
@@ -134,7 +143,7 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      */
     public RenderOptions withMacros(java.util.Map<String, String> newMacros) {
         return new RenderOptions(scale, color, mathStyle, newMacros,
-            interactiveExpansion, fluid, renderErrors);
+            interactiveExpansion, fluid, renderErrors, copySource);
     }
 
     /**
@@ -146,7 +155,7 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      */
     public RenderOptions withInteractiveExpansion(boolean enabled) {
         return new RenderOptions(scale, color, mathStyle, macros,
-            enabled, fluid, renderErrors);
+            enabled, fluid, renderErrors, copySource);
     }
 
     /**
@@ -164,7 +173,7 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      */
     public RenderOptions withFluid(boolean enabled) {
         return new RenderOptions(scale, color, mathStyle, macros,
-            interactiveExpansion, enabled, renderErrors);
+            interactiveExpansion, enabled, renderErrors, copySource);
     }
 
     /**
@@ -174,7 +183,13 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      */
     public RenderOptions withRenderedErrors(boolean enabled) {
         return new RenderOptions(scale, color, mathStyle, macros,
-            interactiveExpansion, fluid, enabled);
+            interactiveExpansion, fluid, enabled, copySource);
+    }
+
+    /** A copy with the host-only exact authored-source capability enabled or disabled. */
+    public RenderOptions withCopySource(boolean enabled) {
+        return new RenderOptions(scale, color, mathStyle, macros,
+            interactiveExpansion, fluid, renderErrors, enabled);
     }
 
     /**

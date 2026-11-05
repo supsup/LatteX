@@ -20,6 +20,32 @@ import org.junit.jupiter.api.Test;
  */
 class RenderOptionsTest {
 
+    @Test
+    void oldConstructorsKeepCopySourceOff() throws ReflectiveOperationException {
+        assertFalse(RenderOptions.defaults().copySource());
+        assertFalse(new RenderOptions(1, Color.CURRENT, MathStyle.DISPLAY).copySource());
+        assertFalse(new RenderOptions(1, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of()).copySource());
+        assertFalse(new RenderOptions(1, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of(), true).copySource());
+        assertFalse(new RenderOptions(1, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of(), true, true).copySource());
+        assertFalse(new RenderOptions(1, Color.CURRENT, MathStyle.DISPLAY, java.util.Map.of(), true, true, true).copySource());
+        RenderOptions.class.getConstructor(double.class, Color.class, MathStyle.class,
+            java.util.Map.class, boolean.class, boolean.class, boolean.class);
+    }
+
+    @Test
+    void everyCopyMethodPreservesTheSourceHostGate() {
+        RenderOptions armed = RenderOptions.defaults().withCopySource(true);
+        for (RenderOptions copy : java.util.List.of(
+                armed.withScale(1.5), armed.withColor(Color.BLACK), armed.withMathStyle(MathStyle.SCRIPT),
+                armed.withMacros(java.util.Map.of("half", "\\frac{1}{2}")),
+                armed.withInteractiveExpansion(true), armed.withFluid(true), armed.withRenderedErrors(true),
+                armed.inline(), armed.display())) {
+            assertTrue(copy.copySource());
+        }
+        assertFalse(armed.withCopySource(false).copySource());
+        assertNotEquals(armed, armed.withCopySource(false));
+    }
+
     // ---- macros (L8): validation, defensive copy, compatibility ----
 
     @org.junit.jupiter.api.Test

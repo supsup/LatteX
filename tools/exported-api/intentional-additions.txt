@@ -5,6 +5,11 @@
 # approve a later reintroduction. Matching is exact and there are no wildcards.
 # Every new line must match a real addition and be explained in the PR and notes.
 
+# Copy source Slice1, plan28f67310: default-OFF host gate; older constructors retained.
+public constructor com.lattex.api.RenderOptions(double,com.lattex.api.Color,com.lattex.api.MathStyle,java.util.Map,boolean,boolean,boolean,boolean)
+public method com.lattex.api.RenderOptions#copySource():boolean
+public method com.lattex.api.RenderOptions#withCopySource(boolean):com.lattex.api.RenderOptions
+
 # --- 2026-07-28  MathStyle relocated to the exported api package (Fixpoint ruling lattex/666)
 #
 # WHY: MathStyle was a public enum in com.lattex.layout, which module-info does NOT
