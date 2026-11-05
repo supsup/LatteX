@@ -6,7 +6,119 @@ LatteX turns LaTeX math into clean, self-contained **SVG** — pure Java, zero d
 
 ## Unreleased
 
-### `\begin{equation}` renders, and says it dropped the number
+_Nothing yet._
+
+---
+
+## 0.13.0 — 2026-10-26
+
+**The second tagged release**, and the first cut under the version-identity guard that
+0.12.0 promised: `build.gradle.kts` declares the bare `0.13.0`, the annotated tag
+`lattex-0.13.0` names the landed tree, and between cuts main declares `<next>-SNAPSHOT`.
+Consumers pin only a tagged release.
+
+**Provenance.** Built from `fa6bbbd` on the release branch `fixpoint/release-0.13.0`
+(`./gradlew clean build`, browser pins required):
+`sha256(lattex-0.13.0.jar)` = `be63b4c71d8a44816790c73f1eb2d64cff861a51730272cd5d1c5d055a943ceb`; manifest `Implementation-Version: 0.13.0`,
+`Implementation-SCM-Revision: fa6bbbddad190bbc6459eeda360b35c3fba12ddd`. The LAND tag `lattex-0.13.0` is the source of the
+vendored jar, rebuilt then; the tag's commit and that rebuild's digest supersede the
+branch figures above. That build ran 1,193 tests (1,176 core, 17 real-browser pins); the two
+tag-derived guards (`VersionIdentityGuardTest`, `ReleaseDocVersionPinTest`) are red on the
+untagged branch by design and go green once `lattex-0.13.0` points at the landed tip.
+
+**What changed since 0.12.0**, folded from the Unreleased section and the twelve entries
+queued in `RELEASE-NOTE-ENTRY.md` (base: `git log lattex-0.12.0..3718dc4`, 159 commits,
+41 merges). The biggest single change is visible in every formula: math letters are now
+math italic and `-` is the minus sign, as TeX sets them. The rest is mostly coverage of
+standard LaTeX measured on a research-preprint corpus: by the last measurement in this
+set, 105,270 of 137,880 display formulas render and 170 candidate LatteX gaps remain,
+against 4,594 gaps when the first entry in this set was measured on an earlier snapshot
+of the same corpus. Every public render entry now parses inside the containment
+boundary, `tryRenderMath` gained a `RenderOptions` overload, the MathML audit fixed four
+disagreements with the SVG, and `fx.substitute` joins `unfold`.
+`examples/symbol-index.html` grew from 609 to 692 commands over the set.
+
+**Also landed since 0.12.0, without a separate entry** (grouped by area; short shas):
+
+- *Build, release and CI.* `VersionIdentityGuardTest`: a bare release version must be
+  backed by a tag on HEAD, and main returns to `<next>-SNAPSHOT` between cuts (`1a0a57a`).
+  CI fetches tags, with both `fetch-depth: 0` and `fetch-tags: true`, so the two
+  tag-derived guards can see them (`90c0bf4`, `7236ff6`, `d75e534`). The jar manifest
+  carries `Implementation-SCM-Revision` from HEAD, or `LATTEX_SOURCE_REVISION` when it
+  matches HEAD, and `jar` fails closed rather than stamping an unknown; the Docker smoke
+  test asserts it (`9fbe092`, `429ad97`, `1754cbd`). The corpus ratchet now fails on growth
+  as well as shrinkage, so the README figure cannot understate coverage (`609fb4d`).
+  Accent MathML is asserted per accent, not by shape, and `\overline`/`\underline` no
+  longer throw a raw `IllegalArgumentException` out of `toMathML` (`85751bf`, `1b23838`,
+  `8a73dc0`). The row-boundary refusal message for `\\` and `\cr` is pinned (`c674279`).
+- *Layout.* Explicit kerns and glue are transparent to inter-atom spacing, as in TeX's
+  `mlist_to_hlist`: `a\!-\!a` keeps the Bin's spacing instead of collapsing the dash onto
+  its neighbours; `\pmod` sets `mod` as Ord, as amsmath does (`7a8d396`, `76dd660`).
+- *Docker and trust.* The two eMudhra-affected roots are removed from both image stages,
+  with a guard that fails the build if either remains and reports a producer failure as
+  VOID (exit 2) rather than PASS (`30723c2`, `c10c2f9`, `a571576`); the `TRUST_REFRESH`
+  build argument re-fetches the OS CA bundle instead of reusing a cached layer (`8440d82`).
+- *Tools.* `bin/lattex-markdown` no longer passes input through a shell boundary and
+  preserves delimiter boundaries (`967011c`, `6a1dac8`).
+- *Docs.* Currency sweep across QUICKSTART, README, the dogfood flow and the gallery
+  (`fa99583`, `3aaee69`).
+
+### Parsing and LaTeX coverage
+
+#### `$x^2$` renders the maths, not the dollar signs
+
+**Behaviour change — read this if you render user-supplied LaTeX.** A whole-input `$…$` or
+`\(…\)` pair is now stripped and its body rendered. Previously `render("$x^2$")` **succeeded
+and drew the dollar signs as literal glyphs** — 2587 bytes against 1247 for the bare body. The
+most common way anyone writes inline maths produced a silently wrong picture.
+
+The contrast that made it a defect rather than a gap: `\begin{equation}` correctly *threw*
+`Unknown environment`. The wrapper failed loud, the delimiter failed silent — and the delimiter
+is the one everybody types.
+
+```
+render("$x^2$")     now byte-identical to  render("x^2")
+render("\(x^2\)")   now byte-identical to  render("x^2")
+```
+
+**If you were relying on visible dollar signs** — a tutorial about LaTeX syntax, say — escape
+them: `\$` still draws a literal glyph and always did. That is the migration path, and it is
+pinned by a test.
+
+**Deliberately narrow**, because a normalization that is too eager eats content:
+
+- **Whole input only, and the pair must match.** `$a$ + $b$` begins and ends with `$`, but
+  those two are not a pair — a naive strip would yield `a$ + $b`. Untouched.
+- **Unclosed delimiters do not strip.** `$x^2` renders as before; `\(x^2` throws, naming the
+  delimiter.
+- **`$$…$$` and `\[…\]` are unchanged.** They are *display* maths; accepting them and then
+  rendering inline would accept a notation and drop its meaning.
+- A bad body inside a wrapper still fails, for the body's own reason.
+
+#### `\begin{equation*}` and `\begin{displaymath}` are accepted
+
+Pasting real LaTeX from a paper used to throw `Unknown environment` on the outermost wrapper,
+even though LatteX already rendered every construct *inside* it. Both explicitly-unnumbered
+display spellings now render their body:
+
+```
+\begin{equation*} E = mc^2 \end{equation*}
+\begin{displaymath} E = mc^2 \end{displaymath}
+```
+
+They are implemented as a one-row `gather`, so each is **byte-identical to `gather*`** — this
+introduces no new layout dialect. Against the bare body the glyphs and the rendered size are
+identical; the viewBox y-origin shifts by 5.696 units, which is the one-row display container
+doing what it already does for `gather*`.
+
+**The numbered `\begin{equation}` is deliberately still refused.** It *means* numbered, and
+LatteX does not render equation numbers, so accepting it silently would drop meaning the author
+wrote. Resolving it properly is complicated by something worth stating plainly: `align`,
+`gather`, `multline` and `eqnarray` **already** accept their numbered forms and render them
+identically to the starred ones, with a clean verdict and no caveat. That inconsistency predates
+this change and is under review rather than settled here.
+
+#### `\begin{equation}` renders, and says it dropped the number
 
 LatteX already rendered everything *inside* a display wrapper; only the outermost container was
 unknown. `\begin{equation*}` and `\begin{displaymath}` landed earlier as explicitly-unnumbered
@@ -41,46 +153,551 @@ The wild corpus gains four rows for four measured zeroes — it carried no `equa
 `displaymath` or `gather` row at all — so the coverage ratchet can now see this class instead of
 being blind to it.
 
+#### LaTeX's escapable specials are now complete in math mode, and the whole escape space is censused
 
-### Structural text braces no longer emit empty MathML text nodes (bug fix)
+- **`\%`, `\&`, `\_` and `\$` render as their literal characters.** Standard
+  LaTeX escapes seven specials to a literal glyph — `\# \$ \% \& \_ \{ \}` — and
+  LatteX registered only three of them (`\#`, `\{`, `\}`). The other four reached
+  the unknown-command throw. That was loud, never silent corruption, but it
+  rejected ordinary, correct LaTeX that harvested sources carry constantly
+  (`50\%`, `A \& B`, `x\_y`, `\$5`). Each is now one `Symbols` row: an ordinary
+  (`ORD`) atom carrying the literal code point, on exactly the path `\#` already
+  used. No new parser branch, no second registration — `CommandRegistry` derives
+  each descriptor's grammar, index row, suggestion candidacy and macro
+  reservation from that single table row.
+
+- **The escaped forms stay distinct from the bare characters.** Bare `_` remains
+  the subscript operator and bare `&` remains the matrix column separator; only
+  the escaped forms are literal content. `\begin{matrix}a\&b\end{matrix}` is one
+  cell containing an ampersand, not two cells — a difference invisible to a
+  "renders without throwing" check, so it is asserted directly. `Symbols.CLASS_BY_CODEPOINT`
+  still excludes ASCII, so four new ASCII rows cannot reclassify any pasted
+  literal character.
+
+- **The single-non-letter escape space is now censused end to end.** The lexer
+  turns `\` plus one non-letter into a one-character control sequence, so that
+  space is finite and enumerable. `NonLetterEscapeCensusTest` walks all 43
+  printable-ASCII non-letters and pins the acceptance property: **each either
+  renders with correct LaTeX semantics or fails loud — there is no silent third
+  path.** Every unregistered escape must throw a classified unknown-command
+  failure; every accepted one must carry a typed descriptor with an accepted
+  example and macro reservation. The accepted set is pinned exactly (the seven
+  specials, the spacing commands `\, \: \; \! \>` and the control space, the row
+  separator `\\`, and `\|` — which is the double bar ‖, not a literal pipe), so a
+  future addition or removal appears as a deliberate diff rather than a widening
+  discovered by a corpus.
+
+- **Two drift guards found while auditing the interactions.** The escapable
+  specials are encoded in *two* independent tables — `Symbols.SYMBOLS` for math
+  and `MathParser.TEXT_CONTROL_SYMBOLS` for `\text{…}` — with nothing structurally
+  tying them together, so a special could become accepted at one surface and
+  rejected at the other. That agreement is now pinned behaviorally at both
+  surfaces from one list. Separately, four new *one-character* names in the
+  fuzzy-suggestion pool could have started decorating unrelated failures with
+  advice like "`\@` — did you mean `\%`?" (any two single characters are edit
+  distance 1 apart). Measured: they do not; that is now pinned too.
+
+- **On the evidence.** There is no TeX engine on the build machine, so none of
+  this is a `pdflatex` differential and it is not claimed as one. The semantics
+  asserted are the documented, standard, uncontroversial behavior of these four
+  control symbols. What *is* machine-verified is the LatteX side: bundled STIX
+  Two Math carries a real glyph for all four code points (`SymbolCoverageTest`
+  fails the build and names any table code point without one, and never permits
+  a `<text>` fallback), and the census pins the atom, the class, the rendered
+  glyph paths and the accessible text. `examples/symbol-index.html` grew by
+  exactly four cells (609 → 613 commands).
+
+#### Braces around a one-token argument are optional, as in TeX
+
+- **`\mathrm u`, `x\pmod q`, `\text a`, `\phantom x`, `\tag1` now render.** TeX
+  reads an undelimited argument as the next token: one character, one control
+  sequence, or one `{...}` group, with spaces before it skipped. LatteX already
+  did this for fractions, roots, accents and font variants (`\frac12`, `\sqrt2`,
+  `\hat x`, `\mathbf 1`), but the text family (`\mathrm`, `\text`, `\textbf`, ...),
+  `\pmod`, the `\phantom` family, `\label`/`\ref`/`\eqref`, `\tag`, `\substack`,
+  `\operatorname`, the colour argument and `\bordermatrix` still demanded a brace.
+  All of them now share one argument predicate in the parser, so no command can
+  drift back to a brace requirement on its own. An unbraced argument is **one
+  token**: `x\pmod q r` is `x\pmod{q}r`, and `\mathrm dx` is `\mathrm{d}x`.
+
+- **Braced and unbraced spellings produce the same tree.** The new
+  `SingleTokenArgumentTest` asserts equality of the parse trees, not just "renders
+  without throwing", so a mis-scoped argument cannot pass. A registry census walks
+  every argument-taking descriptor and requires a one-token probe for its handler:
+  a future argument-taking command without one fails the build. Where an argument
+  has no valid one-token value (a colour name, a whole `\bordermatrix`), the census
+  requires the one token to reach that command's own domain check (`invalid color:
+  "r"`) rather than a brace complaint. A text command's one token is still literal
+  text: `\mathrm\alpha` fails exactly as `\mathrm{\alpha}` does.
+
+- **A boundary is never an argument.** With no token (end of input, `}`, a matrix
+  `&`, or a row separator `\\`/`\cr`) every reader now throws a typed error whose
+  caret points at the spot where the argument is missing. This also closes a quiet
+  bug: before, `\frac1&2` or `x^&` inside a matrix took the `&` as the argument and
+  merged two cells into one.
+
+- **On the evidence.** Measured over 138,172 unique display formulas from 722
+  research preprints (no paper macros supplied), against main `066b90f` and this
+  branch. Rendered: 101,822 to 103,109 (+1,287). Candidate LatteX gaps: 4,594 to
+  3,201. The `\mathrm expects a '{...}' text argument` bucket went from 1,040 to 0
+  and every `Expected '{' but found ...` bucket (385 formulas, every one a `\pmod`)
+  went to 0. No formula that rendered before fails now; 140 formulas still fail,
+  but on a later, different error (most often a paper-defined macro such as `\eps`
+  or `\dd`). There is no TeX engine on the build machine, so equivalence to TeX is
+  asserted against the TeXbook's stated rule, not a `pdflatex` differential.
+
+- **Known limits.** A control-sequence argument is read as a nucleus, so a command
+  that takes its own arguments brings them: `\hat\mathbf x` is `\hat{\mathbf x}`
+  (TeX's reading for an accent or script, whose math field expands the macro). For
+  a macro argument such as `\frac\sqrt2 3`, TeX would take `\sqrt` alone and fail;
+  LatteX renders the evident reading instead. Environment arguments
+  (`\begin{array}{cc}`'s column spec, `alignat`'s count) still require braces.
+
+#### The amsmath / amssymb names research papers use most now render
+
+Measured first, on main `066b90f`, over **138,172 unique display formulas from
+722 research preprints**: each name below was a refusal of standard LaTeX, with
+its count. Every one is now a row in the existing tables (`Symbols` /
+`CommandRegistry`), so its grammar, index cell, suggestion candidacy, macro
+reservation and MathML come from that one row.
+
+- **`\hbox{…}`** (957) takes `\text`'s contract whole: upright, spaces kept,
+  `$…$` re-enters math.
+- **`\begin{gathered}`** (897), plus the two missing inner forms
+  **`alignedat`** (with alignat's mandatory `{n}`) and mathtools' **`multlined`**.
+  Each lays out as its display twin; all take the optional `[t]`/`[b]`/`[c]`,
+  which is read and ignored, as `aligned` and `split` already did.
+- **`\lVert` `\rVert`** (118) and **`\lvert` `\rvert`** (55) are opening/closing
+  atoms *and* delimiters, so `\left\lVert … \right\rVert` and `\bigl\lvert`
+  work (23 more).
+- **`\mathop{…}`** (57) is an Op atom with TeX's limit behaviour: limits under
+  it in display style, beside it in text style, `\limits`/`\nolimits` after it
+  respected. A one-symbol body (`\mathop{\boxtimes}_{i}`) is a large operator,
+  centred on the axis (TeXbook App. G rule 13).
+- **`\varprojlim`** (44), **`\varinjlim`** (14), and their siblings
+  `\varliminf`/`\varlimsup`: "lim" with a stretchy arrow or rule under/over it,
+  as an Op that takes limits. The arrows are STIX Two Math's own combining
+  arrows below (U+20EE/U+20EF), stretched on their MATH constructions.
+- Symbols: **`\Subset`** (50) / `\Supset`, **`\dashrightarrow`** (39) /
+  `\dashleftarrow`, **`\Box`** (24), **`\restriction`** (10, = `\upharpoonright`),
+  **`\Bbbk`** (7), and latexsym's binary **`\lhd` `\rhd` `\unlhd` `\unrhd`**.
+- **`\lhook\joinrel\longrightarrow`** (35): the hook *piece* has no code point in
+  Unicode or the bundled font, so `\lhook` is accepted only in the composites
+  it exists for: `\lhook\joinrel\rightarrow` is exactly `\hookrightarrow`, and
+  the long form is the extensible hooked arrow. Alone it fails loud and names
+  `\hookrightarrow`. `\joinrel` itself is TeX's -3mu relation kern.
+- **`\qedhere`** (8) is accepted and renders nothing; the proof's end mark
+  belongs to the surrounding document, not the formula.
+- **`\hspace` physical units**: `mm` (149), `cm` (24), and `in` `bp` `pc` `dd`
+  `cc` `sp`, converted to pt by TeX's own ratios (TeXbook Ch.10) and then
+  through LatteX's existing 10pt-em pt anchor, so they inherit exactly pt's
+  approximation and nothing more.
+- **The control space `\ `** inside `\mathrm`/`\text`-family arguments (34)
+  decodes to a word space, like `\,` already did.
+
+**Measured after**, same corpus, same script: rendered OK **101,822 → 103,902**
+(73.7% → 75.2%); candidate LatteX gaps **4,594 → 2,108**. Every bucket above is
+now zero. Some formulas that got past their old refusal now stop at a macro the
+paper defines itself (31,756 → 32,162), which is the expected next failure, not
+a regression.
+
+**One determinism fix found on the way.** A pasted Unicode operator takes its
+class from the command table, "first mapping wins"; but the table iterates in
+`Map.copyOf`'s per-JVM order, so two rows sharing a code point with different
+classes made a pasted glyph's spacing vary between runs. `\lVert` (Open) next to
+`\Vert` (Ord) on U+2016 would have been a new instance, so class-tagged
+spellings no longer claim the code point; a pasted ‖ stays Ord every run.
+Pre-existing conflicts elsewhere in the table (for example `\perp` vs `\bot`
+on U+22A5) are untouched and noted as a follow-up.
+
+`examples/symbol-index.html` grew by exactly 24 cells (613 → 637 commands).
+
+#### Math, accents and references inside `\text`, as LaTeX writes them
+
+- **`\(…\)` re-enters math inside `\text`, exactly like `$…$`.** Theorem
+  statements quoted into a formula write `\text{If \(K\) is categorical in some
+  \(\lambda\ge H(K)\),}`; LatteX refused that with "commands are not expanded in
+  text; wrap math in $...$". The `$…$` advice already worked; now the other
+  spelling is the same toggle, scanned by the same code (escapes and nested
+  `\text` arguments skipped identically), on every text-family command
+  including `\hbox`. The math takes the surrounding style, as a `$` span does.
+  An unpaired `\(` is a positioned error; a stray `\)` still fails loud.
+- **Accents in names.** `\"` `\'` `` \` `` `\^` `\~` on one letter, bare or
+  braced (`K\"ahler`, `Poincar\'e`, `\'{e}tale`, `\'{\i}`), become the
+  precomposed character. A letter with no precomposed character the bundled
+  font draws fails loud; a census renders every accent on every ASCII letter
+  and requires a real glyph or a refusal (107 compose).
+- **`\ref{key}` / `\eqref{key}` inside text** draw the same unresolved marker
+  math mode already drew, `??` and `(??)`; the key is never shown. A tie `~` in
+  text is now a space (it drew a literal tilde, e.g. `Proposition~\ref{…}`).
+- **Still refused, deliberately:** a math accent inside `\mathrm`
+  (`\mathrm{\acute et}`, 10 corpus formulas): `\mathrm` is lexed as a text
+  run here, and whether its argument should become math is a separate decision.
+
+**Measured**, same corpus and script as the entries above, against main
+`85c1ed7`: rendered OK **105,234 → 105,315**; candidate LatteX gaps
+**376 → 288**. The `\(`-in-text (53 + 5 in `\hbox`), `\eqref` (12 + 2),
+`\ref` (5), `\"` (7 + 2) and `\'` (3) buckets are now zero. Seven of those
+formulas now stop at a macro the paper defines itself (inside the nested
+math), and one at a pre-existing, unrelated `\displaystyle`-in-`array` gap.
+
+#### `@{...}` column specs, arrows as `\big` delimiters, `\not` over anything, every negated relation
+
+Measured on the research corpus (746 preprints, 137,880 unique display formulas):
+main cc8186a renders 105,156 and has 288 real gaps; this branch renders 105,199 and
+has 240. The four buckets below (19 + 14 + 1 + 12 refusals, plus 6 more from the
+named negations and their bases) are gone; nothing that rendered before fails now.
+
+**`@{...}` and `!{...}` in `array` column specs.** `@{math}` sets its material between
+the columns on every row IN PLACE of the intercolumn space (LaTeX's semantics, so
+`@{}` removes an edge or column gap and `@{\quad\longrightarrow\quad}` draws an arrow
+column); `!{math}` keeps the space. The material is a per-boundary
+`MathNode.ColumnSeparator` on `Matrix` (a new record component; the old 7-argument
+constructor still builds a grid with none). MathML puts it inside the adjacent cell,
+so the table keeps the author's column count. Two expressions, or a `|` and an
+expression, at one boundary fail loud.
+
+**Arrows as delimiters.** `\big`..`\Bigg` (with `l`/`r`/`m`) and `\left`/`\right` take
+`\uparrow` `\downarrow` `\updownarrow` `\Uparrow` `\Downarrow` `\Updownarrow` (the
+font's vertical constructions) and `\backslash` (the reverse solidus).
+
+**`\not` overstrikes.** The precomposed character is still preferred, and more of them
+are known (`\not\simeq` = U+2244, `\not\sqsubseteq`, `\not\preccurlyeq`, the
+turnstiles, `\not\lesssim` …). Any other target, which used to be refused, is drawn
+struck: the new `MathNode.Negated` places U+0338 COMBINING LONG SOLIDUS OVERLAY (the
+stroke STIX Two Math draws inside ≠) centred on the target's ink, keeping the
+target's width and class (`a\not\perp b` spaces as a relation; `\not D` is a slashed
+D). MathML appends U+0338 to the token (`<mo>⊥̸</mo>`); a non-atom target takes
+`<menclose notation="updiagonalstrike">`. `\not` with nothing after it still fails,
+now naming `\not`.
+
+**Negated relations.** 32 new names with their precomposed code points (`\nsimeq`
+`\napprox` `\nequiv` `\nasymp` `\lneq` `\gneq` `\lneqq` `\gneqq` `\lnsim` `\gnsim`
+`\lnapprox` `\gnapprox` `\nlesssim` `\ngtrsim` `\nlessgtr` `\ngtrless` `\npreceq`
+`\nsucceq` `\precneqq` `\succneqq` `\precnsim` `\succnsim` `\precnapprox`
+`\succnapprox` `\nsubset` `\nsupset` `\subsetneqq` `\supsetneqq` `\nsqsubseteq`
+`\nsqsupseteq` `\nni` `\notni`), six overstruck ones Unicode does not precompose
+(`\nleqslant` `\ngeqslant` `\nleqq` `\ngeqq` `\nsubseteqq` `\nsupseteqq`), and the
+bases `\preccurlyeq` `\succcurlyeq` `\VDash`, all relations. Registering them also
+fixes the PASTED glyph: a pasted ≄ (and ≉ ≢ ≭ ⊄ ⊅ ∌ ⋠ …) used to space as an
+ordinary symbol (`N≄0` tight) and now gets relation spacing like `\neq`. Not added:
+`\varsubsetneq` & co and `\lvertneqq`/`\gvertneqq` (Unicode has them only as a
+variation sequence, which LatteX does not map) and `\nshortmid`/`\nshortparallel`.
+`examples/symbol-index.html` grew by 41 cells (640 -> 681 commands).
+
+**Pinned.** `SmallGapsTest`: corpus formulas verbatim, a census of every negated name
+against its code point's Unicode NAME, a STIX glyph and REL class (command and
+pasted), relation spacing on both sides, and the loud refusals. `SmallGapsLayoutTest`:
+the slash's ink centred on and inside the struck relation's box and matching ≠'s
+slash; each `\big` level's arrow span centred on the axis; `@` material between its
+columns on each row with no `\arraycolsep` beside it. Nine mutants (slash dropped,
+slash uncentred, overstrike parse path dropped, `@` dropped, `@` keeping its padding,
+material on one row only, `\downarrow` delimiter dropped, `\not\simeq` mapping dropped,
+`\napprox` unregistered) each turn the suite red. `SymbolCoverageTest`'s
+"`\not\alpha` must throw" pin is inverted: the overstrike is real ink.
+
+#### The next standard-LaTeX gaps: `\genfrac`, `\multicolumn`, row `\tag`s, `\vert`, `\sf`, `\fint`
+
+Measured on the research corpus (746 preprints, 137,880 display formulas): main
+f396b9d refused 232 formulas for reasons that were LatteX's, not the paper's. This
+branch: 178, with 63 more formulas rendering (105,199 -> 105,262) and none newly
+failing.
+
+- **`\genfrac{l}{r}{thickness}{style}{num}{den}`** (amsmath). Built from the same
+  nodes as its instances, so `\genfrac(){0pt}{}{n}{k}` IS `\binom{n}{k}` and
+  `\genfrac{}{}{}{0}{a}{b}` IS `\dfrac{a}{b}` (pinned tree-equal and SVG-equal). A
+  non-zero explicit thickness fails loud rather than drawing the default bar.
+- **`\multicolumn{n}{spec}{body}`** in `array`, the matrices and `cases`. The span is
+  aligned across its columns by its own spec, a wider span widens the LAST spanned
+  column (TeX's rule), the rules inside the span are not drawn on its row and its own
+  trailing `|` is. `Matrix` carries the spans as metadata; a grid without one is
+  unchanged, down to one full-height rect per vertical rule. A span also covers
+  `@{...}`/`!{...}` material, as TeX's column templates do: on the span's row the
+  material inside it and at its right edge is not drawn (and the leading material
+  too when it starts in column one), the material to its left still is, and every
+  boundary keeps its width on every row.
+- **`\tag` per row** in `align`/`gather`/`alignat` (starred too), drawn on its row's
+  baseline in a right-aligned column after the grid, and as `<mlabeledtr>` in
+  MathML. Anywhere else (`gathered`, `equation`, a group, after `\displaystyle`) it
+  tags the equation, as amsmath does.
+- **`\vert`** is the ordinary bar symbol, not only a delimiter; **`\sf`** and
+  **`\tt`** complete the TeX 2.09 font declarations; esint's **`\fint`** (U+2A0F),
+  **`\sqint`** (U+2A16), **`\ointclockwise`** and **`\ointctrclockwise`** are
+  integrals with side limits; **`\text` nests in `\mathrm`** and in other text
+  commands (`\mathrm{non\text{-}tail}`).
+- **Two parser bugs from the investigation buckets.** (1) A `\displaystyle`/
+  `\textstyle` (or `\color`, or legacy font) switch ran past `\end{…}` and `\right`,
+  so `\displaystyle` in a pmatrix's last cell gave "\end without a matching \begin"
+  (7 corpus formulas) and one inside `\left(..\right)` gave "\right without matching
+  \left" (3). It now ends at `\end`, `\right` and `\middle` too. (2) After `\\` in an
+  amsmath environment, a SPACED `[` was read as the spacing option, so
+  `\\ [B]_2` failed "no nucleus" (4). amsmath reads that option without skipping
+  spaces; now so does LatteX (LaTeX's own `array`/`eqnarray` still skip them).
+
+`examples/symbol-index.html` grew from 681 to 689 commands. Newly reserved built-in
+names (a preset macro of the same name is now refused, as for every addition):
+`\genfrac \multicolumn \sf \tt \fint \sqint \ointclockwise \ointctrclockwise`.
+
+**Review fixes (lattex/1015).** A `\tag` after a trailing `\\` in `align`/`gather`
+(`a\\ \tag{1}`) threw a raw `IllegalArgumentException` out of `render` and
+`toMathML`: the empty row was dropped as a phantom and its tag pointed past the
+grid. It is now a real numbered empty last row, as in amsmath, drawn below the row
+above with its tag on its own baseline (a row's height now includes its tag's), and
+any grid invariant the parser fails to uphold is a typed `MathSyntaxException`.
+
+**Limits.** `\genfrac`'s style is empty or `0`-`3`; `4` and above fail loud. Its
+thickness unit must be lowercase (`0PT` is refused; TeX accepts it). The `\\ [`
+space-skip decision is made by the environment's own name, so an `array` nested in
+`pmatrix` skips the space as `array` does and does not inherit amsmath's rule.
+
+#### Parser audit: a primed big operator
+
+One finding from the 2026-10-12 read-only audit: an input that rendered without complaint
+and drew the wrong thing.
+
+- **A prime after a big operator is its superscript.** `\sum'_{n\le x} a_n` used to
+  parse as a scriptless sum followed by an ASCII apostrophe (U+0027) with the lower limit
+  hung on it; `\int'_a^b` took the same path. A `'` is TeX's
+  `^{\prime}` after an operator exactly as after a letter, so `\sum'_{n}` is now
+  `\sum^{\prime}_{n}` and `\int'_a^b` is `\int^{\prime b}_a`, tree for tree. Being the
+  superscript, the prime goes where the operator's upper limit goes: beside an integral,
+  and above a display-style `\sum`, as TeX sets it (write `\sum\nolimits'` to keep it at
+  the side). Unprimed operators are unchanged. A prime after `\underbrace{...}` or
+  `\overbrace{...}` is NOT changed here: those stacks draw a label on one side only, so a
+  superscript on an underbrace (or a subscript on an overbrace) is not drawn at all today, and
+  moving the prime there would lose it. That gap is a separate finding.
+
+### Layout and glyphs
+
+#### Math letters are math italic, and `-` is a minus sign
+
+- **Variables now slant, the way TeX sets them.** A bare `x` used to draw the upright
+  roman x: its paths were byte-identical to `\mathrm{x}`. TeX's default math alphabet
+  is math italic, so every formula LatteX rendered read like typed text. Now a Latin
+  letter draws its Mathematical Italic glyph (𝑥; `h` uses the Letterlike slot ℎ),
+  lowercase Greek draws italic Greek (including the variant shapes `\epsilon`,
+  `\vartheta`, `\phi`, `\varrho`, `\varpi`, `\varkappa`), and `\imath`/`\jmath` draw
+  the italic dotless forms. Digits, uppercase Greek, `\partial` and `\nabla` stay
+  upright, and so does everything that was never a math letter: `\sin` and the other
+  function names, `\operatorname`, `\mathrm`, `\text`. `\mathit{x}` and a bare `x` are
+  now the same glyph, as in TeX. Explicit alphabets (`\mathbf`, `\mathbb`, `\mathsf`,
+  `\mathcal`, ...) are unchanged.
+
+- **`-` in math is the minus sign.** `a-b` drew the 225-unit hyphen; it now draws
+  U+2212, the 596-unit bar that lines up with `+`. That covers binary minus, unary
+  minus (`-1`) and every negative exponent (`x^{-1}`). Text keeps its hyphen:
+  `\text{a-b}` is unchanged.
+
+- **Scripts follow the slanted letter.** Italic correction and the OpenType
+  math-kern staircases are now read from the glyph that is actually drawn. Before,
+  they were read from the upright glyph, which in STIX Two Math has zero italic
+  correction, so a superscript on `f`, `V` or `P` sat where an upright letter would put
+  it. The drawn nucleus, its italic correction, its kern staircase and its accent
+  attachment now come from one resolver and cannot disagree.
+
+- **`{\rm ...}` now does something.** The legacy switch used to be an identity remap,
+  because bare letters were already upright. It now keeps Latin letters roman inside
+  its group. As in TeX, it does not straighten Greek or the minus.
+
+- **What you typed is still what is named.** Only the drawn glyph changed. The parse
+  tree keeps the typed character, so the `thread` glyphmap (`78:` for x), `substitute`,
+  the aria-label and `toMathML` all still say `x`. MathML now agrees with the picture:
+  `-` emits `<mo>−</mo>`, and the letters LatteX keeps upright (uppercase Greek, `\rm`
+  letters) emit `<mi mathvariant="normal">`. MathML Core already italicises a
+  single-character `<mi>`, so plain letters need no attribute.
+
+- **Every rendered formula changes, on purpose.** Any formula with a letter or a
+  minus now renders different bytes and a slightly different width. The byte goldens
+  (the whole-corpus ratchet hashes, the cap-postcondition SVGs, the batch golden and
+  the stretchy-arrow ladder) were re-pinned in their own commit, after a control run
+  showed that with the old alphabet forced back on, the tree reproduces every
+  previous golden exactly. The tracked `examples/` pages and their BrewShot PNGs were
+  regenerated. The wild-corpus ratchet counts successful renders, so it could not see
+  either defect and did not move.
+
+- **Known limits.** `\partial` keeps its own glyph. It is family 1 in TeX, but LatteX
+  emits it to MathML as an operator (`<mo>∂</mo>`), so slanting it is a separate
+  decision about both outputs. `\boldsymbol{x}` is still bold *upright* (TeX makes it bold italic), which
+  predates this change. Most effect GIFs and the README's `showcase.gif` were not
+  re-captured and still show upright letters.
+
+#### Braced atoms are ordinary; `\tag` labels are text; `\mathllap` & co; the superscript prime
+
+Found by typesetting the math showcase (plan `720cd87e`), not by a test.
+
+- **A braced subformula is an Ord atom** (TeXbook ch. 17). A one-item group used to
+  collapse to its item and keep that item's class, so `152{,}320` was exactly as wide
+  as `152,320` and `a{+}b` as `a+b`, with nothing refused: a corpus scan cannot see it.
+  Now `{,}` `{+}` `{=}` `{;}` `{\le}` lay out as their `\mathord` spelling, and a braced
+  `\sin`, `\left(..\right)` or `{n\choose k}` is Ord too. Command and script arguments
+  are not subformulas and keep their class (`\overset{a}{=}` is still a relation,
+  `\mathbin{+}` still binary). A braced Ord atom stays a bare atom, so `{x}^2` draws as
+  `x^2`; a braced `\sum` keeps its display size and takes its scripts beside it. The
+  showcase's quotient-map card (`X/{\sim}`) narrows 324.18 -> 301.96 as the tildes lose
+  their relation glue; it is the one tracked example that moves, regenerated.
+- **`\tag` labels are text**, as amsmath sets them: `\tag{a}` is upright, `\tag{C-pair}`
+  keeps its hyphen, `\tag{$\dagger$}` no longer draws its dollar signs, and
+  `\tag{\(*\)}` renders instead of failing. Row tags likewise. A label text mode cannot
+  read (`\tag{\ref{x}.1}`, `\tag{\ast}`) falls back to its old math reading. Digit labels
+  draw the same glyphs either way, so `\tag{1}` output is unchanged. In MathML the label
+  is an `<mtext>`.
+- **`\mathllap`, `\mathrlap`, `\mathclap`** (mathtools): zero width, content in math at
+  the current style (or the optional `[\scriptstyle]`-family argument), keeping height
+  and depth, spacing as Ord. MathML: `<mpadded width="0">`.
+- **Primes.** The construction already matched TeX and is now pinned (`f'` draws
+  exactly `f^{\prime}`, `u''` exactly `u^{\prime\prime}`, `x'^2` exactly
+  `x^{\prime 2}`). The glyph did not: STIX Two Math's U+2032 is a text prime drawn
+  raised (ink 0.399 to 0.703 em), and superscripting it put a small prime well above the
+  letter. A prime in a script style now draws the font's `ssty` alternate
+  (`minute.ssty`, ink 0.085 to 0.527 em), the superscript prime a TeX engine on this font
+  uses. Only the prime family takes `ssty`; other glyphs' script alternates are a
+  separate decision. The two whole-corpus byte pins move for this alone (three corpus
+  rows have a prime) and reproduce exactly with it reverted.
+
+`examples/symbol-index.html` grew from 689 to 692 commands. Newly reserved built-in
+names: `\mathllap \mathrlap \mathclap`.
+
+**Preprint corpus** (137,880 display formulas from 746 preprints): rendered 105,262 ->
+105,270; candidate LatteX gaps 178 -> 170 (the four `\tag{\(..\)}` formulas and the four
+overlap formulas); newly failing 0, compared formula by formula.
+
+**Limits.** A tag label read as text expands no macros; one that text mode refuses is
+re-read as math with the preset macros only, not ones defined inline earlier in the
+formula. `\tag*` is still unsupported.
+
+#### Stretchy arrows fit what they decorate; `\underleftarrow` & co are new
+
+**The bug.** `\varprojlim` and `\varinjlim` (added in plan `edbda088`) drew their
+arrow wider than "lim": the stretchy-accent path picked the smallest arrow AT
+LEAST the base's width, and the font's arrows come in steps of about 447 font
+units, so under the 1420-unit "lim" it drew the 1786-unit one, centred. The head
+hung 183 units out on the left and the shaft ran under the next atom
+(`\varprojlim M`, the paren of `\varprojlim_k\bigl(`). `\overrightarrow` and its
+siblings had the same rule. Found on a BrewShot picture; the edbda088 tests checked
+acceptance and code points, not geometry.
+
+**Now.** The six arrow accents are FITTED to the base box, as TeX's are: the
+widest rendering whose ink is not wider than the box. Where the font's assembly
+can reach the box width (its parts may overlap anywhere between the minimum and
+their connector lengths), the arrow is exactly that width; under "lim" no
+assembly lands between 1306 and 1519 units, so the 1340-unit variant is drawn,
+within 15 units of lim's own ink at each end. A base narrower than the smallest
+arrow (`\underleftarrow{i}`) widens its box to the arrow, base centred, so a
+neighbour never overlaps it. Hats, tildes and parentheses keep their previous
+sizing.
+
+**New commands.** `\underleftarrow`, `\underrightarrow`, `\underleftrightarrow`
+(amsmath); the last stretches on the font's left-right arrow construction, since
+U+034D has none in STIX Two Math. `examples/symbol-index.html` grew by 3 cells
+(637 -> 640 commands), and its `\varprojlim`/`\varinjlim`/over-arrow cells redraw
+with the fitted arrows.
+
+**Pinned geometrically** (`ArrowAccentWidthTest`): arrow ink within the base box
+and every later glyph starting after the operator, for `\varprojlim`/`\varinjlim`
+in text and display style and all six arrow commands; exact width over a wide
+base. The `\overrightarrow` byte-identity ladder in `StretchyAssemblyLinearTest`
+was re-pinned after showing the old four hashes reproduce with the fit forced off.
+
+### MathML
+
+#### MathML audit: integral limits, labelled braces, table alignment, `\backslash`
+
+Four findings from the 2026-10-12 read-only audit (plan cb3b4518), where the MathML (or
+the glyph) disagreed with what the SVG already drew.
+
+- **Integrals keep their limits beside the sign in MathML.** `\int_0^1 f` emitted
+  `<munderover>`, stacking 0 and 1 under and over the integral, while the SVG sets an
+  integral's limits beside it in every style. The emitter now uses the layout's own rule:
+  `\nolimits` beside, `\limits` stacked, and by default beside for the integral family
+  (`\int \iint \iiint \oint \oiint \oiiint \idotsint \fint \sqint` and the clockwise
+  contour integrals) and stacked for everything else, so `\sum` and `\prod` are unchanged.
+  An explicit `\limits` on a non-integral operator also emits
+  `<mo movablelimits="false">`, so the limits stay stacked as the SVG draws them.
+- **A labelled brace keeps its brace.** `\underbrace{x+y}_{n}` emitted the label directly
+  under the base and no brace at all; `\overbrace{x+y}^{n}` likewise. The brace now
+  stacks on the base and the label on the brace, the order the SVG draws.
+- **Tables state their column alignment.** Every `<mtable>` was bare, so MathML centred
+  every cell: the `=` signs of `aligned` did not line up and `cases` bodies were centred.
+  A grid with any non-centre column now carries `columnalign` (`right left` pairs for
+  `aligned`, `left` for `cases`, the `l`/`c`/`r` spec for `array`), and a `\multicolumn`
+  cell aligned unlike its column carries its own. All-centred grids (`matrix`, `pmatrix`,
+  `\substack`) with no differently aligned `\multicolumn` cell are byte-unchanged. Column and row rules (`|`, `\hline`) are still not
+  expressed in MathML.
+- **`\backslash` draws a backslash.** It mapped to U+2216 SET MINUS, the `\setminus`
+  glyph, though its delimiter form (`\big\backslash`) already used U+005C. It is now
+  U+005C in both. A pasted set-minus glyph is now Bin every run; while the two commands
+  shared U+2216 its class depended on per-run map iteration order.
+
+**Still open after this entry.**
+
+- `multline` rows are still centred in MathML; the SVG sets the first row left and the
+  last row right.
+- `columnalign` is not part of MathML Core, so Chromium's native MathML ignores it and
+  still centres every cell; renderers that implement full MathML (or MathJax) honour it.
+- The `<math>` root carries no `display="block"`, so a MathML Core renderer sets it in
+  compact style and draws a default `\sum_{i=1}^n` with its limits beside the sign, where
+  a display-style SVG stacks them. A consumer that wants display layout must set
+  `display="block"` on the element itself.
+
+#### Structural text braces no longer emit empty MathML text nodes (bug fix)
 
 Nested math now decodes each surrounding literal fragment before deciding whether it is text.
 Thus `\text{{$x$}}` no longer creates empty `TextRun` siblings or `<mtext></mtext>`, while a
 meaningful trailing space such as `\text{{$x$} }` remains intact. Explicit `\text{}` is unchanged.
 
-### `./gradlew test` no longer launches a browser
+### API and containment
 
-The core suite ran the six real-browser BrewShot pins inline, so every `test` invocation started
-host Chrome — slow on a developer machine, and on a Chrome-less one indistinguishable from a
-failing build. The pins now carry `@Tag("capture")` and run in a dedicated **`browserTest`** task.
+#### Every public render entry is inside the containment boundary now, parse included
 
-`check` depends on `browserTest`, so the browser assertions are **never optional in CI** — the
-split is about *where* they run, not *whether*. A browser pin that becomes opt-in is a browser pin
-nobody runs.
+`containRender` is the library's "never let an `Error` escape onto a live page" boundary. Two
+public seams did not use it at all, and the throwing render entries used it only after parsing.
+(`renderWithDiagnostics` was never affected: it has its own catch-all.)
 
-Measured on this change: core `test` went from ~65s to **8s** (973 tests), `browserTest` runs the
-remaining **17** in 56s. 973 + 17 = 990, the same total as before — the split moves tests, it does
-not drop them. `LATTEX_REQUIRE_BROWSER=1` still turns a missing browser into a loud failure rather
-than a skip.
+- **The throwing siblings parsed outside the boundary.** `render`, `renderInlineResult`,
+  `renderFragment` and `renderStyledHtml` wrapped layout and emit but ran `MathParser.parse`
+  before entering `containRender`, and the deprecated `fxContainerAttrs` had no boundary at all.
+  The parser's 512-level depth limit bounds its own recursion, not the stack the caller has
+  left, so an overflow during parse escaped as an `Error`. Each now parses inside the boundary
+  (the one-argument forms delegate, so they are covered too). A syntax error still arrives as
+  the same `MathSyntaxException` instance; a stray untyped exception thrown during parse now
+  arrives as a `MathSyntaxException` with the original as its cause, as layout ones always did.
+- **`tryRenderMath` caught `RuntimeException` but not `StackOverflowError`.** It is the
+  sanctioned producer path for a consumer that owns its own wrapper (Stafficy's `/docs` seam),
+  and its contract is "empty on any failure"; an overflow unwound straight through that
+  contract into the consumer's pipeline. It now runs parse, layout and emit inside
+  `containRender` and returns `Optional.empty()` for an overflow like any other failure.
+- **`toMathML(String)` had no guard at all.** It now throws an overflow or a stray internal
+  exception as the same typed `LatteXException` it already threw for a parse error, with the
+  original failure as the cause. Parse errors arrive exactly as before.
 
+The overflow is pinned with a real one, not an injected throw: a legal input nesting
+`\text{$...$}` 500 deep (under the parser's 512-level limit) on a thread with a minimum-size
+stack, which is how the overflow reaches production, on a host thread already deep in its own
+frames. Each level re-enters the parser through a long frame chain, so the overflow survives
+the JIT; 500 plain nested braces overflowed only while the parser was still interpreted. Each such test first
+proves the bare parse really overflows on that stack, so it cannot pass by no longer reaching
+the Error. `anyFailureYieldsEmptyNeverAHalfPair` now checks the Error case its name always
+promised, and the hostile-input corpus runs through both seams.
 
-### `unfold` no longer expands a coefficient summand into the wrong number (bug fix)
+**New: `tryRenderMath(latex, RenderOptions)`.** The seam had no options overload, so a consumer
+needing preset macros or fluid sizing had to fall back to the split render plus the deprecated
+`fxContainerAttrs`, whose glyphmap can desync from the SVG. The overload honours macros,
+host scale/color/math style (a source `\lx` wrapper still overrides styling) and `fluid`; its
+SVG is byte-identical to `render(latex, opts)` and its glyphmap to the `renderStyledHtml(latex,
+opts)` stamp. The attribute map is not the whole `renderStyledHtml` container: it omits the
+`\lx` semantics (`data-lx-intent`, `data-lx-concept`, `data.*`, `aria-label`).
 
-**A `\sum` with a coefficient unfolded to a false sum.** Implicit multiplication in
-maths is written by *adjacency* — `2i` is a product — but adjacency between two *digits*
-is positional notation. The expansion pass spliced the index value in with no guard, so
-`\sum_{i=1}^{3} 2i` expanded to a tree byte-identical to the parse of `21 + 22 + 23`
-rather than `2·1 + 2·2 + 2·3`. Nothing looked broken: the interaction ran, the terms
-typeset cleanly, and the sum was simply wrong.
+**The seam never arms interactive expansion.** With `interactiveExpansion` set it returns
+exactly its flag-off result: no pre-rendered payload and no `data-lx-fx-expand`,
+`data-lx-fx-substitute` or `data-lx-var` marker. That matches `renderStyledHtml` with the flag
+off, which is byte-identical to flag-on for every formula without an `unfold` or `substitute`
+directive; a formula with one stays inert, as on any flag-off page. Hosts that need those two
+effects use `renderStyledHtml`. The one-argument form is now this overload with default
+options, output unchanged.
 
-Substituting now inserts an explicit `\cdot` wherever a substituted digit run would land
-against a digit, and **only** at a substitution boundary — `12i` remains twelve times `i`
-and never becomes `1 · 2 · i`.
+### Effects (`fx`)
 
-If a page relied on the old output, it was displaying an incorrect expansion; the new
-output is the correct one.
-
-### `fx.substitute` — a variable flips to its value (new effect)
+#### `fx.substitute` — a variable flips to its value (new effect)
 
 The second member of the **numeric-substitution family**, alongside `unfold`, and gated
 exactly the same way: the host's `RenderOptions.interactiveExpansion` (default **off**)
@@ -136,61 +753,43 @@ sees the `x`s leave and the value arrive in their place.
 Internals: `SubstituteExpansion` joins `SumExpansion`, and the tree transform both use is
 now one shared `AtomSubstitution` rather than a copy each — that traversal's safety comes
 from refusing node kinds it does not know, and coverage that exists twice drifts.
-### `$x^2$` renders the maths, not the dollar signs
 
-**Behaviour change — read this if you render user-supplied LaTeX.** A whole-input `$…$` or
-`\(…\)` pair is now stripped and its body rendered. Previously `render("$x^2$")` **succeeded
-and drew the dollar signs as literal glyphs** — 2587 bytes against 1247 for the bare body. The
-most common way anyone writes inline maths produced a silently wrong picture.
+#### `unfold` no longer expands a coefficient summand into the wrong number (bug fix)
 
-The contrast that made it a defect rather than a gap: `\begin{equation}` correctly *threw*
-`Unknown environment`. The wrapper failed loud, the delimiter failed silent — and the delimiter
-is the one everybody types.
+**A `\sum` with a coefficient unfolded to a false sum.** Implicit multiplication in
+maths is written by *adjacency* — `2i` is a product — but adjacency between two *digits*
+is positional notation. The expansion pass spliced the index value in with no guard, so
+`\sum_{i=1}^{3} 2i` expanded to a tree byte-identical to the parse of `21 + 22 + 23`
+rather than `2·1 + 2·2 + 2·3`. Nothing looked broken: the interaction ran, the terms
+typeset cleanly, and the sum was simply wrong.
 
-```
-render("$x^2$")     now byte-identical to  render("x^2")
-render("\(x^2\)")   now byte-identical to  render("x^2")
-```
+Substituting now inserts an explicit `\cdot` wherever a substituted digit run would land
+against a digit, and **only** at a substitution boundary — `12i` remains twelve times `i`
+and never becomes `1 · 2 · i`.
 
-**If you were relying on visible dollar signs** — a tutorial about LaTeX syntax, say — escape
-them: `\$` still draws a literal glyph and always did. That is the migration path, and it is
-pinned by a test.
+If a page relied on the old output, it was displaying an incorrect expansion; the new
+output is the correct one.
 
-**Deliberately narrow**, because a normalization that is too eager eats content:
+### Build, test and CI
 
-- **Whole input only, and the pair must match.** `$a$ + $b$` begins and ends with `$`, but
-  those two are not a pair — a naive strip would yield `a$ + $b`. Untouched.
-- **Unclosed delimiters do not strip.** `$x^2` renders as before; `\(x^2` throws, naming the
-  delimiter.
-- **`$$…$$` and `\[…\]` are unchanged.** They are *display* maths; accepting them and then
-  rendering inline would accept a notation and drop its meaning.
-- A bad body inside a wrapper still fails, for the body's own reason.
+#### `./gradlew test` no longer launches a browser
 
-### `\begin{equation*}` and `\begin{displaymath}` are accepted
+The core suite ran the six real-browser BrewShot pins inline, so every `test` invocation started
+host Chrome — slow on a developer machine, and on a Chrome-less one indistinguishable from a
+failing build. The pins now carry `@Tag("capture")` and run in a dedicated **`browserTest`** task.
 
-Pasting real LaTeX from a paper used to throw `Unknown environment` on the outermost wrapper,
-even though LatteX already rendered every construct *inside* it. Both explicitly-unnumbered
-display spellings now render their body:
+`check` depends on `browserTest`, so the browser assertions are **never optional in CI** — the
+split is about *where* they run, not *whether*. A browser pin that becomes opt-in is a browser pin
+nobody runs.
 
-```
-\begin{equation*} E = mc^2 \end{equation*}
-\begin{displaymath} E = mc^2 \end{displaymath}
-```
+Measured on this change: core `test` went from ~65s to **8s** (973 tests), `browserTest` runs the
+remaining **17** in 56s. 973 + 17 = 990, the same total as before — the split moves tests, it does
+not drop them. `LATTEX_REQUIRE_BROWSER=1` still turns a missing browser into a loud failure rather
+than a skip.
 
-They are implemented as a one-row `gather`, so each is **byte-identical to `gather*`** — this
-introduces no new layout dialect. Against the bare body the glyphs and the rendered size are
-identical; the viewBox y-origin shifts by 5.696 units, which is the one-row display container
-doing what it already does for `gather*`.
+### Docker and the dogfood flow
 
-**The numbered `\begin{equation}` is deliberately still refused.** It *means* numbered, and
-LatteX does not render equation numbers, so accepting it silently would drop meaning the author
-wrote. Resolving it properly is complicated by something worth stating plainly: `align`,
-`gather`, `multline` and `eqnarray` **already** accept their numbered forms and render them
-identically to the starred ones, with a clean verdict and no caveat. That inconsistency predates
-this change and is under review rather than settled here.
-
-
-### The Docker smoke test stopped failing correct images, and started saying why
+#### The Docker smoke test stopped failing correct images, and started saying why
 
 `docker/smoke-test.sh` hard-coded `grep -q '^lattex 0\.11\.0$'` as its version check.
 Once main declared `0.12.0`, a **correct** image failed its own smoke test — and failed
@@ -209,7 +808,7 @@ smoke: version mismatch
 
 A pin that must be hand-edited every release is a pin that is wrong between releases.
 
-### New: `dockerDogFoodflow.md`, the container flow end to end
+#### New: `dockerDogFoodflow.md`, the container flow end to end
 
 A detailed walkthrough of running LatteX in a box: the three build stages setting by
 setting, verification in widening circles, the tag convention (throwaway `local`,
