@@ -367,6 +367,40 @@ The polling interval defaults to 500 ms and can be set from 10–60000 ms with
 controlled tests/custom images; the documented container contract remains
 `/lattex/input` and `/lattex/output`.
 
+## Copy the authored LaTeX
+
+The host enables an equation's Copy control with
+<code>RenderOptions.defaults().withCopySource(true)</code>. The styled HTML carries
+the original input in <code>data-lx-source</code>; <code>tryRenderMath</code> supplies
+the same carrier in its wrapper map. <code>tryRenderInlineMath(source, options)</code>
+couples an <code>InlineSvgResult</code>, including its original baseline metrics,
+with that map. Bare SVG rendering stays unchanged. Serve the existing FX JavaScript
+and CSS from the same JAR as the renderer.
+
+The carrier preserves original source before macros or rendering transformations:
+canonical unpadded base64url of strict UTF-8, at most 4096 UTF-16 units, well-formed
+surrogate pairs, and no C0 controls except tab, LF and CR. Over-limit or outside-domain
+source gets no carrier or chip; rendering keeps its existing success/failure policy.
+The runtime independently checks encoded length, alphabet, canonical tail, UTF-8
+and decoded domain. Authored line endings, literal entities and BOMs are preserved.
+The author key <code>data.source</code> is now reserved and rejected, including with
+the host gate off; other author data keys remain available.
+
+The chip opens a one-item menu by click, touch, Enter or Space. Escape closes it and
+restores chip focus; Tab closes it and retains native navigation. Copy uses
+<code>navigator.clipboard.writeText</code> on a supported secure connection, announces
+success only when its promise resolves, and reports failure or unavailability
+accurately. No manual-copy or legacy clipboard fallback is added. Controls stop
+their bubbling events before wrapper effect listeners. CSS reserves a gutter,
+uses a trailing chip for narrow formulas, keeps the chip visible on touch devices,
+and honors reduced motion. Call <code>LatteXFx.destroy(element)</code> before removing
+a component to close its menu and release outside listeners.
+
+Source exposure is **off by default**. Existing RenderOptions constructors with
+three through seven arguments remain callable with it off; the new record component
+participates in equality and reflection. Enabling the carrier exposes authored text
+to the page, so hosts choose that capability explicitly.
+
 ## The fx layer is OPTIONAL
 
 The math renders from the jar **alone** — pure, inert `svg/g/path/rect`, no runtime, safe to inline anywhere. The `\lx` **effects** (glow, handscribe, supernova, shatter, sparkler, precedence, and 22 more — 28 always-on effects total, plus the flag-gated `unfold` and `substitute` described below) are an *opt-in* layer: they ride the `<span class="lx-math" data-lx-fx-*>` wrapper and are driven by a small vanilla-JS runtime **bundled in the jar**. Include it only if you want the animations.

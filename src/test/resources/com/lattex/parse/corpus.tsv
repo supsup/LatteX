@@ -177,7 +177,7 @@ PARSES-NOW	lx	\lx[graph.domain=-3..3]{x^2-3}	lx macro — graphable domain (grap
 PARSES-NOW	lx	\lx[graph.open=multi]{\frac{1}{x}}	lx macro — multi-open graph (graph.* option)
 PARSES-NOW	lx	\lx[intent=ratio,concept=normalized_score]{\frac{a+b}{c}}	lx macro — semantic intent/concept
 PARSES-NOW	lx	\lx[a11y.label="normalized score"]{\frac{a}{b}}	lx macro — accessibility label
-PARSES-NOW	lx	\lx[data.source=calc_12]{x^2}	lx macro — data attribute
+PARSES-NOW	lx	\lx[data.provenance=calc_12]{x^2}	lx macro — nonreserved author data attribute
 PARSES-NOW	lx	\lx[style.color=#333,fx.enter=fade,intent=ratio,a11y.label="a ratio"]{\frac{a}{b}}	lx macro — combined options
 
 # ==== commutative diagrams (amscd \begin{CD}) ====================

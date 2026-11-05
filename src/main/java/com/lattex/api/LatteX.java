@@ -398,22 +398,58 @@ public final class LatteX {
      * the SVG — sanitizer-safe, and composes with fx enter-transforms).
      */
     public static InlineSvgResult renderInlineResult(String latex) {
-        RenderOptions opts = RenderOptions.defaults().inline();
-        return containRender(() -> {
-            // Parse inside the boundary too (plan lattex-seam-containment-parity).
-            MathNode node = MathParser.parse(latex);
-            RenderOptions fStyle = node instanceof StyledMath sm ? sm.style() : opts;
-            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-            SfntFont font = FontHolder.FONT;
-            double fontSize = DISPLAY_FONT_SIZE * fStyle.scale();
-            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                fontSize, fStyle.mathStyle(), false);
-            Layout layout = LayoutEngine.layout(body, ctx);
-            String svg = SvgEmitter.emit(layout, font, describe(body), fStyle.color());
-            double depthEm = Math.max(0.0, layout.maxY()) / fontSize;
-            double heightEm = Math.max(0.0, -layout.minY()) / fontSize;
-            return new InlineSvgResult(svg, depthEm, heightEm);
-        });
+        return containRender(() -> renderInlinePair(latex, RenderOptions.defaults().inline(), false)).result();
+    }
+
+    /**
+     * An inline SVG and its original baseline metrics, coupled with wrapper attributes
+     * derived from the same parse/layout. Existing InlineSvgResult is unchanged.
+     */
+    public record RenderedInlineMath(InlineSvgResult result, Map<String, String> containerAttrs) {
+        public RenderedInlineMath {
+            java.util.Objects.requireNonNull(result, "result");
+            containerAttrs = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(
+                java.util.Objects.requireNonNull(containerAttrs, "containerAttrs")));
+        }
+    }
+
+    /**
+     * Coupled inline counterpart of tryRenderMath. Plain math uses inline style;
+     * an authored style override keeps its existing meaning. Fluid sizing and
+     * interactive payloads remain inert. Contained render failure returns empty.
+     * The host source gate preserves the input before macros and author styling.
+     */
+    public static java.util.Optional<RenderedInlineMath> tryRenderInlineMath(String latex, RenderOptions opts) {
+        java.util.Objects.requireNonNull(opts, "opts");
+        try {
+            return java.util.Optional.of(containRender(() -> renderInlinePair(latex, opts.inline(), true)));
+        } catch (RuntimeException containedOrTyped) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    private static RenderedInlineMath renderInlinePair(String latex, RenderOptions opts, boolean metadata) {
+        String source = copySource(latex, opts);
+        // Original inline layout; only the coupled entry requests sidecars.
+        MathNode node = MathParser.parse(latex, opts.macros());
+        RenderOptions fStyle = node instanceof StyledMath sm ? sm.style() : opts;
+        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
+        SfntFont font = FontHolder.FONT;
+        double fontSize = DISPLAY_FONT_SIZE * fStyle.scale();
+        LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+            fontSize, fStyle.mathStyle(), false);
+        Layout layout = LayoutEngine.layout(body, ctx);
+        String svg = SvgEmitter.emit(layout, font, describe(body), fStyle.color());
+        double depthEm = Math.max(0.0, layout.maxY()) / fontSize;
+        double heightEm = Math.max(0.0, -layout.minY()) / fontSize;
+        Map<String, String> attrs = Map.of();
+        if (metadata) {
+            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+            attrs = withCopySource(containerAttrMap(fx,
+                usesGlyphmap(fx) ? SvgEmitter.glyphmap(layout, font) : "",
+                precedenceGroupmap(fx, layout, font)), source);
+        }
+        return new RenderedInlineMath(new InlineSvgResult(svg, depthEm, heightEm), attrs);
     }
 
     /**
@@ -570,6 +606,8 @@ public final class LatteX {
         // \lx wrapper still overrides the STYLING (macros are not part of the \lx
         // sub-language, so the notation pack applies inside the body regardless).
         return containRender(() -> {
+            // Original authored input, before macros or legality transformations.
+            String source = copySource(latex, opts);
             // Parse inside the boundary too (plan lattex-seam-containment-parity).
             MathNode node = MathParser.parse(latex, opts.macros());
             EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
@@ -680,7 +718,7 @@ public final class LatteX {
                     varmap = "";
                 }
             }
-            return openTag(fx, sem, glyphmap, groupmap, expandMarker, substituteMarker, varmap)
+            return openTag(fx, sem, glyphmap, groupmap, expandMarker, substituteMarker, varmap, source)
                 + svg + payload + "</span>";
         });
     }
@@ -754,7 +792,7 @@ public final class LatteX {
      * escaping, applied exactly once), so no raw author string reaches the attribute.
      */
     private static String openTag(EffectSpec fx, Semantics sem, String glyphmap, String groupmap,
-                                  String expandMarker, String substituteMarker, String varmap) {
+                                  String expandMarker, String substituteMarker, String varmap, String source) {
         StringBuilder sb = new StringBuilder("<span class=\"lx-math\"");
         sem.intentValue().ifPresent(v -> sb.append(" data-lx-intent=\"").append(v).append('"'));
         sem.conceptValue().ifPresent(v -> sb.append(" data-lx-concept=\"").append(v).append('"'));
@@ -800,6 +838,10 @@ public final class LatteX {
         // a11y label — stored RAW; legality policy + HTML-attr escaping applied here.
         sem.a11yLabelValue().ifPresent(v -> sb.append(" aria-label=\"")
             .append(htmlAttrEscape(v)).append('"'));
+        // Canonical URL-safe ASCII only; empty encoding differs from no carrier.
+        if (source != null) {
+            sb.append(" data-lx-source=\"").append(source).append('"');
+        }
         return sb.append('>').toString();
     }
 
@@ -978,6 +1020,7 @@ public final class LatteX {
      * failures as well as layout and emit ones.
      */
     private static RenderedMath renderMathPair(String latex, RenderOptions opts) {
+        String source = copySource(latex, opts);
         MathNode seamNode = MathParser.parse(latex, opts.macros());
         EffectSpec fx = seamNode instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
         RenderOptions seamStyle = seamNode instanceof StyledMath sm ? sm.style() : opts;
@@ -996,7 +1039,20 @@ public final class LatteX {
         String glyphmap = usesGlyphmap(fx)
             ? SvgEmitter.glyphmap(layout, font) : "";
         String groupmap = precedenceGroupmap(fx, layout, font);
-        return new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap));
+        return new RenderedMath(svg, withCopySource(containerAttrMap(fx, glyphmap, groupmap), source));
+    }
+
+    private static String copySource(String latex, RenderOptions opts) {
+        return opts.copySource() ? CopySourcePayload.encode(latex).orElse(null) : null;
+    }
+
+    private static Map<String, String> withCopySource(Map<String, String> attrs, String source) {
+        if (source == null) {
+            return attrs;
+        }
+        Map<String, String> copied = new java.util.LinkedHashMap<>(attrs);
+        copied.put("data-lx-source", source);
+        return copied;
     }
 
     /**

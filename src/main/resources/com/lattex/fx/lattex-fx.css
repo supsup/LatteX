@@ -6,6 +6,98 @@
 
 .lx-math { display: inline-block; transform-origin: center center; }
 
+/* Host-enabled Copy controls. The gutter leaves glyphs and SVG baseline metrics
+   untouched; narrow formulas reserve the chip outside their trailing edge. */
+.lx-math.lx-copy-enabled {
+  --lx-copy-hit: 24px;
+  position: relative;
+  padding-inline-end: var(--lx-copy-hit);
+}
+.lx-math.lx-copy-enabled.lx-copy-narrow {
+  padding-inline-end: 0;
+  margin-inline-end: var(--lx-copy-hit);
+}
+.lx-math > .lx-chip,
+.lx-math > .lx-copy-menu {
+  color: var(--lx-copy-ink, #111);
+  background: var(--lx-copy-bg, #fff);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+.lx-math > .lx-chip {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 0;
+  min-width: var(--lx-copy-hit);
+  min-height: var(--lx-copy-hit);
+  font-size: 20px;
+  line-height: 20px;
+  padding: 1px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 100ms linear;
+}
+.lx-math.lx-copy-narrow > .lx-chip { inset-inline-end: calc(-1 * var(--lx-copy-hit)); }
+.lx-math:hover > .lx-chip,
+.lx-math:focus-within > .lx-chip,
+.lx-math.lx-copy-open > .lx-chip {
+  opacity: 1;
+  pointer-events: auto;
+}
+.lx-math > .lx-chip:focus-visible,
+.lx-math .lx-copy-action:focus-visible {
+  outline: 2px solid var(--lx-copy-focus, #0756bf);
+  outline-offset: 2px;
+}
+.lx-math > .lx-copy-menu {
+  position: absolute;
+  z-index: 10;
+  top: var(--lx-copy-hit);
+  inset-inline-end: 0;
+  min-width: 8rem;
+  max-width: calc(100vw - 16px);
+  padding: 3px;
+}
+.lx-math > .lx-copy-menu.lx-copy-menu-start { inset-inline-start: 0; inset-inline-end: auto; }
+.lx-math > .lx-copy-menu[hidden] { display: none; }
+.lx-math .lx-copy-action {
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  padding: 6px 10px;
+  border: 0;
+  color: inherit;
+  background: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lx-math > .lx-copy-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (hover: none) {
+  .lx-math > .lx-chip { opacity: 1; pointer-events: auto; }
+}
+@media (pointer: coarse) {
+  .lx-math.lx-copy-enabled { --lx-copy-hit: 44px; }
+  .lx-math .lx-copy-action { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lx-math > .lx-chip { transition: none; }
+}
+
 /* enter=fade / enter=inkdrop / enter=constellation start hidden so the JS reveal has
    somewhere to come from (no flash-of-visible before the runtime wires). The hides are
    keyed on html.lx-fx — a root marker the RUNTIME stamps as its first act — so a page

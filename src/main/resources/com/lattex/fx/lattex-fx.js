@@ -2650,9 +2650,200 @@
     el.style.animation = 'lx-' + name + ' ' + dur + ' ease both';
   }
 
+  // ---- exact authored-source Copy control -----------------------------------
+  // Independent validation matters on hosts without Stafficy's sanitizer.
+  function decodeCopySource(raw) {
+    if (typeof raw !== 'string' || raw.length > 16384
+        || !/^[A-Za-z0-9_-]*$/.test(raw) || raw.length % 4 === 1) {
+      return { state: 'invalid' };
+    }
+    if (typeof window.atob !== 'function' || typeof window.btoa !== 'function'
+        || typeof window.TextDecoder !== 'function') {
+      return { state: 'unavailable' };
+    }
+    try {
+      var padded = raw.replace(/-/g, '+').replace(/_/g, '/');
+      while (padded.length % 4) { padded += '='; }
+      var binary = window.atob(padded);
+      var canonical = window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      if (canonical !== raw || binary.length > 12288) { return { state: 'invalid' }; }
+      var bytes = new Uint8Array(binary.length);
+      for (var i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+      var text = new window.TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+      if (text.length > 4096) { return { state: 'invalid' }; }
+      for (var j = 0; j < text.length; j++) {
+        var unit = text.charCodeAt(j);
+        if (unit < 32 && unit !== 9 && unit !== 10 && unit !== 13) { return { state: 'invalid' }; }
+        if (unit >= 0xd800 && unit <= 0xdbff) {
+          var next = text.charCodeAt(++j);
+          if (!(next >= 0xdc00 && next <= 0xdfff)) { return { state: 'invalid' }; }
+        } else if (unit >= 0xdc00 && unit <= 0xdfff) { return { state: 'invalid' }; }
+      }
+      return { state: 'ok', source: text };
+    } catch (invalid) {
+      return { state: 'invalid' };
+    }
+  }
+
+  function isCopyWrapper(el) {
+    var tag = String(el.tagName || '').toLowerCase();
+    var classes = (el.getAttribute('class') || '').trim().split(/\s+/).sort().join(' ');
+    return (tag === 'span' && (classes === 'lx-math' || classes === 'lx-math math-inline'))
+      || (tag === 'div' && classes === 'lx-math math-display');
+  }
+
+  var copyMenuId = 0;
+  var openCopyMenu = null;
+  function initCopy(el) {
+    if (el.__lxCopyDestroy || !isCopyWrapper(el)) { return false; }
+    var initial = decodeCopySource(el.getAttribute('data-lx-source'));
+    if (initial.state === 'invalid') { return false; }
+    var chip = document.createElement('button');
+    var menu = document.createElement('span');
+    var item = document.createElement('button');
+    var status = document.createElement('span');
+    var id;
+    do { id = 'lx-copy-menu-' + (++copyMenuId); }
+    while (document.getElementById && document.getElementById(id));
+    chip.type = 'button';
+    chip.className = 'lx-chip';
+    chip.textContent = '\u22ef';
+    chip.setAttribute('aria-label', 'Equation actions');
+    chip.setAttribute('aria-haspopup', 'menu');
+    chip.setAttribute('aria-expanded', 'false');
+    chip.setAttribute('aria-controls', id);
+    menu.id = id;
+    menu.className = 'lx-copy-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', 'Equation actions');
+    menu.hidden = true;
+    item.type = 'button';
+    item.className = 'lx-copy-action';
+    item.textContent = 'Copy LaTeX';
+    item.setAttribute('role', 'menuitem');
+    item.tabIndex = -1;
+    menu.appendChild(item);
+    status.className = 'lx-copy-status';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    status.setAttribute('aria-atomic', 'true');
+    // Reserve a real gutter; a narrow inline formula gets an outside trailing chip.
+    var narrow = el.getBoundingClientRect && el.getBoundingClientRect().width < 48;
+    el.classList.add('lx-copy-enabled');
+    if (narrow) { el.classList.add('lx-copy-narrow'); }
+    el.appendChild(chip);
+    el.appendChild(menu);
+    el.appendChild(status);
+    var destroyed = false;
+    var generation = 0;
+    var controller = { close: close };
+
+    function stop(ev) { ev.stopPropagation(); }
+    function close(restore) {
+      menu.hidden = true;
+      chip.setAttribute('aria-expanded', 'false');
+      el.classList.remove('lx-copy-open');
+      document.removeEventListener('pointerdown', outside, true);
+      document.removeEventListener('focusin', outside, true);
+      if (openCopyMenu === controller) { openCopyMenu = null; }
+      if (restore && !destroyed) { chip.focus(); }
+    }
+    function outside(ev) {
+      if (!el.contains(ev.target)) { close(false); }
+    }
+    function open() {
+      if (destroyed) { return; }
+      if (openCopyMenu && openCopyMenu !== controller) { openCopyMenu.close(false); }
+      openCopyMenu = controller;
+      menu.hidden = false;
+      menu.classList.remove('lx-copy-menu-start');
+      if (menu.getBoundingClientRect && menu.getBoundingClientRect().left < 8) {
+        menu.classList.add('lx-copy-menu-start');
+      }
+      chip.setAttribute('aria-expanded', 'true');
+      el.classList.add('lx-copy-open');
+      document.addEventListener('pointerdown', outside, true);
+      document.addEventListener('focusin', outside, true);
+      item.focus();
+    }
+    function copy() {
+      // Re-read and validate at activation: a changed DOM attribute is not a trusted cache.
+      var decoded = decodeCopySource(el.getAttribute('data-lx-source'));
+      var turn = ++generation;
+      close(true);
+      if (decoded.state !== 'ok') {
+        status.textContent = 'Copy is unavailable for this equation.';
+        return;
+      }
+      var clipboard = window.navigator && window.navigator.clipboard;
+      if (window.isSecureContext === false || !clipboard || typeof clipboard.writeText !== 'function') {
+        status.textContent = 'Copy is unavailable in this browser or connection.';
+        return;
+      }
+      status.textContent = 'Copying\u2026';
+      try {
+        var pending = clipboard.writeText(decoded.source);
+        if (!pending || typeof pending.then !== 'function') {
+          status.textContent = 'Copy could not be confirmed.';
+          return;
+        }
+        pending.then(function () {
+          if (!destroyed && turn === generation) { status.textContent = 'Copied'; }
+        }, function () {
+          if (!destroyed && turn === generation) { status.textContent = 'Copy failed. Try again.'; }
+        });
+      } catch (failure) {
+        status.textContent = 'Copy failed. Try again.';
+      }
+    }
+    // The controls are siblings of the SVG. Stop their bubbling events before the
+    // wrapper's effect listeners; preserve the native default for ordinary Tab.
+    [chip, menu, status].forEach(function (node) {
+      ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend',
+        'click', 'dblclick', 'keydown', 'keyup'].forEach(function (type) {
+        node.addEventListener(type, stop);
+      });
+    });
+    chip.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      if (menu.hidden) { open(); } else { close(false); }
+    });
+    chip.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        if (menu.hidden) { open(); } else { close(false); }
+      } else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault(); open();
+      } else if (ev.key === 'Escape') { ev.preventDefault(); close(true); }
+    });
+    chip.addEventListener('keyup', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); }
+    });
+    item.addEventListener('click', function (ev) { ev.preventDefault(); copy(); });
+    menu.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') { ev.preventDefault(); close(true); }
+      else if (ev.key === 'Tab') { close(true); }
+      else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp' || ev.key === 'Home' || ev.key === 'End') {
+        ev.preventDefault(); item.focus();
+      }
+    });
+    el.__lxCopyDestroy = function () {
+      if (destroyed) { return; }
+      destroyed = true;
+      generation++;
+      close(false);
+      chip.remove(); menu.remove(); status.remove();
+      el.classList.remove('lx-copy-enabled');
+      el.classList.remove('lx-copy-narrow');
+      delete el.__lxCopyDestroy;
+    };
+    return true;
+  }
+
   function init() {
     var els = document.querySelectorAll('.lx-math');
     Array.prototype.forEach.call(els, function (el) {
+      initCopy(el);
       var enter = el.getAttribute('data-lx-fx-enter');
       var hover = el.getAttribute('data-lx-fx-hover');
       var click = el.getAttribute('data-lx-fx-click');
@@ -2726,6 +2917,7 @@
       var did = false;
       if (el.__lxHoloDie) { el.__lxHoloDie(); did = true; }
       if (el.__lxNeonDie) { el.__lxNeonDie(); did = true; }
+      if (el.__lxCopyDestroy) { el.__lxCopyDestroy(); did = true; }
       return did;
     };
   }
@@ -2753,7 +2945,9 @@
       parseVarmap: parseVarmap,
       cascade: cascade,
       play: play,
-      init: init
+      init: init,
+      decodeCopySource: decodeCopySource,
+      initCopy: initCopy
     });
   }
 })();

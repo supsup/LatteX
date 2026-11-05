@@ -246,4 +246,116 @@
     };
     return el;
   };
+  // Opt-in interaction model for Copy controls. Existing effect fixtures retain
+  // their historical small stubs. This models parent bubbling/capture and focus,
+  // not native keyboard defaults, layout, media queries or the OS clipboard.
+  g.__lxUseInteractiveDom = function () {
+    function listeners(node) {
+      node.__listeners = {};
+      node.addEventListener = function (type, fn, capture) {
+        var list = node.__listeners[type] || (node.__listeners[type] = []);
+        if (!list.some(function (r) { return r.fn === fn && r.capture === !!capture; })) {
+          list.push({ fn: fn, capture: !!capture });
+        }
+      };
+      node.removeEventListener = function (type, fn, capture) {
+        var list = node.__listeners[type] || [];
+        node.__listeners[type] = list.filter(function (r) { return r.fn !== fn || r.capture !== !!capture; });
+      };
+    }
+    listeners(g.document);
+    g.__lxDispatch = function (target, type, extra) {
+      var path = [], cursor = target;
+      while (cursor) { path.push(cursor); cursor = cursor.parentNode; }
+      var ev = Object.assign({
+        type: type, target: target, defaultPrevented: false,
+        stopPropagation: function () { this.__stopped = true; },
+        stopImmediatePropagation: function () { this.__stopped = true; this.__immediate = true; },
+        preventDefault: function () { this.defaultPrevented = true; }
+      }, extra || {});
+      function invoke(node, capture) {
+        ev.currentTarget = node;
+        var rows = (node.__listeners && node.__listeners[type] || []).slice();
+        for (var i = 0; i < rows.length && !ev.__immediate; i++) {
+          if (rows[i].capture === capture) { rows[i].fn(ev); }
+        }
+      }
+      for (var c = path.length - 1; c > 0 && !ev.__stopped; c--) { invoke(path[c], true); }
+      if (!ev.__stopped) {
+        invoke(target, true);
+        invoke(target, false);
+      }
+      for (var b = 1; b < path.length && !ev.__stopped; b++) { invoke(path[b], false); }
+      return ev;
+    };
+    g.__lxInteractiveEl = function (tag, attrs) {
+      var el = makeCreatedEl(tag);
+      el.__attrs = Object.assign({}, attrs || {});
+      el.__children = [];
+      el.isConnected = true;
+      el.hidden = false;
+      listeners(el);
+      el.classList = {
+        contains: function (name) { return (el.__attrs['class'] || '').split(/\s+/).indexOf(name) >= 0; },
+        add: function (name) {
+          if (!this.contains(name)) { el.__attrs['class'] = ((el.__attrs['class'] || '') + ' ' + name).trim(); }
+        },
+        remove: function (name) {
+          el.__attrs['class'] = (el.__attrs['class'] || '').split(/\s+/).filter(function (n) { return n !== name; }).join(' ');
+        }
+      };
+      Object.defineProperty(el, 'className', {
+        get: function () { return el.__attrs['class'] || ''; },
+        set: function (value) { el.__attrs['class'] = String(value); }
+      });
+      el.appendChild = function (child) {
+        child.parentNode = el; child.isConnected = el.isConnected;
+        el.__children.push(child); return child;
+      };
+      el.remove = function () {
+        if (el.parentNode && el.parentNode.__children) {
+          var siblings = el.parentNode.__children;
+          var at = siblings.indexOf(el); if (at >= 0) { siblings.splice(at, 1); }
+        }
+        el.parentNode = null; el.isConnected = false;
+      };
+      el.contains = function (node) {
+        while (node) { if (node === el) { return true; } node = node.parentNode; }
+        return false;
+      };
+      el.focus = function () {
+        g.document.activeElement = el;
+        g.__lxDispatch(el, 'focusin');
+      };
+      function matches(node, selector) {
+        return selector.charAt(0) === '.' ? node.classList.contains(selector.slice(1))
+          : node.tagName.toLowerCase() === selector.toLowerCase();
+      }
+      el.querySelectorAll = function (selector) {
+        var found = [];
+        function visit(node) {
+          (node.__children || []).forEach(function (child) {
+            if (matches(child, selector)) { found.push(child); }
+            visit(child);
+          });
+        }
+        visit(el); return found;
+      };
+      el.querySelector = function (selector) { return el.querySelectorAll(selector)[0] || null; };
+      return el;
+    };
+    g.document.body = g.__lxInteractiveEl('body');
+    g.document.body.parentNode = g.document;
+    g.document.createElement = function (tag) { return g.__lxInteractiveEl(tag); };
+    g.document.querySelectorAll = function (selector) { return g.document.body.querySelectorAll(selector); };
+    g.document.getElementById = function (id) {
+      var result = null;
+      function visit(node) {
+        if (node.id === id) { result = node; }
+        (node.__children || []).forEach(visit);
+      }
+      visit(g.document.body); return result;
+    };
+    g.__lxDocumentListeners = function (type) { return (g.document.__listeners[type] || []).length; };
+  };
 })(globalThis);

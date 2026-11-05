@@ -20,6 +20,13 @@ import org.junit.jupiter.api.Test;
  */
 class LxMacroTest {
 
+    @Test
+    void sourceDataKeyIsReservedWhileOtherAuthorDataRemainsLegal() {
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\lx[data.source=calc_12]{x}"));
+        assertEquals("calc_12", lx("\\lx[data.provenance=calc_12]{x}").sem().data().get("provenance"));
+        assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\lx[style.copySource=true]{x}"));
+    }
+
     private static StyledMath lx(String src) {
         return assertInstanceOf(StyledMath.class, MathParser.parse(src));
     }

@@ -9,6 +9,14 @@
 public constructor com.lattex.api.RenderOptions(double,com.lattex.api.Color,com.lattex.api.MathStyle,java.util.Map,boolean,boolean,boolean,boolean)
 public method com.lattex.api.RenderOptions#copySource():boolean
 public method com.lattex.api.RenderOptions#withCopySource(boolean):com.lattex.api.RenderOptions
+public type com.lattex.api.LatteX$RenderedInlineMath
+public constructor com.lattex.api.LatteX$RenderedInlineMath(com.lattex.api.InlineSvgResult,java.util.Map)
+public method com.lattex.api.LatteX$RenderedInlineMath#result():com.lattex.api.InlineSvgResult
+public method com.lattex.api.LatteX$RenderedInlineMath#containerAttrs():java.util.Map
+public method com.lattex.api.LatteX$RenderedInlineMath#equals(java.lang.Object):boolean
+public method com.lattex.api.LatteX$RenderedInlineMath#hashCode():int
+public method com.lattex.api.LatteX$RenderedInlineMath#toString():java.lang.String
+public static method com.lattex.api.LatteX#tryRenderInlineMath(java.lang.String,com.lattex.api.RenderOptions):java.util.Optional
 
 # --- 2026-07-28  MathStyle relocated to the exported api package (Fixpoint ruling lattex/666)
 #

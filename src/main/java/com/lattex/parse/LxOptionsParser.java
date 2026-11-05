@@ -281,6 +281,9 @@ final class LxOptionsParser {
                         throw unknownKey(key);
                     }
                     String dataKey = key.substring(5); // past "data."
+                    if ("source".equals(dataKey)) {
+                        throw new MathSyntaxException("data.source is reserved for the host's authored-source carrier");
+                    }
                     if (!Semantics.IDENTIFIER.matcher(dataKey).matches()) {
                         throw new MathSyntaxException(
                             "invalid data.* key: \"" + key + "\" (expected an identifier suffix)");

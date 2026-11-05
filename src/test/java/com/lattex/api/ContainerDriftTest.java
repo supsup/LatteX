@@ -24,6 +24,18 @@ import org.junit.jupiter.api.Test;
 ///      rejects or is escaped; it can never inject an attribute or markup.
 class ContainerDriftTest {
 
+    @Test
+    void hostSourceCarrierIsAnExplicitClosedMemberAndCannotInjectMarkup() {
+        String source = "\\text{\" onclick=<script> &quot;}";
+        String tag = openTagOf(LatteX.renderStyledHtml(source, RenderOptions.defaults().withCopySource(true)));
+        assertTrue(ALLOWED_EXACT.contains("data-lx-source"));
+        assertTrue(attrNames(tag).contains("data-lx-source"), "exercise the actual host flag");
+        for (String name : attrNames(tag)) {
+            assertTrue(isAllowed(name));
+        }
+        assertNoInjection(tag, source);
+    }
+
     /// The complete set of attribute NAMES the container may carry. A name outside this
     /// set (an exact member or a `data-lx-<identifier>` data-attr) fails the build.
     private static final Set<String> ALLOWED_EXACT = Set.of(
@@ -31,7 +43,7 @@ class ContainerDriftTest {
         "aria-label",
         "data-lx-fx-enter", "data-lx-fx-hover", "data-lx-fx-click",
         "data-lx-fx-duration", "data-lx-fx-glow-color",
-        "data-lx-glyphmap", "data-lx-groupmap",
+        "data-lx-glyphmap", "data-lx-groupmap", "data-lx-source",
         // The graph-* metadata (LxOptionsParser stamps `graph.*` options as hyphenated
         // `data-lx-graph-<key>` for the host-side plotter). These are HYPHENATED, so they
         // fall outside the identifier-only DATA_ATTR lane below and must be listed here as
