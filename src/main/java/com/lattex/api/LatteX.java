@@ -1043,7 +1043,9 @@ public final class LatteX {
     }
 
     private static String copySource(String latex, RenderOptions opts) {
-        return opts.copySource() ? CopySourcePayload.encode(latex).orElse(null) : null;
+        // Empty has a valid codec representation, but no useful Copy affordance.
+        return opts.copySource() && latex != null && !latex.isEmpty()
+            ? CopySourcePayload.encode(latex).orElse(null) : null;
     }
 
     private static Map<String, String> withCopySource(Map<String, String> attrs, String source) {

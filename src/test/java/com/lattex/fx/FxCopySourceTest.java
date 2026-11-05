@@ -74,7 +74,7 @@ class FxCopySourceTest {
 
     @Test
     void decoderPreservesOriginalBomLineEndingsAndAstralUnits() {
-        for (String source : List.of("", "\uFEFF", "\uFEFFx", "x\uFEFFy",
+        for (String source : List.of("\uFEFF", "\uFEFFx", "x\uFEFFy",
                 "A\rB", "A\r\nB", "A\nB", "&#13;\"<>&", "\uD83D\uDE00")) {
             Value decoded = fx.getMember("decodeCopySource").execute(carrier(source));
             assertEquals("ok", decoded.getMember("state").asString());
@@ -101,8 +101,17 @@ class FxCopySourceTest {
         // accidentally make a removed cap check look effective.
         fx.getMember("decodeCopySource").execute("A".repeat(16388));
         assertEquals(0, js("decodeCalls").asInt());
-        assertEquals("ok", fx.getMember("decodeCopySource").execute("").getMember("state").asString());
+        Value empty = fx.getMember("decodeCopySource").execute("");
+        assertEquals("empty", empty.getMember("state").asString());
+        assertEquals("", empty.getMember("source").asString());
         assertEquals("invalid", js("fx.decodeCopySource(null).state").asString());
+    }
+
+    @Test
+    void validEmptyCarrierOffersNoChipOrClipboardAction() {
+        createWidget("");
+        assertTrue(js("chip === null && menu === null && item === null").asBoolean());
+        assertEquals(0, js("writes.length").asInt());
     }
 
     @Test

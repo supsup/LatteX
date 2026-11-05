@@ -2657,6 +2657,8 @@
         || !/^[A-Za-z0-9_-]*$/.test(raw) || raw.length % 4 === 1) {
       return { state: 'invalid' };
     }
+    // Keep canonical empty distinct from absent/invalid, but never offer a chip.
+    if (raw.length === 0) { return { state: 'empty', source: '' }; }
     if (typeof window.atob !== 'function' || typeof window.btoa !== 'function'
         || typeof window.TextDecoder !== 'function') {
       return { state: 'unavailable' };
@@ -2697,7 +2699,7 @@
   function initCopy(el) {
     if (el.__lxCopyDestroy || !isCopyWrapper(el)) { return false; }
     var initial = decodeCopySource(el.getAttribute('data-lx-source'));
-    if (initial.state === 'invalid') { return false; }
+    if (initial.state === 'invalid' || initial.state === 'empty') { return false; }
     var chip = document.createElement('button');
     var menu = document.createElement('span');
     var item = document.createElement('button');

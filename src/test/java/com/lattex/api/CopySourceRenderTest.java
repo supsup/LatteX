@@ -19,6 +19,21 @@ class CopySourceRenderTest {
     private static final Pattern CARRIER = Pattern.compile(" data-lx-source=\"([A-Za-z0-9_-]*)\"");
 
     @Test
+    void emptyOriginalKeepsRenderLegalityButOmitsTheCopyAffordance() {
+        var oldDisplay = LatteX.tryRenderMath("", OFF);
+        var newDisplay = LatteX.tryRenderMath("", ON);
+        assertEquals(oldDisplay.map(LatteX.RenderedMath::svg), newDisplay.map(LatteX.RenderedMath::svg));
+        newDisplay.ifPresent(result -> assertFalse(result.containerAttrs().containsKey("data-lx-source")));
+        var oldInline = LatteX.tryRenderInlineMath("", OFF);
+        var newInline = LatteX.tryRenderInlineMath("", ON);
+        assertEquals(oldInline.map(LatteX.RenderedInlineMath::result), newInline.map(LatteX.RenderedInlineMath::result));
+        newInline.ifPresent(result -> assertFalse(result.containerAttrs().containsKey("data-lx-source")));
+        if (oldDisplay.isPresent()) {
+            assertEquals(LatteX.renderStyledHtml("", OFF), LatteX.renderStyledHtml("", ON));
+        }
+    }
+
+    @Test
     void sourceIsAbsentByDefaultAndNeverStampedInsideSvg() {
         for (String source : List.of("x+y", "\\lx[fx.click=pulse]{x+y}")) {
             assertFalse(LatteX.renderStyledHtml(source).contains("data-lx-source"));

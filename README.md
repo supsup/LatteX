@@ -381,6 +381,8 @@ The carrier preserves original source before macros or rendering transformations
 canonical unpadded base64url of strict UTF-8, at most 4096 UTF-16 units, well-formed
 surrogate pairs, and no C0 controls except tab, LF and CR. Over-limit or outside-domain
 source gets no carrier or chip; rendering keeps its existing success/failure policy.
+Empty original input also gets no carrier or chip; the codec still distinguishes
+a canonical empty value from absent or malformed data.
 The runtime independently checks encoded length, alphabet, canonical tail, UTF-8
 and decoded domain. Authored line endings, literal entities and BOMs are preserved.
 The author key <code>data.source</code> is now reserved and rejected, including with
