@@ -165,10 +165,21 @@ class FxCopySourceTest {
             ['pointerdown','pointerup','mousedown','mouseup','touchstart','touchend',
              'click','dblclick','keydown','keyup'].forEach(function(type) {
                el.addEventListener(type, function () { wrapperEvents++; });
-               __lxDispatch(chip, type, {key:'Unidentified'});
              });
             """);
-        assertEquals(0, js("wrapperEvents").asInt());
+        for (String node : List.of("chip", "menu", "item", "status")) {
+            for (String type : List.of("pointerdown", "pointerup", "mousedown", "mouseup",
+                    "touchstart", "touchend", "click", "dblclick", "keydown", "keyup")) {
+                context.getBindings("js").putMember("eventTarget", js(node));
+                context.getBindings("js").putMember("eventType", type);
+                js("""
+                    if (menu.hidden) { __lxDispatch(chip, 'click'); }
+                    __lxDispatch(eventTarget, eventType, {key:'Unidentified'});
+                    """);
+                assertEquals(0, js("wrapperEvents").asInt(), node + ":" + type);
+                assertTrue(js("el.style.animation === undefined").asBoolean(), node + ":" + type);
+            }
+        }
         assertTrue(js("el.style.animation === undefined").asBoolean());
         js("__lxDispatch(el, 'click');");
         assertEquals(1, js("wrapperEvents").asInt());
