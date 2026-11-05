@@ -18,8 +18,8 @@
   // Resolve the strike/halo colour: the author's fx.glow-color if set (and not
   // the literal 'currentColor', which canvas can't resolve), else the element's
   // computed ink colour so it matches the on-page glyphs.
-  function resolveColor(el) {
-    var c = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+  function resolveColor(el, authoredColor) {
+    var c = (el.style.getPropertyValue('--lx-glow-color') || authoredColor || '').trim();
     if (c && c.toLowerCase() !== 'currentcolor') { return c; }
     var ink = getComputedStyle(el).color;
     return ink || '#e6a24c';
@@ -170,7 +170,9 @@
     var r = el.getBoundingClientRect();
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     var vw = window.innerWidth, vh = window.innerHeight;
-    var color = resolveColor(el);
+    // A target that was disabled at init has no glow CSS variable. Resolve its
+    // authored colour at positive playback without initializing a disabled target.
+    var color = resolveColor(el, el.getAttribute('data-lx-fx-glow-color'));
     var sources = [[0, vh / 2], [vw, vh / 2]]; // left-mid + right-mid edges
 
     var canvas = document.createElement('canvas');
@@ -255,7 +257,7 @@
     var r = el.getBoundingClientRect();
     var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     var vw = window.innerWidth, vh = window.innerHeight;
-    var color = resolveColor(el);
+    var color = resolveColor(el, el.getAttribute('data-lx-fx-glow-color'));
     var sources = [[0, vh / 2], [vw, vh / 2], [cx, 0]]; // left, right, top edges
     // Spotlight radius: clears the element plus a soft margin.
     var spot = Math.max(r.width, r.height) / 2 + 60;
@@ -286,7 +288,8 @@
     // The target GLOWS HOTTER as bolts charge into it: a heat level 0..1 maps
     // to a growing coloured halo + a white-hot core, warming toward white as
     // it peaks. Biased to the author's glow-color if set, else a heated amber.
-    var authored = (el.style.getPropertyValue('--lx-glow-color') || '').trim();
+    var authored = (el.style.getPropertyValue('--lx-glow-color')
+      || el.getAttribute('data-lx-fx-glow-color') || '').trim();
     var heatTint = (authored && authored.toLowerCase() !== 'currentcolor')
       ? color : '#ffb24d';
     // Bolts read as LIGHT, not dark ink — a glowing electric strike against the

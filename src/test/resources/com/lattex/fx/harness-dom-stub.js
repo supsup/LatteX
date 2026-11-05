@@ -158,7 +158,8 @@
           if (prop === 'stroke') {
             work.strokes++;
             g.__lxCanvasStrokes.push({ points: points.slice(), alpha: target.globalAlpha,
-              width: target.lineWidth, blur: target.shadowBlur || 0 });
+              width: target.lineWidth, blur: target.shadowBlur || 0,
+              color: target.strokeStyle, glow: target.shadowColor });
           }
           if (prop === 'clearRect') { work.clears++; }
           if (prop === 'arc') { work.arcs++; }

@@ -188,6 +188,46 @@ class FxRuntimeLifecycleTest {
     }
 
     @Test
+    void initiallyDisabledBoltCanBeEnabledWithItsAuthoredColor() throws IOException {
+        for (boolean reducedMotion : new boolean[]{false, true}) {
+            for (String effect : new String[]{"lightning", "storm"}) {
+                boot(reducedMotion, "document.readyState = 'loading';"
+                    + " globalThis.__late = __lxMakeEl({'data-lx-fx-hover':'" + effect + "',"
+                    + " 'data-lx-fx-intensity':'0', 'data-lx-fx-glow-color':'#336699'}, 2);"
+                    + " document.querySelectorAll = function (sel) {"
+                    + " return sel === '.lx-math' ? [__late] : []; }; __lxSeedRandom(173);");
+                js("__lxFireDocument('DOMContentLoaded')");
+                assertEquals(0, intOf("__lxWorkSnapshot().styleWrites"), "disabled target stays untouched");
+                String disabled = work();
+                js("LatteXFx.play(__late)");
+                finishBoltRun();
+                assertEquals(disabled, work(), "disabled public play stays inert");
+
+                js("__late.setAttribute('data-lx-fx-intensity', '100'); LatteXFx.play(__late)");
+                finishBoltRun();
+                String scenario = effect + "/reduced=" + reducedMotion;
+                assertTrue(intOf("__lxCanvasStrokes.length") > 0, "late enable really draws: " + scenario);
+                assertTrue(js("__lxCanvasStrokes.every(function (s) { return s.color === '#336699'; })")
+                    .asBoolean(), "late enable retains authored stroke colour: " + scenario);
+                if (!reducedMotion || effect.equals("storm")) {
+                    assertTrue(js("__lxCanvasStrokes.every(function (s) { return s.glow === '#336699'; })")
+                        .asBoolean(), "late enable retains authored bolt halo: " + scenario);
+                }
+                if (effect.equals("storm")) {
+                    assertTrue(js("__lxFilterWrites.some(function (s) { return s.indexOf('#336699') >= 0; })")
+                        .asBoolean(), "late enable retains authored target halo: " + scenario);
+                }
+
+                js("__late.setAttribute('data-lx-fx-intensity', '0')");
+                String beforeDisabledReplay = work();
+                js("LatteXFx.play(__late)");
+                finishBoltRun();
+                assertEquals(beforeDisabledReplay, work(), "returning to zero stays inert: " + scenario);
+            }
+        }
+    }
+
+    @Test
     void boltScrollTeardownParksAlreadyQueuedCallbacksInBothMotionModes() throws IOException {
         for (boolean reducedMotion : new boolean[]{false, true}) {
             for (String effect : new String[]{"lightning", "storm"}) {
