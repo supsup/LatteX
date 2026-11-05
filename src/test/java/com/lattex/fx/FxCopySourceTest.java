@@ -97,7 +97,9 @@ class FxCopySourceTest {
     @Test
     void rawCapRunsBeforeAnyBase64DecoderAndAbsentIsDifferentFromEmpty() {
         js("globalThis.decodeCalls = 0; window.atob = function (s) { decodeCalls++; return __base64Decode(s); };");
-        fx.getMember("decodeCopySource").execute("A".repeat(16385));
+        // Legal base64 length, but over cap: the independent mod-4 gate cannot
+        // accidentally make a removed cap check look effective.
+        fx.getMember("decodeCopySource").execute("A".repeat(16388));
         assertEquals(0, js("decodeCalls").asInt());
         assertEquals("ok", fx.getMember("decodeCopySource").execute("").getMember("state").asString());
         assertEquals("invalid", js("fx.decodeCopySource(null).state").asString());
@@ -194,6 +196,14 @@ class FxCopySourceTest {
         js("delete window.TextDecoder;");
         createWidget("x");
         js("__lxDispatch(chip, 'click'); __lxDispatch(item, 'click');");
+        assertEquals(0, js("writes.length").asInt());
+        assertTrue(js("status.textContent.indexOf('unavailable') >= 0").asBoolean());
+    }
+
+    @Test
+    void insecureContextDoesNotAttemptAClipboardWriteEvenWithAHandcraftedApi() {
+        createWidget("x");
+        js("window.isSecureContext = false; __lxDispatch(chip, 'click'); __lxDispatch(item, 'click');");
         assertEquals(0, js("writes.length").asInt());
         assertTrue(js("status.textContent.indexOf('unavailable') >= 0").asBoolean());
     }

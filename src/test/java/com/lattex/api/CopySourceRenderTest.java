@@ -32,7 +32,7 @@ class CopySourceRenderTest {
 
     @Test
     void styledAndCoupledDisplayPreserveTheExactOriginalInput() {
-        for (String source : List.of("x\r\n+y", "x\r+y", "x\n+y",
+        for (String source : List.of("x\r\n+y", "x\r+y", "x\n+y", " \tx\r\n+y \r\n",
                 "\\lx[style.scale=lg,fx.hover=pulse]{x+y}")) {
             String html = LatteX.renderStyledHtml(source, ON);
             var match = CARRIER.matcher(html);
