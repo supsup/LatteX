@@ -186,7 +186,13 @@ class FxCopySourceTest {
         assertEquals("Copy failed. Try again.", js("status.textContent").asString());
         js("delete window.navigator.clipboard; __lxDispatch(chip, 'click'); __lxDispatch(item, 'click');");
         assertTrue(js("status.textContent.indexOf('unavailable') >= 0").asBoolean());
-        js("el.setAttribute('data-lx-source', 'eB'); __lxDispatch(chip, 'click'); __lxDispatch(item, 'click');");
+        js("""
+            window.navigator.clipboard = {writeText:function(text) {
+              writes.push(text); return Promise.resolve();
+            }};
+            el.setAttribute('data-lx-source', 'eB');
+            __lxDispatch(chip, 'click'); __lxDispatch(item, 'click');
+            """);
         assertEquals(1, js("writes.length").asInt(), "revalidate at action rather than copy a stale cached source");
         assertTrue(js("status.textContent.indexOf('unavailable') >= 0").asBoolean());
     }
