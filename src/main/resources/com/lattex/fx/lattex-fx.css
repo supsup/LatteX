@@ -51,7 +51,7 @@
 }
 .lx-math > .lx-chip:focus-visible,
 .lx-math .lx-copy-action:focus-visible {
-  outline: 2px solid var(--lx-copy-focus, #0756bf);
+  outline: 2px solid var(--lx-copy-focus, #1769d2);
   outline-offset: 2px;
 }
 .lx-math > .lx-copy-menu {
