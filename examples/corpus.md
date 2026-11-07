@@ -245,7 +245,7 @@ following once the node exists.
 | `\lx[graph.open=multi]{\frac{1}{x}}` | lx macro — multi-open graph (graph.* option) | `PARSES-NOW` |
 | `\lx[intent=ratio,concept=normalized_score]{\frac{a+b}{c}}` | lx macro — semantic intent/concept | `PARSES-NOW` |
 | `\lx[a11y.label="normalized score"]{\frac{a}{b}}` | lx macro — accessibility label | `PARSES-NOW` |
-| `\lx[data.source=calc_12]{x^2}` | lx macro — data attribute | `PARSES-NOW` |
+| `\lx[data.provenance=calc_12]{x^2}` | lx macro — nonreserved author data attribute | `PARSES-NOW` |
 | `\lx[style.color=#333,fx.enter=fade,intent=ratio,a11y.label="a ratio"]{\frac{a}{b}}` | lx macro — combined options | `PARSES-NOW` |
 
 ## Commutative diagrams (amscd \begin{CD})
