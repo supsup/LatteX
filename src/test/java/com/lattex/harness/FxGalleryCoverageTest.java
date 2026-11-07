@@ -124,8 +124,10 @@ class FxGalleryCoverageTest {
         assertTrue(gallery.contains(FxKnobsPreviewPageTest.LIGHTNING), "the tuned lightning source is missing");
         assertTrue(gallery.contains(FxKnobsPreviewPageTest.STORM), "the zero-storm source is missing");
         assertTrue(gallery.contains("](fx-knobs.html)"), "the live knob page is unlinked");
+        Path page = examples.resolve("fx-knobs.html");
+        assertTrue(Files.isRegularFile(page), "missing committed knob preview page");
         assertEquals(FxKnobsPreviewPageTest.buildFxKnobsPreviewHtml(),
-            Files.readString(examples.resolve("fx-knobs.html")),
+            Files.readString(page),
             "the committed knob preview is stale; regenerate with ./gradlew generateExamples");
         for (String name : new String[] {"lightning-knobs.gif", "storm-disabled.png", "storm-enabled.gif"}) {
             Path asset = examples.resolve(name);
