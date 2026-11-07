@@ -24,3 +24,6 @@ below are kept verbatim as their branches wrote them.
   existing output. The gallery adds tuned lightning and disabled/late-enabled
   storm specimens. Hosts that sanitize wrappers must explicitly allow the two
   bounded attributes; this does not establish Stafficy `/docs` adoption.
+- Regenerated committed examples with the current renderer and runtime, including
+  showcase and gallery specimen pages that had become stale on main. Their
+  refreshed layout is independent of the lightning and storm knobs.
