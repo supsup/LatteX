@@ -390,6 +390,9 @@ class FxRuntimeCascadeTest {
         // SvgEmitter off the shared emit-order traversal, value-constrained, read-only to
         // the runtime. This guard is about the runtime not INVENTING attribute families,
         // and the widening is deliberate and reviewed, not incidental.
+        // Copy source (plan 28f67310) separately admits the exact data-lx-source
+        // transport carrier. It does not authorize any cascade/row/band sidecar,
+        // a wildcard Copy family, or a runtime-created source value.
         String runtime = LatteX.fxRuntimeJs();
         Matcher m = Pattern.compile("data-lx-[a-z0-9-]+").matcher(runtime);
         Set<String> names = new TreeSet<>();
@@ -399,11 +402,13 @@ class FxRuntimeCascadeTest {
         assertTrue(names.contains("data-lx-glyphmap") && names.contains("data-lx-groupmap"),
             "sanity: the known renderer sidecars must still be present (enumeration works)");
         Pattern known = Pattern.compile(
-            "^data-lx-fx-[a-z-]*$|^data-lx-glyphmap$|^data-lx-groupmap$|^data-lx-var$");
+            "^data-lx-fx-[a-z-]*$|^data-lx-glyphmap$|^data-lx-groupmap$|^data-lx-var$|^data-lx-source$");
+        assertFalse(known.matcher("data-lx-source-extra").matches(),
+            "Copy admits one exact source carrier, not a new open attribute family");
         for (String n : names) {
             assertTrue(known.matcher(n).matches(),
                 "runtime references a data-lx-* attribute outside the known families "
-                    + "(fx.* config / glyphmap / groupmap / var): " + n);
+                    + "(fx.* config / glyphmap / groupmap / var / exact Copy source): " + n);
             assertFalse(n.contains("cascade") || n.contains("row") || n.contains("band"),
                 "cascade must add NO row/band/cascade sidecar attribute: " + n);
         }
