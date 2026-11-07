@@ -1,6 +1,7 @@
 package com.lattex.harness;
 
 import com.lattex.parse.Effect;
+import com.lattex.api.FxKnobsPreviewPageTest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -113,6 +114,26 @@ class FxGalleryCoverageTest {
                 ? ".gif" : ".png";
             assertTrue(specimen.asset().endsWith(extension),
                 entry.getKey() + " representation/extension drift: " + specimen.asset());
+        }
+    }
+
+    @Test
+    void knobSpecimensKeepTheirSourcePageAndAllThreeCommittedReferences() throws IOException {
+        Path examples = Path.of("examples");
+        String gallery = Files.readString(examples.resolve("GALLERY.md"));
+        assertTrue(gallery.contains(FxKnobsPreviewPageTest.LIGHTNING), "the tuned lightning source is missing");
+        assertTrue(gallery.contains(FxKnobsPreviewPageTest.STORM), "the zero-storm source is missing");
+        assertTrue(gallery.contains("](fx-knobs.html)"), "the live knob page is unlinked");
+        Path page = examples.resolve("fx-knobs.html");
+        assertTrue(Files.isRegularFile(page), "missing committed knob preview page");
+        assertEquals(FxKnobsPreviewPageTest.buildFxKnobsPreviewHtml(),
+            Files.readString(page),
+            "the committed knob preview is stale; regenerate with ./gradlew generateExamples");
+        for (String name : new String[] {"lightning-knobs.gif", "storm-disabled.png", "storm-enabled.gif"}) {
+            Path asset = examples.resolve(name);
+            assertTrue(Files.isRegularFile(asset), "missing knob reference: " + name);
+            assertTrue(Files.size(asset) > 5_000, "suspiciously small knob reference: " + name);
+            assertTrue(gallery.contains("](" + name + ")"), "unlinked knob reference: " + name);
         }
     }
 
