@@ -54,5 +54,5 @@ Non-trivial layout code must cite its TeXbook App. G rule (clean-room rule).
 A verdict names, at the exact tip: `./gradlew build` (not `check`: build also runs
 javadoc, check does not) with LATTEX_REQUIRE_BROWSER=1 and Chrome present, its JUnit
 report count, an empty `git status --porcelain` afterwards, and
-`tools/exported-api/check.sh <base> <tip>`, which CI runs on every push. `./gradlew test` alone is NOT the gate: it excludes
+`tools/exported-api/check.sh <base> <tip>`, which CI runs on pull requests and on pushes to main. `./gradlew test` alone is NOT the gate: it excludes
 the browser pins.
