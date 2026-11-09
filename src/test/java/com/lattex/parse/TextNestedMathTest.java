@@ -101,7 +101,7 @@ class TextNestedMathTest {
         // brace-blind $ scan mis-paired at level 1 and never reached the guard —
         // Conf review lattex/210 F2). "nesting too deep" proves the guard fired.
         StringBuilder sb = new StringBuilder();
-        int levels = 600; // > MAX_DEPTH (512)
+        int levels = 600; // > MAX_DEPTH (80)
         for (int i = 0; i < levels; i++) {
             sb.append("\\text{$");
         }

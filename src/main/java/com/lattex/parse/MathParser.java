@@ -86,8 +86,31 @@ public final class MathParser {
      */
     public static final int MAX_SOURCE_LENGTH = 100_000;
 
-    /** Maximum recursive nesting depth (groups, arguments, scripts, fences). */
-    static final int MAX_DEPTH = 512;
+    /**
+     * Maximum recursive nesting depth (groups, arguments, scripts, fences): the documented,
+     * user-visible semantic limit (plan 28201def; was 512). It is an INPUT budget, not a promise
+     * that every input at or under it succeeds on every VM or from an already-deep caller stack:
+     * the counter in {@link #parseNucleus} refuses past it, and the two public {@code parse}
+     * entries additionally turn a residual {@link StackOverflowError} into the same typed
+     * refusal (see {@link #stackExhausted()}). The test suite exercises the limit on a thread
+     * whose REQUESTED stack size is 256 KiB, which cannot tell the counter from the backstop, and
+     * the backstop itself on a 512 KiB worker whose stack is first used up by filler frames. The
+     * JVM may round or ignore a requested size, so both are test conditions, not a certified
+     * floor. The backstop needs a little stack to build its refusal: with almost none left the
+     * raw Error still escapes.
+     */
+    static final int MAX_DEPTH = 80;
+
+    /**
+     * The residual backstop's typed refusal. Only {@link StackOverflowError} is ever caught for
+     * this (never Error/Throwable/OutOfMemoryError): the depth counter is the primary bound, and
+     * this keeps a smaller-than-expected caller stack from leaking the raw Error past the
+     * caller's {@code catch (RuntimeException)} guards.
+     */
+    private static MathSyntaxException stackExhausted() {
+        return new MathSyntaxException("nesting too deep: the parser's stack was exhausted before the "
+            + MAX_DEPTH + "-level limit; input refused");
+    }
 
     /** Current recursion depth; guarded against {@link #MAX_DEPTH} in {@link #parseNucleus}. */
     private int depth;
@@ -470,13 +493,17 @@ public final class MathParser {
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
         String source = latex;
-        return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
-            if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                    && LxOptionsParser.looksLikeTopLevelLx(source)) {
-                return LxOptionsParser.parseLx(source.strip(), macros);
-            }
-            return parseMath(source, 0, macros);
-        });
+        try {
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
+                if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                        && LxOptionsParser.looksLikeTopLevelLx(source)) {
+                    return LxOptionsParser.parseLx(source.strip(), macros);
+                }
+                return parseMath(source, 0, macros);
+            });
+        } catch (StackOverflowError residual) {
+            throw stackExhausted();
+        }
     }
 
     /**
@@ -523,13 +550,17 @@ public final class MathParser {
                 "input too long: " + stripped.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
-        return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
-            if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                    && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
-                return LxOptionsParser.parseLx(stripped.strip(), macros);
-            }
-            return parseMath(stripped, 0, macros, numberedEnvironmentSink);
-        });
+        try {
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
+                if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                        && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
+                    return LxOptionsParser.parseLx(stripped.strip(), macros);
+                }
+                return parseMath(stripped, 0, macros, numberedEnvironmentSink);
+            });
+        } catch (StackOverflowError residual) {
+            throw stackExhausted();
+        }
     }
 
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */

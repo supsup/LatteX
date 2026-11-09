@@ -123,14 +123,35 @@ class TryRenderMathOptionsTest {
         assertThrows(NullPointerException.class, () -> LatteX.tryRenderMath("x", null));
     }
 
+    /**
+     * The options overload shares the containment boundary (plan lattex-seam-containment-parity),
+     * re-derived for the nesting limit of 80 (plan 28201def; rulings M1614, L1623). A SHALLOW
+     * render through this overload with these host options is the positive and the warm-up.
+     * {@link StackStarved#DEEP} on the roomy stack is the GUARD refusal control. On the starved
+     * stack, the bare parse this overload runs (with the host's macros) must end in the parser
+     * BACKSTOP, and the overload must still answer empty.
+     */
     @Test
     void anOverflowThroughTheOptionsOverloadIsStillEmpty() {
-        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(DEEP, host())",
-            () -> LatteX.tryRenderMath(StackStarved.DEEP, host()));
-        assertTrue(((Optional<?>) rendered).isPresent(), "deep input renders on a roomy stack");
-        StackStarved.assertFixtureOverflows("the bare parse the overload runs first",
-            () -> com.lattex.parse.MathParser.parse(StackStarved.DEEP, host().macros()));
-        StackStarved.Outcome o = StackStarved.run(() -> LatteX.tryRenderMath(StackStarved.DEEP, host()));
+        RenderOptions opts = host();
+        // (1) Positive and class warm-up on a roomy stack, through this same overload.
+        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(SHALLOW, host())",
+            () -> LatteX.tryRenderMath(StackStarved.SHALLOW, opts));
+        assertTrue(((Optional<?>) rendered).isPresent(), "a shallow input renders through the options overload on a roomy stack");
+
+        // (2) Refusal control on the roomy stack: DEEP is past the limit, the GUARD refuses it.
+        StackStarved.Outcome roomyDeep = StackStarved.runRoomy(() -> LatteX.tryRenderMath(StackStarved.DEEP, opts));
+        assertTrue(!roomyDeep.threw() && Optional.empty().equals(roomyDeep.value()),
+            "refusal control: DEEP is refused on a roomy stack -> empty: " + roomyDeep.describe());
+        StackStarved.assertRoomyParseIsGuardRefusal("the bare parse the options overload runs",
+            () -> com.lattex.parse.MathParser.parse(StackStarved.DEEP, opts.macros()));
+
+        // (3) Fixture reach: the same bare parse on the starved stack is the BACKSTOP, a real overflow.
+        StackStarved.assertStarvedParseHitsBackstop("the bare parse the options overload runs",
+            () -> com.lattex.parse.MathParser.parse(StackStarved.DEEP, opts.macros()));
+
+        // (4) The options overload on the starved stack: empty, never an escaping Error.
+        StackStarved.Outcome o = StackStarved.run(() -> LatteX.tryRenderMath(StackStarved.DEEP, opts));
         assertTrue(!o.threw() && Optional.empty().equals(o.value()),
             "the options overload shares the containment boundary: " + o.describe());
     }

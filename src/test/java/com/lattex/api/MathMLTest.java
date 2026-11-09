@@ -39,9 +39,12 @@ class MathMLTest {
         // escaping plus repeatedly copying a long descendant is its own work axis.
         String payload = "\\text{" + "\"".repeat(90_000) + "}";
         // Twenty wrappers cost about 11.9M logical copies and must still admit;
-        // forty cross the independent 16M copy allowance with the same final text.
+        // thirty-five cross the independent 16M copy allowance (about 20.2M) with the same
+        // final text. Each \boxed{...} costs two nesting levels and the text one, so
+        // thirty-five wrappers sit at depth 71 of the 80-level limit; forty would be refused
+        // by the nesting limit before the copy allowance is reached.
         assertWellFormed(LatteX.toMathML("\\boxed{".repeat(20) + payload + "}".repeat(20)));
-        String source = "\\boxed{".repeat(40) + payload + "}".repeat(40);
+        String source = "\\boxed{".repeat(35) + payload + "}".repeat(35);
         MathSyntaxException cap = assertThrows(MathSyntaxException.class,
             () -> LatteX.toMathML(source));
         assertTrue(cap.isCapExceeded());
