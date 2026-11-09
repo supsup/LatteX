@@ -58,6 +58,7 @@ surface (`tools/exported-api`), and the release and tag path.
 ## Required evidence
 
 A verdict on code names a full `./gradlew build` at the exact tip, with its test count and
-whether the browser pins ran, plus the GitHub Actions run at that tip. The land rail
-selects no lanes for this repo, so a land is evidenced by that run plus merged tree equal to
-the tested tip's tree.
+whether the browser pins ran, plus the GitHub Actions run at that tip. The land rail's
+pre-land gate for this repo runs `./gradlew test --rerun-tasks`, `browserTest` with
+`LATTEX_REQUIRE_BROWSER=1` (so a missing browser fails instead of skipping) and `jar`, as
+`ai branch review-request` prints them; a verdict that skipped any of those says so.
