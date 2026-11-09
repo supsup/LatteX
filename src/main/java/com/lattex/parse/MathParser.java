@@ -188,6 +188,44 @@ public final class MathParser {
         }
     }
 
+    // Expanded TEXT tokens can share their raw payload while decoding produces a new
+    // retained String on each occurrence. Bound each literal segment BEFORE decoding.
+    // A parent hands nested math/text to its child without billing that payload again.
+    // The allowance follows recursive parseMath calls; resetting it for every $ span
+    // would reopen the amplification.
+    private static final long MAX_TEXT_DECODE_UNITS = 100_000;
+    private static final ScopedValue<TextDecodeWork> TEXT_DECODE_WORK = ScopedValue.newInstance();
+
+    private static final class TextDecodeWork {
+        long units;
+        long parsedTokens;
+
+        void charge(int amount) {
+            if (amount > MAX_TEXT_DECODE_UNITS - units) {
+                throw MathSyntaxException.capExceeded(
+                    "output work budget exceeded: materialized text during parse");
+            }
+            units += amount;
+        }
+
+        // Count actual expanded input once per parser, not raw TEXT payloads at
+        // every enclosing level. This conservative work policy also counts braces
+        // that later collapse; it is separate from the literal-decoding allowance.
+        void chargeParsedTokens(List<Token> tokens) {
+            long amount = 0;
+            for (Token token : tokens) {
+                if (token.kind() != Kind.EOF) {
+                    amount++;
+                }
+            }
+            if (amount > (long) MacroExpander.MAX_MACRO_OUTPUT_TOKENS - parsedTokens) {
+                throw MathSyntaxException.capExceeded(
+                    "output work budget exceeded: parsed tokens during parse");
+            }
+            parsedTokens += amount;
+        }
+    }
+
     private MathParser(String src) {
         this(src, Map.of());
     }
@@ -202,6 +240,7 @@ public final class MathParser {
      */
     private MathParser(String src, Map<String, String> macros) {
         this.tokens = MacroExpander.expand(lex(src), macros);
+        TEXT_DECODE_WORK.get().chargeParsedTokens(tokens);
         this.source = src;
         this.presetMacros = macros;
     }
@@ -450,12 +489,15 @@ public final class MathParser {
                 "input too long: " + latex.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
+        String source = latex;
         try {
-            if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                    && LxOptionsParser.looksLikeTopLevelLx(latex)) {
-                return LxOptionsParser.parseLx(latex.strip(), macros);
-            }
-            return parseMath(latex, 0, macros);
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
+                if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                        && LxOptionsParser.looksLikeTopLevelLx(source)) {
+                    return LxOptionsParser.parseLx(source.strip(), macros);
+                }
+                return parseMath(source, 0, macros);
+            });
         } catch (StackOverflowError residual) {
             throw stackExhausted();
         }
@@ -506,11 +548,13 @@ public final class MathParser {
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
         try {
-            if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                    && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
-                return LxOptionsParser.parseLx(stripped.strip(), macros);
-            }
-            return parseMath(stripped, 0, macros, numberedEnvironmentSink);
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
+                if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                        && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
+                    return LxOptionsParser.parseLx(stripped.strip(), macros);
+                }
+                return parseMath(stripped, 0, macros, numberedEnvironmentSink);
+            });
         } catch (StackOverflowError residual) {
             throw stackExhausted();
         }
@@ -545,6 +589,10 @@ public final class MathParser {
     /** As above, additionally reporting numbered display environments into a caller-owned sink. */
     static MathNode parseMath(String latex, int initialDepth, Map<String, String> macros,
                               Collection<String> numberedEnvironmentSink) {
+        if (!TEXT_DECODE_WORK.isBound()) {
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(
+                () -> parseMath(latex, initialDepth, macros, numberedEnvironmentSink));
+        }
         try {
             MathParser parser = new MathParser(latex, macros);
             parser.numberedEnvironmentSink = numberedEnvironmentSink;
@@ -670,6 +718,9 @@ public final class MathParser {
         try {
             return textWithNestedMath(Token.text("tag", raw, offset), TextStyle.ROMAN);
         } catch (MathSyntaxException textRefused) {
+            if (textRefused.isCapExceeded()) {
+                throw textRefused;
+            }
             try {
                 return parseMath(raw, depth, presetMacros);
             } catch (MathSyntaxException mathRefused) {
@@ -2599,6 +2650,9 @@ public final class MathParser {
                 try {
                     items.add(parseMath(span, depth));
                 } catch (MathSyntaxException e) {
+                    if (e.isCapExceeded()) {
+                        throw e;
+                    }
                     String shown = paren ? "\\(" + span + "\\)" : "$" + span + "$";
                     throw MathSyntaxException.withUnsupportedKind(
                         "in \\" + t.name() + " nested math '" + shown + "': " + e.getMessage(),
@@ -2773,6 +2827,7 @@ public final class MathParser {
      * command inside {@code \text}.
      */
     private static String literalText(String s, Token t) {
+        TEXT_DECODE_WORK.get().charge(s.length());
         if (s.indexOf('{') < 0 && s.indexOf('}') < 0 && s.indexOf('\\') < 0
                 && s.indexOf('~') < 0) {
             return s;
