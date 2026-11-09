@@ -305,6 +305,8 @@ The key set:
 | `style.mathstyle` | `display` \| `text` \| `script` \| `scriptscript` |
 | `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `constellation` \| `thread` \| `precedence` \| `cancel` \| `unfold` \| `substitute` \| `none` — see `examples/effects.html` live (`unfold` and `substitute` are opt-in/flag-gated and not shown there — see their own previews and the callout below) |
 | `fx.duration` | a `<n>ms` value, e.g. `250ms` |
+| `fx.bolts` | integer ASCII decimal `1..8`, for `lightning` and `storm`; omitted default `2` bolts per source |
+| `fx.intensity` | integer ASCII decimal `0..300` percent, for `lightning` and `storm`; omitted default `100`; `0` switches those effects off |
 | `fx.substitute-to` | the literal integer `substitute` flips to, e.g. `3` or `-12` (at most 6 digits). The substituted form is grouped where adjacency would change the meaning: `2x` with `3` renders `2 \cdot 3`, never `23`; a negative after any operand keeps its product, so `ax` with `-3` renders `a \cdot -3`, never `a-3`; and a negative under a power or subscript is parenthesised, so `2x^2` with `-3` renders `2(-3)^2`, never `2-3^2`. `\textcolor` is transparent to both guards |
 | `fx.substitute-var` | the single letter to replace, e.g. `x` — optional; omit it and the body's one distinct letter is used |
 | `intent` / `concept` | a lowercase identifier (`^[a-z][a-z0-9_]*$`), e.g. `function` |
@@ -316,6 +318,29 @@ refinement). Values are bare tokens or `"quoted strings"`; whitespace outside qu
 is insignificant. This is the quickstart view — the full option grammar and rationale
 live in the **`lattex-render-styling-options`** design plan. See
 [examples/showcase.html](examples/showcase.html) for the macro end-to-end.
+
+Tune either bolt effect with the same two global options:
+
+```latex
+\lx[fx.hover=lightning, fx.bolts=4, fx.intensity=150]{x^2}
+\lx[fx.click=storm, fx.intensity=0]{\frac{a}{b}}
+```
+
+Numeric values must be whole ASCII decimals within those ranges. Signs,
+fractions, exponents, units, internal whitespace and trailing junk fail at parse
+time with the option, supplied value and allowed range. Whitespace around option
+separators remains legal; quoted numeric values retain their internal whitespace.
+Omitting a knob emits no new attribute and preserves the default output.
+Explicit knobs stamp `data-lx-fx-bolts` and `data-lx-fx-intensity` on the wrapper;
+they leave the inner SVG unchanged. A host sanitizer must allow these exact names
+with bounded decimal values; this does not establish adoption by Stafficy `/docs`.
+
+Intensity adjusts brightness, glow and stroke width under fixed caps, without
+adding bolt, segment, frame or timer work. Zero leaves the equation visible and
+does not initialize lightning/storm overlays, timers or trigger listeners;
+unrelated effects on the same equation keep their behavior. Reduced motion takes
+precedence over every nonzero knob. `fx.strikes`, `fx.arc` and per-effect numeric
+namespaces remain unknown options.
 
 > **`unfold` and `substitute` are doubly gated.** They are the numeric-substitution
 > family — the effects that need LatteX to *compute* (pre-render a bounded `\sum` into

@@ -10,6 +10,7 @@ import com.lattex.api.Color;
 import com.lattex.api.MathStyle;
 import com.lattex.parse.MathNode.Fraction;
 import com.lattex.parse.MathNode.StyledMath;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -113,6 +114,110 @@ class LxMacroTest {
             lx("\\lx[fx.enter=storm]{ x }").fx().effect(Trigger.ENTER).orElseThrow());
         assertEquals(Effect.STORM,
             lx("\\lx[fx.click=storm]{ x }").fx().effect(Trigger.CLICK).orElseThrow());
+    }
+
+    @Test
+    void numericKnobsPreserveAbsentStateAndParseBothEffectsAtTheirBounds() {
+        for (String effect : new String[]{"lightning", "storm"}) {
+            EffectSpec omitted = lx("\\lx[fx.hover=" + effect + "]{x}").fx();
+            assertNull(omitted.bolts());
+            assertNull(omitted.intensity());
+            for (int[] values : new int[][]{{1, 0}, {2, 100}, {8, 300}}) {
+                EffectSpec fx = lx("\\lx[ fx.hover = " + effect + ", fx.bolts = " + values[0]
+                    + " ,\tfx.intensity = " + values[1] + " \n]{x}").fx();
+                assertEquals(Integer.valueOf(values[0]), fx.bolts());
+                assertEquals(Integer.valueOf(values[1]), fx.intensity());
+                assertEquals(Effect.parse(effect), fx.effect(Trigger.HOVER).orElseThrow());
+            }
+        }
+        EffectSpec quoted = lx("\\lx[fx.bolts=\"002\", fx.intensity=\"000\"]{x}").fx();
+        assertEquals(Integer.valueOf(2), quoted.bolts());
+        assertEquals(Integer.valueOf(0), quoted.intensity());
+        EffectSpec boltsOnly = lx("\\lx[fx.bolts=2]{x}").fx();
+        assertNull(boltsOnly.intensity());
+        assertTrue(!boltsOnly.isEmpty(), "explicit default is still authored state");
+        EffectSpec zeroOnly = lx("\\lx[fx.intensity=0]{x}").fx();
+        assertNull(zeroOnly.bolts());
+        assertTrue(!zeroOnly.isEmpty(), "explicit zero must not disappear");
+        assertTrue(EffectSpec.none().isEmpty());
+    }
+
+    @Test
+    void numericKnobsRejectMalformedValuesWithKeyValueAndRangeEvenAtTokenizerFailures() {
+        String[][] malformed = {
+            {"", ""}, {"\"\"", ""}, {"-1", "-1"}, {"+1", "+1"},
+            {"1.0", "1.0"}, {"1e0", "1e0"}, {"1E0", "1E0"}, {"1ms", "1ms"},
+            {"2%", "2%"}, {"0x2", "0x2"}, {"NaN", "NaN"}, {"Infinity", "Infinity"},
+            {"1x", "1x"}, {"١", "١"}, {"１", "１"},
+            {"1 2", "1 2"}, {"1\t2", "1\t2"}, {"\" 2\"", " 2"},
+            {"\"2 \"", "2 "}, {"\"1 2\"", "1 2"}, {"\"2\"junk", "\"2\"junk"},
+            {"\"2,3\"", "2,3"}, {"2\u00a0", "2\u00a0"},
+            {"2147483648", "2147483648"},
+            {"999999999999999999999999999999999999", "999999999999999999999999999999999999"}
+        };
+        for (String effect : new String[]{"lightning", "storm"}) {
+            for (String key : new String[]{"fx.bolts", "fx.intensity"}) {
+                for (String[] bad : malformed) {
+                    assertNumericRejected(effect, key, bad[0], bad[1]);
+                }
+            }
+            for (String bad : new String[]{"0", "00", "9"}) {
+                assertNumericRejected(effect, "fx.bolts", bad, bad);
+            }
+            assertNumericRejected(effect, "fx.intensity", "301", "301");
+        }
+    }
+
+    private static void assertNumericRejected(String effect, String key, String sourceValue,
+                                              String suppliedValue) {
+        MathSyntaxException error = assertThrows(MathSyntaxException.class,
+            () -> MathParser.parse("\\lx[fx.hover=" + effect + "," + key + "=" + sourceValue + "]{x}"));
+        assertTrue(error.getMessage().contains(key), error.getMessage());
+        assertTrue(error.getMessage().contains("\"" + suppliedValue + "\""), error.getMessage());
+        assertTrue(error.getMessage().contains(key.equals("fx.bolts") ? "1..8" : "0..300"),
+            error.getMessage());
+    }
+
+    @Test
+    void onlyTheTwoFlatNumericKnobsAreKnown() {
+        for (String key : new String[]{"fx.strikes", "fx.arc", "fx.lightning.bolts",
+                "fx.storm.intensity", "fx.bolts.extra", "fx.intensity.extra"}) {
+            MathSyntaxException error = assertThrows(MathSyntaxException.class,
+                () -> MathParser.parse("\\lx[" + key + "=1]{x}"));
+            assertTrue(error.getMessage().contains("unknown"), error.getMessage());
+            assertTrue(error.getMessage().contains(key), error.getMessage());
+        }
+    }
+
+    @Test
+    void directEffectConstructionSharesBoundsAndRetainsFiveArgumentConstructor() {
+        EffectSpec legacy = new EffectSpec(Map.of(Trigger.HOVER, Effect.LIGHTNING),
+            "250ms", Color.CURRENT, null, null);
+        assertNull(legacy.bolts());
+        assertNull(legacy.intensity());
+        assertEquals("250ms", legacy.duration());
+        assertEquals(Effect.LIGHTNING, legacy.effects().get(Trigger.HOVER));
+        assertTrue(new EffectSpec(Map.of(), null, null, null, null).isEmpty());
+        for (int[] values : new int[][]{{1, 0}, {2, 100}, {8, 300}}) {
+            EffectSpec fx = new EffectSpec(Map.of(), null, null, null, null, values[0], values[1]);
+            assertEquals(Integer.valueOf(values[0]), fx.bolts());
+            assertEquals(Integer.valueOf(values[1]), fx.intensity());
+            assertTrue(!fx.isEmpty());
+        }
+        for (int bad : new int[]{Integer.MIN_VALUE, -1, 0, 9, Integer.MAX_VALUE}) {
+            MathSyntaxException error = assertThrows(MathSyntaxException.class,
+                () -> new EffectSpec(Map.of(), null, null, null, null, bad, null));
+            assertTrue(error.getMessage().contains("fx.bolts"), error.getMessage());
+            assertTrue(error.getMessage().contains("\"" + bad + "\""), error.getMessage());
+            assertTrue(error.getMessage().contains("1..8"), error.getMessage());
+        }
+        for (int bad : new int[]{Integer.MIN_VALUE, -1, 301, Integer.MAX_VALUE}) {
+            MathSyntaxException error = assertThrows(MathSyntaxException.class,
+                () -> new EffectSpec(Map.of(), null, null, null, null, null, bad));
+            assertTrue(error.getMessage().contains("fx.intensity"), error.getMessage());
+            assertTrue(error.getMessage().contains("\"" + bad + "\""), error.getMessage());
+            assertTrue(error.getMessage().contains("0..300"), error.getMessage());
+        }
     }
 
     @Test
