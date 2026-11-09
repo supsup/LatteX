@@ -24,11 +24,13 @@ import java.util.concurrent.Callable;
  * <p><strong>The reserve is searched, not assumed.</strong> How many bytes a filler frame or a
  * parser frame costs depends on the VM build and on what the JIT has compiled so far, so no fixed
  * reserve is right everywhere. {@link #assertStarvedParseHitsBackstop} walks a ladder of reserves
- * from small to large and classifies the bare parse at each rung: too little room and the
- * overflow escapes before the parser's own catch is reached; enough room for all
+ * from small to large and classifies the bare parse at each rung: too little room and a raw
+ * overflow escapes (thrown before the parse is entered, or while the parser's own catch is
+ * building its refusal); enough room for all
  * {@value #PARSER_DEPTH_LIMIT} levels and the GUARD refuses; in between is the BACKSTOP. It keeps
- * the middle rung of that BACKSTOP window, and {@link #run} then uses it. If no rung gives the
- * BACKSTOP the control fails and prints what every rung did.
+ * the middle rung of that BACKSTOP window, and {@link #run} then uses it and re-checks it. If no
+ * rung gives the BACKSTOP, or fewer than {@value #MIN_BACKSTOP_RUNGS} do, the control fails and
+ * prints what every rung did.
  *
  * <p><strong>The two refusals (plan 28201def, nesting limit {@value #PARSER_DEPTH_LIMIT}).</strong>
  * <ul>
@@ -49,10 +51,19 @@ import java.util.concurrent.Callable;
  * because each of those also happens with no overflow at all. {@link #run} refuses to run before
  * that control has passed in this JVM.
  *
- * <p><strong>What is and is not claimed.</strong> The kept reserve was measured a moment earlier
- * in the same JVM, on the same kind of thread, with the same parser; it is not derived. A seam
- * that answers empty gives no evidence of its own that it overflowed, so its credit rests on the
- * control that ran just before it and on the kept rung sitting in the middle of the window.
+ * <p><strong>What is and is not claimed.</strong> The kept reserve is measured in the same JVM,
+ * on the same kind of thread, with the same parser; it is not derived. A seam that answers empty
+ * gives no evidence of its own that it overflowed, so its credit rests on three things: the
+ * control that measured the reserve before it, the re-check {@link #run} makes straight after
+ * it, and the kept rung sitting in the middle of the window. That is strong evidence, not proof:
+ * the seam's own frames sit between the reserve and the parser, and the re-check uses the bare
+ * parse, not the seam.
+ *
+ * <p><strong>Scope.</strong> These tests show containment at one reserve chosen from the middle
+ * of the window, where the parser's own catch has room to work. The ladder's lowest rungs show
+ * that with almost no stack left a raw {@code StackOverflowError} can still leave the parser; no
+ * catch can run without room to run in. "Never an escaping Error" is claimed for the kept
+ * reserve, not for every possible depth of the caller's stack.
  *
  * <p>Hazard note for anyone extending this: run a SHALLOW success through the same entry on the
  * roomy stack FIRST. A {@code StackOverflowError} inside a static initializer marks that class
@@ -62,9 +73,13 @@ import java.util.concurrent.Callable;
 final class StackStarved {
 
     /**
-     * Requested stack for the starved worker: above every platform minimum, so the worker is the
-     * same nominal size everywhere, and large enough for the ladder to climb past the BACKSTOP
-     * window. The room the call gets is set by the reserve, not by this.
+     * Requested stack for the starved worker. It is above the JVM's minimum thread stack on the
+     * platforms this suite has run on (measured: 208 KB on macOS on Apple silicon; 136 KB is the
+     * documented floor on Linux x86-64), so the worker is the same nominal size there. In the
+     * measured runs (macOS arm64 and Linux aarch64, JDK 25, interpreted, mixed and fully compiled)
+     * the ladder climbed past the BACKSTOP window and ended in the GUARD. Where the stack is too
+     * small for that, the ladder ends at "more than the worker's whole stack" instead, which is
+     * still a valid end. The room the call gets is set by the reserve, not by this.
      */
     static final long STACK_BYTES = 512L * 1024L;
 
@@ -74,8 +89,18 @@ final class StackStarved {
     /** Largest reserve tried. Far more room than {@value #PARSER_DEPTH_LIMIT} levels need. */
     static final int LAST_RESERVE = 1 << 20;
 
-    /** The reserve the last passing fixture-reach control kept; 0 until one has passed. */
-    private static volatile int keptReserve;
+    /**
+     * Fewest BACKSTOP rungs the control accepts. With fewer than three there is no rung with a
+     * BACKSTOP neighbour on both sides, so the kept rung would sit at an edge of the window.
+     */
+    static final int MIN_BACKSTOP_RUNGS = 3;
+
+    /** What the last passing fixture-reach control kept: the reserve and the bare parse it measured. */
+    private record Kept(int reserve, Callable<?> bareParse, String what) {
+    }
+
+    /** {@code null} until a fixture-reach control has passed in this JVM. */
+    private static volatile Kept kept;
 
     /** Requested stack for the roomy half: roomy, so even an all-interpreted run fits. */
     static final long ROOMY_STACK_BYTES = 256L * 1024L * 1024L;
@@ -114,7 +139,7 @@ final class StackStarved {
         return "\\text{$".repeat(levels) + "y" + "$}".repeat(levels);
     }
 
-    /** Far under the limit: renders on every stack these tests use. The positive and the warm-up. */
+    /** Far under the limit. The positive and the warm-up; only ever run on the roomy stack. */
     static final String SHALLOW = nestedText(3);
 
     /**
@@ -149,17 +174,31 @@ final class StackStarved {
      * Runs {@code call} with only the kept reserve of stack left and reports what it returned or
      * threw. Refuses unless {@link #assertStarvedParseHitsBackstop} has passed in this JVM, so a
      * starved run can never be made at a reserve nobody measured.
+     *
+     * <p>The run is bracketed. The control measured the reserve before it; straight after it the
+     * same bare parse is run again at the same reserve and must still end in the BACKSTOP. A
+     * filler frame's size changes when the JIT compiles it, so a reserve measured a moment ago is
+     * not guaranteed to mean the same amount of stack now. If the re-check fails, the starved
+     * call cannot be credited with meeting a real overflow and this throws instead of returning.
      */
     static Outcome run(Callable<?> call) {
-        int reserve = keptReserve;
-        if (reserve <= 0) {
+        Kept k = kept;
+        if (k == null) {
             throw new AssertionError("StackStarved.run before any passing fixture-reach control:"
                 + " call assertStarvedParseHitsBackstop first, so the reserve is a measured one");
         }
-        Outcome o = runWithReserve(call, reserve);
+        Outcome o = runWithReserve(call, k.reserve());
         if (o == null) {
             throw new AssertionError("the starved worker's stack held fewer than the kept reserve of "
-                + reserve + " filler frames, so the call was never made");
+                + k.reserve() + " filler frames, so the call was never made");
+        }
+        Outcome after = runWithReserve(k.bareParse(), k.reserve());
+        if (after == null || !(after.threw() && isBackstop(after.thrown()))) {
+            throw new AssertionError("the kept reserve of " + k.reserve() + " filler frames stopped ending in"
+                + " the parser BACKSTOP right after the starved call (" + k.what() + " of DEEP "
+                + (after == null ? "was never called" : after.describe()) + "), so that call cannot be"
+                + " credited with a real overflow. The starved call itself " + o.describe(),
+                after == null ? null : after.thrown());
         }
         return o;
     }
@@ -171,7 +210,7 @@ final class StackStarved {
      */
     private static Outcome runWithReserve(Callable<?> call, int reserve) {
         Object[] slot = new Object[2];
-        boolean[] called = new boolean[1];
+        boolean[] called = new boolean[2]; // [0] the call was started, [1] its outcome was stored
         int[] toUnwind = {reserve};
         Outcome worker = runWithStack(() -> {
             fill(call, toUnwind, called, slot);
@@ -184,28 +223,35 @@ final class StackStarved {
         if (!called[0]) {
             return null;
         }
+        if (!called[1]) {
+            throw new AssertionError("the call at reserve " + reserve + " was started but its outcome was"
+                + " never stored, so whatever it threw was lost on the way out of the filler frames");
+        }
         return new Outcome(slot[0], (Throwable) slot[1]);
     }
 
     /**
-     * Recurses until the stack overflows, then makes the call {@code toUnwind[0]} frames above the
-     * deepest frame reached. Everything the call returns or throws is stored, never propagated,
-     * so the {@code catch} below can only ever see the filler's own overflow and cannot swallow
-     * an Error that escaped the entry under test.
+     * Recurses until the stack overflows, then counts filler frames on the way back up, starting
+     * with the frame whose {@code catch} ran, and makes the call from the frame that brings the
+     * count to the reserve. Everything the call returns or throws is stored, never propagated, so
+     * the {@code catch} below is meant to see only the filler's own overflow; {@code called[1]}
+     * records that the outcome really was stored, and the caller refuses a run where it was not.
      */
     private static void fill(Callable<?> call, int[] toUnwind, boolean[] called, Object[] slot) {
         try {
             fill(call, toUnwind, called, slot);
         } catch (StackOverflowError bottom) { // NOPMD - reaching the real bottom is the point
-            // Fall through. A frame too deep to run even this handler overflows again and is
-            // caught one frame up, which only shifts the count by a frame or two.
+            // Fall through: the counting below is the same for the frame that caught the overflow
+            // and for every frame above it.
         }
         if (!called[0] && --toUnwind[0] <= 0) {
             called[0] = true;
             try {
                 slot[0] = call.call();
+                called[1] = true;
             } catch (Throwable t) { // NOPMD - the point is to observe an escaping Error
                 slot[1] = t;
+                called[1] = true;
             }
         }
     }
@@ -362,6 +408,12 @@ final class StackStarved {
                 break;
             }
         }
+        if (!backstopRungs.isEmpty() && backstopRungs.size() < MIN_BACKSTOP_RUNGS) {
+            throw new AssertionError("the BACKSTOP window is too narrow to trust: " + what + " of DEEP ended in"
+                + " the parser BACKSTOP at only " + backstopRungs.size() + " reserve(s) " + backstopRungs
+                + ", fewer than " + MIN_BACKSTOP_RUNGS + ", so no kept rung has room on both sides."
+                + " Reserve in filler frames = outcome: " + ladder);
+        }
         if (backstopRungs.isEmpty()) {
             throw new AssertionError("fixture no longer reaches a real StackOverflowError: " + what
                 + " of DEEP must end in the parser BACKSTOP (" + BACKSTOP_MESSAGE + ", no cause) at some"
@@ -369,10 +421,12 @@ final class StackStarved {
                 + "A jump straight from an escaped overflow to the GUARD means the ladder steps over"
                 + " the window: use a construct that costs more stack per level, or a finer ladder.");
         }
-        int kept = backstopRungs.get(backstopRungs.size() / 2);
-        keptReserve = kept;
+        // The lower of the two middle rungs when the count is even: if the reserve drifts, less room
+        // fails loudly (the overflow escapes), while more room could reach the GUARD quietly.
+        int middle = backstopRungs.get((backstopRungs.size() - 1) / 2);
+        kept = new Kept(middle, bareParse, what);
         // Evidence for whoever reads the report: Gradle keeps this in the suite's system-out.
-        System.out.println("StackStarved fixture reach, " + what + ": kept reserve " + kept
+        System.out.println("StackStarved fixture reach, " + what + ": kept reserve " + middle
             + " of BACKSTOP rungs " + backstopRungs + ". Ladder: " + ladder);
     }
 }

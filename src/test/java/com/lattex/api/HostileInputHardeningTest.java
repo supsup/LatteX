@@ -201,6 +201,52 @@ class HostileInputHardeningTest {
             "tryRenderMath must turn an overflow into Optional.empty: " + seam.describe());
     }
 
+    /**
+     * The parser has two overflow catches, one per public parse entry family. The seams above
+     * reach the first. The diagnostic render is the only production caller of the overload that
+     * takes a numbered-environment sink, which has the second catch (plan 28201def; found by a
+     * mutant that rethrew the overflow there and left the whole suite green). A real overflow
+     * through that overload must end in the same parser BACKSTOP, and the diagnostic render must
+     * report it as a parse error carrying the BACKSTOP's own message: evidence that comes from
+     * this run, not from a control beside it.
+     */
+    @Test
+    void aRealOverflowThroughTheSinkOverloadIsTheBackstopAndTheDiagnosticRenderReportsIt() {
+        // (1) Positive and class warm-up on a ROOMY stack, through the same entry.
+        Object rendered = StackStarved.assertSucceedsOnRoomyStack("renderWithDiagnostics(SHALLOW)",
+            () -> LatteX.renderWithDiagnostics(StackStarved.SHALLOW));
+        assertEquals(Outcome.OK, ((RenderResult) rendered).diagnostics().outcome(),
+            "a shallow input renders through the diagnostic entry on a roomy stack");
+
+        // (2) Refusal control on the roomy stack: DEEP is refused by the GUARD, not the BACKSTOP.
+        StackStarved.Outcome roomy = StackStarved.runRoomy(() -> LatteX.renderWithDiagnostics(StackStarved.DEEP));
+        assertTrue(!roomy.threw(), "the diagnostic render never throws, even while refusing DEEP: " + roomy.describe());
+        Diagnostics roomyDiagnostics = ((RenderResult) roomy.value()).diagnostics();
+        assertEquals(Outcome.PARSE_ERROR, roomyDiagnostics.outcome(), "refusal control: DEEP is a parse error on a roomy stack");
+        assertTrue(roomyDiagnostics.message().contains(StackStarved.GUARD_FRAGMENT)
+                && !roomyDiagnostics.message().contains(StackStarved.BACKSTOP_MESSAGE),
+            "refusal control: on a roomy stack the refusal is the GUARD, not the BACKSTOP");
+        StackStarved.assertRoomyParseIsGuardRefusal("the bare parse renderWithDiagnostics runs",
+            () -> com.lattex.parse.MathParser.parse(StackStarved.DEEP, RenderOptions.defaults().macros(),
+                new ArrayList<String>()));
+
+        // (3) Fixture reach through the sink overload itself.
+        StackStarved.assertStarvedParseHitsBackstop("the bare parse renderWithDiagnostics runs",
+            () -> com.lattex.parse.MathParser.parse(StackStarved.DEEP, RenderOptions.defaults().macros(),
+                new ArrayList<String>()));
+
+        // (4) The diagnostic render on the starved stack: no throw, and the BACKSTOP's exact message.
+        StackStarved.Outcome starved = StackStarved.run(() -> LatteX.renderWithDiagnostics(StackStarved.DEEP));
+        assertTrue(!starved.threw(), "an Error escaped renderWithDiagnostics, which never throws: " + starved.describe());
+        RenderResult result = (RenderResult) starved.value();
+        assertEquals("", result.svg(), "a refused render carries no SVG");
+        assertEquals(Outcome.PARSE_ERROR, result.diagnostics().outcome(),
+            "a real overflow inside the parse is reported as a parse error, not a render bug: "
+                + result.diagnostics().outcome() + " / " + result.diagnostics().detail());
+        assertEquals(StackStarved.BACKSTOP_MESSAGE, result.diagnostics().message(),
+            "the diagnostic carries the parser BACKSTOP's own message, which only a real overflow produces");
+    }
+
     @Test
     void controlCharsInInputNeverReachOutput() {
         // The fuzz-find, pinned: a control character in author input (NUL, BEL,
