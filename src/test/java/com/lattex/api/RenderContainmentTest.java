@@ -1,13 +1,20 @@
 package com.lattex.api;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.lattex.parse.MathParser;
 import com.lattex.parse.MathSyntaxException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 /**
  * L6.1 — the never-throw floor (plan lattex-containment-diagnostics): the render
@@ -72,42 +79,110 @@ class RenderContainmentTest {
         assertNotNull(ex.getMessage());
     }
 
+    /** One throwing sibling: its public entry, its shallow positive input, and the parse it runs. */
+    private record Sibling(String name, String shallow, Function<String, Object> entry,
+                           Function<String, Object> bareParse) {
+    }
+
+    /** A shallow source with an fx annotation, so the attrs-only sibling's positive is non-empty. */
+    private static final String SHALLOW_FX = "\\lx[fx.hover=glow]{x^2}";
+
     /**
-     * Plan lattex-seam-containment-parity, round 2: the throwing siblings used to run their
-     * PARSE outside {@code containRender} (only layout + emit were inside), so the boundary held
-     * only while {@code MathParser.MAX_DEPTH} happened to fit the caller's remaining stack. A
-     * legal 500-deep input on a starved stack (see {@link StackStarved}) overflows inside the
-     * parse; every public throwing entry must deliver that as the typed channel with the Error
-     * as its cause, never as an escaping {@code StackOverflowError}.
+     * Plan lattex-seam-containment-parity round 2, re-derived for the nesting limit of 80 (plan
+     * 28201def; rulings L1623, M1614, C1626, F1627). The throwing siblings used to run their PARSE
+     * outside {@code containRender}, so the boundary held only while the parser's depth limit
+     * happened to fit the caller's remaining stack.
+     *
+     * <p>What changed: the parser now refuses past 80 levels, and both public parse entries turn a
+     * residual {@code StackOverflowError} into their own cause-free BACKSTOP refusal. A real
+     * overflow from {@link StackStarved#DEEP} is therefore typed INSIDE the parser, before this
+     * boundary's catch sees it. So this test pins the parser/composition half only: on a starved
+     * stack every throwing sibling delivers a real overflow on the typed
+     * {@link MathSyntaxException} channel, never as an escaping Error. The other two halves are
+     * pinned elsewhere: {@link #boundaryContainsStackOverflowErrorIntoTheTypedChannel} shows that
+     * the boundary's own catch handles the Error, and {@code RenderSeamWiringCensusTest} shows
+     * that every entry runs its whole post-parse pipeline inside it.
+     *
+     * <p>Order matters, and each phase reports every sibling before the next phase runs. (1) A
+     * SHALLOW success through every sibling on the roomy stack: the positive and the class
+     * warm-up. (2) The roomy refusal control: DEEP refused by the GUARD through each sibling and
+     * through the bare parse it runs. (3) Fixture reach: that same bare parse ends in the BACKSTOP
+     * on the starved stack. (4) Each sibling on the starved stack.
      */
     @Test
     @SuppressWarnings("deprecation")
     void aParseStageOverflowInEveryThrowingSiblingArrivesTyped() {
-        String deep = StackStarved.DEEP;
-        java.util.Map<String, java.util.concurrent.Callable<?>> entries = new java.util.LinkedHashMap<>();
-        entries.put("render(String)", () -> LatteX.render(deep));
-        entries.put("render(String, RenderOptions)", () -> LatteX.render(deep, RenderOptions.defaults()));
-        entries.put("renderInlineResult", () -> LatteX.renderInlineResult(deep));
-        entries.put("renderFragment", () -> LatteX.renderFragment(deep, 20.0));
-        entries.put("renderStyledHtml(String, RenderOptions)",
-            () -> LatteX.renderStyledHtml(deep, RenderOptions.defaults()));
-        entries.put("fxContainerAttrs", () -> LatteX.fxContainerAttrs(deep));
+        Function<String, Object> parseOneArg = latex -> MathParser.parse(latex);
+        Function<String, Object> parseDefaults = latex -> MathParser.parse(latex, RenderOptions.defaults().macros());
+        List<Sibling> siblings = List.of(
+            new Sibling("render(String)", StackStarved.SHALLOW,
+                latex -> LatteX.render(latex), parseDefaults),
+            new Sibling("render(String, RenderOptions)", StackStarved.SHALLOW,
+                latex -> LatteX.render(latex, RenderOptions.defaults()), parseDefaults),
+            new Sibling("renderInline", StackStarved.SHALLOW,
+                latex -> LatteX.renderInline(latex), parseOneArg),
+            new Sibling("renderInlineResult", StackStarved.SHALLOW,
+                latex -> LatteX.renderInlineResult(latex), parseOneArg),
+            new Sibling("renderFragment", StackStarved.SHALLOW,
+                latex -> LatteX.renderFragment(latex, 20.0), parseOneArg),
+            new Sibling("renderStyledHtml(String)", StackStarved.SHALLOW,
+                latex -> LatteX.renderStyledHtml(latex), parseDefaults),
+            new Sibling("renderStyledHtml(String, RenderOptions)", StackStarved.SHALLOW,
+                latex -> LatteX.renderStyledHtml(latex, RenderOptions.defaults()), parseDefaults),
+            new Sibling("fxContainerAttrs", SHALLOW_FX,
+                latex -> LatteX.fxContainerAttrs(latex), parseOneArg));
 
-        // Positive half on a roomy stack (also the class warm-up StackStarved requires).
-        for (java.util.Map.Entry<String, java.util.concurrent.Callable<?>> e : entries.entrySet()) {
-            assertNotNull(StackStarved.assertSucceedsOnRoomyStack(e.getKey(), e.getValue()),
-                e.getKey() + " renders the deep input on a roomy stack");
+        // (1) Positive and warm-up: a SHALLOW success through each sibling, on the roomy stack.
+        List<Executable> positives = new ArrayList<>();
+        for (Sibling s : siblings) {
+            positives.add(() -> {
+                Object v = StackStarved.assertSucceedsOnRoomyStack(s.name() + " on a shallow input",
+                    () -> s.entry().apply(s.shallow()));
+                assertNotNull(v, s.name() + " returns a value for a shallow input");
+                if (v instanceof String str) {
+                    assertFalse(str.isEmpty(), s.name() + " returns a non-empty result for a shallow input");
+                }
+            });
         }
-        StackStarved.assertFixtureOverflows("the bare parse every sibling runs first",
-            () -> com.lattex.parse.MathParser.parse(deep));
+        assertAll("roomy shallow positives", positives);
 
-        for (java.util.Map.Entry<String, java.util.concurrent.Callable<?>> e : entries.entrySet()) {
-            StackStarved.Outcome o = StackStarved.run(e.getValue());
-            assertTrue(o.threw() && o.thrown() instanceof MathSyntaxException,
-                e.getKey() + " must contain a parse-stage overflow as MathSyntaxException: " + o.describe());
-            assertTrue(StackStarved.overflowed(o.thrown()),
-                e.getKey() + " keeps the StackOverflowError as the cause: " + o.describe());
+        // (2) Refusal control on the roomy stack: DEEP is past the limit, so the GUARD refuses it,
+        // through the sibling and through the bare parse it runs. A refusal, not a positive.
+        List<Executable> refusals = new ArrayList<>();
+        for (Sibling s : siblings) {
+            refusals.add(() -> {
+                StackStarved.Outcome o = StackStarved.runRoomy(() -> s.entry().apply(StackStarved.DEEP));
+                assertTrue(o.threw() && StackStarved.isGuard(o.thrown()),
+                    s.name() + " refuses DEEP with the GUARD on a roomy stack: " + o.describe());
+                StackStarved.assertRoomyParseIsGuardRefusal("the bare parse " + s.name() + " runs",
+                    () -> s.bareParse().apply(StackStarved.DEEP));
+            });
         }
+        assertAll("roomy GUARD refusal controls", refusals);
+
+        // (3) Fixture reach: on the starved stack, the bare parse each sibling runs must end in
+        // the parser BACKSTOP, the one refusal that only a real StackOverflowError produces.
+        List<Executable> reach = new ArrayList<>();
+        for (Sibling s : siblings) {
+            reach.add(() -> StackStarved.assertStarvedParseHitsBackstop("the bare parse " + s.name() + " runs",
+                () -> s.bareParse().apply(StackStarved.DEEP)));
+        }
+        assertAll("starved-stack fixture reach", reach);
+
+        // (4) Each sibling on the starved stack: the typed channel, carrying real-overflow evidence
+        // (the BACKSTOP, or this boundary's own containment with the Error as its cause). Never an
+        // escaping Error, and never a refusal that would also happen without an overflow.
+        List<Executable> starved = new ArrayList<>();
+        for (Sibling s : siblings) {
+            starved.add(() -> {
+                StackStarved.Outcome o = StackStarved.run(() -> s.entry().apply(StackStarved.DEEP));
+                assertTrue(o.threw() && o.thrown() instanceof MathSyntaxException,
+                    s.name() + " must deliver a starved-stack overflow as MathSyntaxException: " + o.describe());
+                assertTrue(StackStarved.isRealOverflowRefusal(o.thrown()),
+                    s.name() + " must carry real-overflow evidence, not a GUARD or other refusal: " + o.describe());
+            });
+        }
+        assertAll("starved siblings arrive typed", starved);
     }
 
     @Test

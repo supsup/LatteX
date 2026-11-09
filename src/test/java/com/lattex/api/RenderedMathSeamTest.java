@@ -99,22 +99,38 @@ class RenderedMathSeamTest {
      * see (plan lattex-seam-containment-parity): a {@code StackOverflowError} is an
      * {@code Error}, not a {@code RuntimeException}, and the seam used to catch only the latter,
      * so an overflow unwound straight through the "never throws" contract into the consumer's
-     * doc pipeline. The overflow here is real, not injected: a legal 500-deep input on a starved
-     * stack, with the bare parse proven to overflow on that stack as the fixture-reach control.
+     * doc pipeline.
+     *
+     * <p>Re-derived for the nesting limit of 80 (plan 28201def; rulings M1614, L1623). The
+     * overflow is still real, not injected. {@link StackStarved#DEEP} is past the limit, so on
+     * the roomy stack it is a GUARD refusal: a refusal control, not the positive. The positive is
+     * a SHALLOW render through this same one-argument overload. On the starved stack, the bare
+     * parse this overload runs must end in the parser BACKSTOP, which only a real overflow
+     * produces, and the seam must still answer empty and never throw.
      */
     @Test
     void anyFailureYieldsEmptyNeverAHalfPair() {
         assertTrue(LatteX.tryRenderMath("\\frac{a}{").isEmpty(), "parse error -> empty");
         assertTrue(LatteX.tryRenderMath("\\notacommand{x}").isEmpty(), "unknown command -> empty");
 
-        // Positive half on a ROOMY stack (and the class warm-up StackStarved requires): the
-        // deep input is legal, so an empty result below can only come from the starved stack.
-        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(DEEP)",
-            () -> LatteX.tryRenderMath(StackStarved.DEEP));
-        assertTrue(((Optional<?>) rendered).isPresent(), "the 500-deep input renders on a roomy stack");
-        StackStarved.assertFixtureOverflows("the bare parse tryRenderMath runs first",
-            () -> MathParser.parse(StackStarved.DEEP));
+        // (1) Positive and class warm-up on a ROOMY stack, through this same overload.
+        Object rendered = StackStarved.assertSucceedsOnRoomyStack("tryRenderMath(SHALLOW)",
+            () -> LatteX.tryRenderMath(StackStarved.SHALLOW));
+        assertTrue(((Optional<?>) rendered).isPresent(), "a shallow input renders through the seam on a roomy stack");
 
+        // (2) Refusal control on the roomy stack: DEEP is past the limit, so empty here comes from
+        // the GUARD, and the bare parse this overload runs shows the GUARD, not the BACKSTOP.
+        StackStarved.Outcome roomyDeep = StackStarved.runRoomy(() -> LatteX.tryRenderMath(StackStarved.DEEP));
+        assertFalse(roomyDeep.threw(), "the seam never throws, even while refusing DEEP: " + roomyDeep.describe());
+        assertEquals(Optional.empty(), roomyDeep.value(), "refusal control: DEEP is refused on a roomy stack -> empty");
+        StackStarved.assertRoomyParseIsGuardRefusal("the bare parse tryRenderMath(String) runs",
+            () -> MathParser.parse(StackStarved.DEEP, RenderOptions.defaults().macros()));
+
+        // (3) Fixture reach: the same bare parse on the starved stack is the BACKSTOP, a real overflow.
+        StackStarved.assertStarvedParseHitsBackstop("the bare parse tryRenderMath(String) runs",
+            () -> MathParser.parse(StackStarved.DEEP, RenderOptions.defaults().macros()));
+
+        // (4) The seam on the starved stack: empty, never an escaping Error, never a half pair.
         StackStarved.Outcome starved = StackStarved.run(() -> LatteX.tryRenderMath(StackStarved.DEEP));
         assertFalse(starved.threw(),
             "an Error escaped tryRenderMath, whose contract is empty-on-any-failure: " + starved.describe());
