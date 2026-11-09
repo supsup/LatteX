@@ -86,8 +86,28 @@ public final class MathParser {
      */
     public static final int MAX_SOURCE_LENGTH = 100_000;
 
-    /** Maximum recursive nesting depth (groups, arguments, scripts, fences). */
-    static final int MAX_DEPTH = 512;
+    /**
+     * Maximum recursive nesting depth (groups, arguments, scripts, fences): the documented,
+     * user-visible semantic limit (plan 28201def; was 512). It is an INPUT budget, not a promise
+     * that every input at or under it succeeds on every VM or from an already-deep caller stack:
+     * the counter in {@link #parseNucleus} refuses past it, and the two public {@code parse}
+     * entries additionally turn a residual {@link StackOverflowError} into the same typed
+     * refusal (see {@link #stackExhausted()}). The test suite exercises it on a thread whose
+     * REQUESTED stack size is 256 KiB; the JVM may round or ignore a requested size, so that is a
+     * test condition, not a certified floor.
+     */
+    static final int MAX_DEPTH = 80;
+
+    /**
+     * The residual backstop's typed refusal. Only {@link StackOverflowError} is ever caught for
+     * this (never Error/Throwable/OutOfMemoryError): the depth counter is the primary bound, and
+     * this keeps a smaller-than-expected caller stack from leaking the raw Error past the
+     * caller's {@code catch (RuntimeException)} guards.
+     */
+    private static MathSyntaxException stackExhausted() {
+        return new MathSyntaxException("nesting too deep: the parser's stack was exhausted before the "
+            + MAX_DEPTH + "-level limit; input refused");
+    }
 
     /** Current recursion depth; guarded against {@link #MAX_DEPTH} in {@link #parseNucleus}. */
     private int depth;
@@ -430,11 +450,15 @@ public final class MathParser {
                 "input too long: " + latex.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
-        if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                && LxOptionsParser.looksLikeTopLevelLx(latex)) {
-            return LxOptionsParser.parseLx(latex.strip(), macros);
+        try {
+            if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                    && LxOptionsParser.looksLikeTopLevelLx(latex)) {
+                return LxOptionsParser.parseLx(latex.strip(), macros);
+            }
+            return parseMath(latex, 0, macros);
+        } catch (StackOverflowError residual) {
+            throw stackExhausted();
         }
-        return parseMath(latex, 0, macros);
     }
 
     /**
@@ -481,11 +505,15 @@ public final class MathParser {
                 "input too long: " + stripped.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
-        if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
-            return LxOptionsParser.parseLx(stripped.strip(), macros);
+        try {
+            if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                    && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
+                return LxOptionsParser.parseLx(stripped.strip(), macros);
+            }
+            return parseMath(stripped, 0, macros, numberedEnvironmentSink);
+        } catch (StackOverflowError residual) {
+            throw stackExhausted();
         }
-        return parseMath(stripped, 0, macros, numberedEnvironmentSink);
     }
 
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */

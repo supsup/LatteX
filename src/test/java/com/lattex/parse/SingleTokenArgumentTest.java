@@ -361,6 +361,68 @@ class SingleTokenArgumentTest {
         assertTrue(pm.getMessage().contains("nesting too deep"), pm.getMessage());
     }
 
+    // ------------------------------------------------------------------
+    // Plan 28201def: the refusal must not depend on the thread's stack size
+    // ------------------------------------------------------------------
+
+    /** The ORIGINAL stress depth (old MAX_DEPTH 512 + 10). Fixed on purpose: recomputing it from
+     *  the lowered limit would erase the old-current RED / after-repair contrast. */
+    private static final int ORIGINAL_STRESS = 522;
+    /** A REQUESTED stack size. The JVM may round or ignore it, so this is a test condition. */
+    private static final long SMALL_STACK = 256 * 1024;
+
+    /** Runs one parse on a fresh small-stack thread and returns what it threw (null on success). */
+    private static Throwable onSmallStack(String src, boolean sinkForm) throws InterruptedException {
+        Throwable[] thrown = new Throwable[1];
+        Thread t = new Thread(null, () -> {
+            try {
+                if (sinkForm) MathParser.parse(src, Map.of(), new ArrayList<>());
+                else MathParser.parse(src);
+            } catch (Throwable e) {
+                thrown[0] = e;
+            }
+        }, "lattex-small-stack", SMALL_STACK);
+        t.start();
+        t.join(60_000);
+        assertFalse(t.isAlive(), "small-stack parse did not finish");
+        return thrown[0];
+    }
+
+    @Test
+    void originalStressInputIsATypedRefusalOnASmallStack() throws InterruptedException {
+        for (String token : List.of("\\hat", "\\pmod")) {
+            for (boolean sinkForm : new boolean[] {false, true}) {
+                Throwable e = onSmallStack(token.repeat(ORIGINAL_STRESS) + " x", sinkForm);
+                assertTrue(e instanceof MathSyntaxException,
+                    token + (sinkForm ? " sink form" : " plain form") + ": expected a typed refusal, got " + e);
+                assertTrue(e.getMessage().contains("nesting too deep"), e.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void depthBoundaryIsExactOnASmallStack() throws InterruptedException {
+        // N tokens followed by one atom nest N + 1 nuclei, so MAX_DEPTH - 1 tokens is the deepest accepted input.
+        for (String token : List.of("\\hat", "\\pmod")) {
+            for (boolean sinkForm : new boolean[] {false, true}) {
+                assertEquals(null, onSmallStack(token.repeat(MathParser.MAX_DEPTH - 1) + " x", sinkForm),
+                    token + " at the boundary must parse");
+                Throwable over = onSmallStack(token.repeat(MathParser.MAX_DEPTH) + " x", sinkForm);
+                assertTrue(over instanceof MathSyntaxException, token + " one past the boundary: " + over);
+                assertTrue(over.getMessage().contains("nesting too deep"), over.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void shallowNestingStillParsesOnASmallStack() throws InterruptedException {
+        for (String token : List.of("\\hat", "\\pmod")) {
+            for (boolean sinkForm : new boolean[] {false, true}) {
+                assertEquals(null, onSmallStack(token.repeat(5) + " x", sinkForm), token + " shallow control");
+            }
+        }
+    }
+
     @Test
     void manySingleTokenArgumentsRenderEndToEnd() {
         // The rendered path (layout + SVG) accepts the unbraced forms the corpus uses.
