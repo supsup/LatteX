@@ -298,31 +298,34 @@ class OutputWorkBudgetTest {
 
     @Test
     void deeplyNestedMathSpansOnlyChargeTheirOwnLiteralSegments() {
-        // This legal 500-deep input collapses to y. Use the existing roomy-stack
+        // This legal 79-deep input (the deepest the 80-level nesting limit admits:
+        // 79 text levels plus the innermost y) collapses to y. Use the existing roomy-stack
         // positive venue so this checks accounting, independently of host stack size.
+        String deepest = StackStarved.nestedText(79);
         String[] result = (String[]) StackStarved.assertSucceedsOnRoomyStack(
-            "500-deep text remains admitted by the output budget", () -> new String[] {
-                LatteX.render(StackStarved.DEEP), LatteX.toMathML(StackStarved.DEEP)
+            "79-deep text remains admitted by the output budget", () -> new String[] {
+                LatteX.render(deepest), LatteX.toMathML(deepest)
             });
         assertTrue(result[0].startsWith("<svg"));
         assertTrue(result[0].contains("<path"));
         assertEquals(LatteX.toMathML("y"), result[1]);
 
-        String literalDeep = ("\\text{" + "a".repeat(100) + "$").repeat(500)
-            + "y" + "$}".repeat(500);
+        String literalDeep = ("\\text{" + "a".repeat(1_000) + "$").repeat(50)
+            + "y" + "$}".repeat(50);
         assertTrue(literalDeep.length() < 100_000);
         // Parse only: rendering this nested literal tree has a separate copying
         // allowance. Counting an enclosing raw payload again would refuse 50k.
         assertTrue(StackStarved.assertSucceedsOnRoomyStack(
-            "500 levels charge only their own 100 literal units",
+            "50 levels charge only their own 1,000 literal units",
             () -> MathParser.parse(literalDeep)) instanceof MathNode.MathList);
         String source = "\\newcommand{\\zzq}{" + literalDeep + "}"
             + "\\text{" + "b".repeat(5_000) + "}" + "\\zzq ".repeat(2);
         assertTrue(source.length() < 100_000);
-        // 5k + two 50k payloads = 105k actual literal work, but only 1,003
-        // non-EOF parsed tokens. Depth and source length stay within their caps.
+        // 5k + two 50k payloads = 105k actual literal work, but only 103
+        // non-EOF parsed tokens. Depth (51 of 80 levels) and source length stay
+        // within their caps.
         MathSyntaxException failure = (MathSyntaxException) StackStarved.assertSucceedsOnRoomyStack(
-            "500-deep literal amplification refuses with its typed decode reason",
+            "50-deep literal amplification refuses with its typed decode reason",
             () -> assertThrows(MathSyntaxException.class, () -> MathParser.parse(source)));
         assertTrue(failure.isCapExceeded());
         assertTrue(failure.getMessage().contains("materialized text during parse"));
