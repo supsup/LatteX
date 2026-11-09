@@ -38,17 +38,19 @@ render-local construction limits. Dashed-rule geometry is checked before its
 producer loop, and repeated table-separator stamps share one cumulative allowance.
 This closes geometry amplification that text and AST counts alone cannot measure.
 
-### Nesting limit lowered to 80; a deep input is always a typed refusal
+### Nesting limit lowered to 80; a deep input gets a typed refusal
 
 (Plan 28201def.) On a small thread stack, a deeply nested input such as `\hat` or `\pmod` repeated hundreds of
 times used to exhaust the stack before the old 512-level limit was reached, so callers got a raw
 `StackOverflowError` instead of a `MathSyntaxException`. Main went red on GitHub Actions this way.
 The limit is now 80 nested levels: N repeated single-token commands followed by one atom is
-accepted up to N = 79, and refused at N = 80. Both public `MathParser.parse` entry points also
-turn a residual `StackOverflowError` into the same "nesting too deep" refusal, so an input under
-the limit can still be refused on an unusually small or already-deep caller stack, but it never
-escapes as an `Error`. Only `StackOverflowError` is caught. **Compatibility:** an input nested
-81 to 512 levels deep that parsed before is now refused.
+accepted up to N = 79, and refused at N = 80. The parser's entry points also turn a residual
+`StackOverflowError` into a `MathSyntaxException` whose message contains "nesting too deep" (its
+wording differs from the limit's own refusal), so an input under the limit can still be refused on
+an unusually small or already-deep caller stack. Building that refusal needs a little stack too:
+a caller with almost none left can still see the raw `Error`. Only `StackOverflowError` is
+caught. An input under the limit can also be refused by the output work budgets above.
+**Compatibility:** an input nested 81 to 512 levels deep that parsed before is now refused.
 
 ---
 

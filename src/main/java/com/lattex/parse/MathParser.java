@@ -92,9 +92,12 @@ public final class MathParser {
      * that every input at or under it succeeds on every VM or from an already-deep caller stack:
      * the counter in {@link #parseNucleus} refuses past it, and the two public {@code parse}
      * entries additionally turn a residual {@link StackOverflowError} into the same typed
-     * refusal (see {@link #stackExhausted()}). The test suite exercises it on a thread whose
-     * REQUESTED stack size is 256 KiB; the JVM may round or ignore a requested size, so that is a
-     * test condition, not a certified floor.
+     * refusal (see {@link #stackExhausted()}). The test suite exercises the limit on a thread
+     * whose REQUESTED stack size is 256 KiB, which cannot tell the counter from the backstop, and
+     * the backstop itself on a 512 KiB worker whose stack is first used up by filler frames. The
+     * JVM may round or ignore a requested size, so both are test conditions, not a certified
+     * floor. The backstop needs a little stack to build its refusal: with almost none left the
+     * raw Error still escapes.
      */
     static final int MAX_DEPTH = 80;
 

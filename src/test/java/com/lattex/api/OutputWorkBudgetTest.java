@@ -301,7 +301,9 @@ class OutputWorkBudgetTest {
         // This legal 79-deep input (the deepest the 80-level nesting limit admits:
         // 79 text levels plus the innermost y) collapses to y. Use the existing roomy-stack
         // positive venue so this checks accounting, independently of host stack size.
-        String deepest = StackStarved.nestedText(79);
+        int levels = StackStarved.PARSER_DEPTH_LIMIT - 1;
+        assertEquals(79, levels, "the arithmetic below is written for the 80-level limit");
+        String deepest = StackStarved.nestedText(levels);
         String[] result = (String[]) StackStarved.assertSucceedsOnRoomyStack(
             "79-deep text remains admitted by the output budget", () -> new String[] {
                 LatteX.render(deepest), LatteX.toMathML(deepest)
@@ -310,14 +312,22 @@ class OutputWorkBudgetTest {
         assertTrue(result[0].contains("<path"));
         assertEquals(LatteX.toMathML("y"), result[1]);
 
+        // Admit case, close to the cap on purpose: 79 levels x 1,253 literal units is 98,987
+        // of the 100,000 allowance. Billing any enclosing level's payload again, or as little
+        // as 13 extra units per segment, refuses it. Parse only: rendering this nested literal
+        // tree has a separate copying allowance.
+        int units = 99_000 / levels;
+        assertEquals(1_253, units);
+        String nearCap = ("\\text{" + "a".repeat(units) + "$").repeat(levels)
+            + "y" + "$}".repeat(levels);
+        assertTrue(nearCap.length() < 100_000);
+        assertTrue(StackStarved.assertSucceedsOnRoomyStack(
+            levels + " levels charge only their own " + units + " literal units",
+            () -> MathParser.parse(nearCap)) instanceof MathNode.MathList);
+
         String literalDeep = ("\\text{" + "a".repeat(1_000) + "$").repeat(50)
             + "y" + "$}".repeat(50);
         assertTrue(literalDeep.length() < 100_000);
-        // Parse only: rendering this nested literal tree has a separate copying
-        // allowance. Counting an enclosing raw payload again would refuse 50k.
-        assertTrue(StackStarved.assertSucceedsOnRoomyStack(
-            "50 levels charge only their own 1,000 literal units",
-            () -> MathParser.parse(literalDeep)) instanceof MathNode.MathList);
         String source = "\\newcommand{\\zzq}{" + literalDeep + "}"
             + "\\text{" + "b".repeat(5_000) + "}" + "\\zzq ".repeat(2);
         assertTrue(source.length() < 100_000);
@@ -329,6 +339,40 @@ class OutputWorkBudgetTest {
             () -> assertThrows(MathSyntaxException.class, () -> MathParser.parse(source)));
         assertTrue(failure.isCapExceeded());
         assertTrue(failure.getMessage().contains("materialized text during parse"));
+    }
+
+    @Test
+    void aRealOverflowLeavesItsThreadAbleToParseWithAFreshWorkAllowance() {
+        // The parser binds its text allowance with a ScopedValue around the parse. A real
+        // StackOverflowError unwinds THROUGH that scope before the entry point turns it into
+        // the typed refusal. Afterwards the same thread must parse normally: two 60k literals
+        // each fit their own 100k allowance, and would not fit one that leaked from the
+        // failed scope or was shared between the two calls.
+        String sixtyK = "\\text{" + "b".repeat(60_000) + "}";
+        // Warm-up on a roomy stack first, so that nothing below is initialised or linked for the
+        // first time inside the overflow window when this test runs alone: a shallow parse, the
+        // 60k literal the follow-up uses, and the deep input's ordinary depth refusal.
+        StackStarved.assertSucceedsOnRoomyStack("MathParser.parse(SHALLOW)",
+            () -> MathParser.parse(StackStarved.SHALLOW));
+        StackStarved.assertSucceedsOnRoomyStack("MathParser.parse(60k literal)",
+            () -> MathParser.parse(sixtyK));
+        StackStarved.assertRoomyParseIsGuardRefusal("MathParser.parse",
+            () -> MathParser.parse(StackStarved.DEEP));
+        StackStarved.assertStarvedParseHitsBackstop("MathParser.parse",
+            () -> MathParser.parse(StackStarved.DEEP));
+        StackStarved.Outcome[] outcomes = StackStarved.runThenOnSameThread(
+            () -> MathParser.parse(StackStarved.DEEP),
+            () -> {
+                MathParser.parse(sixtyK);
+                return MathParser.parse(sixtyK);
+            });
+        assertTrue(outcomes[0].threw() && StackStarved.isBackstop(outcomes[0].thrown()),
+            "the starved parse must end in the BACKSTOP but " + outcomes[0].describe());
+        assertFalse(outcomes[1].threw(),
+            "after a real overflow the same thread must parse twice but " + outcomes[1].describe());
+        // A lone \\text{...} parses to a single node, not a list: any parsed node is the point.
+        assertTrue(outcomes[1].value() instanceof MathNode,
+            "the second parse after the overflow must return a node but returned " + outcomes[1].describe());
     }
 
     @Test

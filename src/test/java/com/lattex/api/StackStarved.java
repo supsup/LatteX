@@ -192,6 +192,12 @@ final class StackStarved {
             throw new AssertionError("the starved worker's stack held fewer than the kept reserve of "
                 + k.reserve() + " filler frames, so the call was never made");
         }
+        requireKeptReserveStillEndsInBackstop(k, o);
+        return o;
+    }
+
+    /** The re-check {@link #run} describes: the bare parse at the kept reserve, right after. */
+    private static void requireKeptReserveStillEndsInBackstop(Kept k, Outcome o) {
         Outcome after = runWithReserve(k.bareParse(), k.reserve());
         if (after == null || !(after.threw() && isBackstop(after.thrown()))) {
             throw new AssertionError("the kept reserve of " + k.reserve() + " filler frames stopped ending in"
@@ -200,7 +206,40 @@ final class StackStarved {
                 + " credited with a real overflow. The starved call itself " + o.describe(),
                 after == null ? null : after.thrown());
         }
-        return o;
+    }
+
+    /**
+     * {@link #run} for {@code starved}, and then {@code after} on the SAME worker thread once
+     * every filler frame has unwound: for checking what a real overflow leaves behind on its
+     * thread. Returns the starved outcome and the after outcome, in that order. The same
+     * re-check as {@link #run} applies to the starved call.
+     */
+    static Outcome[] runThenOnSameThread(Callable<?> starved, Callable<?> after) {
+        Kept k = kept;
+        if (k == null) {
+            throw new AssertionError("StackStarved.runThenOnSameThread before any passing fixture-reach"
+                + " control: call assertStarvedParseHitsBackstop first, so the reserve is a measured one");
+        }
+        Object[] slot = new Object[2];
+        boolean[] called = new boolean[2];
+        boolean[] afterStarted = new boolean[1];
+        int[] toUnwind = {k.reserve()};
+        Outcome afterOutcome = runWithStack(() -> {
+            fill(starved, toUnwind, called, slot);
+            afterStarted[0] = true;
+            return after.call();
+        }, STACK_BYTES, "lattex-stack-starved-then");
+        if (!afterStarted[0]) {
+            throw new AssertionError("the filler descent itself failed at reserve " + k.reserve() + ": "
+                + afterOutcome.describe(), afterOutcome.thrown());
+        }
+        if (!called[0] || !called[1]) {
+            throw new AssertionError("the starved call at reserve " + k.reserve()
+                + (called[0] ? " was started but its outcome was never stored" : " was never made"));
+        }
+        Outcome o = new Outcome(slot[0], (Throwable) slot[1]);
+        requireKeptReserveStillEndsInBackstop(k, o);
+        return new Outcome[] {o, afterOutcome};
     }
 
     /**
@@ -265,8 +304,9 @@ final class StackStarved {
      * The positive half: {@code call} must return normally on a ROOMY stack. Run off the test
      * thread so the result does not depend on the test runner's own stack size or on how much of
      * the parser the JIT has compiled yet. It also initializes every class the call touches, which
-     * is the warm-up the starved run relies on. Feed it a SHALLOW input: a deep refusal is a
-     * refusal control, not this positive.
+     * is the warm-up the starved run relies on. Feed it a call that is expected to return: a
+     * legal input, or an {@code assertThrows} whose refusal is the expected result. A bare deep
+     * refusal is a refusal control, not this positive.
      */
     static Object assertSucceedsOnRoomyStack(String what, Callable<?> call) {
         Outcome o = runRoomy(call);

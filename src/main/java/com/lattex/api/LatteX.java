@@ -103,12 +103,20 @@ public final class LatteX {
             return stage.get();
         } catch (MathSyntaxException e) {
             throw e;
-        } catch (StackOverflowError | RuntimeException e) {
+        } catch (StackOverflowError e) {
+            // A compile-time constant on purpose (plan 28201def): this arm can run on a stack with
+            // very little room left, and a run-time string concatenation is linked on first use,
+            // which is exactly the kind of one-time work that overflows again there. The text is
+            // what the arm below produces for an overflow, whose message is null.
+            throw new MathSyntaxException(STACK_OVERFLOW_RENDER_FAILURE, e);
+        } catch (RuntimeException e) {
             throw new MathSyntaxException("internal render failure ("
                 + e.getClass().getSimpleName()
                 + (e.getMessage() == null ? "" : ": " + e.getMessage()) + ")", e);
         }
     }
+
+    private static final String STACK_OVERFLOW_RENDER_FAILURE = "internal render failure (StackOverflowError)";
 
     /**
      * Diagnostic render (L6.2, plan lattex-containment-diagnostics): the same SVG

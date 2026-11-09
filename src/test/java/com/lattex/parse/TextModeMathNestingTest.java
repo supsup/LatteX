@@ -82,7 +82,7 @@ class TextModeMathNestingTest {
     @Test
     void deepParenTextNestingHitsTheDepthGuard() {
         StringBuilder sb = new StringBuilder();
-        int levels = 600; // > MAX_DEPTH (512)
+        int levels = 600; // > MAX_DEPTH (80)
         for (int i = 0; i < levels; i++) {
             sb.append("\\text{\\(");
         }
