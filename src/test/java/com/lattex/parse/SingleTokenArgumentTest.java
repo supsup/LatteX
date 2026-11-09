@@ -400,7 +400,7 @@ class SingleTokenArgumentTest {
             Arguments.of("\\pmod", "plain"), Arguments.of("\\pmod", "sink"));
     }
 
-    @ParameterizedTest(name = "{0} via {1} entry")
+    @ParameterizedTest(name = "stress522 {0} via {1} entry")
     @MethodSource("smallStackCases")
     void originalStressInputIsATypedRefusalOnASmallStack(String token, String entry) throws InterruptedException {
         Throwable e = onSmallStack(token.repeat(ORIGINAL_STRESS) + " x", "sink".equals(entry));
@@ -408,7 +408,7 @@ class SingleTokenArgumentTest {
         assertTrue(e.getMessage().contains("nesting too deep"), e.getMessage());
     }
 
-    @ParameterizedTest(name = "{0} via {1} entry")
+    @ParameterizedTest(name = "boundaryAccepted {0} via {1} entry")
     @MethodSource("smallStackCases")
     void deepestAcceptedInputParsesOnASmallStack(String token, String entry) throws InterruptedException {
         // N tokens followed by one atom nest N + 1 nuclei, so MAX_DEPTH - 1 tokens is the deepest accepted input.
@@ -416,7 +416,7 @@ class SingleTokenArgumentTest {
             token + " via " + entry + " at the boundary must parse");
     }
 
-    @ParameterizedTest(name = "{0} via {1} entry")
+    @ParameterizedTest(name = "boundaryRefused {0} via {1} entry")
     @MethodSource("smallStackCases")
     void onePastTheBoundaryIsATypedRefusalOnASmallStack(String token, String entry) throws InterruptedException {
         Throwable over = onSmallStack(token.repeat(MathParser.MAX_DEPTH) + " x", "sink".equals(entry));
@@ -424,7 +424,7 @@ class SingleTokenArgumentTest {
         assertTrue(over.getMessage().contains("nesting too deep"), over.getMessage());
     }
 
-    @ParameterizedTest(name = "{0} via {1} entry")
+    @ParameterizedTest(name = "shallow {0} via {1} entry")
     @MethodSource("smallStackCases")
     void shallowNestingStillParsesOnASmallStack(String token, String entry) throws InterruptedException {
         assertEquals(null, onSmallStack(token.repeat(5) + " x", "sink".equals(entry)), token + " via " + entry + " shallow control");
