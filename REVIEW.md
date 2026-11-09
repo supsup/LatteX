@@ -4,32 +4,37 @@ Status: PROPOSED by Fixpoint 2026-11-09 for crew review (Charles asked for REVIE
 beyond stafficy). It is adopted and amended the same way as stafficy's REVIEW.md, by
 crew majority. How to write and run a review is the platform practice in stafficy's
 `START_HERE/REVIEW_PRACTICE.md`; this file is only what failure looks like in THIS repo.
-Keep it short; add a class only when a real tip taught it.
+Keep it short; add a class only when a real tip taught it. Classes 2 and 6 to 9 are cited
+from Fixpoint's retained lessons with their locators; reviewers have not reconstructed every
+one of those histories.
 
 ## What failure looks like here
 
 - **Clean room:** a non-trivial algorithm with no primary-source citation, or code that
   mirrors another renderer's structure (CONTRIBUTING section 1). This is a licence defect,
   not a style nit.
-- **Runtime dependency:** anything beyond `java.base` on the runtime classpath
-  (CONTRIBUTING section 2).
+- **Runtime dependency:** anything beyond `java.base` on the CORE library's runtime classpath
+  (CONTRIBUTING section 2). An optional raster backend may use `java.desktop`, but only in its
+  own module, never the core.
 - **Output contract:** emitted SVG leaves the sanitizer-safe subset that the two-way
   containment (S8) harness pins (CONTRIBUTING section 5).
 - **Looks right in tests, renders wrong:** rendered output changed and nobody looked at it.
 
 ## Recurring classes (each taught by a real tip)
 
-1. **`./gradlew test` is not the gate.** `test` excludes `browserTest`; only `check` or
-   `build` runs the browser pins, and a local run without Chrome can omit them.
+1. **`./gradlew test` is not the gate.** `test` excludes the `capture`-tagged browser pins;
+   they run in `browserTest`, which `check` and `build` include (and which can also be run
+   on its own). Without Chrome a local run assumption-skips them, so a green local
+   `check`/`build` may still omit them unless `LATTEX_REQUIRE_BROWSER=1` makes absence fail.
    Check: the verdict names `./gradlew build` at the exact tip and whether the browser
-   pins ran.
+   pins actually ran.
 2. **A dead javadoc `{@link}` passes locally and fails CI.** It compiles and passes `jar`,
    but CI's full `build` runs `:javadoc`, which hard-fails. Check: the GitHub Actions run
    for the exact tip, not the push.
-3. **Parameterized cases collide in the XML.** Gradle names a parameterized case by its
-   display name alone (no method, no index), so two methods sharing a name pattern
-   overwrite each other in the report (28201def; per-method prefixes on its branch at 430a7fbf,
-   2026-11-09, not yet on main).
+3. **Parameterized case names are ambiguous in the XML.** Gradle reports a parameterized
+   case by its display name alone (no method, no index), so two methods sharing a name
+   pattern produce indistinguishable case names and per-case accounting is unreliable
+   (28201def; per-method prefixes on its branch at 430a7fbf, 2026-11-09, not yet on main).
    Check: count distinct case names in the XML against the expected inventory.
 4. **A test inlines a compile-time constant.** A `static final` budget such as
    `MathParser.MAX_DEPTH` is compiled into the test, so a cached test result says nothing
@@ -38,7 +43,8 @@ Keep it short; add a class only when a real tip taught it.
    stack (256 KiB in 28201def) proves behaviour on this JVM only (lattex 1574, 1580).
 6. **A retired behaviour rides back in a bundled branch.** Retiring a branch does not
    retire what it carried; until main pins the preserved behaviour with a test naming the
-   ruling, a later carrier revives it silently (splitpos: retired at lattex 650, back at 750).
+   ruling, a later carrier can revive it silently (splitpos: retired at lattex 650, found
+   riding in a second, unlanded carrier at 750).
 7. **A rendered-output READY names the eyes and the whole docs set.** Look at the output
    (BrewShot render) and check README, `RELEASE-NOTE-ENTRY.md`, QUICKSTART/SLOWSTART and the
    examples, not only the guide that changed.
