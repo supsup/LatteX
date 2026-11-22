@@ -305,6 +305,8 @@ The key set:
 | `style.mathstyle` | `display` \| `text` \| `script` \| `scriptscript` |
 | `fx.enter` / `fx.hover` / `fx.click` | `boom` \| `pulse` \| `fade` \| `glow` \| `lightning` \| `storm` \| `handscribe` \| `hologram` \| `neonsign` \| `crystallize` \| `blueprint` \| `wobble` \| `gravwell` \| `matrixrain` \| `supernova` \| `inkdrop` \| `diffusion` \| `refraction` \| `teleport` \| `shatter` \| `glitch` \| `sparkler` \| `quantum` \| `typeset` \| `constellation` \| `thread` \| `precedence` \| `cancel` \| `unfold` \| `substitute` \| `none` — see `examples/effects.html` live (`unfold` and `substitute` are opt-in/flag-gated and not shown there — see their own previews and the callout below) |
 | `fx.duration` | a `<n>ms` value, e.g. `250ms` |
+| `fx.bolts` | integer ASCII decimal `1..8`, for `lightning` and `storm`; omitted default `2` bolts per source |
+| `fx.intensity` | integer ASCII decimal `0..300` percent, for `lightning` and `storm`; omitted default `100`; `0` switches those effects off |
 | `fx.substitute-to` | the literal integer `substitute` flips to, e.g. `3` or `-12` (at most 6 digits). The substituted form is grouped where adjacency would change the meaning: `2x` with `3` renders `2 \cdot 3`, never `23`; a negative after any operand keeps its product, so `ax` with `-3` renders `a \cdot -3`, never `a-3`; and a negative under a power or subscript is parenthesised, so `2x^2` with `-3` renders `2(-3)^2`, never `2-3^2`. `\textcolor` is transparent to both guards |
 | `fx.substitute-var` | the single letter to replace, e.g. `x` — optional; omit it and the body's one distinct letter is used |
 | `intent` / `concept` | a lowercase identifier (`^[a-z][a-z0-9_]*$`), e.g. `function` |
@@ -316,6 +318,29 @@ refinement). Values are bare tokens or `"quoted strings"`; whitespace outside qu
 is insignificant. This is the quickstart view — the full option grammar and rationale
 live in the **`lattex-render-styling-options`** design plan. See
 [examples/showcase.html](examples/showcase.html) for the macro end-to-end.
+
+Tune either bolt effect with the same two global options:
+
+```latex
+\lx[fx.hover=lightning, fx.bolts=4, fx.intensity=150]{x^2}
+\lx[fx.click=storm, fx.intensity=0]{\frac{a}{b}}
+```
+
+Numeric values must be whole ASCII decimals within those ranges. Signs,
+fractions, exponents, units, internal whitespace and trailing junk fail at parse
+time with the option, supplied value and allowed range. Whitespace around option
+separators remains legal; quoted numeric values retain their internal whitespace.
+Omitting a knob emits no new attribute and preserves the default output.
+Explicit knobs stamp `data-lx-fx-bolts` and `data-lx-fx-intensity` on the wrapper;
+they leave the inner SVG unchanged. A host sanitizer must allow these exact names
+with bounded decimal values; this does not establish adoption by Stafficy `/docs`.
+
+Intensity adjusts brightness, glow and stroke width under fixed caps, without
+adding bolt, segment, frame or timer work. Zero leaves the equation visible and
+does not initialize lightning/storm overlays, timers or trigger listeners;
+unrelated effects on the same equation keep their behavior. Reduced motion takes
+precedence over every nonzero knob. `fx.strikes`, `fx.arc` and per-effect numeric
+namespaces remain unknown options.
 
 > **`unfold` and `substitute` are doubly gated.** They are the numeric-substitution
 > family — the effects that need LatteX to *compute* (pre-render a bounded `\sum` into
@@ -410,14 +435,14 @@ Everything wraps the one core: `render(latex, options) → SVG string`.
 
 ### JVM — Java / Kotlin / Scala — *available*
 
-Depend on the versioned artifact `com.lattex:lattex:0.12.0` (module `com.lattex`,
+Depend on the versioned artifact `com.lattex:lattex:0.13.0` (module `com.lattex`,
 exporting `com.lattex.api`) and call the API directly:
 
 ```kotlin
 // build.gradle.kts — resolve from ~/.m2 after `./gradlew publishToMavenLocal`
 // in the LatteX repo (a published repo can be added later).
 repositories { mavenLocal(); mavenCentral() }
-dependencies { implementation("com.lattex:lattex:0.12.0") }
+dependencies { implementation("com.lattex:lattex:0.13.0") }
 ```
 
 ```java
@@ -454,6 +479,45 @@ UNTRUSTED input: caps on source length, nesting depth, layout box count, and out
 (the latter enforced incrementally so a runaway SVG is never built), plus control-char
 stripping so the output stays within the `svg/g/path/rect` alphabet — a cap trip surfaces
 as `OUTPUT_CAP_EXCEEDED`, never an escaped error.
+
+Before decoding literal text segments, the parser also allows 100,000 UTF-16 units
+of raw literal work per parse, counted on every occurrence after macro expansion.
+The same allowance follows nested math spans and text commands: each level charges
+only its own literal segments, while its children charge theirs. Braces and escapes
+inside a literal segment count before decoding. This prevents repeated decoded macro
+text from exhausting the heap before render preflight can run without repeatedly
+charging a nested math payload at every enclosing level.
+
+A separate conservative parser-work allowance permits 100,000 cumulative non-EOF
+tokens after lexing and macro expansion, counted once for each parser before its
+AST is built. Internal re-parses of text math share this allowance; an independent
+public parse, including a reentrant call, gets a fresh allowance. This is separate
+from the 100,000 literal UTF-16 units above. Deeply bracketed or repeatedly re-parsed
+text math may be refused before its final output would exceed a limit. For example,
+2,000 calls to a text macro containing `$x$` with 32 singleton brace groups around
+`x` consume 132,000 work tokens despite collapsing to only 2,000 final atoms; that
+shape receives a typed parsed-token output-work refusal.
+
+SVG layout and MathML also preflight materialized work before allocating glyphs or
+markup. Each render allows 100,000 UTF-16 units of text/operator-name payload,
+counted per occurrence after macro expansion (including repeated array separators).
+Spaces and surrogate pairs count conservatively. A bounded AST walk also charges
+ancestor copying; MathML counts atom markup separately from compound wrappers and
+includes XML escaping and table/tag overhead, with a
+2,000,000-unit markup estimate and a separate copying allowance. These are
+conservative work limits, so deeply wrapped or markup-heavy input may be refused
+even when its final string would be smaller. Admitted output bytes are unchanged;
+`toMathML` reports a typed resource-cap exception, and diagnostic SVG rendering
+reports `OUTPUT_CAP_EXCEEDED` (including at the parse stage). Each call has a fresh
+budget. `renderFragment` retains its existing fail-soft contract: a MathML failure
+leaves its MathML string empty without discarding successfully rendered SVG.
+
+SVG layout also charges actual primitive construction, including translated and
+colored copies: at most 400,000 glyph placements and 100,000 rules per render.
+This covers generated dashed rules and separators reused across table rows,
+whose geometry can grow without a large text payload. Excessive or non-finite
+rule geometry is refused before its producer loop. These are construction-count
+limits, not a guarantee that every admitted render fits an arbitrary heap size.
 
 ```java
 try {

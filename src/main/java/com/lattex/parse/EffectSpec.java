@@ -23,9 +23,18 @@ import java.util.regex.Pattern;
  *     without evaluating anything symbolic.
  * @param substituteVar the {@code fx.substitute-var} variable to replace: exactly one
  *     letter, or {@code null} to auto-detect the single distinct letter in the body
+ * @param bolts explicit {@code fx.bolts} in 1..8, or {@code null} for runtime default 2
+ * @param intensity explicit {@code fx.intensity} in 0..300 percent, or {@code null}
+ *     for runtime default 100; zero disables lightning/storm
  */
 public record EffectSpec(Map<Trigger, Effect> effects, String duration, Color glowColor,
-                         String substituteTo, String substituteVar) {
+                         String substituteTo, String substituteVar, Integer bolts, Integer intensity) {
+
+    /** Preserves the original public constructor and its omitted-knob state. */
+    public EffectSpec(Map<Trigger, Effect> effects, String duration, Color glowColor,
+                      String substituteTo, String substituteVar) {
+        this(effects, duration, glowColor, substituteTo, substituteVar, null, null);
+    }
 
     /** {@code fx.duration} grammar: 1–5 digits followed by the {@code ms} unit. */
     private static final Pattern DURATION_PATTERN = Pattern.compile("^\\d{1,5}ms$");
@@ -40,6 +49,8 @@ public record EffectSpec(Map<Trigger, Effect> effects, String duration, Color gl
 
     public EffectSpec {
         effects = Map.copyOf(effects);
+        validateIntegerOption("fx.bolts", bolts, 1, 8);
+        validateIntegerOption("fx.intensity", intensity, 0, 300);
         if (duration != null && !DURATION_PATTERN.matcher(duration).matches()) {
             throw new MathSyntaxException(
                 "invalid fx.duration: \"" + duration + "\" (expected like 250ms)");
@@ -58,7 +69,41 @@ public record EffectSpec(Map<Trigger, Effect> effects, String duration, Color gl
         }
     }
 
-    /** The empty spec: no effects, no duration, no glow colour, no substitution. */
+    /** Strict ASCII decimal, bounded during accumulation so overflow never escapes. */
+    static int parseIntegerOption(String key, String value, int min, int max) {
+        if (value.isEmpty()) {
+            throw invalidIntegerOption(key, value, min, max);
+        }
+        int parsed = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < '0' || c > '9') {
+                throw invalidIntegerOption(key, value, min, max);
+            }
+            int digit = c - '0';
+            if (parsed > max / 10 || (parsed == max / 10 && digit > max % 10)) {
+                throw invalidIntegerOption(key, value, min, max);
+            }
+            parsed = parsed * 10 + digit;
+        }
+        if (parsed < min) {
+            throw invalidIntegerOption(key, value, min, max);
+        }
+        return parsed;
+    }
+
+    private static void validateIntegerOption(String key, Integer value, int min, int max) {
+        if (value != null && (value < min || value > max)) {
+            throw invalidIntegerOption(key, value.toString(), min, max);
+        }
+    }
+
+    private static MathSyntaxException invalidIntegerOption(String key, String value, int min, int max) {
+        return new MathSyntaxException("invalid " + key + ": \"" + value
+            + "\" (expected integral ASCII decimal " + min + ".." + max + ")");
+    }
+
+    /** The empty spec: all effect options, including numeric knobs, omitted. */
     public static EffectSpec none() {
         return new EffectSpec(Map.of(), null, null, null, null);
     }
@@ -91,9 +136,9 @@ public record EffectSpec(Map<Trigger, Effect> effects, String duration, Color gl
         return Optional.ofNullable(substituteVar).map(v -> v.codePointAt(0));
     }
 
-    /** Whether any effect, duration, glow colour, or substitution option was specified. */
+    /** Whether any effect option, including an explicit numeric knob, was specified. */
     public boolean isEmpty() {
         return effects.isEmpty() && duration == null && glowColor == null
-            && substituteTo == null && substituteVar == null;
+            && substituteTo == null && substituteVar == null && bolts == null && intensity == null;
     }
 }

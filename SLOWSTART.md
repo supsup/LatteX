@@ -226,8 +226,8 @@ real production `/docs` integration ran, minus its framework:
 1. **Get the two assets out of the jar you render with — at build time.**
    They're plain jar resources, no JVM needed:
    ```bash
-   unzip -p lattex-0.12.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
-   unzip -p lattex-0.12.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
+   unzip -p lattex-0.13.0.jar com/lattex/fx/lattex-fx.js  > static/js/lattex-fx.js
+   unzip -p lattex-0.13.0.jar com/lattex/fx/lattex-fx.css > static/css/lattex-fx.css
    ```
    Extract from the **same jar version** every build — a cached/vendored copy is
    how the runtime and the renderer drift apart (the class of bug that bites
@@ -250,18 +250,33 @@ real production `/docs` integration ran, minus its framework:
    structurally cannot carry the `data-lx-glyphmap` sidecar, so the glyphmap-reading
    effects (`thread`, `cancel`) render a container hook with no glyph data and sit
    silently inert — no exception, no warning, just an effect that never fires.
+   Host options (preset macros, scale/color/math style, `fluid`) go through
+   `LatteX.tryRenderMath(latex, opts)`, which honours them exactly as
+   `renderStyledHtml(latex, opts)` does. The seam never arms interactive expansion:
+   with `interactiveExpansion` set it returns the flag-off result, so an `unfold` or
+   `substitute` equation stays inert there (the record has no slot for the
+   pre-rendered payload). Use `renderStyledHtml` for those two effects. The map also
+   carries only the `data-lx-fx-*` attributes and the renderer sidecars, not the
+   `\lx` semantics (`data-lx-intent`, `data-lx-concept`, `data.*`, `aria-label`) that
+   `renderStyledHtml`'s own span stamps. Both forms return
+   empty on any failure, a stack overflow included, so the caller's fallback is
+   always the plain source text.
    From a **non-JVM SSG** there is no CLI flag for this yet (a known gap — the
    binary emits bare SVG), but the runtime only reads *attributes*; it doesn't
    care who wrote them. A Hugo shortcode / 11ty filter can stamp the wrapper
    itself: `class="lx-math"` plus any of `data-lx-fx-enter|hover|click` (an
    effect name from the catalogue), `data-lx-fx-duration` (`400ms`), and
-   `data-lx-fx-glow-color` (`#hex` or `currentColor`). If your authors are
+   `data-lx-fx-glow-color` (`#hex` or `currentColor`). Lightning and storm also
+   accept `data-lx-fx-bolts` (ASCII decimal `1..8`) and `data-lx-fx-intensity`
+   (ASCII decimal `0..300` percent). If your authors are
    untrusted, validate those values against the catalogue's closed vocabulary —
    when LatteX writes them it does that validation for you at parse time.
 4. **If your pipeline sanitizes HTML** (rehype-sanitize and friends), allow-list
-   the wrapper: `class` on `span`/`div` plus the five `data-lx-fx-*` attributes —
+   the wrapper: `class` on `span`/`div` plus the seven exact `data-lx-fx-*`
+   attributes: `enter`, `hover`, `click`, `duration`, `glow-color`, `bolts` and
+   `intensity` (each prefixed with `data-lx-fx-`) —
    or your sanitizer strips the effects as silently as step 0 ignored them.
-   `unfold` needs a few more allow-list entries beyond the base five: the
+   `unfold` needs a few more allow-list entries beyond these trigger options: the
    `unfold` value itself on `fx.click`/`fx.enter`/`fx.hover`, the
    `data-lx-fx-expand` marker attribute, the nested `lx-fx-expanded` class (a
    `span` one level inside the wrapper, holding the pre-rendered payload
@@ -274,7 +289,7 @@ real production `/docs` integration ran, minus its framework:
    attributes/class above gets full `unfold` now.
 
    `substitute` has the SAME shape and the same dependency, so its allow-list is
-   worth stating rather than inferring from unfold's. Beyond the base five it
+   worth stating rather than inferring from unfold's. Beyond these trigger options it
    needs: the `substitute` value on `fx.click`/`fx.enter`/`fx.hover`, the
    `data-lx-fx-substitute` marker (the literal target), the `data-lx-var`
    sidecar (the variable's `<path>` addresses — what the runtime dims), the
@@ -291,6 +306,25 @@ real production `/docs` integration ran, minus its framework:
      the one that degrades QUIETLY: a host stripping it sees a working-but-duller
      effect and no error anywhere.
    Same `/docs` caveat as `unfold`: the Stafficy host does not allow these today.
+
+For lightning/storm, omitted numeric attributes mean `2` bolts per source and
+`100` percent intensity. The JVM parser rejects malformed or out-of-range author
+values and emits attributes only when explicitly supplied. Handcrafted DOM is
+bounded again on every play: whole ASCII digit strings clamp to `1..8` / `0..300`,
+while missing, empty or malformed strings independently fall back to `2` / `100`.
+There is no partial numeric parsing. Intensity `0` disables just these two effects
+before their overlays, timers or trigger listeners are initialized; the equation
+and other effects remain available. If a page changes an initially disabled
+effect to a positive intensity, use `LatteXFx.play(element)`; that change does not
+install listeners that initialization skipped.
+
+Nonzero intensity changes capped appearance, without increasing work at a fixed
+bolt count. Reduced motion retains its gentle behavior regardless of nonzero
+knobs, and scroll tears down the fixed overlays. Keep renderer and runtime from
+the same version, and explicitly adopt both numeric names and bounded values in
+your sanitizer. This LatteX slice does not update Stafficy's sanitizer or establish
+that `/docs` preserves the new numeric attributes. `fx.strikes`, `fx.arc` and
+per-effect numeric namespaces remain deferred.
 
 Skip all four and Sam's original promise holds: static math, zero runtime. Do
 them and the same pages get the full catalogue — with JavaScript off, readers

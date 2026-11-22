@@ -148,6 +148,8 @@ final class LxOptionsParser {
         Color glowColor = null;
         String substituteTo = null;
         String substituteVar = null;
+        Integer bolts = null;
+        Integer intensity = null;
         String intent = null;
         String concept = null;
         String a11yLabel = null;
@@ -180,7 +182,31 @@ final class LxOptionsParser {
             i = skipWs(raw, i + 1); // past '='
             // value: quoted or bare
             String value;
-            if (i < n && raw.charAt(i) == '"') {
+            if (key.equals("fx.bolts") || key.equals("fx.intensity")) {
+                // Keep malformed numeric spans intact until the keyed validator runs.
+                // In particular, `2 3` and `"2"junk` must not escape as a generic
+                // separator error. Strip only insignificant OUTSIDE whitespace/quotes.
+                int vs = i;
+                boolean inQuote = false;
+                while (i < n) {
+                    char c = raw.charAt(i);
+                    if (c == '"') {
+                        inQuote = !inQuote;
+                    } else if (c == ',' && !inQuote) {
+                        break;
+                    }
+                    i++;
+                }
+                int end = i;
+                while (end > vs && isWhitespace(raw.charAt(end - 1))) {
+                    end--;
+                }
+                value = raw.substring(vs, end);
+                if (value.length() >= 2 && value.charAt(0) == '"'
+                        && value.charAt(value.length() - 1) == '"') {
+                    value = value.substring(1, value.length() - 1);
+                }
+            } else if (i < n && raw.charAt(i) == '"') {
                 int vs = ++i;
                 while (i < n && raw.charAt(i) != '"') {
                     i++;
@@ -235,6 +261,8 @@ final class LxOptionsParser {
                         case "fx.hover" -> effects.put(Trigger.HOVER, Effect.parse(value));
                         case "fx.click" -> effects.put(Trigger.CLICK, Effect.parse(value));
                         case "fx.duration" -> duration = value; // validated in EffectSpec
+                        case "fx.bolts" -> bolts = EffectSpec.parseIntegerOption(key, value, 1, 8);
+                        case "fx.intensity" -> intensity = EffectSpec.parseIntegerOption(key, value, 0, 300);
                         // The glow/lightning halo colour. Validated through the same
                         // Color boundary as style.color (accepts #rgb/#rrggbb/currentColor,
                         // fails loud otherwise); it becomes a data-lx-fx-glow-color VALUE on
@@ -338,7 +366,7 @@ final class LxOptionsParser {
 
         return new LxOptions(
             new RenderOptions(scale, color, mathStyle),
-            new EffectSpec(effects, duration, glowColor, substituteTo, substituteVar),
+            new EffectSpec(effects, duration, glowColor, substituteTo, substituteVar, bolts, intensity),
             new Semantics(intent, concept, a11yLabel, data));
     }
 

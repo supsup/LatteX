@@ -492,7 +492,7 @@ final class CommandRegistry {
             case "Downarrow" -> OptionalInt.of(0x21D3);
             case "Updownarrow" -> OptionalInt.of(0x21D5);
             // As a delimiter \backslash is the reverse solidus (with STIX size variants,
-            // like '/'), not the set-minus glyph its symbol form draws.
+            // like '/'), the same code point as its symbol form (audit cb3b4518 F11).
             case "backslash" -> OptionalInt.of(0x5C);
             default -> OptionalInt.empty();
         };

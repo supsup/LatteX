@@ -67,9 +67,14 @@ class FontCacheByteIdentityRatchetTest {
      * exactly one PARSES-NOW row moves, `a\not= b,\ x\not\in S,...` (Punct|`\ `|Ord
      * gains TeX's 3mu thin space), and with rowBox's prev-reset restored the tree
      * reproduces 3e551b9a... exactly.
+     * Re-pinned 2026-10-25 for audit cb3b4518 F11 (\\backslash -> U+005C). Sole cause
+     * MEASURED 2026-10-25 by a fresh counterfactual on a6ec19e2: reverting only Symbols'
+     * backslash to U+2216 reproduces the old pin 7b1c7afc... exactly (review lattex 1100/1103).
+     * An earlier probe at 84b9aef is NOT evidence: that tree's test sources do not compile (an
+     * illegal escape in a MathMLTest comment, fixed in 60e2073) and its XML was not retained.
      */
     private static final String PINNED_SHA256 =
-        "7b1c7afcf1eeb749b15b5a0a4b3a39014c4234838dae62a6fcd7cb6a9dbf2f4f";
+        "17b3ec3487a20a8c629eb19859dc4c6000d3edec4f7e61ec8a74c84cb5022fae";
 
     private static final SfntFont FONT = SfntFont.loadBundled();
 

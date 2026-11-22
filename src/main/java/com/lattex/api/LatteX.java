@@ -1,5 +1,7 @@
 package com.lattex.api;
 
+import com.lattex.layout.RenderWorkBudget;
+
 import java.util.List;
 
 import java.util.ArrayList;
@@ -101,12 +103,20 @@ public final class LatteX {
             return stage.get();
         } catch (MathSyntaxException e) {
             throw e;
-        } catch (StackOverflowError | RuntimeException e) {
+        } catch (StackOverflowError e) {
+            // A compile-time constant on purpose (plan 28201def): this arm can run on a stack with
+            // very little room left, and a run-time string concatenation is linked on first use,
+            // which is exactly the kind of one-time work that overflows again there. The text is
+            // what the arm below produces for an overflow, whose message is null.
+            throw new MathSyntaxException(STACK_OVERFLOW_RENDER_FAILURE, e);
+        } catch (RuntimeException e) {
             throw new MathSyntaxException("internal render failure ("
                 + e.getClass().getSimpleName()
                 + (e.getMessage() == null ? "" : ": " + e.getMessage()) + ")", e);
         }
     }
+
+    private static final String STACK_OVERFLOW_RENDER_FAILURE = "internal render failure (StackOverflowError)";
 
     /**
      * Diagnostic render (L6.2, plan lattex-containment-diagnostics): the same SVG
@@ -346,34 +356,30 @@ public final class LatteX {
         // L8: preset macros expand before parsing. A top-level \lx wrapper below may
         // override the STYLING options, but macros are not part of the \lx
         // sub-language, so the caller's notation pack applies inside the body too.
-        MathNode node = MathParser.parse(latex, opts.macros());
-
-        // A top-level \lx wrapper carries its own validated RenderOptions in the
-        // source; that style is what we apply (it overrides `opts`), and we render
-        // the wrapped body under a context seeded from it.
-        //
-        // The wrapper's fx.* (effects) and semantics (intent / concept / a11y.label
-        // / data.*) are validated and stored on the node but are DELIBERATELY NOT
-        // emitted into the SVG here — they ride the trusted container built by
-        // renderStyledHtml, which keeps the emitter's SVG alphabet unchanged.
-        RenderOptions style = opts;
-        MathNode body = node;
-        if (node instanceof StyledMath sm) {
-            style = sm.style();
-            body = sm.body();
-        }
-
-        final RenderOptions fStyle = style;
-        final MathNode fBody = body;
+        // The parse runs INSIDE the boundary (plan lattex-seam-containment-parity): MAX_DEPTH
+        // bounds the parser's recursion, not the caller's remaining stack, so a parse-stage
+        // StackOverflowError must be contained like a layout one.
         return containRender(() -> {
+            MathNode node = MathParser.parse(latex, opts.macros());
+
+            // A top-level \lx wrapper carries its own validated RenderOptions in the
+            // source; that style is what we apply (it overrides `opts`), and we render
+            // the wrapped body under a context seeded from it.
+            //
+            // The wrapper's fx.* (effects) and semantics (intent / concept / a11y.label
+            // / data.*) are validated and stored on the node but are DELIBERATELY NOT
+            // emitted into the SVG here — they ride the trusted container built by
+            // renderStyledHtml, which keeps the emitter's SVG alphabet unchanged.
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * fStyle.scale(), fStyle.mathStyle(), false);
-            Layout layout = LayoutEngine.layout(fBody, ctx);
+                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
+            Layout layout = LayoutEngine.layout(body, ctx);
             // fluid is a HOST flag (like interactiveExpansion): it reads from the
             // caller's opts even when a \lx wrapper overrides the styling, and it is
             // NOT part of the \lx sub-language — an author can never turn it on.
-            return SvgEmitter.emit(layout, font, describe(fBody), fStyle.color(), opts.fluid());
+            return SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
         });
     }
 
@@ -403,11 +409,11 @@ public final class LatteX {
      */
     public static InlineSvgResult renderInlineResult(String latex) {
         RenderOptions opts = RenderOptions.defaults().inline();
-        MathNode node = MathParser.parse(latex);
-        RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-        final RenderOptions fStyle = style;
         return containRender(() -> {
+            // Parse inside the boundary too (plan lattex-seam-containment-parity).
+            MathNode node = MathParser.parse(latex);
+            RenderOptions fStyle = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             double fontSize = DISPLAY_FONT_SIZE * fStyle.scale();
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
@@ -471,13 +477,12 @@ public final class LatteX {
                 "fontSizePx must be a finite value in (0, " + MAX_FRAGMENT_FONT_SIZE
                     + "]; got: " + fontSizePx);
         }
+        return containRender(() -> {
+        // Parse inside the boundary too (plan lattex-seam-containment-parity).
         MathNode node = MathParser.parse(latex);
         // A top-level \lx wrapper is transparent here: render the body; the wrapper's
         // container metadata rides the consumer's own wrapper, not the fragment.
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-
-        final MathNode fBody = body;
-        return containRender(() -> {
+        final MathNode fBody = node instanceof StyledMath sm ? sm.body() : node;
         SfntFont font = FontHolder.FONT;
         LayoutContext ctx = new LayoutContext(font, font.mathConstants(), fontSizePx);
         Layout layout = LayoutEngine.layout(fBody, ctx);
@@ -513,8 +518,7 @@ public final class LatteX {
      */
     private static String mathmlOrEmpty(MathNode body) {
         try {
-            return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
-                + toMathML(body) + "</math>";
+            return mathmlDocument(body);
         } catch (RuntimeException | StackOverflowError e) {
             return "";
         }
@@ -575,15 +579,16 @@ public final class LatteX {
         // is no top-level \lx wrapper the host's scale/color/mathStyle apply. A source
         // \lx wrapper still overrides the STYLING (macros are not part of the \lx
         // sub-language, so the notation pack applies inside the body regardless).
-        MathNode node = MathParser.parse(latex, opts.macros());
-        EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-        Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
-
-        // Lay out once, and reuse the layout for BOTH the SVG and the glyphmap — the
-        // sidecar's path indices must line up with this exact emission.
-        RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
-        MathNode body = node instanceof StyledMath sm ? sm.body() : node;
         return containRender(() -> {
+            // Parse inside the boundary too (plan lattex-seam-containment-parity).
+            MathNode node = MathParser.parse(latex, opts.macros());
+            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+            Semantics sem = node instanceof StyledMath sm ? sm.sem() : Semantics.none();
+
+            // Lay out once, and reuse the layout for BOTH the SVG and the glyphmap — the
+            // sidecar's path indices must line up with this exact emission.
+            RenderOptions style = node instanceof StyledMath sm ? sm.style() : opts;
+            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
             SfntFont font = FontHolder.FONT;
             LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
                 DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
@@ -815,14 +820,15 @@ public final class LatteX {
      * Stafficy's {@code /docs} math seam is the reference consumer).
      *
      * <p>Returns {@code ""} when the source carries no top-level {@code \lx[fx.*]}
-     * annotations, else a <em>leading-space-prefixed</em> run of only the five
-     * {@code data-lx-fx-*} attributes (enter/hover/click/duration/glow-color, in that
-     * order) — never {@code data-lx-intent}/{@code concept}/{@code data.*}/
+     * annotations, else a <em>leading-space-prefixed</em> run of only the seven
+     * {@code data-lx-fx-*} attributes (enter/hover/click/duration/glow-color/bolts/intensity,
+     * in that order) — never {@code data-lx-intent}/{@code concept}/{@code data.*}/
      * {@code aria-*}, which ride {@link #renderStyledHtml}'s own container instead.
      * Every value is parse-time validated (effects are the closed {@code Effect}
      * vocabulary, duration matches {@code \d{1,5}ms}, glow-color is
-     * {@code currentColor} or a canonical hex literal), so no raw author string
-     * reaches an attribute.
+     * {@code currentColor} or a canonical hex literal, bolts/intensity are bounded ASCII
+     * decimals), so no raw author string reaches an attribute. Omitted numeric knobs
+     * produce no attributes; runtime defaults remain 2 bolts and 100 percent intensity.
      *
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @return {@code ""} or a leading-space-prefixed {@code data-lx-fx-*} attribute run
@@ -861,16 +867,19 @@ public final class LatteX {
      */
     @Deprecated
     public static String fxContainerAttrs(String latex) {
-        MathNode node = MathParser.parse(latex);
-        EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-        return fxAttrs(fx);
+        // Deprecated but live (see above), so it gets the same boundary as every sibling.
+        return containRender(() -> {
+            MathNode node = MathParser.parse(latex);
+            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+            return fxAttrs(fx);
+        });
     }
 
     /**
      * The render-coupled seam record: the self-contained SVG document plus the container
      * attributes derived from the SAME parse+layout, as a key→value map. The consumer (the
      * Stafficy {@code /docs} markdown converter) stamps each entry onto ITS OWN wrapper
-     * element; the key set is pinned by the container-output contract (the five
+     * element; the key set is pinned by the container-output contract (the seven
      * {@code data-lx-fx-*} plus {@code data-lx-glyphmap}), so nothing re-encodes and the
      * reflective bridge stays name-agnostic. Values are parse-validated (effects: closed
      * vocabulary; duration: {@code \d{1,5}ms}; glow: {@code currentColor|#rrggbb}; glyphmap:
@@ -888,7 +897,7 @@ public final class LatteX {
         public RenderedMath {
             java.util.Objects.requireNonNull(svg, "svg");
             // Order-PRESERVING defensive copy: the historical stamp order (enter/hover/
-            // click, duration, glow, glyphmap) is load-bearing — the deprecated string
+            // click, duration, glow, explicit numeric knobs, glyphmap) is load-bearing — the deprecated string
             // seam is byte-identical to this map joined in iteration order. Map.copyOf
             // would be immutable but randomize iteration, breaking that equivalence, so
             // copy through a LinkedHashMap and wrap unmodifiable.
@@ -910,40 +919,103 @@ public final class LatteX {
      * <p>Failure semantics mirror the consumer-side {@code tryRender}: ANY failure (parse
      * error, layout overflow, emit fault) yields {@link java.util.Optional#empty()} so the
      * caller falls back to the plain source text — fail-inert, never a half-rendered pair.
+     * "Any" includes a {@code StackOverflowError}: the whole pipeline, parse included, runs
+     * inside {@link #containRender}, the same boundary every sibling render entry uses, so an
+     * {@code Error} becomes the typed failure and then the empty result instead of unwinding
+     * into the consumer's doc pipeline (plan lattex-seam-containment-parity).
      *
      * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
      * @return the render-coupled pair, or empty on any failure
      */
     public static java.util.Optional<RenderedMath> tryRenderMath(String latex) {
+        return tryRenderMath(latex, RenderOptions.defaults());
+    }
+
+    /**
+     * {@link #tryRenderMath(String)} honouring the HOST's {@link RenderOptions}, with the same
+     * semantics {@link #renderStyledHtml(String, RenderOptions)} gives them: preset
+     * {@link RenderOptions#macros()} expand before parsing (inside an {@code \lx} body too);
+     * with no top-level {@code \lx} wrapper the host's scale, color and math style apply, while
+     * a wrapper still overrides the styling; {@link RenderOptions#fluid()} is a host flag that
+     * reaches the {@code <svg>} either way. The returned SVG is byte-identical to
+     * {@link #render(String, RenderOptions)} on the same arguments, and the
+     * {@code data-lx-glyphmap} sidecar equals the one {@code renderStyledHtml} stamps. The
+     * map is NOT the whole of that container: it carries the {@code data-lx-fx-*} effect
+     * attributes and the renderer-derived sidecars, while {@code renderStyledHtml}'s own
+     * {@code <span>} additionally stamps the semantics ({@code data-lx-intent},
+     * {@code data-lx-concept}, each {@code data.*} entry as {@code data-lx-<key>}, and
+     * {@code aria-label}), which this record does not carry.
+     * Without this overload a consumer needing macros or fluid sizing had to go back to the
+     * split render + deprecated {@link #fxContainerAttrs} path, whose glyphmap can desync.
+     *
+     * <p><strong>This seam never arms interactive expansion.</strong> With
+     * {@link RenderOptions#interactiveExpansion()} set, the result is exactly the flag-off
+     * result: no pre-rendered payload, no {@code data-lx-fx-expand} /
+     * {@code data-lx-fx-substitute} / {@code data-lx-var} marker. That is what
+     * {@code renderStyledHtml} produces with the flag off, and its own contract makes that
+     * byte-identical to flag-on for every formula without an {@code unfold} or
+     * {@code substitute} directive; a formula WITH one degrades inert, as it does on any
+     * flag-off page. The flag's product is a hidden SIBLING {@code <svg>} that
+     * {@link RenderedMath} has no slot for, so a host that needs those effects uses
+     * {@code renderStyledHtml}. The flag is deliberately not refused: a refusal would throw on
+     * every input, and a consumer wrapper that catches {@code RuntimeException} would swallow
+     * it and fall back to the split path this overload exists to replace.
+     * {@link RenderOptions#renderErrors()} is ignored here exactly as the throwing render API
+     * ignores it.
+     *
+     * <p>Failure semantics are the one-arg form's: ANY failure in parse, layout or emit,
+     * including a {@code StackOverflowError}, yields {@link java.util.Optional#empty()}.
+     *
+     * @param latex the LaTeX math source (optionally the {@code \lx[…]{…}} macro)
+     * @param opts  the host render options
+     * @return the render-coupled pair, or empty on any render failure
+     * @throws NullPointerException if {@code opts} is null
+     */
+    public static java.util.Optional<RenderedMath> tryRenderMath(String latex, RenderOptions opts) {
+        java.util.Objects.requireNonNull(opts, "opts");
+        // opts.interactiveExpansion() is intentionally never read: see the javadoc.
         try {
-            MathNode node = MathParser.parse(latex);
-            EffectSpec fx = node instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
-            RenderOptions style = node instanceof StyledMath sm ? sm.style() : RenderOptions.defaults();
-            MathNode body = node instanceof StyledMath sm ? sm.body() : node;
-            SfntFont font = FontHolder.FONT;
-            LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
-                DISPLAY_FONT_SIZE * style.scale(), style.mathStyle(), false);
-            Layout layout = LayoutEngine.layout(body, ctx);
-            String svg = SvgEmitter.emit(layout, font, describe(body), style.color());
-            // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
-            // stamping decision, so the seam and the wrapper path cannot drift on whether
-            // the sidecar rides the container. A literal THREAD check here silently left
-            // `cancel` inert on the split-wrapper consumer (it reads the sidecar to find
-            // the code point occurring exactly twice, and an absent map is not an error).
-            String glyphmap = usesGlyphmap(fx)
-                ? SvgEmitter.glyphmap(layout, font) : "";
-            String groupmap = precedenceGroupmap(fx, layout, font);
-            return java.util.Optional.of(new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap)));
-        } catch (RuntimeException e) {
+            return java.util.Optional.of(containRender(() -> renderMathPair(latex, opts)));
+        } catch (RuntimeException containedOrTyped) {
+            // containRender has already turned an Error into a MathSyntaxException, so this
+            // one catch sees every failure the contract promises to absorb.
             return java.util.Optional.empty();
         }
+    }
+
+    /**
+     * The seam's pipeline, unguarded: callers run it inside {@link #containRender}. Parse is
+     * inside too, unlike the throwing siblings, because this seam's contract absorbs parse
+     * failures as well as layout and emit ones.
+     */
+    private static RenderedMath renderMathPair(String latex, RenderOptions opts) {
+        MathNode seamNode = MathParser.parse(latex, opts.macros());
+        EffectSpec fx = seamNode instanceof StyledMath sm ? sm.fx() : EffectSpec.none();
+        RenderOptions seamStyle = seamNode instanceof StyledMath sm ? sm.style() : opts;
+        MathNode seamBody = seamNode instanceof StyledMath sm ? sm.body() : seamNode;
+        SfntFont font = FontHolder.FONT;
+        LayoutContext ctx = new LayoutContext(font, font.mathConstants(),
+            DISPLAY_FONT_SIZE * seamStyle.scale(), seamStyle.mathStyle(), false);
+        Layout layout = LayoutEngine.layout(seamBody, ctx);
+        // fluid rides the HOST opts, never the \lx wrapper, exactly as in render(latex, opts).
+        String svg = SvgEmitter.emit(layout, font, describe(seamBody), seamStyle.color(), opts.fluid());
+        // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
+        // stamping decision, so the seam and the wrapper path cannot drift on whether
+        // the sidecar rides the container. A literal THREAD check here silently left
+        // `cancel` inert on the split-wrapper consumer (it reads the sidecar to find
+        // the code point occurring exactly twice, and an absent map is not an error).
+        String glyphmap = usesGlyphmap(fx)
+            ? SvgEmitter.glyphmap(layout, font) : "";
+        String groupmap = precedenceGroupmap(fx, layout, font);
+        return new RenderedMath(svg, containerAttrMap(fx, glyphmap, groupmap));
     }
 
     /**
      * THE single container-attribute producer: {@link #fxAttrs} (the string form
      * {@link #openTag} and the deprecated seam join) derives from this map, so the record
      * form and the string form cannot drift. Insertion order is the historical stamp order
-     * (enter/hover/click, duration, glow, glyphmap) so the joined string stays byte-identical.
+     * (enter/hover/click, duration, glow, explicit numeric knobs, glyphmap) so omitted knobs
+     * leave the joined string byte-identical to the predecessor.
      */
     private static Map<String, String> containerAttrMap(EffectSpec fx, String glyphmap, String groupmap) {
         Map<String, String> attrs = new java.util.LinkedHashMap<>();
@@ -953,6 +1025,12 @@ public final class LatteX {
         }
         fx.durationValue().ifPresent(v -> attrs.put("data-lx-fx-duration", v));
         fx.glowColorValue().ifPresent(c -> attrs.put("data-lx-fx-glow-color", c.svgValue()));
+        if (fx.bolts() != null) {
+            attrs.put("data-lx-fx-bolts", Integer.toString(fx.bolts()));
+        }
+        if (fx.intensity() != null) {
+            attrs.put("data-lx-fx-intensity", Integer.toString(fx.intensity()));
+        }
         if (glyphmap != null && !glyphmap.isEmpty()) {
             attrs.put("data-lx-glyphmap", glyphmap);
         }
@@ -965,14 +1043,14 @@ public final class LatteX {
     /**
      * The shared fx-attribute stamping source consumed by BOTH {@link #openTag} and
      * {@link #fxContainerAttrs} — one producer, so the wrapper form and the seam form
-     * cannot drift. Emits only the container contract's five {@code data-lx-fx-*}
+     * cannot drift. Emits only the container contract's seven {@code data-lx-fx-*}
      * attributes, each value validated at parse time.
      */
     private static String fxAttrs(EffectSpec fx) {
         // Derived from containerAttrMap — the ONE producer (record seam + string form share
         // it, so they cannot drift). Values are parse-validated; the glow colour's svgValue()
         // is currentColor or a canonical #rrggbb literal — a safe attribute VALUE.
-        // Empty sidecars: fxAttrs stamps only the fx-* / duration / glow attrs; openTag
+        // Empty sidecars: fxAttrs stamps only the fx-* attrs, including numeric knobs; openTag
         // stamps the glyphmap/groupmap sidecars separately (and the deprecated seam never
         // carried them).
         StringBuilder sb = new StringBuilder();
@@ -1112,11 +1190,25 @@ public final class LatteX {
      * @param latex a LaTeX math expression
      * @return {@code <math xmlns="http://www.w3.org/1998/Math/MathML">…</math>}
      * @throws LatteXException if {@code latex} does not parse (the exported supertype of
-     *         the concrete {@code com.lattex.parse.MathSyntaxException} thrown)
+     *         the concrete {@code com.lattex.parse.MathSyntaxException} thrown), or if the
+     *         serialization fails internally: parse and traversal run inside
+     *         {@link #containRender}, so a {@code StackOverflowError} or stray
+     *         {@code RuntimeException} arrives on this same typed channel with the original
+     *         failure as its cause, never as an escaping {@code Error} (plan
+     *         lattex-seam-containment-parity)
      */
     public static String toMathML(String latex) {
-        return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">"
-            + toMathML(MathParser.parse(latex)) + "</math>";
+        return containRender(() -> mathmlDocument(MathParser.parse(latex)));
+    }
+
+    /**
+     * Wraps one serialized node in the {@code <math>} root. The single producer for that
+     * wrapper, shared by the public {@link #toMathML(String)} and the fail-soft fragment
+     * helper, so the two can never disagree on the root element.
+     */
+    private static String mathmlDocument(MathNode node) {
+        RenderWorkBudget.checkMathML(node);
+        return "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">" + toMathML(node) + "</math>";
     }
 
     /** Serializes one node to Presentation-MathML markup (no {@code <math>} wrapper). */
@@ -1188,9 +1280,25 @@ public final class LatteX {
             } + ">" + toMathML(l.body()) + "</mpadded>";
             case BigOperator(var op, var lower, var upper, var limits) -> {
                 String o = mo(op.codePoint());
-                // \nolimits (e.g. an inline integral) sets scripts to the SIDE —
-                // msub/msup/msubsup — matching the SVG; otherwise above/below.
-                boolean beside = limits == MathNode.LimitsMode.NOLIMITS;
+                // Scripts go to the SIDE (msub/msup/msubsup) by the SVG layout's own rule:
+                // always for \nolimits, never for \limits, and by default for the integral
+                // family, which keeps side limits even in display style (audit cb3b4518 F3).
+                // Otherwise above/below.
+                boolean beside = switch (limits) {
+                    case NOLIMITS -> true;
+                    case LIMITS -> false;
+                    case DEFAULT -> LayoutEngine.isIntegral(op.codePoint());
+                };
+                // An explicit \limits must stay stacked in a compact-style (non-block) <math>
+                // too, where MathML Core moves munderover limits beside an operator the
+                // dictionary marks movablelimits (sum, prod, coprod, the big set/logic
+                // operators). DEFAULT keeps the dictionary value, TeX's displaylimits; an
+                // integral is not movablelimits in the dictionary and needs nothing.
+                if (limits == MathNode.LimitsMode.LIMITS
+                        && !LayoutEngine.isIntegral(op.codePoint())) {
+                    o = "<mo movablelimits=\"false\">"
+                        + xmlEscape(Character.toString(op.codePoint())) + "</mo>";
+                }
                 if (lower != null && upper != null) {
                     yield (beside ? "<msubsup>" : "<munderover>") + o
                         + toMathML(lower) + toMathML(upper) + (beside ? "</msubsup>" : "</munderover>");
@@ -1348,7 +1456,20 @@ public final class LatteX {
                 sb.append(fenceMo(m.leftDelim()));
             }
         }
-        sb.append("<mtable>");
+        // Column alignment (audit cb3b4518 F2): the parser computes it (aligned is right/left
+        // pairs, cases left, array its l/c/r spec) and the SVG draws it; MathML centres every
+        // cell unless told, so a grid with any non-centre column states the full list.
+        boolean allCentred = m.columnAligns().stream()
+            .allMatch(a -> a == MathNode.ColumnAlign.CENTER);
+        if (allCentred) {
+            sb.append("<mtable>");
+        } else {
+            StringBuilder aligns = new StringBuilder();
+            for (MathNode.ColumnAlign a : m.columnAligns()) {
+                aligns.append(aligns.length() == 0 ? "" : " ").append(columnAlignValue(a));
+            }
+            sb.append("<mtable columnalign=\"").append(aligns).append("\">");
+        }
         for (int r = 0; r < m.rows().size(); r++) {
             var row = m.rows().get(r);
             // Plan 636d214f: a tagged row is MathML's labelled row, label first; a
@@ -1374,9 +1495,18 @@ public final class LatteX {
                     content = "<mrow>" + (before == null ? "" : toMathML(before.material()))
                         + content + (after == null ? "" : toMathML(after.material())) + "</mrow>";
                 }
-                sb.append(span != null && span.span() > 1
-                        ? "<mtd columnspan=\"" + span.span() + "\">" : "<mtd>")
-                  .append(content).append("</mtd>");
+                sb.append("<mtd");
+                if (span != null && span.span() > 1) {
+                    sb.append(" columnspan=\"").append(span.span()).append('"');
+                }
+                // A \multicolumn carries its own alignment; state it only where it differs
+                // from what the cell inherits from the table (centre when none was stated).
+                MathNode.ColumnAlign inherited = allCentred
+                    ? MathNode.ColumnAlign.CENTER : m.columnAligns().get(c);
+                if (span != null && span.align() != inherited) {
+                    sb.append(" columnalign=\"").append(columnAlignValue(span.align())).append('"');
+                }
+                sb.append('>').append(content).append("</mtd>");
                 c = last;
             }
             sb.append(tag == null ? "</mtr>" : "</mlabeledtr>");
@@ -1389,6 +1519,15 @@ public final class LatteX {
             sb.append("</mrow>");
         }
         return sb.toString();
+    }
+
+    /** The MathML {@code columnalign} keyword for a column alignment. */
+    private static String columnAlignValue(MathNode.ColumnAlign a) {
+        return switch (a) {
+            case LEFT -> "left";
+            case CENTER -> "center";
+            case RIGHT -> "right";
+        };
     }
 
     /**
@@ -1454,14 +1593,25 @@ public final class LatteX {
         return sb.toString();
     }
 
-    /** MathML for a stacked annotation (under/over-brace, overset/underset). */
+    /**
+     * MathML for a stacked annotation (under/over-brace, overset/underset). A brace is
+     * stacked on the base first and its label, when present, on the brace, the same
+     * outward order as {@code LayoutEngine.stackBox} (audit cb3b4518 F5: the brace was
+     * emitted only when the label was null, so a labelled brace lost the brace).
+     */
     private static String stackMathML(MathNode.Stack st) {
         String base = toMathML(st.base());
         return switch (st.kind()) {
-            case UNDERBRACE -> "<munder>" + base
-                + (st.below() == null ? "<mo>&#9183;</mo>" : toMathML(st.below())) + "</munder>";
-            case OVERBRACE -> "<mover>" + base
-                + (st.above() == null ? "<mo>&#9182;</mo>" : toMathML(st.above())) + "</mover>";
+            case UNDERBRACE -> {
+                String braced = "<munder>" + base + "<mo>&#9183;</mo></munder>";
+                yield st.below() == null ? braced
+                    : "<munder>" + braced + toMathML(st.below()) + "</munder>";
+            }
+            case OVERBRACE -> {
+                String braced = "<mover>" + base + "<mo>&#9182;</mo></mover>";
+                yield st.above() == null ? braced
+                    : "<mover>" + braced + toMathML(st.above()) + "</mover>";
+            }
             case STACKREL, OVERSET -> "<mover>" + base + toMathML(st.above()) + "</mover>";
             case UNDERSET -> "<munder>" + base + toMathML(st.below()) + "</munder>";
         };

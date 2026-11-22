@@ -86,8 +86,31 @@ public final class MathParser {
      */
     public static final int MAX_SOURCE_LENGTH = 100_000;
 
-    /** Maximum recursive nesting depth (groups, arguments, scripts, fences). */
-    static final int MAX_DEPTH = 512;
+    /**
+     * Maximum recursive nesting depth (groups, arguments, scripts, fences): the documented,
+     * user-visible semantic limit (plan 28201def; was 512). It is an INPUT budget, not a promise
+     * that every input at or under it succeeds on every VM or from an already-deep caller stack:
+     * the counter in {@link #parseNucleus} refuses past it, and the two public {@code parse}
+     * entries additionally turn a residual {@link StackOverflowError} into the same typed
+     * refusal (see {@link #stackExhausted()}). The test suite exercises the limit on a thread
+     * whose REQUESTED stack size is 256 KiB, which cannot tell the counter from the backstop, and
+     * the backstop itself on a 512 KiB worker whose stack is first used up by filler frames. The
+     * JVM may round or ignore a requested size, so both are test conditions, not a certified
+     * floor. The backstop needs a little stack to build its refusal: with almost none left the
+     * raw Error still escapes.
+     */
+    static final int MAX_DEPTH = 80;
+
+    /**
+     * The residual backstop's typed refusal. Only {@link StackOverflowError} is ever caught for
+     * this (never Error/Throwable/OutOfMemoryError): the depth counter is the primary bound, and
+     * this keeps a smaller-than-expected caller stack from leaking the raw Error past the
+     * caller's {@code catch (RuntimeException)} guards.
+     */
+    private static MathSyntaxException stackExhausted() {
+        return new MathSyntaxException("nesting too deep: the parser's stack was exhausted before the "
+            + MAX_DEPTH + "-level limit; input refused");
+    }
 
     /** Current recursion depth; guarded against {@link #MAX_DEPTH} in {@link #parseNucleus}. */
     private int depth;
@@ -168,6 +191,44 @@ public final class MathParser {
         }
     }
 
+    // Expanded TEXT tokens can share their raw payload while decoding produces a new
+    // retained String on each occurrence. Bound each literal segment BEFORE decoding.
+    // A parent hands nested math/text to its child without billing that payload again.
+    // The allowance follows recursive parseMath calls; resetting it for every $ span
+    // would reopen the amplification.
+    private static final long MAX_TEXT_DECODE_UNITS = 100_000;
+    private static final ScopedValue<TextDecodeWork> TEXT_DECODE_WORK = ScopedValue.newInstance();
+
+    private static final class TextDecodeWork {
+        long units;
+        long parsedTokens;
+
+        void charge(int amount) {
+            if (amount > MAX_TEXT_DECODE_UNITS - units) {
+                throw MathSyntaxException.capExceeded(
+                    "output work budget exceeded: materialized text during parse");
+            }
+            units += amount;
+        }
+
+        // Count actual expanded input once per parser, not raw TEXT payloads at
+        // every enclosing level. This conservative work policy also counts braces
+        // that later collapse; it is separate from the literal-decoding allowance.
+        void chargeParsedTokens(List<Token> tokens) {
+            long amount = 0;
+            for (Token token : tokens) {
+                if (token.kind() != Kind.EOF) {
+                    amount++;
+                }
+            }
+            if (amount > (long) MacroExpander.MAX_MACRO_OUTPUT_TOKENS - parsedTokens) {
+                throw MathSyntaxException.capExceeded(
+                    "output work budget exceeded: parsed tokens during parse");
+            }
+            parsedTokens += amount;
+        }
+    }
+
     private MathParser(String src) {
         this(src, Map.of());
     }
@@ -182,6 +243,7 @@ public final class MathParser {
      */
     private MathParser(String src, Map<String, String> macros) {
         this.tokens = MacroExpander.expand(lex(src), macros);
+        TEXT_DECODE_WORK.get().chargeParsedTokens(tokens);
         this.source = src;
         this.presetMacros = macros;
     }
@@ -430,11 +492,18 @@ public final class MathParser {
                 "input too long: " + latex.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
-        if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                && LxOptionsParser.looksLikeTopLevelLx(latex)) {
-            return LxOptionsParser.parseLx(latex.strip(), macros);
+        String source = latex;
+        try {
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
+                if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                        && LxOptionsParser.looksLikeTopLevelLx(source)) {
+                    return LxOptionsParser.parseLx(source.strip(), macros);
+                }
+                return parseMath(source, 0, macros);
+            });
+        } catch (StackOverflowError residual) {
+            throw stackExhausted();
         }
-        return parseMath(latex, 0, macros);
     }
 
     /**
@@ -481,11 +550,17 @@ public final class MathParser {
                 "input too long: " + stripped.length() + " chars exceeds the "
                     + MAX_SOURCE_LENGTH + "-char limit");
         }
-        if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
-                && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
-            return LxOptionsParser.parseLx(stripped.strip(), macros);
+        try {
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(() -> {
+                if (CommandRegistry.hasHandler("lx", CommandRegistry.Handler.LX)
+                        && LxOptionsParser.looksLikeTopLevelLx(stripped)) {
+                    return LxOptionsParser.parseLx(stripped.strip(), macros);
+                }
+                return parseMath(stripped, 0, macros, numberedEnvironmentSink);
+            });
+        } catch (StackOverflowError residual) {
+            throw stackExhausted();
         }
-        return parseMath(stripped, 0, macros, numberedEnvironmentSink);
     }
 
     /** Parses ordinary LaTeX math (no top-level {@code \lx}). */
@@ -517,6 +592,10 @@ public final class MathParser {
     /** As above, additionally reporting numbered display environments into a caller-owned sink. */
     static MathNode parseMath(String latex, int initialDepth, Map<String, String> macros,
                               Collection<String> numberedEnvironmentSink) {
+        if (!TEXT_DECODE_WORK.isBound()) {
+            return ScopedValue.where(TEXT_DECODE_WORK, new TextDecodeWork()).call(
+                () -> parseMath(latex, initialDepth, macros, numberedEnvironmentSink));
+        }
         try {
             MathParser parser = new MathParser(latex, macros);
             parser.numberedEnvironmentSink = numberedEnvironmentSink;
@@ -642,6 +721,9 @@ public final class MathParser {
         try {
             return textWithNestedMath(Token.text("tag", raw, offset), TextStyle.ROMAN);
         } catch (MathSyntaxException textRefused) {
+            if (textRefused.isCapExceeded()) {
+                throw textRefused;
+            }
             try {
                 return parseMath(raw, depth, presetMacros);
             } catch (MathSyntaxException mathRefused) {
@@ -2571,6 +2653,9 @@ public final class MathParser {
                 try {
                     items.add(parseMath(span, depth));
                 } catch (MathSyntaxException e) {
+                    if (e.isCapExceeded()) {
+                        throw e;
+                    }
                     String shown = paren ? "\\(" + span + "\\)" : "$" + span + "$";
                     throw MathSyntaxException.withUnsupportedKind(
                         "in \\" + t.name() + " nested math '" + shown + "': " + e.getMessage(),
@@ -2745,6 +2830,7 @@ public final class MathParser {
      * command inside {@code \text}.
      */
     private static String literalText(String s, Token t) {
+        TEXT_DECODE_WORK.get().charge(s.length());
         if (s.indexOf('{') < 0 && s.indexOf('}') < 0 && s.indexOf('\\') < 0
                 && s.indexOf('~') < 0) {
             return s;

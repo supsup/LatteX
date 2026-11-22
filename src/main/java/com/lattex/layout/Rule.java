@@ -33,6 +33,7 @@ public record Rule(double x, double y, double width, double height, Color color,
                    double[] polygon) {
 
     public Rule {
+        RenderWorkBudget.chargeRule();
         // Defensive copy so a caller's array can't mutate the rule out from under us.
         polygon = polygon == null ? null : polygon.clone();
     }

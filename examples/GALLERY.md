@@ -82,6 +82,40 @@ Each GIF is clipped to its own equation and loops forever; the trigger is shown 
 
 ![storm](storm.gif)
 
+### Lightning and storm knobs
+
+[Open the live knob preview](fx-knobs.html). These supplement the default specimens
+above; `fx.bolts` chooses bolts per source and `fx.intensity` changes appearance.
+See [QUICKSTART](../QUICKSTART.md) for ranges and defaults.
+
+Four bolts per source at 150% intensity, played by clicking the equation:
+
+```latex
+\lx[fx.click=lightning, fx.bolts=4, fx.intensity=150]{\nabla^2\phi=0}
+```
+
+![Lightning with four bolts at 150 percent intensity](lightning-knobs.gif)
+
+Storm begins switched off at intensity zero. The equation stays visible:
+
+```latex
+\lx[fx.hover=storm, fx.glow-color=#5caaff, fx.intensity=0]{i\hbar\,\partial_t\psi}
+```
+
+![The intact equation with storm disabled](storm-disabled.png)
+
+The preview's **Enable storm at 100%** button changes the same wrapper's
+`data-lx-fx-intensity` to `100` and calls `LatteXFx.play(element)`. Updating the
+attribute alone does not install the hover listener skipped during zero-intensity
+initialization; the explicit public play starts the effect:
+
+![The initially disabled storm enabled through public play](storm-enabled.gif)
+
+The PNG deliberately shows the off state. The GIFs show playback for human
+inspection; randomized pixels are not byte-golden assertions. All three references
+are regenerated through `./gradlew generateExamples`, and the gallery contract
+fails if their source page, authored directives or committed files disappear.
+
 ### `fx.enter=handscribe`
 
 ```

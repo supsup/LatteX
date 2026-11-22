@@ -17,7 +17,11 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * TeX's undelimited-argument rule (The TeXbook, Ch. 20, "Definitions"): an argument
@@ -359,6 +363,71 @@ class SingleTokenArgumentTest {
         MathSyntaxException pm = assertThrows(MathSyntaxException.class,
             () -> MathParser.parse(deepPmod));
         assertTrue(pm.getMessage().contains("nesting too deep"), pm.getMessage());
+    }
+
+    // ------------------------------------------------------------------
+    // Plan 28201def: the refusal must not depend on the thread's stack size
+    // ------------------------------------------------------------------
+
+    /** The ORIGINAL stress depth (old MAX_DEPTH 512 + 10). Fixed on purpose: recomputing it from
+     *  the lowered limit would erase the old-current RED / after-repair contrast. */
+    private static final int ORIGINAL_STRESS = 522;
+    /** A REQUESTED stack size. The JVM may round or ignore it, so this is a test condition. */
+    private static final long SMALL_STACK = 256 * 1024;
+
+    /** Runs one parse on a fresh small-stack thread and returns what it threw (null on success). */
+    private static Throwable onSmallStack(String src, boolean sinkForm) throws InterruptedException {
+        Throwable[] thrown = new Throwable[1];
+        Thread t = new Thread(null, () -> {
+            try {
+                if (sinkForm) MathParser.parse(src, Map.of(), new ArrayList<>());
+                else MathParser.parse(src);
+            } catch (Throwable e) {
+                thrown[0] = e;
+            }
+        }, "lattex-small-stack", SMALL_STACK);
+        t.start();
+        t.join(60_000);
+        assertFalse(t.isAlive(), "small-stack parse did not finish");
+        return thrown[0];
+    }
+
+    /** Every token x public-entry combination, each executed and reported as its OWN case (Lattice 1564): a fail-fast
+     *  loop would stop at the first failing combination and leave the others unexecuted. */
+    static Stream<Arguments> smallStackCases() {
+        return Stream.of(
+            Arguments.of("\\hat", "plain"), Arguments.of("\\hat", "sink"),
+            Arguments.of("\\pmod", "plain"), Arguments.of("\\pmod", "sink"));
+    }
+
+    @ParameterizedTest(name = "stress522 {0} via {1} entry")
+    @MethodSource("smallStackCases")
+    void originalStressInputIsATypedRefusalOnASmallStack(String token, String entry) throws InterruptedException {
+        Throwable e = onSmallStack(token.repeat(ORIGINAL_STRESS) + " x", "sink".equals(entry));
+        assertTrue(e instanceof MathSyntaxException, token + " via " + entry + ": expected a typed refusal, got " + e);
+        assertTrue(e.getMessage().contains("nesting too deep"), e.getMessage());
+    }
+
+    @ParameterizedTest(name = "boundaryAccepted {0} via {1} entry")
+    @MethodSource("smallStackCases")
+    void deepestAcceptedInputParsesOnASmallStack(String token, String entry) throws InterruptedException {
+        // N tokens followed by one atom nest N + 1 nuclei, so MAX_DEPTH - 1 tokens is the deepest accepted input.
+        assertEquals(null, onSmallStack(token.repeat(MathParser.MAX_DEPTH - 1) + " x", "sink".equals(entry)),
+            token + " via " + entry + " at the boundary must parse");
+    }
+
+    @ParameterizedTest(name = "boundaryRefused {0} via {1} entry")
+    @MethodSource("smallStackCases")
+    void onePastTheBoundaryIsATypedRefusalOnASmallStack(String token, String entry) throws InterruptedException {
+        Throwable over = onSmallStack(token.repeat(MathParser.MAX_DEPTH) + " x", "sink".equals(entry));
+        assertTrue(over instanceof MathSyntaxException, token + " via " + entry + " one past the boundary: " + over);
+        assertTrue(over.getMessage().contains("nesting too deep"), over.getMessage());
+    }
+
+    @ParameterizedTest(name = "shallow {0} via {1} entry")
+    @MethodSource("smallStackCases")
+    void shallowNestingStillParsesOnASmallStack(String token, String entry) throws InterruptedException {
+        assertEquals(null, onSmallStack(token.repeat(5) + " x", "sink".equals(entry)), token + " via " + entry + " shallow control");
     }
 
     @Test

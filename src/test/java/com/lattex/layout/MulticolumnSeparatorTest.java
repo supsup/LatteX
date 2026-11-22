@@ -93,7 +93,7 @@ class MulticolumnSeparatorTest {
         int first = mml.indexOf("<mo>:</mo>");
         assertTrue(first >= 0, "row 2 still carries the material: " + mml);
         assertEquals(-1, mml.indexOf("<mo>:</mo>", first + 1), "and only row 2: " + mml);
-        String spanRow = mml.substring(mml.indexOf("<mtable>"), mml.indexOf("</mtr>"));
+        String spanRow = mml.substring(mml.indexOf("<mtable"), mml.indexOf("</mtr>"));
         assertFalse(spanRow.contains(":"), "not on the span row: " + spanRow);
     }
 }
