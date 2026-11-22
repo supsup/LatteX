@@ -1649,8 +1649,9 @@ public final class LatteX {
     /**
      * HTML-attribute-escapes a container attribute value (aria-label / data-lx-*).
      * The shared {@link com.lattex.parse.OutputLegality} policy runs FIRST (plan
-     * cfd12523): illegal C0 controls are stripped and an unpaired surrogate fails
-     * loud, so a semantic value stored RAW is made legal+safe at this single
+     * cfd12523): characters outside the XML 1.0 Char production (C0 controls,
+     * U+FFFE, U+FFFF) are stripped and an unpaired surrogate fails loud, so a
+     * semantic value stored RAW is made legal+safe at this single
      * boundary. Escapes the same metachar set the parser used to pre-escape
      * ({@code & < > " '}), so clean values stamp byte-identically to before.
      */

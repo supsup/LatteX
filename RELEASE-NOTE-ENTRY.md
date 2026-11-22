@@ -33,14 +33,18 @@ below are kept verbatim as their branches wrote them.
 
 #### U+FFFE and U+FFFF no longer reach MathML or SVG
 
-The shared output-legality policy checked only C0 controls and surrogates, so the two BMP
-noncharacters U+FFFE and U+FFFF passed straight into MathML text and the SVG `aria-label`,
-and an XML 1.0 parser rejected the document. `OutputLegality` now expresses the whole XML
-1.0 `Char` production once, as `isXmlChar(int)`, and every XML boundary uses it.
+The shared output-legality policy checked only C0 controls and surrogates, so U+FFFE and
+U+FFFF, the two BMP noncharacters the XML `Char` production excludes, passed straight into
+MathML text and the SVG `aria-label`, and an XML 1.0 parser rejected the document.
+`OutputLegality` now expresses the whole XML 1.0 `Char` production once, as
+`isXmlChar(int)`; the boundaries already call that shared policy, so they pick it up
+without being edited one by one.
 
 - **The two noncharacters are stripped**, exactly as an illegal C0 control already was, at
   every boundary that runs the shared policy: MathML, the SVG `aria-label`, and the
-  styled-HTML a11y and `data-lx-*` attributes. A lone surrogate still fails loud.
+  styled-HTML `aria-label` and `data.*` values. A lone surrogate still fails loud rather than
+  being stripped, and the other 32 BMP noncharacters (U+FDD0 to U+FDEF), legal XML characters,
+  are kept.
 - **Legal characters at the edges are unchanged**: U+D7FF, U+E000, U+FFFD, and astral code
   points up to U+10FFFF (as valid surrogate pairs) are preserved verbatim.
 - **The interactive endpoint validator uses the same predicate.** Its `aria-label` check
