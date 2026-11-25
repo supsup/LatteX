@@ -539,6 +539,11 @@ final class Symbols {
         m.put("bigtriangledown", new Sym(0x25BD, MathClass.BIN)); // ▽
         m.put("triangleleft", new Sym(0x25C3, MathClass.BIN));    // ◃
         m.put("triangleright", new Sym(0x25B9, MathClass.BIN));   // ▹
+        // amssymb's filled partners of the two above, at the same small size (U+25B8 and
+        // U+25C2, BLACK RIGHT-/LEFT-POINTING SMALL TRIANGLE), and like amssymb's
+        // \vartriangleright they are relations. Plan 2d5a59ad (lattex project).
+        m.put("blacktriangleright", new Sym(0x25B8, MathClass.REL)); // ▸
+        m.put("blacktriangleleft", new Sym(0x25C2, MathClass.REL));  // ◂
         m.put("barwedge", new Sym(0x22BC, MathClass.BIN));     // ⊼
         m.put("veebar", new Sym(0x22BB, MathClass.BIN));       // ⊻
         m.put("doublebarwedge", new Sym(0x2A5E, MathClass.BIN)); // ⩞
@@ -821,6 +826,10 @@ final class Symbols {
         m.put("Box", new Sym(0x25A1, MathClass.ORD));     // □ (amssymb: \Box = \square; the d'Alembertian)
         m.put("Bbbk", new Sym(0x1D55C, MathClass.ORD));   // 𝕜 (amssymb; = \mathbb{k})
         m.put("blacksquare", new Sym(0x25A0, MathClass.ORD)); // ■
+        // LaTeX's \S (section sign) and \P (pilcrow), which work in math as in text.
+        // Plan 2d5a59ad (lattex project).
+        m.put("S", new Sym(0x00A7, MathClass.ORD)); // §
+        m.put("P", new Sym(0x00B6, MathClass.ORD)); // ¶
         m.put("lozenge", new Sym(0x25CA, MathClass.ORD)); // ◊
         m.put("blacklozenge", new Sym(0x29EB, MathClass.ORD)); // ⧫
         m.put("bigstar", new Sym(0x2605, MathClass.ORD)); // ★
@@ -931,6 +940,10 @@ final class Symbols {
         m.put("rVert", new Sym(0x2016, MathClass.CLOSE)); // ‖
         m.put("langle", new Sym(0x27E8, MathClass.OPEN)); // ⟨
         m.put("rangle", new Sym(0x27E9, MathClass.CLOSE)); // ⟩
+        // Plain TeX's \lgroup and \rgroup, the flat-ended group brackets (U+27EE and U+27EF,
+        // MATHEMATICAL LEFT/RIGHT FLATTENED PARENTHESIS). Plan 2d5a59ad (lattex project).
+        m.put("lgroup", new Sym(0x27EE, MathClass.OPEN)); // ⟮
+        m.put("rgroup", new Sym(0x27EF, MathClass.CLOSE)); // ⟯
         // stmaryrd double brackets. STIX Two Math carries the dedicated Unicode
         // glyphs, so these are real opening/closing atoms rather than a kerned
         // "[\![" approximation (2026-07-23 math.PR wild-corpus survey).

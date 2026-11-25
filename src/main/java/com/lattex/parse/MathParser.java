@@ -2852,6 +2852,20 @@ public final class MathParser {
                     i = textReference(s, j, word, sb, t) - 1;
                     continue;
                 }
+                if (TEXT_LETTER_ACCENTS.containsKey(word)) {
+                    i = composeAccent("\\" + word, TEXT_LETTER_ACCENTS.get(word), s, j, sb, t) - 1;
+                    continue;
+                }
+                if (TEXT_WORD_SYMBOLS.containsKey(word)) {
+                    sb.append(TEXT_WORD_SYMBOLS.get(word));
+                    // TeX skips the spaces after a control word (TeXbook ch. 3), so
+                    // Gro\ss e is "Große" and \S 3 is "§3".
+                    while (j < s.length() && s.charAt(j) == ' ') {
+                        j++;
+                    }
+                    i = j - 1;
+                    continue;
+                }
                 throw MathSyntaxException.unknownCommand(
                     "Unknown command in \\" + t.name() + ": \\" + word
                         + " — commands are not expanded in text; wrap math in $...$",
@@ -2907,6 +2921,40 @@ public final class MathParser {
         '~', accentTable("a\u00e3e\u1ebdi\u0129n\u00f1o\u00f5u\u0169v\u1e7dy\u1ef9"
             + "A\u00c3E\u1ebcI\u0128N\u00d1O\u00d5U\u0168V\u1e7cY\u1ef8"));
 
+    /**
+     * The four text accents LaTeX spells as control WORDS (the LaTeX2e font-encoding
+     * guide: the control words H double acute, v caron, u breve and c cedilla), found in names such as Erd\H{o}s and \v{C}ech. Like {@link #TEXT_ACCENTS}
+     * they map an ASCII base to its PRECOMPOSED character, derived from the Unicode canonical
+     * compositions (NFC of base + U+030B / U+030C / U+0306 / U+0327), less the fourteen
+     * carons the bundled STIX Two Math does not draw (U+01CD-U+01D4, U+01E6-U+01E9,
+     * U+021E/F: a/A, g/G, h/H, i/I, k/K, o/O, u/U with caron); those are refused, never
+     * drawn unaccented or as a missing-glyph box. Plan 2d5a59ad (lattex project).
+     */
+    private static final Map<String, Map<Character, Character>> TEXT_LETTER_ACCENTS = Map.of(
+        "H", accentTable("o\u0151u\u0171O\u0150U\u0170"),
+        "v", accentTable("c\u010dd\u010fe\u011bj\u01f0l\u013en\u0148r\u0159s\u0161t\u0165z\u017e"
+            + "C\u010cD\u010eE\u011aL\u013dN\u0147R\u0158S\u0160T\u0164Z\u017d"),
+        "u", accentTable("a\u0103e\u0115g\u011fi\u012do\u014fu\u016d"
+            + "A\u0102E\u0114G\u011eI\u012cO\u014eU\u016c"),
+        "c", accentTable("c\u00e7d\u1e11e\u0229g\u0123h\u1e29k\u0137l\u013cn\u0146r\u0157s\u015ft\u0163"
+            + "C\u00c7D\u1e10E\u0228G\u0122H\u1e28K\u0136L\u013bN\u0145R\u0156S\u015eT\u0162"));
+
+    /**
+     * Text-mode control words that stand for one character (the LaTeX2e font-encoding
+     * guide's text symbols): the section and paragraph signs, the letters of names
+     * ({@code \ss \o \O \ae \AE \oe \OE \aa \AA \l \L}), {@code \dag},
+     * {@code \ddag}, {@code \copyright} and {@code \pounds}. Each decodes to its literal
+     * character, which the bundled font draws (pinned per word by
+     * TextLetterAccentsAndSymbolsTest). Plan 2d5a59ad (lattex project).
+     */
+    private static final Map<String, Character> TEXT_WORD_SYMBOLS = Map.ofEntries(
+        Map.entry("S", '\u00a7'), Map.entry("P", '\u00b6'), Map.entry("ss", '\u00df'),
+        Map.entry("o", '\u00f8'), Map.entry("O", '\u00d8'), Map.entry("ae", '\u00e6'),
+        Map.entry("AE", '\u00c6'), Map.entry("oe", '\u0153'), Map.entry("OE", '\u0152'),
+        Map.entry("aa", '\u00e5'), Map.entry("AA", '\u00c5'), Map.entry("l", '\u0142'),
+        Map.entry("L", '\u0141'), Map.entry("dag", '\u2020'), Map.entry("ddag", '\u2021'),
+        Map.entry("copyright", '\u00a9'), Map.entry("pounds", '\u00a3'));
+
     private static Map<Character, Character> accentTable(String pairs) {
         Map<Character, Character> table = new java.util.HashMap<>();
         for (int k = 0; k + 1 < pairs.length(); k += 2) {
@@ -2925,7 +2973,16 @@ public final class MathParser {
      */
     private static int textAccent(String s, int i, StringBuilder sb, Token t) {
         char accent = s.charAt(i + 1);
-        int k = i + 2;
+        return composeAccent("\\" + accent, TEXT_ACCENTS.get(accent), s, i + 2, sb, t);
+    }
+
+    /**
+     * The shared body of every text accent: {@code name} is the accent as typed (for the
+     * error), {@code table} its base-to-precomposed map, and {@code k} the index just past
+     * the accent command. Returns the index just past the base.
+     */
+    private static int composeAccent(String name, Map<Character, Character> table, String s,
+            int k, StringBuilder sb, Token t) {
         while (k < s.length() && s.charAt(k) == ' ') {
             k++;
         }
@@ -2948,13 +3005,13 @@ public final class MathParser {
         }
         if (base.length() != 1 || !isAsciiLetter(base.charAt(0))) {
             throw MathSyntaxException.unknownCommand(
-                "Unknown command in \\" + t.name() + ": \\" + accent
+                "Unknown command in \\" + t.name() + ": " + name
                     + " expects one letter to accent", t.offset());
         }
-        Character composed = TEXT_ACCENTS.get(accent).get(base.charAt(0));
+        Character composed = table.get(base.charAt(0));
         if (composed == null) {
             throw MathSyntaxException.unknownCommand(
-                "Unknown command in \\" + t.name() + ": \\" + accent + base
+                "Unknown command in \\" + t.name() + ": " + name + (isAsciiLetter(name.charAt(name.length() - 1)) ? "{" + base + "}" : base)
                     + " has no precomposed character", t.offset());
         }
         sb.append(composed.charValue());

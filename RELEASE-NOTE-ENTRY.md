@@ -27,3 +27,20 @@ below are kept verbatim as their branches wrote them.
 - Regenerated committed examples with the current renderer and runtime, including
   showcase and gallery specimen pages that had become stale on main. Their
   refreshed layout is independent of the lightning and storm knobs.
+
+
+### confluence/lattex-text-accents-and-commands
+
+- Commands a LaTeX author types for characters LatteX already draws are no longer
+  refused (plan 2d5a59ad, found by the crew's census of the showcase pages,
+  2026-11-25). Inside `\text` and its family: the accents spelled as control words,
+  double acute, caron, breve and cedilla (`\H{o}` is ő, `\v{C}` is Č), each composing to
+  its precomposed character from the Unicode canonical compositions (57 pairs; the
+  fourteen carons STIX Two Math does not draw are refused by name, never boxed); and
+  seventeen text symbols, `\S \P \ss \o \O \ae \AE \oe \OE \aa \AA \l \L \dag \ddag
+  \copyright \pounds`, with the spaces after a control word skipped as TeX does
+  (`Gro\ss e` is "Große"). In math: `\S` and `\P`; `\blacktriangleright` and
+  `\blacktriangleleft` (U+25B8 and U+25C2, relations, the filled partners of
+  `\triangleright` and `\triangleleft`); and `\lgroup` and `\rgroup` (U+27EE and
+  U+27EF) as symbols and as `\left`/`\right` delimiters. The command index grows
+  from 692 to 698. No existing render changes.

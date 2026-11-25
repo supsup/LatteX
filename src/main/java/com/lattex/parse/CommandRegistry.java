@@ -483,6 +483,8 @@ final class CommandRegistry {
             case "rfloor" -> OptionalInt.of(0x230B);
             case "lceil" -> OptionalInt.of(0x2308);
             case "rceil" -> OptionalInt.of(0x2309);
+            case "lgroup" -> OptionalInt.of(0x27EE);
+            case "rgroup" -> OptionalInt.of(0x27EF);
             // Arrows are TeX delimiters too (\big\downarrow in hand-drawn commutative
             // diagrams; plan fc988bc4); STIX Two Math gives each a vertical construction.
             case "uparrow" -> OptionalInt.of(0x2191);
