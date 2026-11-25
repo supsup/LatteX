@@ -49,8 +49,12 @@ below are kept verbatim as their branches wrote them.
   refused instead of silently taking the dotless letter (main took the built-in for `\i`).
   Spaces and an end of line after a text control word are skipped, as TeX skips them.
 - In math: `\blacktriangleright` and `\blacktriangleleft` (U+25B8 and U+25C2, relations,
-  the filled partners of `\triangleright` and `\triangleleft`; the code points and the
-  class follow this table's pairing and amssymb from memory, NOT checked at a source);
+  the filled partners of `\triangleright` and `\triangleleft`). Checked at the source
+  (Lattice): amssymb declares both `\mathrel`, with the same ink bounds in msam10.afm as
+  their unfilled `\vartriangle` partners, and the bundled small glyphs match
+  `\vartriangle`'s size; unicode-math instead maps them to the large U+25B6/U+25C0 as
+  ordinary symbols, and LatteX follows amssymb. A raw ▸ or ◂ deliberately takes the same
+  relation spacing (see below);
   and `\lgroup` and `\rgroup` (U+27EE and U+27EF) at their natural size. They cannot be
   stretched: `\left`, `\right` and the `\big` family refuse them, because the bundled
   font has no larger sizes of them.

@@ -541,9 +541,14 @@ final class Symbols {
         m.put("triangleright", new Sym(0x25B9, MathClass.BIN));   // ▹
         // amssymb's filled partners of the two above, at the same small size (U+25B8 and
         // U+25C2, BLACK RIGHT-/LEFT-POINTING SMALL TRIANGLE), and like amssymb's
-        // \vartriangleright they are relations. NOT CHECKED AT A SOURCE: the code points
-        // follow this table's own pairing for the white triangles, and the class is
-        // amssymb's from memory. Plan 2d5a59ad (lattex project).
+        // \vartriangleright they are relations. Checked at the source by Lattice
+        // (stafficy/35714): amssymb declares both \mathrel, at MSAM10 slots 0x49/0x4A, and
+        // msam10.afm gives them the same 611x579 ink bounds as their unfilled \vartriangle
+        // partners; in the bundled font U+25B8/U+25C2 are about 25.5x28.8 ink at 40 units/em,
+        // close to \vartriangle's 28.9x26.8 (the large U+25B6/U+25C0 are 42.4x48.0).
+        // unicode-math differs on purpose: it maps the commands to the LARGE triangles as
+        // ORD. This table follows amssymb's size and spacing. A raw small triangle
+        // deliberately gets this REL spacing too. Plan 2d5a59ad (lattex project).
         m.put("blacktriangleright", new Sym(0x25B8, MathClass.REL)); // ▸
         m.put("blacktriangleleft", new Sym(0x25C2, MathClass.REL));  // ◂
         m.put("barwedge", new Sym(0x22BC, MathClass.BIN));     // ⊼
