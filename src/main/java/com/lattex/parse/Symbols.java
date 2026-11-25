@@ -63,17 +63,73 @@ final class Symbols {
     private static final java.util.Set<String> CLASS_TAGGED_SPELLINGS = java.util.Set.of(
         "lVert", "rVert", "lhd", "rhd", "unlhd", "unrhd");
 
+    /**
+     * The class of a PASTED character whose remaining spellings disagree (plan a9dde3b4,
+     * lattex project). Before this, the class was whichever spelling {@code Map.copyOf}'s
+     * per-JVM iteration order met first, so 'a ⊥ b' gave two different SVGs from one jar
+     * (Fixpoint 35720, Lattice 35723). The choices are Unicode's own math class for the
+     * character, MathClass-15.txt (revision 15, 2017-06-01), read at the source:
+     * {@code 22A5;R}, {@code 25B3;B}, {@code 25BD;B}. Each named command keeps its own class
+     * ({@code \bot} Ord, {@code \perp} Rel; {@code \triangle} and {@code \triangledown} Ord,
+     * {@code \bigtriangleup} and {@code \bigtriangledown} Bin): this decides the paste only.
+     *
+     * <p>THE RULE (Fixpoint ruling, stafficy/35753): a pasted character takes the class of the
+     * command that names it. Unicode's MathClass file is only the tie-breaker for the code
+     * points that several commands name with different classes, where the two-output bug
+     * lived. A code point with one command keeps that command's class even where Unicode's
+     * file differs: the small black triangles U+25B8/U+25C2 are relations, as amssymb's
+     * commands are, though MathClass-15 says B.
+     */
+    static final Map<Integer, MathClass> RAW_CLASS_CHOICE = Map.of(
+        0x22A5, MathClass.REL,   // ⊥ UP TACK: MathClass-15 R (\perp's class)
+        0x25B3, MathClass.BIN,   // △ WHITE UP-POINTING TRIANGLE: B (\bigtriangleup's)
+        0x25BD, MathClass.BIN);  // ▽ WHITE DOWN-POINTING TRIANGLE: B (\bigtriangledown's)
+
     static {
-        CLASS_BY_CODEPOINT = buildClassByCodepoint();
+        CLASS_BY_CODEPOINT = buildClassByCodepoint(SYMBOLS, CLASS_TAGGED_SPELLINGS, RAW_CLASS_CHOICE);
     }
 
-    private static Map<Integer, MathClass> buildClassByCodepoint() {
-        Map<Integer, MathClass> m = new java.util.HashMap<>();
-        for (Map.Entry<String, Sym> e : SYMBOLS.entrySet()) {
+    /**
+     * The class of each pasted non-ASCII character, independent of the table's iteration
+     * order: a code point all of whose remaining spellings agree takes that class; one whose
+     * spellings disagree takes its entry in {@code choice}, and with no entry the table does
+     * not build (an {@link IllegalStateException} at class initialisation, which every test
+     * meets), so a future conflicting pair cannot be decided by iteration order again. A
+     * choice for a code point whose spellings agree is refused too, so no entry goes stale.
+     * Package-private for SymbolsRawClassTest.
+     */
+    static Map<Integer, MathClass> buildClassByCodepoint(Map<String, Sym> symbols, java.util.Set<String> tagged,
+            Map<Integer, MathClass> choice) {
+        Map<Integer, java.util.EnumSet<MathClass>> classes = new java.util.TreeMap<>();
+        for (Map.Entry<String, Sym> e : symbols.entrySet()) {
             Sym s = e.getValue();
             if (s.codePoint() > 0x7F // non-ASCII only; ASCII is the classify() switch's job
-                    && !CLASS_TAGGED_SPELLINGS.contains(e.getKey())) {
-                m.putIfAbsent(s.codePoint(), s.mathClass());
+                    && !tagged.contains(e.getKey())) {
+                classes.computeIfAbsent(s.codePoint(), k -> java.util.EnumSet.noneOf(MathClass.class)).add(s.mathClass());
+            }
+        }
+        // every choice must answer a real conflict: a choice whose spellings now agree, or whose
+        // last remaining spelling was removed, is stale (Lattice review of 132bd1e)
+        for (int cp : choice.keySet()) {
+            java.util.EnumSet<MathClass> c = classes.get(cp);
+            if (c == null || c.size() < 2) {
+                throw new IllegalStateException(String.format(
+                    "raw-class choice for U+%04X, which has %s: remove the stale entry", cp,
+                    c == null ? "no remaining spelling" : "spellings that all agree (" + c + ")"));
+            }
+        }
+        Map<Integer, MathClass> m = new java.util.HashMap<>();
+        for (Map.Entry<Integer, java.util.EnumSet<MathClass>> e : classes.entrySet()) {
+            int cp = e.getKey();
+            if (e.getValue().size() == 1) {
+                m.put(cp, e.getValue().iterator().next());
+            } else {
+                MathClass chosen = choice.get(cp);
+                if (chosen == null) {
+                    throw new IllegalStateException(String.format(
+                        "U+%04X has spellings of classes %s and no raw-class choice: add one, from a source", cp, e.getValue()));
+                }
+                m.put(cp, chosen);
             }
         }
         return Map.copyOf(m);

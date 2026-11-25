@@ -540,6 +540,12 @@ sets `LATTEX_REQUIRE_BROWSER=1` so browser absence fails instead of silently
 reducing coverage. See [CONTRIBUTING.md](CONTRIBUTING.md#build--test) for the
 full test-gate contract.
 
+**JDK security note (November 2026).** [CVE-2026-114938](https://nvd.nist.gov/vuln/detail/CVE-2026-114938)
+is a flaw in the JVM itself: HotSpot's Base64 decoder on x86-64 processors with AVX-512 VBMI, in
+JDK 17.0.6 and later (ARM64 is not affected). LatteX never calls Base64, so its input cannot
+reach that code, but run it on a JDK that carries the fix: 25.0.5.1 or later (17.0.21.1 and
+21.0.13.1 on the older lines).
+
 ## License
 
 - **Code:** [Apache-2.0](LICENSE).

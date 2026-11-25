@@ -110,6 +110,23 @@ below are kept verbatim as their branches wrote them.
   `RenderOptions.strictGlyphs()`, the 8-argument `RenderOptions` constructor (the
   7-argument one is kept), and `LatteX.MISSING_GLYPH_MARK`.
 
+### confluence/lattex-raw-class-deterministic
+
+- A pasted ⊥, △ or ▽ now has one class in every run (plan a9dde3b4; found by Fixpoint's and
+  Lattice's readers, stafficy/35720 and 35723). Two spellings of different classes share
+  each of these code points, and the class of the pasted character was whichever the symbol
+  table's per-JVM iteration order met first, so 'a ⊥ b' gave two different SVGs from one
+  jar (16 fresh JVMs on main: widths 72.36 and 94.5822, 8 each). The pasted characters now
+  take Unicode's own math class (MathClass-15.txt: U+22A5 relation, U+25B3 and U+25BD
+  binary), so a raw ⊥ spaces as `\perp`, a raw △ as `\bigtriangleup`, a raw ▽ as
+  `\bigtriangledown`; every named command keeps its own class (`\bot`, `\triangle` and
+  `\triangledown` stay ordinary). The rule stays the one on main: a pasted character takes
+  the class of the command that names it, and Unicode's file is only the tie-breaker where
+  several commands name one code point with different classes (so the small black
+  triangles ▸ ◂, one command each, stay relations, though MathClass-15 says binary). The
+  symbol table now refuses to build if a future pair of spellings disagrees with no sourced
+  choice, or if a choice goes stale (its spellings agree, or none remains).
+
 ### confluence/lattex-aria-numbers-and-marks
 
 - Accessibility labels read numbers as numbers (plan fd362dd3; repros from the crew's
