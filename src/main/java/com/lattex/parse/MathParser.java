@@ -345,13 +345,115 @@ public final class MathParser {
                 }
                 default -> {
                     int cp = s.codePointAt(i);
-                    out.add(Token.ch(cp, start));
-                    i += Character.charCount(cp);
+                    int end = scriptRun(s, i, out, start);
+                    if (end > i) {
+                        i = end;
+                    } else {
+                        out.add(Token.ch(cp, start));
+                        i += Character.charCount(cp);
+                    }
                 }
             }
         }
         out.add(Token.special(Kind.EOF, n));
         return out;
+    }
+
+    /**
+     * Unicode's superscript and subscript characters: every code point in U+00A0-U+2DFF
+     * whose decomposition is ONE character tagged {@code <super>} or {@code <sub>}, 163 in
+     * all. Each entry is the code point, {@code ^} or {@code _}, the base character, and
+     * {@code !} when the bundled font has no glyph for the character itself but does draw
+     * its base (103 of them; pinned against the font by ScriptLetterRewriteTest). Derived
+     * from the Unicode Character Database decompositions. Plan 14579fe4 (lattex project).
+     */
+    private static final String SCRIPT_TABLE =
+        "00AA^0061 00B2^0032 00B3^0033 00B9^0031 00BA^006F 02B0^0068 02B1^0266 02B2^006A "
+        + "02B3^0072 02B4^0279 02B5^027B 02B6^0281 02B7^0077 02B8^0079 02E0^0263 02E1^006C "
+        + "02E2^0073 02E3^0078 02E4^0295 10FC^10DC 1D2C^0041! 1D2D^00C6! 1D2E^0042! 1D30^0044! "
+        + "1D31^0045! 1D32^018E 1D33^0047! 1D34^0048! 1D35^0049! 1D36^004A! 1D37^004B! 1D38^004C! "
+        + "1D39^004D! 1D3A^004E! 1D3C^004F! 1D3D^0222 1D3E^0050! 1D3F^0052! 1D40^0054! 1D41^0055! "
+        + "1D42^0057! 1D43^0061! 1D44^0250! 1D45^0251! 1D46^1D02 1D47^0062! 1D48^0064! 1D49^0065! "
+        + "1D4A^0259! 1D4B^025B! 1D4C^025C! 1D4D^0067! 1D4F^006B! 1D50^006D! 1D51^014B! 1D52^006F! "
+        + "1D53^0254! 1D54^1D16 1D55^1D17 1D56^0070! 1D57^0074! 1D58^0075! 1D59^1D1D 1D5A^026F! "
+        + "1D5B^0076! 1D5C^1D25 1D5D^03B2! 1D5E^03B3! 1D5F^03B4! 1D60^03C6! 1D61^03C7! 1D62_0069! "
+        + "1D63_0072! 1D64_0075! 1D65_0076! 1D66_03B2! 1D67_03B3! 1D68_03C1! 1D69_03C6! 1D6A_03C7! "
+        + "1D78^043D! 1D9B^0252 1D9C^0063! 1D9D^0255! 1D9E^00F0! 1D9F^025C! 1DA0^0066! 1DA1^025F! "
+        + "1DA2^0261! 1DA3^0265 1DA4^0268! 1DA5^0269! 1DA6^026A! 1DA7^1D7B 1DA8^029D! 1DA9^026D! "
+        + "1DAA^1D85! 1DAB^029F! 1DAC^0271! 1DAD^0270! 1DAE^0272! 1DAF^0273! 1DB0^0274! 1DB1^0275! "
+        + "1DB2^0278! 1DB3^0282! 1DB4^0283! 1DB5^01AB! 1DB6^0289! 1DB7^028A! 1DB8^1D1C! 1DB9^028B! "
+        + "1DBA^028C! 1DBB^007A! 1DBC^0290! 1DBD^0291! 1DBE^0292! 1DBF^03B8! 2070^0030 2071^0069 "
+        + "2074^0034 2075^0035 2076^0036 2077^0037 2078^0038 2079^0039 207A^002B 207B^2212 "
+        + "207C^003D 207D^0028 207E^0029 207F^006E 2080_0030 2081_0031 2082_0032 2083_0033 "
+        + "2084_0034 2085_0035 2086_0036 2087_0037 2088_0038 2089_0039 208A_002B 208B_2212 "
+        + "208C_003D 208D_0028 208E_0029 2090_0061! 2091_0065! 2092_006F! 2093_0078! 2094_0259! "
+        + "2095_0068! 2096_006B! 2097_006C! 2098_006D! 2099_006E! 209A_0070! 209B_0073! 209C_0074! "
+        + "2C7C_006A! 2C7D^0056! 2D6F^2D61 ";
+
+    /**
+     * Name carried by a script token that {@link #scriptRun} made from a Unicode script
+     * character: where the parser finds no nucleus for it (at the start, after an opening
+     * brace, a \\left delimiter or a cell break), it attaches to an empty base, as
+     * {@code {}_{i}} does, instead of failing. A typed {@code _} still fails there.
+     */
+    static final String UNICODE_SCRIPT = "unicode-script";
+
+    /** code point -> {kind (0 sup, 1 sub), base code point, 1 if the font lacks it}. */
+    static final Map<Integer, int[]> SCRIPT_CHARS = parseScriptTable(SCRIPT_TABLE); // package-private: pinned by ScriptLetterRewriteTest
+
+    private static Map<Integer, int[]> parseScriptTable(String table) {
+        Map<Integer, int[]> m = new java.util.HashMap<>();
+        for (String e : table.trim().split(" +")) {
+            int k = e.indexOf('^') >= 0 ? e.indexOf('^') : e.indexOf('_');
+            boolean lacks = e.endsWith("!");
+            int cp = Integer.parseInt(e.substring(0, k), 16);
+            int base = Integer.parseInt(e.substring(k + 1, lacks ? e.length() - 1 : e.length()), 16);
+            m.put(cp, new int[] {e.charAt(k) == '^' ? 0 : 1, base, lacks ? 1 : 0});
+        }
+        return Map.copyOf(m);
+    }
+
+    /**
+     * A run of Unicode script characters of ONE kind (all superscript or all subscript)
+     * becomes one real script of their base characters, {@code ^{...}} or {@code _{...}},
+     * when the run holds any character the bundled font cannot draw: so x followed by
+     * subscript i sets exactly as {@code x_{i}}, two subscript letters in a row as one
+     * subscript of two letters, and a script digit in such a run moves with the letters,
+     * at one size and height. A run the font draws whole (x followed by superscript two)
+     * is left as the font's own glyphs, exactly as before, and with nothing before it the
+     * script attaches to an empty base as {@code _{i}} does. Returns the index just past
+     * the run when it was rewritten, else {@code i}. Plan 14579fe4 (lattex project),
+     * ruling stafficy/35638: the alternative, a .notdef box with a success exit, drew
+     * the missing-glyph box in visible authored math.
+     */
+    private static int scriptRun(String s, int i, List<Token> out, int start) {
+        int[] first = SCRIPT_CHARS.get(s.codePointAt(i));
+        if (first == null) {
+            return i;
+        }
+        List<Integer> bases = new ArrayList<>();
+        boolean rewrite = false;
+        int j = i;
+        while (j < s.length()) {
+            int cp = s.codePointAt(j);
+            int[] e = SCRIPT_CHARS.get(cp);
+            if (e == null || e[0] != first[0]) {
+                break;
+            }
+            bases.add(e[1]);
+            rewrite |= e[2] == 1;
+            j += Character.charCount(cp);
+        }
+        if (!rewrite) {
+            return i;
+        }
+        out.add(new Token(first[0] == 0 ? Kind.SUP : Kind.SUB, 0, UNICODE_SCRIPT, null, start));
+        out.add(Token.special(Kind.LBRACE, start));
+        for (int b : bases) {
+            out.add(Token.ch(b, start));
+        }
+        out.add(Token.special(Kind.RBRACE, start));
+        return j;
     }
 
     private static boolean isAsciiLetter(char c) {
@@ -1702,10 +1804,14 @@ public final class MathParser {
                 yield textWithNestedMath(t);
             }
             case COMMAND -> parseCommand();
-            case SUP -> throw new MathSyntaxException(
-                "Unexpected '^': no nucleus to attach a superscript to");
-            case SUB -> throw new MathSyntaxException(
-                "Unexpected '_': no nucleus to attach a subscript to");
+            case SUP, SUB -> {
+                if (UNICODE_SCRIPT.equals(t.name())) {
+                    yield wrap(List.of()); // an empty base; the script itself is parsed next
+                }
+                throw new MathSyntaxException(t.kind() == Kind.SUP
+                    ? "Unexpected '^': no nucleus to attach a superscript to"
+                    : "Unexpected '_': no nucleus to attach a subscript to");
+            }
             case RBRACE -> throw new MathSyntaxException("Unexpected '}' (unbalanced brace)");
             case EOF -> throw new MathSyntaxException("Unexpected end of input (expected an atom)");
         };

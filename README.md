@@ -90,6 +90,32 @@ This is a host-only switch: source authors cannot enable or disable it through
 `\lx[...]`. The original overload, throwing render methods, CLI, and Docker
 worker all retain their previous defaults and behavior.
 
+## Missing glyphs: the mark, the warning, and `strictGlyphs`
+
+A character the bundled font has no glyph for is still drawn, as the font's
+missing-glyph box, so no host loses a formula over one stray character (plan
+a1866884). It is no longer silent. Three faces of one condition, which always agree
+(pinned by `MissingGlyphMarkTest`):
+
+- **The SVG says so.** Its `aria-label` ends with ` (missing glyph: U+XXXX, U+YYYY)`:
+  the code points in order of first appearance, each once, at most eight, then
+  `, +N more`. A caller tests for the exact substring `(missing glyph: U+`
+  (`SvgEmitter.MISSING_GLYPH_MARK`). A clean render never contains it: author text that
+  spells it (a `\text{...}` label, say) gets a zero-width space U+200B after the word
+  "glyph", which a screen reader does not voice and which breaks the match. The mark is
+  text of the one `aria-label` the root already carries, inside the emitter's minimal
+  subset (CONTRIBUTING section 5).
+- **The CLI says so.** `lattex: warning: no glyph for U+XXXX (drawn as a box)` on stderr
+  (in `--batch`, `lattex: warning: record N: ...`, N counting from 1), the SVG still
+  written, and exit status 3.
+- **A host can refuse it.** `RenderOptions.withStrictGlyphs(true)` makes `render` throw
+  and `renderWithDiagnostics` return `UNSUPPORTED_CONSTRUCT` with no SVG; the CLI flag
+  `--strict-glyphs` makes it an error (exit 1, or an error record in `--batch`).
+
+Unicode's superscript and subscript letters are not affected: where the font lacks one
+and draws its base letter, the parser sets it as a real script (x followed by subscript
+i is exactly `x_{i}`), so none of those draw a box at all.
+
 ## Docker: one-shot CLI or watched folders
 
 The repository ships one Java 25 image with two explicit modes. `cli` preserves

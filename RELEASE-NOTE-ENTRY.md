@@ -64,3 +64,19 @@ below are kept verbatim as their branches wrote them.
   raw U+27EE / U+27EF an opening / closing bracket, because a raw character takes its
   class from the symbol table (`a ▸ b` is spaced as a relation; in `⟮ - x ⟯` the minus is
   now unary). The command index grows from 692 to 696.
+
+### confluence/lattex-unmapped-glyph-loud
+
+- No character is drawn as the missing-glyph box in silence any more (plan 14579fe4,
+  rulings stafficy/35638 and 35665; found by the crew's census of the showcase pages,
+  2026-11-25, where x with subscript i, j, u or v drew boxes with exit 0). Unicode's
+  superscript and subscript characters (163, every one-character `<super>`/`<sub>`
+  decomposition in U+00A0-U+2DFF) are read in math: a run of one kind that holds a
+  character the font lacks, but whose base it draws (103 of them), becomes one real
+  script of the base letters (`xᵢⱼ` is `x_{ij}`; a script digit in such a run moves with
+  it; at the start, after `{`, a `\left` delimiter or a cell break it attaches to an empty
+  base). A run the font draws whole (`x²`) renders exactly as before. Where a box is
+  still drawn, the SVG's aria-label ends with ` (missing glyph: U+XXXX)`, the CLI warns
+  on stderr and exits 3, and `RenderOptions.withStrictGlyphs(true)` / `--strict-glyphs`
+  make it a failure; plan a1866884's lenient default stands. Existing clean renders are
+  unchanged.

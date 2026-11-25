@@ -246,6 +246,13 @@ public final class LatteX {
             String svg = SvgEmitter.emit(
                 layout, font, describe(body), style.color(), opts.fluid());
             String unmapped = unmappedReport(layout);
+            if (!unmapped.isEmpty() && opts.strictGlyphs()) {
+                // Plan 14579fe4: the host opted in to strictness, so the condition plan
+                // a1866884 keeps non-fatal by default is a failure here, with no SVG.
+                return new RenderResult("", new Diagnostics(Outcome.UNSUPPORTED_CONSTRUCT, "layout",
+                    "the font has no glyph for " + unmapped + " (strictGlyphs)",
+                    -1, "unmapped-glyph:" + unmapped, -1, ""));
+            }
             if (!unmapped.isEmpty()) {
                 // Non-fatal by construction: outcome stays OK so the host's renderErrors()
                 // gate cannot swap this SVG for an error card. A doc build must not lose a
@@ -379,7 +386,15 @@ public final class LatteX {
             // fluid is a HOST flag (like interactiveExpansion): it reads from the
             // caller's opts even when a \lx wrapper overrides the styling, and it is
             // NOT part of the \lx sub-language — an author can never turn it on.
-            return SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
+            if (opts.strictGlyphs()) {
+                String unmapped = unmappedReport(layout);
+                if (!unmapped.isEmpty()) {
+                    // Plan 14579fe4: the host asked for strictness, so the box is a failure.
+                    throw new MathSyntaxException("the font has no glyph for " + unmapped + " (strictGlyphs)");
+                }
+            }
+            return svg;
         });
     }
 
