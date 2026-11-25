@@ -168,6 +168,13 @@ class AriaNumbersAndMarksTest {
         // a point left at the end of a split number is its own word, as the command form reads it
         reads("0 . bar over 3", "0.3\u0304", "0.\\bar{3}");
         reads("1 . bar over 5", "1.5\u0304");
+        // Lattice 1752: a decimal or grouped number in a SCRIPT splits the same way, each pinned
+        // against its explicit last-digit accent control
+        reads("x to the power of 0 . bar over 5", "x^{0.5}\u0304", "x^{0.\\bar{5}}");
+        reads("x sub 0 . bar over 5", "x_{0.5}\u0304", "x_{0.\\bar{5}}");
+        reads("x to the power of 4,37 bar over 2", "x^{4{,}372}\u0304", "x^{4{,}37\\bar{2}}");
+        reads("x to the power of 1.2 bar over 5", "x^{1.25}\u0304", "x^{1.2\\bar{5}}");
+        reads("x to the power of . bar over 5", "x^{.5}\u0304", "x^{.\\bar{5}}");
     }
 
     @Test

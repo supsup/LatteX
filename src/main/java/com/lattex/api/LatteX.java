@@ -1392,7 +1392,9 @@ public final class LatteX {
         }
 
         /** The words with the marks over their LAST character, as drawn: "23" with a bar is
-         *  "2 bar over 3". Later marks are outer, as for a word. */
+         *  "2 bar over 3". A number keeps the rest of itself as one word, and a point or comma
+         *  left at its end is its own word, as the row reads 0.\bar{3} (Lattice 1752): "0.5"
+         *  with a bar is "0 . bar over 5", "4,372" is "4,37 bar over 2". Later marks are outer. */
         private static void withMarks(StringBuilder out, String words, List<String> marks) {
             if (marks.isEmpty()) {
                 out.append(words);
@@ -1401,9 +1403,18 @@ public final class LatteX {
             int sp = words.lastIndexOf(' ');
             String head = words.substring(0, sp + 1);
             String last = words.substring(sp + 1);
-            if (last.codePointCount(0, last.length()) > 1 && last.codePoints().allMatch(Character::isDigit)) {
+            if (isNumberWord(last)) {
                 int k = last.offsetByCodePoints(last.length(), -1);
-                head = head + last.substring(0, k) + " ";
+                String rest = last.substring(0, k);
+                char end = rest.charAt(rest.length() - 1);
+                if (end == '.' || end == ',') {
+                    if (rest.length() > 1) {
+                        head = head + rest.substring(0, rest.length() - 1) + " ";
+                    }
+                    head = head + end + " ";
+                } else {
+                    head = head + rest + " ";
+                }
                 last = last.substring(k);
             }
             out.append(head);
@@ -1412,6 +1423,16 @@ public final class LatteX {
             }
             out.append(last);
         }
+    }
+
+    /** A word the number builder made: more than one character, ending in a digit, of digits
+     *  and the points and grouping commas it joins (".5" and "1.5.2" included). */
+    private static boolean isNumberWord(String w) {
+        int count = w.codePointCount(0, w.length());
+        if (count < 2 || !Character.isDigit(w.codePointBefore(w.length()))) {
+            return false;
+        }
+        return w.codePoints().allMatch(c -> Character.isDigit(c) || c == '.' || c == ',');
     }
 
     /** A script run with no base in front of it, read whole: "superscript 235", "subscript 12". */
