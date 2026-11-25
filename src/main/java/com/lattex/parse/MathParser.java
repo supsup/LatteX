@@ -2865,9 +2865,9 @@ public final class MathParser {
                 }
                 if (TEXT_WORD_SYMBOLS.containsKey(word) && !isUserMacro(word)) {
                     sb.append(TEXT_WORD_SYMBOLS.get(word));
-                    // TeX skips the spaces after a control word (TeXbook ch. 3), so
-                    // Gro\ss e is "Große" and \S 3 is "§3".
-                    while (j < s.length() && s.charAt(j) == ' ') {
+                    // TeX skips the spaces after a control word, an end of line included
+                    // (TeXbook ch. 3 and 8), so Gro\ss e is "Große".
+                    while (j < s.length() && isWhitespace(s.charAt(j))) {
                         j++;
                     }
                     i = j - 1;
@@ -3014,7 +3014,8 @@ public final class MathParser {
      */
     private static int composeAccent(String name, Map<Character, Character> table, String s,
             int k, StringBuilder sb, Token t) {
-        while (k < s.length() && s.charAt(k) == ' ') {
+        // an accent's argument is found past spaces and an end of line, as TeX scans it
+        while (k < s.length() && isWhitespace(s.charAt(k))) {
             k++;
         }
         String base;
@@ -3027,12 +3028,25 @@ public final class MathParser {
             base = k < s.length() ? s.substring(k, k + 1) : "";
             end = k + 1;
         }
+        String dotless = null;
         if (base.equals("\\i") || base.equals("\\j")) {
-            base = base.substring(1);
+            dotless = base.substring(1);
         } else if (k < s.length() && s.charAt(k) == '\\' && (s.startsWith("\\i", k) || s.startsWith("\\j", k))
                 && (k + 2 >= s.length() || !isAsciiLetter(s.charAt(k + 2)))) {
-            base = s.substring(k + 1, k + 2); // bare \'\i or \v\j, as their braced forms
+            dotless = s.substring(k + 1, k + 2); // bare \'\i or \v\j, as their braced forms
             end = k + 2;
+        }
+        if (dotless != null) {
+            // A user who has defined \i or \j meant their macro, not the dotless letter, so the
+            // accent on it is refused rather than silently taking the built-in (Fixpoint
+            // re-review of 9c1686c; this changes main's behaviour for a user-defined \i).
+            if (isUserMacro(dotless)) {
+                throw MathSyntaxException.unknownCommand(
+                    "Unknown command in \\" + t.name() + ": " + name + " on \\" + dotless
+                        + ", which is a user macro here — commands are not expanded in text; wrap math in $...$",
+                    t.offset());
+            }
+            base = dotless;
         }
         if (base.length() != 1 || !isAsciiLetter(base.charAt(0))) {
             throw MathSyntaxException.unknownCommand(

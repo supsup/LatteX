@@ -89,6 +89,37 @@ class TextLetterAccentsAndSymbolsTest {
         assertEquals(57, composed, "the four letter-accent tables, pinned (4 + 19 + 12 + 22)");
     }
 
+    @Test
+    void aBareDotlessJNowWorksForTheOldAccentsToo() {
+        // Fixpoint re-review of 9c1686c: refused on main ('expects one letter'), now as \^{\j}
+        assertEquals(pp("\\text{\\^{\\j}}"), pp("\\text{\\^\\j}"));
+        assertEquals("Txt[ROMAN](ĵ)", pp("\\text{\\^\\j}"));
+    }
+
+    @Test
+    void aUserDefinedDotlessBaseIsRefusedNotTakenAsTheBuiltIn() {
+        for (String src : new String[] {"\\newcommand{\\j}{x} \\text{\\^\\j}", "\\newcommand{\\j}{x} \\text{\\^{\\j}}",
+                "\\newcommand{\\i}{x} \\text{\\'\\i}", "\\newcommand{\\i}{x} \\text{\\v{\\i}}"}) {
+            MathSyntaxException e = assertThrows(MathSyntaxException.class, () -> MathParser.parse(src));
+            assertTrue(e.getMessage().contains("which is a user macro here"), src + ": " + e.getMessage());
+        }
+        assertEquals("Txt[ROMAN](í)", pp("\\text{\\'\\i}"), "without the macro, the dotless i as before");
+    }
+
+    @Test
+    void anOldAccentTheFontCannotDrawNamesTheCodePoint() {
+        MathSyntaxException e = assertThrows(MathSyntaxException.class, () -> MathParser.parse("\\text{\\'G}"));
+        assertTrue(e.getMessage().contains("\\'G is not drawn: the bundled font has no glyph for its precomposed character U+01F4"),
+            e.getMessage());
+    }
+
+    @Test
+    void aNewlineAfterAControlWordIsSkippedLikeASpace() {
+        assertEquals("Txt[ROMAN](Große)", pp("\\text{Gro\\ss\ne}"));
+        assertEquals("Txt[ROMAN](Čech)", pp("\\text{\\v\nCech}"), "a letter accent's argument past an end of line");
+        assertEquals("Txt[ROMAN](é)", pp("\\text{\\'\ne}"), "and an old accent's, refused on main");
+    }
+
     // ---- text-mode word symbols ---------------------------------------------------------
 
     private static final Map<String, Character> WORDS = Map.ofEntries(
@@ -149,6 +180,8 @@ class TextLetterAccentsAndSymbolsTest {
         // triangle was ordinary and the group brackets ordinary, so the minus was binary; now
         // the triangle is a relation and the brackets open and close.
         assertEquals("L(A(a,ORD) A(U+25B8,REL) A(b,ORD))", pp("a ▸ b"));
+        assertEquals("L(A(a,ORD) A(U+25C2,REL) A(b,ORD))", pp("a ◂ b"));
+        assertEquals(LatteX.render("a ◂ b"), LatteX.render("a \\blacktriangleleft b"));
         assertEquals(LatteX.render("a ▸ b"), LatteX.render("a \\blacktriangleright b"));
         assertEquals(pp("\\lgroup - x \\rgroup"), pp("⟮ - x ⟯"));
         assertTrue(pp("⟮ - x ⟯").startsWith("L(A(U+27EE,OPEN)"), pp("⟮ - x ⟯"));

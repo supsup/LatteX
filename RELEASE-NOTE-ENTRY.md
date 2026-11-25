@@ -42,6 +42,12 @@ below are kept verbatim as their branches wrote them.
   TeX does (`Gro\ss e` is "Große"). A text word the user has defined as a macro is not
   decoded: it stays refused, as before. `\S` and `\P` are deliberately NOT added (they
   are among the commonest user macros; the raw characters draw).
+- Two changes to the OLD five accents too: a bare `\j` is now a base, as `\i` was
+  (`\^\j` is ĵ; refused on main), and a refusal now says which reason holds (the font
+  lacks the precomposed character, naming it, or Unicode has none). **Behaviour change:**
+  when the user has defined `\i` or `\j` as a macro, an accent on it inside `\text` is
+  refused instead of silently taking the dotless letter (main took the built-in for `\i`).
+  Spaces and an end of line after a text control word are skipped, as TeX skips them.
 - In math: `\blacktriangleright` and `\blacktriangleleft` (U+25B8 and U+25C2, relations,
   the filled partners of `\triangleright` and `\triangleleft`; the code points and the
   class follow this table's pairing and amssymb from memory, NOT checked at a source);
