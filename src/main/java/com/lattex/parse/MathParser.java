@@ -1243,17 +1243,13 @@ public final class MathParser {
      */
     private MathNode parseStackLabel(MathNode.Stack st) {
         MathNode.Stack out = st;
-        MathNode.Stack snap = null; // the label state before the last attached cluster
-        int clusterAt = -1;
         while (true) {
             Kind k = peek().kind();
             if (isUnicodeScript(peek())) {
                 boolean[] kinds = clusterKinds(p);
-                if ((kinds[0] && out.above() != null) || (kinds[1] && out.below() != null)) {
+                if ((kinds[0] && out.above() != null) || (kinds[1] && out.below() != null) || typedScriptFollows(p)) {
                     break;
                 }
-                clusterAt = p;
-                snap = out;
                 MathNode[] c = takeCluster();
                 if (c[0] != null) {
                     out = out.withAbove(c[0]);
@@ -1263,22 +1259,12 @@ public final class MathParser {
                 }
             } else if (k == Kind.SUP) {
                 if (out.above() != null) {
-                    if (clusterAt >= 0) {
-                        p = clusterAt;
-                        out = snap;
-                        break;
-                    }
                     throw new MathSyntaxException("Double superscript on \\" + braceCommand(st));
                 }
                 next();
                 out = out.withAbove(parseScriptArg("brace label"));
             } else if (k == Kind.SUB) {
                 if (out.below() != null) {
-                    if (clusterAt >= 0) {
-                        p = clusterAt;
-                        out = snap;
-                        break;
-                    }
                     throw new MathSyntaxException("Double subscript on \\" + braceCommand(st));
                 }
                 next();
@@ -1308,23 +1294,13 @@ public final class MathParser {
         List<MathNode> supItems = new ArrayList<>();
         boolean explicitSup = false;
         MathNode sub = null;
-        // The state before the last rewritten Unicode-script cluster that attached here, so a
-        // later collision rewinds it (see takeCluster). -1: none attached.
-        int clusterAt = -1;
-        int snapSup = 0;
-        boolean snapExplicit = false;
-        MathNode snapSub = null;
         while (true) {
             Kind k = peek().kind();
             if (isUnicodeScript(peek())) {
                 boolean[] kinds = clusterKinds(p);
-                if ((kinds[0] && explicitSup) || (kinds[1] && sub != null)) {
-                    break; // a script of its kind is already here: the cluster is its own nucleus
+                if ((kinds[0] && explicitSup) || (kinds[1] && sub != null) || typedScriptFollows(p)) {
+                    break; // the cluster is its own nucleus (see typedScriptFollows)
                 }
-                clusterAt = p;
-                snapSup = supItems.size();
-                snapExplicit = explicitSup;
-                snapSub = sub;
                 MathNode[] c = takeCluster();
                 if (c[0] != null) {
                     supItems.add(c[0]);
@@ -1338,15 +1314,6 @@ public final class MathParser {
                 supItems.add(new Atom(0x2032, MathClass.ORD));
             } else if (k == Kind.SUP) {
                 if (explicitSup) {
-                    if (clusterAt >= 0) {
-                        // the rewrite only improves: on main the cluster's raw character was a
-                        // nucleus that took this script, so rewind and let it be one again
-                        p = clusterAt;
-                        supItems.subList(snapSup, supItems.size()).clear();
-                        explicitSup = snapExplicit;
-                        sub = snapSub;
-                        break;
-                    }
                     throw new MathSyntaxException("Double superscript ('^' after '^')");
                 }
                 next();
@@ -1354,13 +1321,6 @@ public final class MathParser {
                 supItems.add(parseScriptArg("superscript"));
             } else if (k == Kind.SUB) {
                 if (sub != null) {
-                    if (clusterAt >= 0) {
-                        p = clusterAt;
-                        supItems.subList(snapSup, supItems.size()).clear();
-                        explicitSup = snapExplicit;
-                        sub = snapSub;
-                        break;
-                    }
                     throw new MathSyntaxException("Double subscript ('_' after '_')");
                 }
                 next();
@@ -1393,21 +1353,13 @@ public final class MathParser {
         List<MathNode> upperItems = new ArrayList<>();
         boolean explicitUpper = false;
         MathNode lower = null;
-        int clusterAt = -1; // as in parseScripts: the state before the last attached cluster
-        int snapUpper = 0;
-        boolean snapExplicit = false;
-        MathNode snapLower = null;
         while (true) {
             Kind k = peek().kind();
             if (isUnicodeScript(peek())) {
                 boolean[] kinds = clusterKinds(p);
-                if ((kinds[0] && explicitUpper) || (kinds[1] && lower != null)) {
+                if ((kinds[0] && explicitUpper) || (kinds[1] && lower != null) || typedScriptFollows(p)) {
                     break;
                 }
-                clusterAt = p;
-                snapUpper = upperItems.size();
-                snapExplicit = explicitUpper;
-                snapLower = lower;
                 MathNode[] c = takeCluster();
                 if (c[0] != null) {
                     upperItems.add(c[0]);
@@ -1421,13 +1373,6 @@ public final class MathParser {
                 upperItems.add(new Atom(0x2032, MathClass.ORD));
             } else if (k == Kind.SUP) {
                 if (explicitUpper) {
-                    if (clusterAt >= 0) {
-                        p = clusterAt;
-                        upperItems.subList(snapUpper, upperItems.size()).clear();
-                        explicitUpper = snapExplicit;
-                        lower = snapLower;
-                        break;
-                    }
                     throw new MathSyntaxException("Double superscript on operator");
                 }
                 next();
@@ -1435,13 +1380,6 @@ public final class MathParser {
                 upperItems.add(parseScriptArg("upper limit"));
             } else if (k == Kind.SUB) {
                 if (lower != null) {
-                    if (clusterAt >= 0) {
-                        p = clusterAt;
-                        upperItems.subList(snapUpper, upperItems.size()).clear();
-                        explicitUpper = snapExplicit;
-                        lower = snapLower;
-                        break;
-                    }
                     throw new MathSyntaxException("Double subscript on operator");
                 }
                 next();
@@ -1597,13 +1535,26 @@ public final class MathParser {
     }
 
     /**
+     * Whether a typed {@code ^}, {@code _} or prime follows the cluster at {@code q} directly.
+     *
+     * <p>THE ATTACH RULE, decided before any script argument is parsed: a cluster attaches to
+     * the nucleus before it unless that nucleus already has a script of a kind the cluster
+     * carries, or a typed script follows the cluster; in either case the cluster is its own
+     * nucleus ({@link #unicodeScriptNucleus}), which takes those typed scripts, as its raw
+     * character did on main. One token of lookahead and no rewind: a rewind would discard
+     * parsed arguments, and nested clusters would re-parse them (Lattice review of c3c9e60,
+     * stafficy/35743). The rule exists so the rewrite may only improve: any input main
+     * renders, this renders (Fixpoint review of 6160f84).
+     */
+    private boolean typedScriptFollows(int q) {
+        Token after = tokens.get(clusterEnd(q));
+        return ((after.kind() == Kind.SUP || after.kind() == Kind.SUB) && !isUnicodeScript(after))
+            || (after.kind() == Kind.CHAR && after.codePoint() == '\'');
+    }
+
+    /**
      * Consumes the rewritten cluster at the cursor: {superscript, subscript}, its superscript
-     * characters as one script and its subscript characters as another, either null. Where
-     * a script loop attaches it and a later script collides with what is there, the loop
-     * rewinds to the cluster and stops, and the cluster becomes the next nucleus
-     * ({@link #unicodeScriptNucleus}), which then takes that script, as its raw character
-     * did on main. THE RULE (Fixpoint review of 6160f84, Lattice review of b608ecd): the
-     * rewrite may only improve; any input main renders, this renders.
+     * characters as one script and its subscript characters as another, either null.
      */
     private MathNode[] takeCluster() {
         int end = clusterEnd(p);

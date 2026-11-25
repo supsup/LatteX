@@ -84,9 +84,10 @@ below are kept verbatim as their branches wrote them.
   `A^{-1}ᵀ`, `x^ᵢ`, `\frac1ᵢ`), or has nothing before it, it is its own nucleus, an empty
   base carrying its scripts, as its raw character was one atom on main; where an argument
   is read it takes ONE character, as one raw character was one argument (`\frac²ᵢ` is
-  still a fraction of the two); and a cluster that collides with a later typed script
-  (`\frac12ᵀ_j^3`) gives way, so the scripts attach to it as they attached to the raw
-  character. Pinned over a corpus: 47 templates times three cluster shapes times all 163
+  still a fraction of the two); and a cluster directly followed by a typed `^`, `_` or
+  prime (`\frac12ᵀ_j^3`, `xᵢ^2`) is its own nucleus and takes them, as the raw character
+  did, decided by one token of lookahead before any script argument is parsed, so parse
+  work stays linear. Pinned over a corpus: 47 templates times three cluster shapes times all 163
   characters, against a model of main; a wider replay of 18,048 contexts finds no input
   main renders that this refuses.
 - **Where a box is still drawn**, the SVG's aria-label ends with

@@ -109,7 +109,10 @@ class ScriptLetterRewriteTest {
         // ({}_{i} then _j has no explicit spelling: it would be a double subscript)
         assertEquals("L(A(x,ORD) SS(SS(L(),_A(i,ORD)),_A(j,ORD)))", pp("x\u1D62_j"));
         assertEquals(pp("x^{{}_{i}}"), pp("x^\u1D62"));
-        assertEquals(pp("x_{i}^{2}"), pp("x\u1D62^2"), "a typed script of the OTHER kind still joins it");
+        // a typed script directly after the cluster makes it its own nucleus, which takes it, as
+        // the raw character did: decided by one token of lookahead (Lattice review of c3c9e60)
+        assertEquals("L(A(x,ORD) SS(SS(L(),_A(i,ORD)),^A(2,ORD)))", pp("x\u1D62^2"));
+        assertEquals(pp("x_{i}^{2}"), pp("x\u1D62\u00B2"), "the cluster's own superscript still joins it");
     }
 
     /**
@@ -165,6 +168,19 @@ class ScriptLetterRewriteTest {
         assertEquals(pp("\\frac{{}^{2}}{{}_{i}}"), pp("\\frac\u00B2\u1D62"));
         // and a following explicit-script cluster is read whole: the raw T takes both scripts
         assertEquals("L(Frac(A(1,ORD),A(2,ORD)) SS(SS(L(),^A(T,ORD)),^A(3,ORD),_A(j,ORD)))", pp("\\frac12\u1D40_j^3"));
+    }
+
+    @Test
+    void nestedClustersBeforeTypedScriptsParseInLinearWork() {
+        // Lattice review of c3c9e60: with a rewind, a cluster attached, a NON-colliding typed
+        // script's argument was parsed, a colliding one rewound and that argument was parsed
+        // again, so nesting y, subscript i, ^{...}, _j doubled the work per level. Measured on
+        // c3c9e60's jar: 23 levels 1.29 s, 25 levels 4.50 s, 26 levels 8.45 s; this tree 0.08 s
+        // at each. Twenty-six levels stay inside the 80-level nesting limit.
+        String src = "y\u1D62^{".repeat(26) + "y" + "}_j".repeat(26);
+        var tree = Assertions.assertTimeoutPreemptively(Duration.ofMillis(1500), () -> MathParser.parse(src));
+        assertTrue(MathParserTest.pp(tree).startsWith("L(A(y,ORD) SS(SS(L(),_A(i,ORD))"),
+            "each cluster is its own nucleus, taking ^{...}_j as the raw character did");
     }
 
     @Test
