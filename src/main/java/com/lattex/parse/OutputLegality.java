@@ -81,16 +81,6 @@ public final class OutputLegality {
     }
 
     /**
-     * Applies the shared legality policy to {@code s}: strips every non-surrogate
-     * character outside {@link #isXmlChar(int)}, rejects an unpaired surrogate loud,
-     * preserves everything else. Returns the legality-clean raw text (NOT
-     * format-escaped).
-     *
-     * @param s the raw text destined for an output boundary (never {@code null})
-     * @return the same text with illegal characters removed
-     * @throws MathSyntaxException if {@code s} contains an unpaired UTF-16 surrogate
-     */
-    /**
      * Breaks every spelling of the reserved missing-glyph mark ({@code "(missing glyph: "})
      * in author text with a zero-width space U+200B after "glyph", which a screen reader
      * does not voice. Applied to the FINAL text of a label, after {@link #sanitize} and
@@ -103,6 +93,16 @@ public final class OutputLegality {
         return finalText.replace("(missing glyph: ", "(missing glyph\u200B: ");
     }
 
+    /**
+     * Applies the shared legality policy to {@code s}: strips every non-surrogate
+     * character outside {@link #isXmlChar(int)}, rejects an unpaired surrogate loud,
+     * preserves everything else. Returns the legality-clean raw text (NOT
+     * format-escaped).
+     *
+     * @param s the raw text destined for an output boundary (never {@code null})
+     * @return the same text with illegal characters removed
+     * @throws MathSyntaxException if {@code s} contains an unpaired UTF-16 surrogate
+     */
     public static String sanitize(String s) {
         // Fast path: scan once; only allocate a builder if something must change.
         int n = s.length();
