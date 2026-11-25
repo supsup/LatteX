@@ -27,3 +27,40 @@ below are kept verbatim as their branches wrote them.
 - Regenerated committed examples with the current renderer and runtime, including
   showcase and gallery specimen pages that had become stale on main. Their
   refreshed layout is independent of the lightning and storm knobs.
+
+
+### confluence/lattex-text-accents-and-commands
+
+- Commands a LaTeX author types for characters LatteX already draws are no longer
+  refused (plan 2d5a59ad, found by the crew's census of the showcase pages, 2026-11-25).
+  Inside `\text` and its family: the accents spelled as control words, double acute,
+  caron, breve and cedilla (`\H{o}` is ő, `\v{C}` is Č, `\v\j` as `\v{\j}`), each
+  composing to its precomposed character from the Unicode canonical compositions (57
+  pairs; the fourteen carons STIX Two Math does not draw are refused, the message saying
+  it is the font); and fifteen text symbols, `\ss \o \O \ae \AE \oe \OE \aa \AA \l
+  \L \dag \ddag \copyright \pounds`, with the spaces after a control word skipped as
+  TeX does (`Gro\ss e` is "Große"). A text word the user has defined as a macro is not
+  decoded: it stays refused, as before. `\S` and `\P` are deliberately NOT added (they
+  are among the commonest user macros; the raw characters draw).
+- Two changes to the OLD five accents too: a bare `\j` is now a base, as `\i` was
+  (`\^\j` is ĵ; refused on main), and a refusal now says which reason holds (the font
+  lacks the precomposed character, naming it, or Unicode has none). **Behaviour change:**
+  when the user has defined `\i` or `\j` as a macro, an accent on it inside `\text` is
+  refused instead of silently taking the dotless letter (main took the built-in for `\i`).
+  Spaces and an end of line after a text control word are skipped, as TeX skips them.
+- In math: `\blacktriangleright` and `\blacktriangleleft` (U+25B8 and U+25C2, relations,
+  the filled partners of `\triangleright` and `\triangleleft`). Checked at the source
+  (Lattice): amssymb declares both `\mathrel`, with the same ink bounds in msam10.afm as
+  their unfilled `\vartriangle` partners, and the bundled small glyphs match
+  `\vartriangle`'s size; unicode-math instead maps them to the large U+25B6/U+25C0 as
+  ordinary symbols, and LatteX follows amssymb. A raw ▸ or ◂ deliberately takes the same
+  relation spacing (see below);
+  and `\lgroup` and `\rgroup` (U+27EE and U+27EF) at their natural size. They cannot be
+  stretched: `\left`, `\right` and the `\big` family refuse them, because the bundled
+  font has no larger sizes of them.
+- **Newly reserved built-in names:** `\lgroup`, `\rgroup`, `\blacktriangleright`,
+  `\blacktriangleleft` (a user `\newcommand` of these is now refused as a built-in).
+- **Spacing change on raw characters:** a raw U+25B8 or U+25C2 is now a relation and a
+  raw U+27EE / U+27EF an opening / closing bracket, because a raw character takes its
+  class from the symbol table (`a ▸ b` is spaced as a relation; in `⟮ - x ⟯` the minus is
+  now unary). The command index grows from 692 to 696.

@@ -539,6 +539,18 @@ final class Symbols {
         m.put("bigtriangledown", new Sym(0x25BD, MathClass.BIN)); // ▽
         m.put("triangleleft", new Sym(0x25C3, MathClass.BIN));    // ◃
         m.put("triangleright", new Sym(0x25B9, MathClass.BIN));   // ▹
+        // amssymb's filled partners of the two above, at the same small size (U+25B8 and
+        // U+25C2, BLACK RIGHT-/LEFT-POINTING SMALL TRIANGLE), and like amssymb's
+        // \vartriangleright they are relations. Checked at the source by Lattice
+        // (stafficy/35714): amssymb declares both \mathrel, at MSAM10 slots 0x49/0x4A, and
+        // msam10.afm gives them the same 611x579 ink bounds as their unfilled \vartriangle
+        // partners; in the bundled font U+25B8/U+25C2 are about 25.5x28.8 ink at 40 units/em,
+        // close to \vartriangle's 28.9x26.8 (the large U+25B6/U+25C0 are 42.4x48.0).
+        // unicode-math differs on purpose: it maps the commands to the LARGE triangles as
+        // ORD. This table follows amssymb's size and spacing. A raw small triangle
+        // deliberately gets this REL spacing too. Plan 2d5a59ad (lattex project).
+        m.put("blacktriangleright", new Sym(0x25B8, MathClass.REL)); // ▸
+        m.put("blacktriangleleft", new Sym(0x25C2, MathClass.REL));  // ◂
         m.put("barwedge", new Sym(0x22BC, MathClass.BIN));     // ⊼
         m.put("veebar", new Sym(0x22BB, MathClass.BIN));       // ⊻
         m.put("doublebarwedge", new Sym(0x2A5E, MathClass.BIN)); // ⩞
@@ -931,6 +943,10 @@ final class Symbols {
         m.put("rVert", new Sym(0x2016, MathClass.CLOSE)); // ‖
         m.put("langle", new Sym(0x27E8, MathClass.OPEN)); // ⟨
         m.put("rangle", new Sym(0x27E9, MathClass.CLOSE)); // ⟩
+        // Plain TeX's \lgroup and \rgroup, the flat-ended group brackets (U+27EE and U+27EF,
+        // MATHEMATICAL LEFT/RIGHT FLATTENED PARENTHESIS). Plan 2d5a59ad (lattex project).
+        m.put("lgroup", new Sym(0x27EE, MathClass.OPEN)); // ⟮
+        m.put("rgroup", new Sym(0x27EF, MathClass.CLOSE)); // ⟯
         // stmaryrd double brackets. STIX Two Math carries the dedicated Unicode
         // glyphs, so these are real opening/closing atoms rather than a kerned
         // "[\![" approximation (2026-07-23 math.PR wild-corpus survey).
