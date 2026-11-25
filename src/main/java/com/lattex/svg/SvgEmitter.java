@@ -121,6 +121,52 @@ public final class SvgEmitter {
      * value is renderer-derived ({@code [0-9.:%;a-z-]} from a fixed template + a
      * numeric width) — no author string can reach it.
      */
+    /*
+     * The mark itself is com.lattex.api.LatteX.MISSING_GLYPH_MARK, on the exported API so a
+     * module consumer can name it (Fixpoint review of 6160f84). The reserved substring a caller tests for (plan 14579fe4, lattex project, ruling
+     * stafficy/35665): a render that drew the font's missing-glyph box ends its aria-label
+     * with {@code " (missing glyph: U+XXXX, U+YYYY)"}, code points in order of first
+     * appearance, each once, at most eight then {@code ", +N more"}. A clean render never
+     * contains this substring: author text that spells it (a {@code \text} label, say) has a
+     * zero-width space U+200B put after the word "glyph", which a screen reader does not
+     * voice and which breaks the match. The mark stays inside the emitter's minimal subset
+     * (CONTRIBUTING section 5): it is text of the one aria-label the root already carries.
+     */
+    private static final int MAX_MARKED = 8;
+
+    /**
+     * The label's final, escaped text, with the reserved mark appended when the layout drew
+     * a missing-glyph box. The author's text is escaped (which also strips control
+     * characters) BEFORE any spelling of the mark in it is broken, so a stripped character
+     * cannot rejoin one (Fixpoint review of 6160f84).
+     */
+    static String markedLabel(String label, Layout layout) {
+        String safe = com.lattex.parse.OutputLegality.unmark(escape(label));
+        java.util.LinkedHashSet<Integer> cps = new java.util.LinkedHashSet<>();
+        for (var g : layout.glyphs()) {
+            if (g.unmappedCodePoint() != com.lattex.layout.PositionedGlyph.MAPPED) {
+                cps.add(g.unmappedCodePoint());
+            }
+        }
+        if (cps.isEmpty()) {
+            return safe;
+        }
+        StringBuilder sb = new StringBuilder(safe).append(" (missing glyph: ");
+        int shown = 0;
+        for (int cp : cps) {
+            if (shown == MAX_MARKED) {
+                sb.append(", +").append(cps.size() - shown).append(" more");
+                break;
+            }
+            if (shown > 0) {
+                sb.append(", ");
+            }
+            sb.append(String.format(java.util.Locale.ROOT, "U+%04X", cp));
+            shown++;
+        }
+        return sb.append(')').toString();
+    }
+
     public static String emit(Layout layout, SfntFont font, String ariaLabel, Color fill,
                               boolean fluid) {
         double vbX = layout.minX() - MARGIN;
@@ -142,7 +188,7 @@ public final class SvgEmitter {
                 .append("px;height:auto\"");
         }
         svg.append(" role=\"img\"")
-            .append(" aria-label=\"").append(escape(ariaLabel)).append("\">\n");
+            .append(" aria-label=\"").append(markedLabel(ariaLabel, layout)).append("\">\n");
 
         emitInner(svg, layout, font, fill, 0.0, 0.0);
         svg.append("</svg>");

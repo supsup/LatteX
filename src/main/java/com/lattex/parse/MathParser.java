@@ -202,6 +202,8 @@ public final class MathParser {
     private static final class TextDecodeWork {
         long units;
         long parsedTokens;
+        /** Macro names the user defined in this render (presets and inline definitions). */
+        final java.util.Set<String> userMacros = new java.util.HashSet<>();
 
         void charge(int amount) {
             if (amount > MAX_TEXT_DECODE_UNITS - units) {
@@ -343,14 +345,131 @@ public final class MathParser {
                 }
                 default -> {
                     int cp = s.codePointAt(i);
-                    out.add(Token.ch(cp, start));
-                    i += Character.charCount(cp);
+                    int end = scriptRun(s, i, out, start);
+                    if (end > i) {
+                        i = end;
+                    } else {
+                        out.add(Token.ch(cp, start));
+                        i += Character.charCount(cp);
+                    }
                 }
             }
         }
         out.add(Token.special(Kind.EOF, n));
         return out;
     }
+
+    /**
+     * Unicode's superscript and subscript characters: every code point in U+00A0-U+2DFF
+     * whose decomposition is ONE character tagged {@code <super>} or {@code <sub>}, 163 in
+     * all. Each entry is the code point, {@code ^} or {@code _}, the base character, and
+     * {@code !} when the bundled font has no glyph for the character itself but does draw
+     * its base (103 of them), or {@code ?} when it draws neither (10): such a character stays
+     * as typed even inside a rewritten cluster, so its box names what the author typed
+     * (Fixpoint review of 6160f84). Both pinned against the font by ScriptLetterRewriteTest. Derived
+     * from the Unicode Character Database decompositions. Plan 14579fe4 (lattex project).
+     */
+    private static final String SCRIPT_TABLE =
+        "00AA^0061 00B2^0032 00B3^0033 00B9^0031 00BA^006F 02B0^0068 02B1^0266 02B2^006A "
+        + "02B3^0072 02B4^0279 02B5^027B 02B6^0281 02B7^0077 02B8^0079 02E0^0263 02E1^006C "
+        + "02E2^0073 02E3^0078 02E4^0295 10FC^10DC? 1D2C^0041! 1D2D^00C6! 1D2E^0042! 1D30^0044! "
+        + "1D31^0045! 1D32^018E? 1D33^0047! 1D34^0048! 1D35^0049! 1D36^004A! 1D37^004B! 1D38^004C! "
+        + "1D39^004D! 1D3A^004E! 1D3C^004F! 1D3D^0222? 1D3E^0050! 1D3F^0052! 1D40^0054! 1D41^0055! "
+        + "1D42^0057! 1D43^0061! 1D44^0250! 1D45^0251! 1D46^1D02? 1D47^0062! 1D48^0064! 1D49^0065! "
+        + "1D4A^0259! 1D4B^025B! 1D4C^025C! 1D4D^0067! 1D4F^006B! 1D50^006D! 1D51^014B! 1D52^006F! "
+        + "1D53^0254! 1D54^1D16? 1D55^1D17? 1D56^0070! 1D57^0074! 1D58^0075! 1D59^1D1D? 1D5A^026F! "
+        + "1D5B^0076! 1D5C^1D25? 1D5D^03B2! 1D5E^03B3! 1D5F^03B4! 1D60^03C6! 1D61^03C7! 1D62_0069! "
+        + "1D63_0072! 1D64_0075! 1D65_0076! 1D66_03B2! 1D67_03B3! 1D68_03C1! 1D69_03C6! 1D6A_03C7! "
+        + "1D78^043D! 1D9B^0252 1D9C^0063! 1D9D^0255! 1D9E^00F0! 1D9F^025C! 1DA0^0066! 1DA1^025F! "
+        + "1DA2^0261! 1DA3^0265 1DA4^0268! 1DA5^0269! 1DA6^026A! 1DA7^1D7B? 1DA8^029D! 1DA9^026D! "
+        + "1DAA^1D85! 1DAB^029F! 1DAC^0271! 1DAD^0270! 1DAE^0272! 1DAF^0273! 1DB0^0274! 1DB1^0275! "
+        + "1DB2^0278! 1DB3^0282! 1DB4^0283! 1DB5^01AB! 1DB6^0289! 1DB7^028A! 1DB8^1D1C! 1DB9^028B! "
+        + "1DBA^028C! 1DBB^007A! 1DBC^0290! 1DBD^0291! 1DBE^0292! 1DBF^03B8! 2070^0030 2071^0069 "
+        + "2074^0034 2075^0035 2076^0036 2077^0037 2078^0038 2079^0039 207A^002B 207B^2212 "
+        + "207C^003D 207D^0028 207E^0029 207F^006E 2080_0030 2081_0031 2082_0032 2083_0033 "
+        + "2084_0034 2085_0035 2086_0036 2087_0037 2088_0038 2089_0039 208A_002B 208B_2212 "
+        + "208C_003D 208D_0028 208E_0029 2090_0061! 2091_0065! 2092_006F! 2093_0078! 2094_0259! "
+        + "2095_0068! 2096_006B! 2097_006C! 2098_006D! 2099_006E! 209A_0070! 209B_0073! 209C_0074! "
+        + "2C7C_006A! 2C7D^0056! 2D6F^2D61? ";
+
+    /**
+     * Name carried by a script token that {@link #scriptRun} made from a Unicode script
+     * character: where the parser finds no nucleus for it (at the start, after an opening
+     * brace, a \\left delimiter or a cell break), it attaches to an empty base, as
+     * {@code {}_{i}} does, instead of failing. A typed {@code _} still fails there.
+     */
+    static final String UNICODE_SCRIPT = "unicode-script";
+
+    /** code point -> {kind (0 sup, 1 sub), base code point, 1 if the font lacks it but draws the base, 2 if it draws neither}. */
+    static final Map<Integer, int[]> SCRIPT_CHARS = parseScriptTable(SCRIPT_TABLE); // package-private: pinned by ScriptLetterRewriteTest
+
+    private static Map<Integer, int[]> parseScriptTable(String table) {
+        Map<Integer, int[]> m = new java.util.HashMap<>();
+        for (String e : table.trim().split(" +")) {
+            int k = e.indexOf('^') >= 0 ? e.indexOf('^') : e.indexOf('_');
+            int flag = e.endsWith("!") ? 1 : e.endsWith("?") ? 2 : 0;
+            int cp = Integer.parseInt(e.substring(0, k), 16);
+            int base = Integer.parseInt(e.substring(k + 1, flag != 0 ? e.length() - 1 : e.length()), 16);
+            m.put(cp, new int[] {e.charAt(k) == '^' ? 0 : 1, base, flag});
+        }
+        return Map.copyOf(m);
+    }
+
+    /**
+     * A cluster of contiguous Unicode script characters becomes real scripts of their base
+     * characters when it holds any character the bundled font cannot draw: the lexer emits
+     * one synthesized SUP or SUB token per character, at its own offset, carrying the
+     * character it sets (its base, or itself when the font draws neither) and, as its text,
+     * the character as typed. The parser assembles them: at a list position the whole cluster
+     * attaches to the nucleus before it, its superscripts as one script and its subscripts as
+     * another (x followed by subscript i sets exactly as {@code x_{i}}; x with superscript
+     * two and subscript i as {@code x^{2}_{i}}); where an argument is read it takes ONE
+     * character, as one raw character was one argument before; where it cannot attach it is
+     * its own nucleus on an empty base. A cluster the font draws whole (x followed by
+     * superscript two) is left as the font's own glyphs, exactly as before. Returns the
+     * index just past the cluster, else {@code i}. Plan 14579fe4 (lattex project), rulings
+     * stafficy/35638 and 35720: the rewrite may only improve.
+     */
+    private static int scriptRun(String s, int i, List<Token> out, int start) {
+        if (!SCRIPT_CHARS.containsKey(s.codePointAt(i))) {
+            return i;
+        }
+        // ONE pass over the whole cluster of contiguous script characters, of either kind
+        // (Lattice review of 4d0f03a: a rescan per character was quadratic, and a mixed
+        // cluster such as x, superscript two, subscript i put the i on the two).
+        List<int[]> raw = new ArrayList<>(); // {code point, offset}, in source order
+        boolean rewrite = false;
+        int j = i;
+        while (j < s.length()) {
+            int cp = s.codePointAt(j);
+            int[] e = SCRIPT_CHARS.get(cp);
+            if (e == null) {
+                break;
+            }
+            raw.add(new int[] {cp, j});
+            rewrite |= e[2] == 1;
+            j += Character.charCount(cp);
+        }
+        if (!rewrite) {
+            for (int[] r : raw) {
+                out.add(Token.ch(r[0], r[1])); // the font's own glyphs, exactly as before
+            }
+            return j;
+        }
+        // One synthesized SUP or SUB token PER CHARACTER, at its own offset, carrying the
+        // character it sets (its base, or itself when the font draws neither): the parser
+        // assembles a cluster at a list position and takes ONE character where an argument
+        // is read, so the original token boundaries survive (Lattice review of b608ecd:
+        // \frac then superscript two, subscript i read the pair as its two arguments on main).
+        for (int[] r : raw) {
+            int[] e = SCRIPT_CHARS.get(r[0]);
+            // text: the character as typed, for a site that reads its argument raw as text
+            out.add(new Token(e[0] == 0 ? Kind.SUP : Kind.SUB, e[2] == 2 ? r[0] : e[1], UNICODE_SCRIPT,
+                new String(Character.toChars(r[0])), r[1]));
+        }
+        return j;
+    }
+
 
     private static boolean isAsciiLetter(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -700,6 +819,7 @@ public final class MathParser {
             case CHAR -> new String(Character.toChars(t.codePoint()));
             case COMMAND -> "\\" + t.name();
             case TEXT -> "\\" + t.name() + "{" + t.text() + "}";
+            case SUP, SUB -> t.text(); // a rewritten script character, read raw as main read it
             default -> throw new IllegalStateException("not an argument token: " + t);
         };
         return tagLabel(raw, t.offset());
@@ -1059,6 +1179,9 @@ public final class MathParser {
 
     /** One component: a nucleus, plus any scripts (or big-operator limits). */
     MathNode parseComponent() {
+        if (isUnicodeScript(peek())) {
+            return parseScripts(unicodeScriptNucleus(true)); // a list position: the whole cluster
+        }
         boolean braced = peek().kind() == Kind.LBRACE;
         MathNode nucleus = parseNucleus();
         if (braced) {
@@ -1122,7 +1245,19 @@ public final class MathParser {
         MathNode.Stack out = st;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.SUP) {
+            if (isUnicodeScript(peek())) {
+                boolean[] kinds = clusterKinds(p);
+                if ((kinds[0] && out.above() != null) || (kinds[1] && out.below() != null) || typedScriptFollows(p)) {
+                    break;
+                }
+                MathNode[] c = takeCluster();
+                if (c[0] != null) {
+                    out = out.withAbove(c[0]);
+                }
+                if (c[1] != null) {
+                    out = out.withBelow(c[1]);
+                }
+            } else if (k == Kind.SUP) {
                 if (out.above() != null) {
                     throw new MathSyntaxException("Double superscript on \\" + braceCommand(st));
                 }
@@ -1161,7 +1296,20 @@ public final class MathParser {
         MathNode sub = null;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.CHAR && peek().codePoint() == '\'') {
+            if (isUnicodeScript(peek())) {
+                boolean[] kinds = clusterKinds(p);
+                if ((kinds[0] && explicitSup) || (kinds[1] && sub != null) || typedScriptFollows(p)) {
+                    break; // the cluster is its own nucleus (see typedScriptFollows)
+                }
+                MathNode[] c = takeCluster();
+                if (c[0] != null) {
+                    supItems.add(c[0]);
+                    explicitSup = true;
+                }
+                if (c[1] != null) {
+                    sub = c[1];
+                }
+            } else if (k == Kind.CHAR && peek().codePoint() == '\'') {
                 next();
                 supItems.add(new Atom(0x2032, MathClass.ORD));
             } else if (k == Kind.SUP) {
@@ -1207,7 +1355,20 @@ public final class MathParser {
         MathNode lower = null;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.CHAR && peek().codePoint() == '\'') {
+            if (isUnicodeScript(peek())) {
+                boolean[] kinds = clusterKinds(p);
+                if ((kinds[0] && explicitUpper) || (kinds[1] && lower != null) || typedScriptFollows(p)) {
+                    break;
+                }
+                MathNode[] c = takeCluster();
+                if (c[0] != null) {
+                    upperItems.add(c[0]);
+                    explicitUpper = true;
+                }
+                if (c[1] != null) {
+                    lower = c[1];
+                }
+            } else if (k == Kind.CHAR && peek().codePoint() == '\'') {
                 next();
                 upperItems.add(new Atom(0x2032, MathClass.ORD));
             } else if (k == Kind.SUP) {
@@ -1260,7 +1421,8 @@ public final class MathParser {
      */
     private boolean isArgumentToken(Token t) {
         return switch (t.kind()) {
-            case SUP, SUB, RBRACE, EOF -> false;
+            case SUP, SUB -> UNICODE_SCRIPT.equals(t.name()); // a rewritten cluster is a nucleus, as its raw character was
+            case RBRACE, EOF -> false;
             case CHAR -> t.codePoint() != '&';
             case COMMAND -> !CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.RIGHT)
                 && !CommandRegistry.hasHandler(t.name(), CommandRegistry.Handler.ROW_SEPARATOR);
@@ -1349,6 +1511,79 @@ public final class MathParser {
         return mode;
     }
 
+    private static boolean isUnicodeScript(Token t) {
+        return (t.kind() == Kind.SUP || t.kind() == Kind.SUB) && UNICODE_SCRIPT.equals(t.name());
+    }
+
+    /** The end (exclusive) of the rewritten cluster starting at token {@code q}: its characters are
+     * contiguous in the source, one token each (every script character is in the BMP). */
+    private int clusterEnd(int q) {
+        int end = q + 1;
+        while (isUnicodeScript(tokens.get(end)) && tokens.get(end).offset() == tokens.get(end - 1).offset() + 1) {
+            end++;
+        }
+        return end;
+    }
+
+    /** {has a superscript character, has a subscript character} in the cluster at {@code q}. */
+    private boolean[] clusterKinds(int q) {
+        boolean[] kinds = new boolean[2];
+        for (int i = q, end = clusterEnd(q); i < end; i++) {
+            kinds[tokens.get(i).kind() == Kind.SUP ? 0 : 1] = true;
+        }
+        return kinds;
+    }
+
+    /**
+     * Whether a typed {@code ^}, {@code _} or prime follows the cluster at {@code q} directly.
+     *
+     * <p>THE ATTACH RULE, decided before any script argument is parsed: a cluster attaches to
+     * the nucleus before it unless that nucleus already has a script of a kind the cluster
+     * carries, or a typed script follows the cluster; in either case the cluster is its own
+     * nucleus ({@link #unicodeScriptNucleus}), which takes those typed scripts, as its raw
+     * character did on main. One token of lookahead and no rewind: a rewind would discard
+     * parsed arguments, and nested clusters would re-parse them (Lattice review of c3c9e60,
+     * stafficy/35743). The rule exists so the rewrite may only improve: any input main
+     * renders, this renders (Fixpoint review of 6160f84).
+     */
+    private boolean typedScriptFollows(int q) {
+        Token after = tokens.get(clusterEnd(q));
+        return ((after.kind() == Kind.SUP || after.kind() == Kind.SUB) && !isUnicodeScript(after))
+            || (after.kind() == Kind.CHAR && after.codePoint() == '\'');
+    }
+
+    /**
+     * Consumes the rewritten cluster at the cursor: {superscript, subscript}, its superscript
+     * characters as one script and its subscript characters as another, either null.
+     */
+    private MathNode[] takeCluster() {
+        int end = clusterEnd(p);
+        List<MathNode> sup = new ArrayList<>();
+        List<MathNode> sub = new ArrayList<>();
+        while (p < end) {
+            Token t = next();
+            (t.kind() == Kind.SUP ? sup : sub).add(charAtom(t.codePoint()));
+        }
+        return new MathNode[] {sup.isEmpty() ? null : wrap(sup), sub.isEmpty() ? null : wrap(sub)};
+    }
+
+    /**
+     * A rewritten cluster as a nucleus: an empty base carrying its scripts. At a list position
+     * ({@link #parseComponent}) the whole cluster; where an argument is read ({@code x^},
+     * {@code \frac}) ONE character, as one raw character was one argument on main.
+     */
+    private MathNode unicodeScriptNucleus(boolean whole) {
+        MathNode[] c;
+        if (whole) {
+            c = takeCluster();
+        } else {
+            Token t = next();
+            MathNode a = charAtom(t.codePoint());
+            c = t.kind() == Kind.SUP ? new MathNode[] {a, null} : new MathNode[] {null, a};
+        }
+        return new SupSub(wrap(List.of()), c[0], c[1]);
+    }
+
     /** The argument of a script: a single nucleus ({@code '{'} opens a group). */
     private MathNode parseScriptArg(String what) {
         if (!isArgumentToken(peek())) {
@@ -1434,6 +1669,7 @@ public final class MathParser {
             case CHAR -> new String(Character.toChars(t.codePoint()));
             case COMMAND -> "\\" + t.name();
             case TEXT -> "\\" + t.name() + "{" + t.text() + "}";
+            case SUP, SUB -> t.text(); // a rewritten script character, read raw as main read it
             default -> throw new IllegalStateException("not an argument token: " + t);
         };
         return textWithNestedMath(Token.text(name, raw, commandOffset));
@@ -1700,10 +1936,14 @@ public final class MathParser {
                 yield textWithNestedMath(t);
             }
             case COMMAND -> parseCommand();
-            case SUP -> throw new MathSyntaxException(
-                "Unexpected '^': no nucleus to attach a superscript to");
-            case SUB -> throw new MathSyntaxException(
-                "Unexpected '_': no nucleus to attach a subscript to");
+            case SUP, SUB -> {
+                if (UNICODE_SCRIPT.equals(t.name())) {
+                    yield unicodeScriptNucleus(false); // an argument site: one character
+                }
+                throw new MathSyntaxException(t.kind() == Kind.SUP
+                    ? "Unexpected '^': no nucleus to attach a superscript to"
+                    : "Unexpected '_': no nucleus to attach a subscript to");
+            }
             case RBRACE -> throw new MathSyntaxException("Unexpected '}' (unbalanced brace)");
             case EOF -> throw new MathSyntaxException("Unexpected end of input (expected an atom)");
         };
@@ -2560,7 +2800,12 @@ public final class MathParser {
             java.util.OptionalInt delimiter = CommandRegistry.delimiterCodePoint(t.name());
             if (delimiter.isEmpty()) {
                 throw new MathSyntaxException(
-                    context + ": \\" + t.name() + " is not a valid delimiter");
+                    context + ": \\" + t.name() + (t.name().equals("lgroup") || t.name().equals("rgroup")
+                        // Fixpoint review of a3713921: STIX Two Math has no size variants and no
+                        // assembly for U+27EE/U+27EF, so a stretched group bracket would be a
+                        // magnified glyph, its strokes heavier than a parenthesis beside it.
+                        ? " cannot be stretched: the bundled font has no larger sizes of it; use it at its natural size"
+                        : " is not a valid delimiter"));
             }
             return delimiter.getAsInt();
         }
@@ -2852,6 +3097,20 @@ public final class MathParser {
                     i = textReference(s, j, word, sb, t) - 1;
                     continue;
                 }
+                if (TEXT_LETTER_ACCENTS.containsKey(word) && !isUserMacro(word)) {
+                    i = composeAccent("\\" + word, TEXT_LETTER_ACCENTS.get(word), s, j, sb, t) - 1;
+                    continue;
+                }
+                if (TEXT_WORD_SYMBOLS.containsKey(word) && !isUserMacro(word)) {
+                    sb.append(TEXT_WORD_SYMBOLS.get(word));
+                    // TeX skips the spaces after a control word, an end of line included
+                    // (TeXbook ch. 3 and 8), so Gro\ss e is "Große".
+                    while (j < s.length() && isWhitespace(s.charAt(j))) {
+                        j++;
+                    }
+                    i = j - 1;
+                    continue;
+                }
                 throw MathSyntaxException.unknownCommand(
                     "Unknown command in \\" + t.name() + ": \\" + word
                         + " — commands are not expanded in text; wrap math in $...$",
@@ -2907,6 +3166,64 @@ public final class MathParser {
         '~', accentTable("a\u00e3e\u1ebdi\u0129n\u00f1o\u00f5u\u0169v\u1e7dy\u1ef9"
             + "A\u00c3E\u1ebcI\u0128N\u00d1O\u00d5U\u0168V\u1e7cY\u1ef8"));
 
+    /**
+     * The four text accents LaTeX spells as control WORDS (the LaTeX2e font-encoding
+     * guide: the control words H double acute, v caron, u breve and c cedilla), found in names such as Erd\H{o}s and \v{C}ech. Like {@link #TEXT_ACCENTS}
+     * they map an ASCII base to its PRECOMPOSED character, derived from the Unicode canonical
+     * compositions (NFC of base + U+030B / U+030C / U+0306 / U+0327), less the fourteen
+     * carons the bundled STIX Two Math does not draw (U+01CD-U+01D4, U+01E6-U+01E9,
+     * U+021E/F: a/A, g/G, h/H, i/I, k/K, o/O, u/U with caron); those are refused, never
+     * drawn unaccented or as a missing-glyph box. Plan 2d5a59ad (lattex project).
+     */
+    private static final Map<String, Map<Character, Character>> TEXT_LETTER_ACCENTS = Map.of(
+        "H", accentTable("o\u0151u\u0171O\u0150U\u0170"),
+        "v", accentTable("c\u010dd\u010fe\u011bj\u01f0l\u013en\u0148r\u0159s\u0161t\u0165z\u017e"
+            + "C\u010cD\u010eE\u011aL\u013dN\u0147R\u0158S\u0160T\u0164Z\u017d"),
+        "u", accentTable("a\u0103e\u0115g\u011fi\u012do\u014fu\u016d"
+            + "A\u0102E\u0114G\u011eI\u012cO\u014eU\u016c"),
+        "c", accentTable("c\u00e7d\u1e11e\u0229g\u0123h\u1e29k\u0137l\u013cn\u0146r\u0157s\u015ft\u0163"
+            + "C\u00c7D\u1e10E\u0228G\u0122H\u1e28K\u0136L\u013bN\u0145R\u0156S\u015eT\u0162"));
+
+    /**
+     * Text-mode control words that stand for one character (the LaTeX2e font-encoding
+     * guide's text symbols): the letters of names
+     * ({@code \ss \o \O \ae \AE \oe \OE \aa \AA \l \L}), {@code \dag},
+     * {@code \ddag}, {@code \copyright} and {@code \pounds}. Each decodes to its literal
+     * character, which the bundled font draws (pinned per word by
+     * TextLetterAccentsAndSymbolsTest). A word the user has defined as a macro is NOT
+     * decoded: the run keeps refusing it, as before. The section and paragraph signs are
+     * deliberately absent (Fixpoint review of a3713921): \\S and \\P are among the
+     * commonest user macros, so they stay free until overridable built-ins exist; the raw
+     * characters draw. Plan 2d5a59ad (lattex project).
+     */
+    private static final Map<String, Character> TEXT_WORD_SYMBOLS = Map.ofEntries(
+        Map.entry("ss", '\u00df'),
+        Map.entry("o", '\u00f8'), Map.entry("O", '\u00d8'), Map.entry("ae", '\u00e6'),
+        Map.entry("AE", '\u00c6'), Map.entry("oe", '\u0153'), Map.entry("OE", '\u0152'),
+        Map.entry("aa", '\u00e5'), Map.entry("AA", '\u00c5'), Map.entry("l", '\u0142'),
+        Map.entry("L", '\u0141'), Map.entry("dag", '\u2020'), Map.entry("ddag", '\u2021'),
+        Map.entry("copyright", '\u00a9'), Map.entry("pounds", '\u00a3'));
+
+    /**
+     * Records a user macro name for this render (called by {@link MacroExpander}), so a text
+     * run keeps refusing a word the user has defined rather than reading it as a text symbol
+     * (Fixpoint review of a3713921: \\newcommand{\\L}{...} with \\text{in \\L here}).
+     */
+    static void noteUserMacro(String name) {
+        if (TEXT_DECODE_WORK.isBound()) {
+            TEXT_DECODE_WORK.get().userMacros.add(name);
+        }
+    }
+
+    private static boolean isUserMacro(String name) {
+        return TEXT_DECODE_WORK.isBound() && TEXT_DECODE_WORK.get().userMacros.contains(name);
+    }
+
+    /** The combining mark each text accent stands for, to tell the two refusals apart. */
+    private static final Map<String, String> COMBINING_MARK = Map.of(
+        "\\\"", "\u0308", "\\'", "\u0301", "\\`", "\u0300", "\\^", "\u0302", "\\~", "\u0303",
+        "\\H", "\u030b", "\\v", "\u030c", "\\u", "\u0306", "\\c", "\u0327");
+
     private static Map<Character, Character> accentTable(String pairs) {
         Map<Character, Character> table = new java.util.HashMap<>();
         for (int k = 0; k + 1 < pairs.length(); k += 2) {
@@ -2925,8 +3242,18 @@ public final class MathParser {
      */
     private static int textAccent(String s, int i, StringBuilder sb, Token t) {
         char accent = s.charAt(i + 1);
-        int k = i + 2;
-        while (k < s.length() && s.charAt(k) == ' ') {
+        return composeAccent("\\" + accent, TEXT_ACCENTS.get(accent), s, i + 2, sb, t);
+    }
+
+    /**
+     * The shared body of every text accent: {@code name} is the accent as typed (for the
+     * error), {@code table} its base-to-precomposed map, and {@code k} the index just past
+     * the accent command. Returns the index just past the base.
+     */
+    private static int composeAccent(String name, Map<Character, Character> table, String s,
+            int k, StringBuilder sb, Token t) {
+        // an accent's argument is found past spaces and an end of line, as TeX scans it
+        while (k < s.length() && isWhitespace(s.charAt(k))) {
             k++;
         }
         String base;
@@ -2939,23 +3266,44 @@ public final class MathParser {
             base = k < s.length() ? s.substring(k, k + 1) : "";
             end = k + 1;
         }
+        String dotless = null;
         if (base.equals("\\i") || base.equals("\\j")) {
-            base = base.substring(1);
-        } else if (k < s.length() && s.charAt(k) == '\\' && s.startsWith("\\i", k)
+            dotless = base.substring(1);
+        } else if (k < s.length() && s.charAt(k) == '\\' && (s.startsWith("\\i", k) || s.startsWith("\\j", k))
                 && (k + 2 >= s.length() || !isAsciiLetter(s.charAt(k + 2)))) {
-            base = "i"; // bare \'\i
+            dotless = s.substring(k + 1, k + 2); // bare \'\i or \v\j, as their braced forms
             end = k + 2;
+        }
+        if (dotless != null) {
+            // A user who has defined \i or \j meant their macro, not the dotless letter, so the
+            // accent on it is refused rather than silently taking the built-in (Fixpoint
+            // re-review of 9c1686c; this changes main's behaviour for a user-defined \i).
+            if (isUserMacro(dotless)) {
+                throw MathSyntaxException.unknownCommand(
+                    "Unknown command in \\" + t.name() + ": " + name + " on \\" + dotless
+                        + ", which is a user macro here — commands are not expanded in text; wrap math in $...$",
+                    t.offset());
+            }
+            base = dotless;
         }
         if (base.length() != 1 || !isAsciiLetter(base.charAt(0))) {
             throw MathSyntaxException.unknownCommand(
-                "Unknown command in \\" + t.name() + ": \\" + accent
+                "Unknown command in \\" + t.name() + ": " + name
                     + " expects one letter to accent", t.offset());
         }
-        Character composed = TEXT_ACCENTS.get(accent).get(base.charAt(0));
+        Character composed = table.get(base.charAt(0));
         if (composed == null) {
+            // Two different reasons, said apart (Fixpoint review of a3713921): Unicode has a
+            // precomposed character the bundled font does not draw (\\v{a} is U+01CE), or
+            // Unicode has none at all (\\"q).
+            String typed = name + (isAsciiLetter(name.charAt(name.length() - 1)) ? "{" + base + "}" : base);
+            String nfc = java.text.Normalizer.normalize(base + COMBINING_MARK.get(name), java.text.Normalizer.Form.NFC);
             throw MathSyntaxException.unknownCommand(
-                "Unknown command in \\" + t.name() + ": \\" + accent + base
-                    + " has no precomposed character", t.offset());
+                "Unknown command in \\" + t.name() + ": " + typed + (nfc.length() == 1
+                    ? String.format(java.util.Locale.ROOT,
+                        " is not drawn: the bundled font has no glyph for its precomposed character U+%04X", (int) nfc.charAt(0))
+                    : " has no precomposed character"),
+                t.offset());
         }
         sb.append(composed.charValue());
         return end;

@@ -116,10 +116,11 @@ class NonLetterEscapeCensusTest {
         assertEquals('%', percent.codePoint());
         assertEquals(MathClass.ORD, percent.mathClass());
         assertEquals("A(%,ORD)", MathParserTest.pp(MathParser.parse("\\%")));
-        // The realistic source shape: a percentage in an expression. Each digit
-        // is its own atom, so the accessible text is "5 0 %" — the assertion is
-        // on the literal '%' arriving, not on digit grouping.
-        assertEquals("5 0 %", ariaOf(LatteX.render("50\\%")));
+        // The realistic source shape: a percentage in an expression. Each digit is
+        // its own atom, and since plan fd362dd3 the label reads the digit run as one
+        // number, so the accessible text is "50 %" — the assertion is on the literal
+        // '%' arriving after the number.
+        assertEquals("50 %", ariaOf(LatteX.render("50\\%")));
         assertTrue(LatteX.render("50\\%").contains("<path"), "renders glyph paths");
     }
 

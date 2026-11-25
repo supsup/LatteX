@@ -90,6 +90,41 @@ This is a host-only switch: source authors cannot enable or disable it through
 `\lx[...]`. The original overload, throwing render methods, CLI, and Docker
 worker all retain their previous defaults and behavior.
 
+## Missing glyphs: the mark, the warning, and `strictGlyphs`
+
+A character the bundled font has no glyph for is still drawn, as the font's
+missing-glyph box, so no host loses a formula over one stray character (plan
+a1866884). It is no longer silent. Three faces of one condition, which always agree
+(pinned by `MissingGlyphMarkTest`):
+
+- **The SVG says so.** Its `aria-label` ends with ` (missing glyph: U+XXXX, U+YYYY)`:
+  the code points in order of first appearance, each once, at most eight, then
+  `, +N more`, naming the characters the author typed. A caller tests for the exact
+  substring `(missing glyph: U+` (`LatteX.MISSING_GLYPH_MARK`). A clean render never
+  contains it: author text that spells it (a `\text{...}` label or an `a11y.label`) gets
+  a zero-width space U+200B after the word "glyph", once the text is normalised, which a
+  screen reader does not voice and which breaks the match. The mark is
+  text of the one `aria-label` the root already carries, inside the emitter's minimal
+  subset (CONTRIBUTING section 5).
+- **The CLI says so.** `lattex: warning: no glyph for U+XXXX (drawn as a box)` on stderr
+  (in `--batch`, `lattex: warning: record N: ...`, N counting from 1), the SVG still
+  written, and the exit status still 0: a warning never changes it, because hosts read a
+  nonzero exit as "leave the source in place" (SLOWSTART), which would lose the formula.
+- **A host can refuse it.** `RenderOptions.withStrictGlyphs(true)` makes `render` and
+  `renderStyledHtml` throw, `tryRenderMath` return empty, and `renderWithDiagnostics`
+  return `UNSUPPORTED_CONSTRUCT` (with no SVG, unless the host has also opted in to the
+  rendered error card with `withRenderedErrors(true)`, which then draws that card); the
+  CLI flag `--strict-glyphs` makes it an error (exit 1, or an error record in `--batch`).
+- **Not covered:** `renderFragment` returns markup without an aria-label, so it cannot
+  carry the mark (use `renderWithDiagnostics`); the opt-in rendered error card draws its
+  own message.
+
+Unicode's superscript and subscript letters are not affected: where the font lacks one
+and draws its base letter, the parser sets it as a real script (x followed by subscript
+i is exactly `x_{i}`), so none of those draw a box at all. Where such a script cannot
+attach (`x_1ᵢ`, `x^ᵢ`), it is its own nucleus on an empty base: the rewrite only improves,
+so any input that rendered before still renders.
+
 ## Docker: one-shot CLI or watched folders
 
 The repository ships one Java 25 image with two explicit modes. `cli` preserves
@@ -504,6 +539,12 @@ Chrome when it is available and assumption-skip locally when it is not. CI
 sets `LATTEX_REQUIRE_BROWSER=1` so browser absence fails instead of silently
 reducing coverage. See [CONTRIBUTING.md](CONTRIBUTING.md#build--test) for the
 full test-gate contract.
+
+**JDK security note (November 2026).** [CVE-2026-114938](https://nvd.nist.gov/vuln/detail/CVE-2026-114938)
+is a flaw in the JVM itself: HotSpot's Base64 decoder on x86-64 processors with AVX-512 VBMI, in
+JDK 17.0.6 and later (ARM64 is not affected). LatteX never calls Base64, so its input cannot
+reach that code, but run it on a JDK that carries the fix: 25.0.5.1 or later (17.0.21.1 and
+21.0.13.1 on the older lines).
 
 ## License
 

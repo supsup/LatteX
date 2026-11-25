@@ -331,7 +331,19 @@ class OutputCapPostconditionTest {
         // 1100/1103). An earlier probe at 84b9aef is NOT evidence: that tree's test sources do
         // not compile (an illegal escape in a MathMLTest comment, fixed in 60e2073) and its
         // XML was not retained.
-        assertEquals("30ff4ad7ad4b79ce0a63d59eb5c9e5426b67b923900683957a5464009a9964a6", hex.toString(),
+        // Re-pinned 2026-11-25 for plan 14579fe4 (Fixpoint review of 6160f84: a label whose base
+        // is empty no longer starts with a space). Sole cause MEASURED 2026-11-25 by a
+        // counterfactual: with only that label rule disabled the tree reproduces 30ff4ad7...
+        // exactly. Three of the 187 corpus labels change, each by its leading space alone
+        // ({}^3/_7, \\prescript{14}{6}, \\prescript{a}{b}); stripped of labels, all 187 renders
+        // are byte-identical to main.
+        // Re-pinned 2026-11-25 for plan fd362dd3 (an aria label reads a run of digits as one
+        // number, the font's script characters as scripts, a combining mark as its accent).
+        // Sole cause MEASURED 2026-11-25 by a counterfactual: with describeRow bypassed (the
+        // old plain join) the tree reproduces 6a76c8b8... exactly. Five of the 187 corpus labels
+        // change, all digit runs (x^{1.01}, \\sum_{i=1}^{10}, \\prescript{14}{6}, two \\text
+        // rows); stripped of labels, all 187 renders are byte-identical.
+        assertEquals("bde1c304df05f0b6058b5389fad98276bc320591d959208da2c27750f021fc8d", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
     }
