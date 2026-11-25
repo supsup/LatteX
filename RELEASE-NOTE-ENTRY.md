@@ -109,3 +109,15 @@ below are kept verbatim as their branches wrote them.
 - **New exported API:** `RenderOptions.withStrictGlyphs(boolean)`,
   `RenderOptions.strictGlyphs()`, the 8-argument `RenderOptions` constructor (the
   7-argument one is kept), and `LatteX.MISSING_GLYPH_MARK`.
+
+### confluence/lattex-aria-numbers-and-marks
+
+- Accessibility labels read numbers as numbers (plan fd362dd3; repros from the crew's
+  showcase pages, 2026-11-25): a run of digits, with a decimal point or a braced group
+  separator `{,}` between digits, is one word (`e^{\pi\sqrt{163}}` ends "the square root
+  of 163", not "1 6 3"; `\frac{4{,}372}{E}` reads "4,372"). A bare comma stays a
+  separator, as in f(1, 2). The font's own script characters read as the scripts they are
+  (x² is "x squared", as `x^{2}` is; x₁₂ is "x sub 12"), and a combining mark after a base
+  reads as its accent command (x with U+0304 is "bar over x"). Labels only: no geometry
+  changes. Five of the 187 corpus labels change; the two whole-corpus hash pins are
+  re-pinned with the change measured as their sole cause.

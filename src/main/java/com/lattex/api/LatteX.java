@@ -1099,43 +1099,181 @@ public final class LatteX {
         return sb.toString();
     }
 
+    /**
+     * Reads a row aloud (plan fd362dd3, lattex project; ruling stafficy/35638 for the script
+     * digits). Three things a listener should hear as one word, where the plain join read
+     * them glyph by glyph: a NUMBER (consecutive digits, with a decimal point or a braced
+     * group separator {@code {,}} between digits: 163, 0.5, 4,372; a bare comma stays a
+     * separator, as in f(1, 2)); a run of the font's own script characters after a base
+     * (x² reads "x squared" exactly as x^{2} does, x₁₂ "x sub 12"); and a combining mark
+     * after a base, read as its accent command reads (x with U+0304 is "bar over x", as
+     * \\bar{x} is). Labels only: no geometry changes.
+     */
+    private static String describeRow(List<MathNode> items) {
+        List<String> words = new ArrayList<>();
+        int i = 0;
+        while (i < items.size()) {
+            MathNode it = items.get(i);
+            if (isDigitAtom(it)) {
+                // TeX attaches a script to the LAST digit only (10^{-3} is 1, then 0^{-3}), so a
+                // run may end in a scripted digit; the whole number carries the script.
+                StringBuilder number = new StringBuilder();
+                int zero = zeroOf(it);
+                SupSub scripts = null;
+                int j = i;
+                while (j < items.size()) {
+                    MathNode x = items.get(j);
+                    if (isDigitAtom(x) && zeroOf(x) == zero) {
+                        number.appendCodePoint(((Atom) x).codePoint());
+                        j++;
+                    } else if (x instanceof SupSub ss && isDigitAtom(ss.base()) && zeroOf(ss.base()) == zero) {
+                        number.appendCodePoint(((Atom) ss.base()).codePoint());
+                        scripts = ss;
+                        j++;
+                        break;
+                    } else if (j + 1 < items.size() && (isAtomOf(x, '.') || isBracedComma(x))
+                            && continuesNumber(items.get(j + 1), zero)) {
+                        number.append(isAtomOf(x, '.') ? '.' : ',');
+                        j++;
+                    } else {
+                        break;
+                    }
+                }
+                words.add(scripts == null ? number.toString() : scripted(number.toString(), scripts.sup(), scripts.sub()));
+                i = j;
+                continue;
+            }
+            if (scriptKind(it) != 0 && !words.isEmpty()) {
+                // The font's own script characters after a base, in either order and either
+                // kind (x²₃, x₃²): the superscripts form one script and the subscripts another,
+                // read exactly as the explicit x^{2}_{3} reads (Lattice review of 5e956f64).
+                StringBuilder sup = new StringBuilder();
+                StringBuilder sub = new StringBuilder();
+                int j = i;
+                while (j < items.size() && scriptKind(items.get(j)) != 0) {
+                    (scriptKind(items.get(j)) == 2 ? sub : sup).append(java.text.Normalizer.normalize(
+                        Character.toString(((Atom) items.get(j)).codePoint()), java.text.Normalizer.Form.NFKD));
+                    j++;
+                }
+                words.add(scriptedWords(words.remove(words.size() - 1),
+                    sup.isEmpty() ? null : sup.toString(), sub.isEmpty() ? null : sub.toString()));
+                i = j;
+                continue;
+            }
+            String accent = combiningAccent(it);
+            if (accent != null && !words.isEmpty()) {
+                words.add(accentName(accent) + " " + words.remove(words.size() - 1));
+                i++;
+                continue;
+            }
+            String part = describe(it);
+            if (!part.isEmpty()) {
+                words.add(part);
+            }
+            i++;
+        }
+        return String.join(" ", words);
+    }
+
+    /** A decimal digit of any numbering system (ASCII, math bold, full-width, Arabic-Indic, ...). */
+    private static boolean isDigitAtom(MathNode n) {
+        return n instanceof Atom a && Character.getType(a.codePoint()) == Character.DECIMAL_DIGIT_NUMBER;
+    }
+
+    /** The code point of the zero of a digit's numbering system: digits of one system join. */
+    private static int zeroOf(MathNode n) {
+        int cp = ((Atom) n).codePoint();
+        return cp - Character.digit(cp, 10);
+    }
+
+    private static boolean continuesNumber(MathNode n, int zero) {
+        MathNode d = n instanceof SupSub ss ? ss.base() : n;
+        return isDigitAtom(d) && zeroOf(d) == zero;
+    }
+
+    /** How a base with scripts reads: "x squared", "x to the power of n", "x sub i ...". */
+    private static String scripted(String b, MathNode sup, MathNode sub) {
+        return scriptedWords(b, sup == null ? null : describe(sup), sub == null ? null : describe(sub));
+    }
+
+    /** The one reading rule for scripts, given their words; {@code null} means absent. */
+    private static String scriptedWords(String b, String sup, String sub) {
+        // an empty base ({}_{i}, or a Unicode script with nothing before it) reads 'sub i', not
+        // ' sub i' (Fixpoint review of 6160f84, plan 14579fe4)
+        String base = b.isEmpty() ? "" : b + " ";
+        if (sub == null) {
+            return sup.equals("2") ? base + "squared" : base + "to the power of " + sup;
+        }
+        if (sup == null) {
+            return base + "sub " + sub;
+        }
+        return base + "sub " + sub + " to the power of " + sup;
+    }
+
+    private static boolean isAtomOf(MathNode n, int cp) {
+        return n instanceof Atom a && a.codePoint() == cp;
+    }
+
+    /** {@code {,}}: TeX's group separator, a comma wrapped to an ordinary atom. */
+    private static boolean isBracedComma(MathNode n) {
+        return n instanceof MathNode.ClassOverride co && isAtomOf(co.body(), ',');
+    }
+
+    /**
+     * 1 for a superscript character, 2 for a subscript one, 0 otherwise: a single atom whose
+     * compatibility decomposition is one other character and whose Unicode name marks it as
+     * a superscript, a subscript or a modifier letter (the script characters the parser left
+     * as the font's own glyphs because the font draws them).
+     */
+    private static int scriptKind(MathNode n) {
+        if (!(n instanceof Atom a)) {
+            return 0;
+        }
+        String ch = Character.toString(a.codePoint());
+        String d = java.text.Normalizer.normalize(ch, java.text.Normalizer.Form.NFKD);
+        if (d.equals(ch) || d.codePointCount(0, d.length()) != 1) {
+            return 0;
+        }
+        String name = Character.getName(a.codePoint());
+        if (name == null) {
+            return 0;
+        }
+        if (name.contains("SUBSCRIPT")) {
+            return 2;
+        }
+        return name.startsWith("SUPERSCRIPT") || name.startsWith("MODIFIER LETTER SMALL")
+            || name.startsWith("MODIFIER LETTER CAPITAL") || name.endsWith("ORDINAL INDICATOR") ? 1 : 0;
+    }
+
+    /** The accent command a combining mark reads as, or null if it is not one we name. */
+    private static String combiningAccent(MathNode n) {
+        if (!(n instanceof Atom a)) {
+            return null;
+        }
+        return switch (a.codePoint()) {
+            case 0x0300 -> "grave";
+            case 0x0301 -> "acute";
+            case 0x0302 -> "hat";
+            case 0x0303 -> "tilde";
+            case 0x0304 -> "bar";
+            case 0x0305 -> "overline";
+            case 0x0306 -> "breve";
+            case 0x0307 -> "dot";
+            case 0x0308 -> "ddot";
+            case 0x030A -> "mathring";
+            case 0x030C -> "check";
+            case 0x20D7 -> "vec";
+            default -> null;
+        };
+    }
+
     /** A plain-language accessibility label for a math tree. */
     static String describe(MathNode node) {
         return switch (node) {
             case Atom atom -> Character.toString(atom.codePoint());
             case MathNode.MiddleDelim(var delimCp) -> Character.toString(delimCp);
-            case MathList(var items) -> {
-                StringBuilder sb = new StringBuilder();
-                for (MathNode item : items) {
-                    String part = describe(item);
-                    if (part.isEmpty()) {
-                        continue;
-                    }
-                    if (sb.length() > 0) {
-                        sb.append(' ');
-                    }
-                    sb.append(part);
-                }
-                yield sb.toString();
-            }
-            case SupSub(var base, var sup, var sub) -> {
-                String b = describe(base);
-                if (b.isEmpty()) {
-                    // an empty base ({}_{i}, or a Unicode script with nothing before it): the
-                    // label reads 'sub i', not ' sub i' (Fixpoint review of 6160f84)
-                    String s = sub == null ? "" : "sub " + describe(sub);
-                    String p = sup == null ? "" : (describe(sup).equals("2") && sub == null ? "squared" : "to the power of " + describe(sup));
-                    yield (s + (s.isEmpty() || p.isEmpty() ? "" : " ") + p);
-                }
-                if (sub == null) {
-                    String exp = describe(sup);
-                    yield exp.equals("2") ? b + " squared" : b + " to the power of " + exp;
-                }
-                if (sup == null) {
-                    yield b + " sub " + describe(sub);
-                }
-                yield b + " sub " + describe(sub) + " to the power of " + describe(sup);
-            }
+            case MathList(var items) -> describeRow(items);
+            case SupSub(var base, var sup, var sub) -> scripted(describe(base), sup, sub);
             case Fraction f -> f.hasRule()
                 ? "the fraction " + describe(f.numerator()) + " over " + describe(f.denominator())
                 : describe(f.numerator()) + " choose " + describe(f.denominator());
