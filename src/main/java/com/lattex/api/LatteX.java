@@ -1158,7 +1158,7 @@ public final class LatteX {
                 String num = number.toString();
                 if (scripts != null) {
                     row.add(scripted(num, scripts.sup(), scripts.sub()), true);
-                } else if (j < n && combiningAccent(items.get(j)) != null && num.codePointCount(0, num.length()) > 1) {
+                } else if (j < n && markFollows(items.get(j)) && num.codePointCount(0, num.length()) > 1) {
                     int last = num.offsetByCodePoints(num.length(), -1);
                     row.add(num.substring(0, last), true);
                     row.add(num.substring(last), true);
@@ -1282,15 +1282,26 @@ public final class LatteX {
         return atoms;
     }
 
-    /** Whether a described item is something a following script or mark sits on (not an operator, an opening or a punctuation). */
+    /** A combining mark, bare or carrying a TeX script (0.16, U+0304, ^2), next in the row. */
+    private static boolean markFollows(MathNode n) {
+        return combiningAccent(n) != null || (n instanceof SupSub ss && combiningAccent(ss.base()) != null);
+    }
+
+    /**
+     * Whether a described item is something a following script or mark sits on: not an
+     * operator, an opening or a punctuation, by its EFFECTIVE class, so {@code \mathbin{+}}
+     * is an operator as a bare + is (Lattice review of f94842f).
+     */
     private static boolean isBaseNode(MathNode n) {
-        if (n instanceof Atom a) {
-            return switch (a.mathClass()) {
-                case BIN, REL, OPEN, PUNCT -> false;
-                default -> true;
-            };
+        MathNode.MathClass c = n instanceof Atom a ? a.mathClass()
+            : n instanceof MathNode.ClassOverride co ? co.forcedClass() : null;
+        if (c == null) {
+            return true;
         }
-        return true;
+        return switch (c) {
+            case BIN, REL, OPEN, PUNCT -> false;
+            default -> true;
+        };
     }
 
     /** The digits of a digit atom or a digit-only group of the given numbering system, else null. */

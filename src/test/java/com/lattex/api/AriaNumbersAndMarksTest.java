@@ -87,6 +87,9 @@ class AriaNumbersAndMarksTest {
         reads("0.1 bar over 6", "0.16̄", "0.1\\bar{6}");
         reads("1 dot over 2", "12̇", "1\\dot{2}");
         reads("0.1 vector 6", "0.16⃗", "0.1\\vec{6}");
+        // and when the mark carries a script (Lattice review of f94842f)
+        reads("0.1 bar over 6 squared", "0.16̄^2", "0.1\\bar{6}^2", "0.16̄²");
+        reads("1 bar over 2 to the power of 3", "12̄^3", "1\\bar{2}^3");
     }
 
     @Test
@@ -107,7 +110,11 @@ class AriaNumbersAndMarksTest {
     void aScriptRunWithNoBaseIsReadWhole() {
         // item 2: an isotope's prescript, at the start or after an operator
         reads("superscript 235 U", "²³⁵U");
-        reads("x + superscript 235 U", "x+²³⁵U");
+        reads("x + superscript 235 U", "x+²³⁵U", "x\\mathbin{+}²³⁵U");
+        // an operator by its EFFECTIVE class is no base either (Lattice review of f94842f)
+        reads("x = superscript 235 U", "x=²³⁵U", "x\\mathrel{=}²³⁵U");
+        reads("x , superscript 235 U", "x,²³⁵U", "x\\mathpunct{,}²³⁵U");
+        reads("x ( superscript 235 U )", "x(²³⁵U)", "x\\mathopen{(}²³⁵U)");
     }
 
     @Test
