@@ -71,12 +71,35 @@ below are kept verbatim as their branches wrote them.
   rulings stafficy/35638 and 35665; found by the crew's census of the showcase pages,
   2026-11-25, where x with subscript i, j, u or v drew boxes with exit 0). Unicode's
   superscript and subscript characters (163, every one-character `<super>`/`<sub>`
-  decomposition in U+00A0-U+2DFF) are read in math: a run of one kind that holds a
-  character the font lacks, but whose base it draws (103 of them), becomes one real
-  script of the base letters (`xᵢⱼ` is `x_{ij}`; a script digit in such a run moves with
-  it; at the start, after `{`, a `\left` delimiter or a cell break it attaches to an empty
-  base). A run the font draws whole (`x²`) renders exactly as before. Where a box is
-  still drawn, the SVG's aria-label ends with ` (missing glyph: U+XXXX)`, the CLI warns
-  on stderr and exits 3, and `RenderOptions.withStrictGlyphs(true)` / `--strict-glyphs`
-  make it a failure; plan a1866884's lenient default stands. Existing clean renders are
-  unchanged.
+  decomposition in U+00A0-U+2DFF) are read in math: a cluster of them that holds a
+  character the font lacks, but whose base it draws (103 of them), becomes real scripts
+  of the base letters, its superscripts as one and its subscripts as one on the same base
+  (`xᵢⱼ` is `x_{ij}`, `x²ᵢ` is `x^{2}_{i}`; a script digit in such a cluster moves with
+  it). A character in such a cluster whose base the font lacks too (10 of them) stays as
+  typed, so its box names what the author typed. A cluster the font draws whole (`x²`)
+  renders exactly as before.
+- **The rewrite only improves:** any input main renders, this renders. Where a cluster
+  cannot attach as scripts (the nucleus already has a script of that kind, a typed script
+  of that kind follows it, or it stands where an argument is read: `x_1ᵢ`, `xᵢ_j`,
+  `A^{-1}ᵀ`, `x^ᵢ`, `\frac1ᵢ`), or has nothing before it, it is its own nucleus, an empty
+  base carrying its scripts, as its raw character was one atom on main. Pinned over a
+  corpus: 34 templates times all 163 characters.
+- **Where a box is still drawn**, the SVG's aria-label ends with
+  ` (missing glyph: U+XXXX)` (the reserved substring is `LatteX.MISSING_GLYPH_MARK`, on
+  the exported API); the CLI warns on stderr (`lattex: warning: no glyph for U+XXXX`),
+  still writes the SVG and **still exits 0**, because hosts read a nonzero exit as "leave
+  the source in place"; and `RenderOptions.withStrictGlyphs(true)` / `--strict-glyphs`
+  make it a failure (exit 1). Plan a1866884's lenient default stands. Not covered:
+  `renderFragment`, which returns markup without an aria-label (a host that needs the
+  check uses `renderWithDiagnostics`), and the opt-in rendered error card, which draws its
+  own message.
+- **Existing clean renders are unchanged, with two exceptions by design:** author text
+  that spells the mark (`\text{... (missing glyph: ...}` or an `a11y.label`) gets a
+  zero-width space U+200B after "glyph", applied after the text is normalised so a
+  stripped control character cannot rejoin it; and a label whose base is empty no longer
+  starts with a space (three corpus labels: `{}^3/_7`, `\prescript{14}{6}`,
+  `\prescript{a}{b}`; the two whole-corpus hashes are re-pinned with that measured as
+  their sole cause; stripped of labels all 187 renders are byte-identical).
+- **New exported API:** `RenderOptions.withStrictGlyphs(boolean)`,
+  `RenderOptions.strictGlyphs()`, the 8-argument `RenderOptions` constructor (the
+  7-argument one is kept), and `LatteX.MISSING_GLYPH_MARK`.

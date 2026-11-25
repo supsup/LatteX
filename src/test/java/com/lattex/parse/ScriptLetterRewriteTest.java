@@ -8,6 +8,8 @@ import com.lattex.api.LatteX;
 import com.lattex.api.RenderResult;
 import com.lattex.font.SfntFont;
 import java.text.Normalizer;
+import java.time.Duration;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 /// Plan 14579fe4 (lattex project), part (a), ruling stafficy/35638: a Unicode script
@@ -53,13 +55,14 @@ class ScriptLetterRewriteTest {
 
     @Test
     void aLongClusterTheFontDrawsWholeIsLexedInOnePass() {
-        // a cluster with no rewrite keeps its own CHAR tokens and their own offsets
-        String run = "\u00B2".repeat(20000);
-        long t0 = System.nanoTime();
-        String p = pp("x" + run);
-        long ms = (System.nanoTime() - t0) / 1_000_000;
-        assertTrue(p.startsWith("L(A(x,ORD) A(U+00B2,ORD)"), p.substring(0, 60));
-        assertTrue(ms < 5000, "20,000 script characters took " + ms + " ms");
+        // a cluster with no rewrite keeps its own CHAR tokens and their own offsets. Sized so
+        // the quadratic first commit (4d0f03a: 3.1 s on 20,000) cannot pass: 100,000
+        // characters take it over a minute, and the one-pass lexer milliseconds (Fixpoint
+        // review of 6160f84: the old 20,000 / 5,000 ms did not pin the fix).
+        String run = "\u00B2".repeat(100_000);
+        var tokens = Assertions.assertTimeoutPreemptively(Duration.ofMillis(1500), () -> MathParser.lex("x" + run));
+        assertEquals(100_002, tokens.size(), "x, every script character, EOF");
+        assertTrue(pp("x" + "\u00B2".repeat(20000)).startsWith("L(A(x,ORD) A(U+00B2,ORD)"));
         assertEquals(1, MathParser.lex("x\u00B2\u00B3").get(1).offset());
         assertEquals(2, MathParser.lex("x\u00B2\u00B3").get(2).offset());
     }
@@ -89,6 +92,64 @@ class ScriptLetterRewriteTest {
         org.junit.jupiter.api.Assertions.assertThrows(MathSyntaxException.class, () -> MathParser.parse("_{i}x"));
     }
 
+    // ---- the rewrite may only improve (Fixpoint review of 6160f84, stafficy/35720) -------
+
+    /** Fixpoint's six inputs: main draws each with a box and exit 0; the first branch refused them. */
+    @Test
+    void fixpointsSixRefusalsNowRenderAsRealScripts() {
+        for (String s : new String[] {"x_1\u1D62", "x\u1D62_j", "A^{-1}\u1D40", "x\u1D62 \u2C7C", "x^\u1D62",
+                "\\frac1\u1D62"}) {
+            RenderResult r = LatteX.renderWithDiagnostics(s);
+            assertEquals(com.lattex.api.Outcome.OK, r.diagnostics().outcome(), s + ": " + r.diagnostics().message());
+            assertEquals("", r.diagnostics().detail(), s + " draws no box");
+        }
+        // where it cannot attach, the cluster is its own nucleus: an empty base with its script
+        assertEquals(pp("x_1{}_{i}"), pp("x_1\u1D62"));
+        // the typed _j attaches to the cluster's own nucleus, as it attached to main's box
+        // ({}_{i} then _j has no explicit spelling: it would be a double subscript)
+        assertEquals("L(A(x,ORD) SS(SS(L(),_A(i,ORD)),_A(j,ORD)))", pp("x\u1D62_j"));
+        assertEquals(pp("x^{{}_{i}}"), pp("x^\u1D62"));
+        assertEquals(pp("x_{i}^{2}"), pp("x\u1D62^2"), "a typed script of the OTHER kind still joins it");
+    }
+
+    /**
+     * The rule, over a corpus: for every template and every one of the 163 script characters,
+     * if main renders it, the branch renders it. Main drew a script character as one ordinary
+     * atom, so main's outcome is modelled by the same template with an ordinary non-letter
+     * atom (U+2202) in its place, which this branch parses exactly as main parsed the character.
+     */
+    @Test
+    void renderedOnMainImpliesRenderedHere() {
+        String[] templates = {"x@", "x_1@", "x^1@", "x_1^2@", "x@_j", "x@^j", "x@ @", "x^@", "x_@", "x^{2}@",
+            "\\frac1@", "\\frac@2", "\\sqrt@", "\\hat@", "\\mathbf@", "@x", "@", "{@}", "x'@", "x@'", "@_1", "@^1",
+            "\\left(@\\right)", "\\sum@", "\\sum_1@", "\\sum@_1", "\\sum^1@", "\\int@^b", "\\underbrace{x}_1@",
+            "\\underbrace{x}@_1", "\\overbrace{x}^1@", "\\begin{matrix}a&@\\\\@&b\\end{matrix}", "x@@", "x@\\,@"};
+        int checked = 0;
+        for (String tpl : templates) {
+            boolean mainRenders;
+            try {
+                MathParser.parse(tpl.replace("@", "\u2202"));
+                mainRenders = true;
+            } catch (MathSyntaxException e) {
+                mainRenders = false;
+            }
+            if (!mainRenders) {
+                continue;
+            }
+            for (int cp : MathParser.SCRIPT_CHARS.keySet()) {
+                String in = tpl.replace("@", new String(Character.toChars(cp)));
+                try {
+                    MathParser.parse(in);
+                } catch (MathSyntaxException e) {
+                    throw new AssertionError(String.format("U+%04X in %s: main renders it, this refuses: %s",
+                        cp, tpl, e.getMessage()), e);
+                }
+                checked++;
+            }
+        }
+        assertEquals(34 * 163, checked, "every template renders on main, so every pair is checked");
+    }
+
     @Test
     void textModeIsNotRewritten() {
         // a text run is taken raw; the rewrite is a math-mode lexer rule
@@ -98,11 +159,13 @@ class ScriptLetterRewriteTest {
     @Test
     void theTableMatchesUnicodeAndTheBundledFont() {
         int rewritten = 0;
+        int kept = 0;
         for (var e : MathParser.SCRIPT_CHARS.entrySet()) {
             int cp = e.getKey();
             int kind = e.getValue()[0];
             int base = e.getValue()[1];
             boolean flagged = e.getValue()[2] == 1;
+            boolean neither = e.getValue()[2] == 2;
             String ch = new String(Character.toChars(cp));
             String b = new String(Character.toChars(base));
             String at = String.format("U+%04X", cp);
@@ -112,6 +175,10 @@ class ScriptLetterRewriteTest {
             boolean fontLacks = FONT.glyphId(cp) == 0;
             boolean baseDraws = LatteX.renderWithDiagnostics(b).diagnostics().detail().isEmpty();
             assertEquals(fontLacks && baseDraws, flagged, at + ": rewritten exactly when the font lacks it and draws its base");
+            assertEquals(fontLacks && !baseDraws, neither, at + ": kept as typed exactly when the font draws neither");
+            if (neither) {
+                kept++;
+            }
             if (flagged) {
                 rewritten++;
                 assertEquals(pp("x" + (kind == 0 ? "^" : "_") + "{" + b + "}"), pp("x" + ch), at);
@@ -121,6 +188,7 @@ class ScriptLetterRewriteTest {
         }
         assertEquals(163, MathParser.SCRIPT_CHARS.size(), "Unicode's one-character <super>/<sub> decompositions in U+00A0-U+2DFF");
         assertEquals(103, rewritten, "of which the bundled font lacks the character and draws the base");
+        assertEquals(10, kept, "and of which it draws neither: kept as typed, so a box names what was typed");
     }
 
     @Test

@@ -72,9 +72,15 @@ class FontCacheByteIdentityRatchetTest {
      * backslash to U+2216 reproduces the old pin 7b1c7afc... exactly (review lattex 1100/1103).
      * An earlier probe at 84b9aef is NOT evidence: that tree's test sources do not compile (an
      * illegal escape in a MathMLTest comment, fixed in 60e2073) and its XML was not retained.
+     * Re-pinned 2026-11-25 for plan 14579fe4 (Fixpoint review of 6160f84: a label whose base
+     * is empty no longer starts with a space). Sole cause MEASURED 2026-11-25 by a
+     * counterfactual: with only that label rule disabled the tree reproduces 17b3ec34...
+     * exactly. Three of the 187 corpus labels change, each by its leading space alone
+     * ({}^3/_7, \\prescript{14}{6}, \\prescript{a}{b}); stripped of labels, all 187 renders
+     * are byte-identical to main.
      */
     private static final String PINNED_SHA256 =
-        "17b3ec3487a20a8c629eb19859dc4c6000d3edec4f7e61ec8a74c84cb5022fae";
+        "6d7f53afe7bddde271b8cba3b4a814383ea16d1ab4a631b013756e552ba3a3bb";
 
     private static final SfntFont FONT = SfntFont.loadBundled();
 

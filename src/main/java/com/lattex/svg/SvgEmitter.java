@@ -121,8 +121,9 @@ public final class SvgEmitter {
      * value is renderer-derived ({@code [0-9.:%;a-z-]} from a fixed template + a
      * numeric width) — no author string can reach it.
      */
-    /**
-     * The reserved substring a caller tests for (plan 14579fe4, lattex project, ruling
+    /*
+     * The mark itself is com.lattex.api.LatteX.MISSING_GLYPH_MARK, on the exported API so a
+     * module consumer can name it (Fixpoint review of 6160f84). The reserved substring a caller tests for (plan 14579fe4, lattex project, ruling
      * stafficy/35665): a render that drew the font's missing-glyph box ends its aria-label
      * with {@code " (missing glyph: U+XXXX, U+YYYY)"}, code points in order of first
      * appearance, each once, at most eight then {@code ", +N more"}. A clean render never
@@ -131,12 +132,16 @@ public final class SvgEmitter {
      * voice and which breaks the match. The mark stays inside the emitter's minimal subset
      * (CONTRIBUTING section 5): it is text of the one aria-label the root already carries.
      */
-    public static final String MISSING_GLYPH_MARK = "(missing glyph: U+";
     private static final int MAX_MARKED = 8;
 
-    /** The label with the reserved mark appended when the layout drew a missing-glyph box. */
+    /**
+     * The label's final, escaped text, with the reserved mark appended when the layout drew
+     * a missing-glyph box. The author's text is escaped (which also strips control
+     * characters) BEFORE any spelling of the mark in it is broken, so a stripped character
+     * cannot rejoin one (Fixpoint review of 6160f84).
+     */
     static String markedLabel(String label, Layout layout) {
-        String safe = label.replace("(missing glyph: ", "(missing glyph\u200B: ");
+        String safe = com.lattex.parse.OutputLegality.unmark(escape(label));
         java.util.LinkedHashSet<Integer> cps = new java.util.LinkedHashSet<>();
         for (var g : layout.glyphs()) {
             if (g.unmappedCodePoint() != com.lattex.layout.PositionedGlyph.MAPPED) {
@@ -183,7 +188,7 @@ public final class SvgEmitter {
                 .append("px;height:auto\"");
         }
         svg.append(" role=\"img\"")
-            .append(" aria-label=\"").append(escape(markedLabel(ariaLabel, layout))).append("\">\n");
+            .append(" aria-label=\"").append(markedLabel(ariaLabel, layout)).append("\">\n");
 
         emitInner(svg, layout, font, fill, 0.0, 0.0);
         svg.append("</svg>");

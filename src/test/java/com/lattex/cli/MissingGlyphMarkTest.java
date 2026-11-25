@@ -10,7 +10,6 @@ import com.lattex.api.Outcome;
 import com.lattex.api.RenderOptions;
 import com.lattex.api.RenderResult;
 import com.lattex.parse.MathSyntaxException;
-import com.lattex.svg.SvgEmitter;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -20,7 +19,8 @@ import org.junit.jupiter.api.Test;
 /// Plan 14579fe4 (lattex project), part (b), rulings stafficy/35638 and 35665. A character
 /// the bundled font has no glyph for is still drawn as a box by default (plan a1866884 stands),
 /// but no longer silently: the SVG's aria-label ends with the reserved mark, the CLI warns on
-/// stderr and exits 3, and strictGlyphs / --strict-glyphs turn the same condition into a failure.
+/// stderr (exit status still 0, Fixpoint review of 6160f84: a host reads nonzero as 'leave the
+/// source in place'), and strictGlyphs / --strict-glyphs turn the same condition into a failure.
 /// The three faces are one condition, asserted to agree on the same inputs.
 final class MissingGlyphMarkTest {
 
@@ -49,16 +49,35 @@ final class MissingGlyphMarkTest {
         assertTrue(label(LatteX.render("x " + BALLOT_X)).endsWith(" (missing glyph: U+2717)"));
         String two = label(LatteX.render(BALLOT_X + "+" + BALLOT_X + "+" + GEORGIAN_NAR));
         assertTrue(two.endsWith(" (missing glyph: U+2717, U+10FC)"), two);
-        assertEquals("(missing glyph: U+", SvgEmitter.MISSING_GLYPH_MARK);
+        assertEquals("(missing glyph: U+", LatteX.MISSING_GLYPH_MARK);
     }
 
     @Test
     void aCleanRenderNeverCarriesTheMarkEvenWhenItsTextSpellsIt() {
         String svg = LatteX.render(CONTROL);
-        assertFalse(svg.contains(SvgEmitter.MISSING_GLYPH_MARK), label(svg));
+        assertFalse(svg.contains(LatteX.MISSING_GLYPH_MARK), label(svg));
         assertTrue(label(svg).contains("(missing glyph​: U+1D62)"), "the author's words survive, unvoiced ZWSP after 'glyph'");
         assertEquals("", LatteX.renderWithDiagnostics(CONTROL).diagnostics().detail());
-        assertFalse(LatteX.render("x^2").contains(SvgEmitter.MISSING_GLYPH_MARK));
+        assertFalse(LatteX.render("x^2").contains(LatteX.MISSING_GLYPH_MARK));
+    }
+
+    @Test
+    void theMarkCannotBeForgedThroughAStrippedCharacterOrAnAuthorLabel() {
+        // Fixpoint review of 6160f84: a control character between 'glyph' and ':' was stripped
+        // AFTER the guard, rejoining the spelling; an a11y.label reached the styled span unguarded
+        String forged = label(LatteX.render("\\text{A report (missing glyph\u0001: U+1D62)}"));
+        assertFalse(forged.contains("(missing glyph: U+1D62)"), forged);
+        String styled = LatteX.renderStyledHtml("\\lx[a11y.label=\"(missing glyph: U+0041)\"]{x^2}");
+        assertFalse(styled.contains(LatteX.MISSING_GLYPH_MARK), styled);
+        assertTrue(styled.contains("(missing glyph\u200B: U+0041)"), "the author's words survive, unvoiced ZWSP");
+    }
+
+    @Test
+    void theMarkNamesTheCharacterTheAuthorTyped() {
+        // Fixpoint review of 6160f84: in a rewritten cluster, a script letter whose base the
+        // font also lacks was replaced by that base, so the mark named U+10DC, never typed
+        assertTrue(label(LatteX.render("x\u1D62" + GEORGIAN_NAR)).endsWith(" (missing glyph: U+10FC)"),
+            label(LatteX.render("x\u1D62" + GEORGIAN_NAR)));
     }
 
     @Test
@@ -81,13 +100,13 @@ final class MissingGlyphMarkTest {
         RenderResult card = LatteX.renderWithDiagnostics(BALLOT_X, strict.withRenderedErrors(true));
         assertEquals(Outcome.UNSUPPORTED_CONSTRUCT, card.diagnostics().outcome());
         assertTrue(card.svg().startsWith("<svg"), "the opted-in card is drawn");
-        assertFalse(card.svg().contains(SvgEmitter.MISSING_GLYPH_MARK), "the card draws its message, not the box");
+        assertFalse(card.svg().contains(LatteX.MISSING_GLYPH_MARK), "the card draws its message, not the box");
     }
 
     @Test
-    void theCliWarnsAndExitsThreeOrFailsWithStrictGlyphs() {
+    void theCliWarnsWithExitZeroOrFailsWithStrictGlyphs() {
         Result warn = cli("", "x " + BALLOT_X);
-        assertEquals(3, warn.code(), warn.err());
+        assertEquals(0, warn.code(), "a warning never changes the exit status: " + warn.err());
         assertEquals("lattex: warning: no glyph for U+2717 (drawn as a box)" + System.lineSeparator(), warn.err());
         assertEquals(LatteX.render("x " + BALLOT_X) + System.lineSeparator(), warn.out(), "the SVG is still written");
         Result strict = cli("", "--strict-glyphs", "x " + BALLOT_X);
@@ -101,7 +120,7 @@ final class MissingGlyphMarkTest {
     void theBatchNamesEachRecordByItsOneBasedNumber() {
         String in = "x^2\n" + BALLOT_X + "\nx" + GEORGIAN_NAR + "\n" + CONTROL + "\n";
         Result warn = cli(in, "--batch");
-        assertEquals(3, warn.code(), warn.err());
+        assertEquals(0, warn.code(), warn.err());
         assertEquals("lattex: warning: record 2: no glyph for U+2717 (drawn as a box)" + System.lineSeparator()
             + "lattex: warning: record 3: no glyph for U+10FC (drawn as a box)" + System.lineSeparator(), warn.err());
         assertEquals(4, warn.out().split("\0", -1).length - 1, "all four records emitted");
@@ -119,9 +138,11 @@ final class MissingGlyphMarkTest {
         String[] inputs = {"x^2", BALLOT_X, "x" + GEORGIAN_NAR, CONTROL, "xᵢ", "͸", "a✗b✗"};
         RenderOptions strict = RenderOptions.defaults().withStrictGlyphs(true);
         for (String in : inputs) {
-            boolean label = LatteX.render(in).contains(SvgEmitter.MISSING_GLYPH_MARK);
+            boolean label = LatteX.render(in).contains(LatteX.MISSING_GLYPH_MARK);
             boolean detail = !LatteX.renderWithDiagnostics(in).diagnostics().detail().isEmpty();
-            boolean warned = cli("", in).code() == 3;
+            Result plain = cli("", in);
+            assertEquals(0, plain.code(), in + ": a warning never changes the exit status");
+            boolean warned = plain.err().contains("lattex: warning: no glyph for ");
             boolean strictFails;
             try {
                 LatteX.render(in, strict);

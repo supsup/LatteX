@@ -62,6 +62,19 @@ import java.util.Map;
  */
 public final class LatteX {
 
+    /**
+     * The reserved substring a caller tests for (plan 14579fe4, lattex project, rulings
+     * stafficy/35665 and 35720): a render that drew the font's missing-glyph box ends its
+     * aria-label with {@code " (missing glyph: U+XXXX, U+YYYY)"}, naming the characters the
+     * author typed, in order of first appearance, each once, at most eight then
+     * {@code ", +N more"}. No clean render contains it: author text that spells it (a
+     * {@code \text} label, an {@code a11y.label}) has a zero-width space U+200B put after the
+     * word "glyph" once the text is normalised, which a screen reader does not voice and
+     * which breaks the match. The mark is text of the one aria-label the SVG root already
+     * carries, inside the emitter's minimal subset (CONTRIBUTING section 5).
+     */
+    public static final String MISSING_GLYPH_MARK = "(missing glyph: U+";
+
     /** Default display font size, in user units (px at 1:1). */
     public static final double DISPLAY_FONT_SIZE = 40.0;
 
@@ -832,8 +845,9 @@ public final class LatteX {
               .append(htmlAttrEscape(e.getValue())).append('"');
         }
         // a11y label — stored RAW; legality policy + HTML-attr escaping applied here.
+        // An author label may not spell the missing-glyph mark (Fixpoint review of 6160f84).
         sem.a11yLabelValue().ifPresent(v -> sb.append(" aria-label=\"")
-            .append(htmlAttrEscape(v)).append('"'));
+            .append(com.lattex.parse.OutputLegality.unmark(htmlAttrEscape(v))).append('"'));
         return sb.append('>').toString();
     }
 
@@ -1106,6 +1120,13 @@ public final class LatteX {
             }
             case SupSub(var base, var sup, var sub) -> {
                 String b = describe(base);
+                if (b.isEmpty()) {
+                    // an empty base ({}_{i}, or a Unicode script with nothing before it): the
+                    // label reads 'sub i', not ' sub i' (Fixpoint review of 6160f84)
+                    String s = sub == null ? "" : "sub " + describe(sub);
+                    String p = sup == null ? "" : (describe(sup).equals("2") && sub == null ? "squared" : "to the power of " + describe(sup));
+                    yield (s + (s.isEmpty() || p.isEmpty() ? "" : " ") + p);
+                }
                 if (sub == null) {
                     String exp = describe(sup);
                     yield exp.equals("2") ? b + " squared" : b + " to the power of " + exp;

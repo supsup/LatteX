@@ -99,24 +99,31 @@ a1866884). It is no longer silent. Three faces of one condition, which always ag
 
 - **The SVG says so.** Its `aria-label` ends with ` (missing glyph: U+XXXX, U+YYYY)`:
   the code points in order of first appearance, each once, at most eight, then
-  `, +N more`. A caller tests for the exact substring `(missing glyph: U+`
-  (`SvgEmitter.MISSING_GLYPH_MARK`). A clean render never contains it: author text that
-  spells it (a `\text{...}` label, say) gets a zero-width space U+200B after the word
-  "glyph", which a screen reader does not voice and which breaks the match. The mark is
+  `, +N more`, naming the characters the author typed. A caller tests for the exact
+  substring `(missing glyph: U+` (`LatteX.MISSING_GLYPH_MARK`). A clean render never
+  contains it: author text that spells it (a `\text{...}` label or an `a11y.label`) gets
+  a zero-width space U+200B after the word "glyph", once the text is normalised, which a
+  screen reader does not voice and which breaks the match. The mark is
   text of the one `aria-label` the root already carries, inside the emitter's minimal
   subset (CONTRIBUTING section 5).
 - **The CLI says so.** `lattex: warning: no glyph for U+XXXX (drawn as a box)` on stderr
   (in `--batch`, `lattex: warning: record N: ...`, N counting from 1), the SVG still
-  written, and exit status 3.
+  written, and the exit status still 0: a warning never changes it, because hosts read a
+  nonzero exit as "leave the source in place" (SLOWSTART), which would lose the formula.
 - **A host can refuse it.** `RenderOptions.withStrictGlyphs(true)` makes `render` and
   `renderStyledHtml` throw, `tryRenderMath` return empty, and `renderWithDiagnostics`
   return `UNSUPPORTED_CONSTRUCT` (with no SVG, unless the host has also opted in to the
   rendered error card with `withRenderedErrors(true)`, which then draws that card); the
   CLI flag `--strict-glyphs` makes it an error (exit 1, or an error record in `--batch`).
+- **Not covered:** `renderFragment` returns markup without an aria-label, so it cannot
+  carry the mark (use `renderWithDiagnostics`); the opt-in rendered error card draws its
+  own message.
 
 Unicode's superscript and subscript letters are not affected: where the font lacks one
 and draws its base letter, the parser sets it as a real script (x followed by subscript
-i is exactly `x_{i}`), so none of those draw a box at all.
+i is exactly `x_{i}`), so none of those draw a box at all. Where such a script cannot
+attach (`x_1ᵢ`, `x^ᵢ`), it is its own nucleus on an empty base: the rewrite only improves,
+so any input that rendered before still renders.
 
 ## Docker: one-shot CLI or watched folders
 
