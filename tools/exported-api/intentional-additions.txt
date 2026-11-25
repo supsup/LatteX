@@ -57,3 +57,12 @@ public type com.lattex.api.MathStyle
 # 7-argument constructor is retained deliberately so no construction site moves.
 public constructor com.lattex.api.Diagnostics(com.lattex.api.Outcome,java.lang.String,java.lang.String,int,java.lang.String,int,java.lang.String,java.util.List)
 public method com.lattex.api.Diagnostics#caveats():java.util.List
+# Plan 14579fe4 (lattex project): a character with no glyph in the font is announced, and a host
+# can refuse it. strictGlyphs is a new RenderOptions component (the 7-argument constructor is
+# kept, so no construction site moves); MISSING_GLYPH_MARK is the reserved aria-label substring a
+# host tests for, on the exported API so a module consumer can name it. The first three approved
+# by Fixpoint as LatteX lead (stafficy/35720 item 3); the field is his item 8. Removals: none.
+public constructor com.lattex.api.RenderOptions(double,com.lattex.api.Color,com.lattex.api.MathStyle,java.util.Map,boolean,boolean,boolean,boolean)
+public method com.lattex.api.RenderOptions#strictGlyphs():boolean
+public method com.lattex.api.RenderOptions#withStrictGlyphs(boolean):com.lattex.api.RenderOptions
+public static field com.lattex.api.LatteX#MISSING_GLYPH_MARK:java.lang.String

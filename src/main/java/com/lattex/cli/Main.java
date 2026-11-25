@@ -127,6 +127,13 @@ public final class Main {
                                   --macro 'R=\\mathbb{R}' --macro 'norm=\\lVert #1 \\rVert'
             --color <C>           Ink color: 'currentColor' (default — inherits text
                                   color) or a #rgb / #rrggbb hex literal.
+            --strict-glyphs       Fail (exit 1, or an error record in --batch) when a
+                                  character has no glyph in the font. Without it the
+                                  formula is drawn with a box for that character, a
+                                  'lattex: warning: no glyph for U+XXXX' line goes to
+                                  stderr, the SVG's aria-label ends with
+                                  '(missing glyph: U+XXXX)', and the exit status is
+                                  still 0: a warning never changes the exit status.
             -h, --help            Show this help and exit.
             -V, --version         Print the version and exit.
             --                    Treat all following arguments as the
@@ -148,6 +155,10 @@ public final class Main {
                at the first detected output failure; the confirmed complete prefix
                remains valid)
             2  usage error (unknown flag, missing argument, …)
+            A character with no glyph in the font is a warning on stderr, not an
+            exit status: the SVG is written and the status is 0 (in --batch, a
+            batch with an error record and a warning exits 1, for the error).
+            With --strict-glyphs it is an error instead (status 1).
         """.formatted(VERSION);
 
     private Main() {
@@ -167,7 +178,9 @@ public final class Main {
      * @param args the raw command-line arguments
      * @param out  the stream for SVG output / help / version
      * @param err  the stream for diagnostics
-     * @return the process exit code (0 ok, 1 render/IO error, 2 usage error)
+     * @return the process exit code (0 ok, 1 render/IO error, 2 usage error); a character
+     *     with no glyph is a stderr warning and leaves the code at 0, unless {@code --strict-glyphs}
+     *     makes it an error (1)
      */
     public static int run(String[] args, PrintStream out, PrintStream err) {
         return run(args, System.in, out, err);
@@ -191,7 +204,9 @@ public final class Main {
      * @param in   the input stream read when no positional expression is given / in batch mode
      * @param out  the stream for SVG output / help / version
      * @param err  the stream for diagnostics
-     * @return the process exit code (0 ok, 1 render/IO error, 2 usage error)
+     * @return the process exit code (0 ok, 1 render/IO error, 2 usage error); a character
+     *     with no glyph is a stderr warning and leaves the code at 0, unless {@code --strict-glyphs}
+     *     makes it an error (1)
      */
     public static int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
         Path outputFile = null;
@@ -201,6 +216,7 @@ public final class Main {
         boolean batch = false;
         boolean nullDelim = false;
         boolean inline = false;
+        boolean strictGlyphs = false;
         Double scale = null;
         com.lattex.api.Color color = null;
         java.util.Map<String, String> macros = new java.util.LinkedHashMap<>();
@@ -227,6 +243,7 @@ public final class Main {
                     case "--batch" -> batch = true;
                     case "-0", "--null" -> nullDelim = true;
                     case "--inline" -> inline = true;
+                    case "--strict-glyphs" -> strictGlyphs = true;
                     case "--scale" -> {
                         if (i + 1 >= args.length) {
                             err.println("lattex: error: --scale requires a NUMBER argument");
@@ -303,7 +320,7 @@ public final class Main {
         }
 
         if (batch) {
-            return runBatch(in, out, err, outputFile, sawExpr, nullDelim, opts);
+            return runBatch(in, out, err, outputFile, sawExpr, nullDelim, opts, strictGlyphs);
         }
 
         String latex;
@@ -353,6 +370,19 @@ public final class Main {
             return 1;
         }
 
+        // Plan 14579fe4: the box is announced. The mark in the SVG's own aria-label is the
+        // single source, so the warning, the label and --strict-glyphs cannot disagree.
+        String missing = missingGlyphs(svg);
+        if (!missing.isEmpty()) {
+            if (strictGlyphs) {
+                err.println("lattex: error: no glyph for " + missing + " (--strict-glyphs)");
+                return 1;
+            }
+            err.println("lattex: warning: no glyph for " + missing + " (drawn as a box)");
+        }
+        // A warning never changes the exit status (Fixpoint review of 6160f84): hosts
+        // read a nonzero exit as 'leave the source in place' (SLOWSTART, bin/lattex-markdown),
+        // which would lose a formula over one stray character, the loss plan a1866884 forbids.
         if (outputFile == null) {
             out.println(svg);
             return finishStdout(out, err);
@@ -365,6 +395,17 @@ public final class Main {
             }
         }
         return 0;
+    }
+
+    /** The aria-label's reserved missing-glyph mark (LatteX.MISSING_GLYPH_MARK) in an SVG root. */
+    private static final java.util.regex.Pattern MISSING_MARK = java.util.regex.Pattern.compile(
+        "\\(missing glyph: (U\\+[0-9A-F]{4,6}(?:, U\\+[0-9A-F]{4,6})*(?:, \\+\\d+ more)?)\\)\"");
+
+    /** The code points the render drew as the missing-glyph box, or "" for a clean render. */
+    static String missingGlyphs(String svg) {
+        int end = svg.indexOf('>');
+        java.util.regex.Matcher m = MISSING_MARK.matcher(end < 0 ? svg : svg.substring(0, end + 1));
+        return m.find() ? m.group(1) : "";
     }
 
     /**
@@ -440,7 +481,7 @@ public final class Main {
      */
     private static int runBatch(InputStream in, PrintStream out, PrintStream err,
                                 Path outputFile, boolean sawExpr, boolean nullDelim,
-                                com.lattex.api.RenderOptions opts) {
+                                com.lattex.api.RenderOptions opts, boolean strictGlyphs) {
         if (outputFile != null) {
             err.println("lattex: error: -o/--output cannot be combined with --batch"
                 + " (batch writes NUL-delimited records to stdout)");
@@ -484,6 +525,18 @@ public final class Main {
                 String record;
                 try {
                     record = LatteX.render(latex, opts);
+                    String missing = missingGlyphs(record);
+                    if (!missing.isEmpty()) {
+                        int number = completedRecords + 1;
+                        if (strictGlyphs) {
+                            record = "lattex: error: record " + number + ": no glyph for " + missing
+                                + " (--strict-glyphs)";
+                            anyFailed = true;
+                        } else {
+                            err.println("lattex: warning: record " + number + ": no glyph for " + missing
+                                + " (drawn as a box)");
+                        }
+                    }
                 } catch (MathSyntaxException e) {
                     record = "lattex: error: invalid LaTeX: " + e.getMessage();
                     anyFailed = true;

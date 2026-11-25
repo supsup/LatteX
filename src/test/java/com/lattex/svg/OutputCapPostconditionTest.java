@@ -331,7 +331,13 @@ class OutputCapPostconditionTest {
         // 1100/1103). An earlier probe at 84b9aef is NOT evidence: that tree's test sources do
         // not compile (an illegal escape in a MathMLTest comment, fixed in 60e2073) and its
         // XML was not retained.
-        assertEquals("30ff4ad7ad4b79ce0a63d59eb5c9e5426b67b923900683957a5464009a9964a6", hex.toString(),
+        // Re-pinned 2026-11-25 for plan 14579fe4 (Fixpoint review of 6160f84: a label whose base
+        // is empty no longer starts with a space). Sole cause MEASURED 2026-11-25 by a
+        // counterfactual: with only that label rule disabled the tree reproduces 30ff4ad7...
+        // exactly. Three of the 187 corpus labels change, each by its leading space alone
+        // ({}^3/_7, \\prescript{14}{6}, \\prescript{a}{b}); stripped of labels, all 187 renders
+        // are byte-identical to main.
+        assertEquals("6a76c8b8a76560d6b700ecb312c4950b6fdd41a7e3a6f733621469fb106dc87e", hex.toString(),
             "compliant renders must be byte-identical below the cap");
         assertFalse(rows == 0, "corpus must be non-empty");
     }

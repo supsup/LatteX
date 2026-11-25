@@ -54,11 +54,18 @@ import java.util.regex.Pattern;
  *                  empty-SVG result. This flag is not part of the author-controlled
  *                  {@code \lx} option language and never changes throwing
  *                  {@link LatteX#render(String, RenderOptions)}.
+ * @param strictGlyphs the HOST opt-in that turns a character the font has no glyph for
+ *                  into a failure (plan 14579fe4, lattex project). Default {@code false}:
+ *                  plan a1866884 stands, the formula renders with the missing-glyph box and
+ *                  says so (the aria-label mark and the diagnostic detail). {@code true}:
+ *                  {@link LatteX#render(String, RenderOptions)} throws and
+ *                  {@link LatteX#renderWithDiagnostics(String, RenderOptions)} returns
+ *                  {@code UNSUPPORTED_CONSTRUCT} naming the code points.
  */
 public record RenderOptions(double scale, Color color, MathStyle mathStyle,
                             java.util.Map<String, String> macros,
                             boolean interactiveExpansion, boolean fluid,
-                            boolean renderErrors) {
+                            boolean renderErrors, boolean strictGlyphs) {
 
     /** Lower clamp for {@link #scale()} — below this glyphs collapse to nothing. */
     public static final double MIN_SCALE = 0.1;
@@ -96,6 +103,13 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
         this(scale, color, mathStyle, macros, interactiveExpansion, false, false);
     }
 
+    /** Seven-arg compatibility constructor: pre-strictGlyphs shape, glyphs lenient (plan a1866884). */
+    public RenderOptions(double scale, Color color, MathStyle mathStyle,
+                         java.util.Map<String, String> macros,
+                         boolean interactiveExpansion, boolean fluid, boolean renderErrors) {
+        this(scale, color, mathStyle, macros, interactiveExpansion, fluid, renderErrors, false);
+    }
+
     /** Six-arg compatibility constructor: pre-rendered-error shape, card disabled. */
     public RenderOptions(double scale, Color color, MathStyle mathStyle,
                          java.util.Map<String, String> macros,
@@ -106,25 +120,25 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
     /** The default options: {@code scale=1.0}, {@link Color#CURRENT}, display style, expansion off, fixed-size. */
     public static RenderOptions defaults() {
         return new RenderOptions(1.0, Color.CURRENT, MathStyle.DISPLAY,
-            java.util.Map.of(), false, false, false);
+            java.util.Map.of(), false, false, false, false);
     }
 
     /** A copy with a different scale (must be in {@code [MIN_SCALE, MAX_SCALE]}). */
     public RenderOptions withScale(double newScale) {
         return new RenderOptions(newScale, color, mathStyle, macros,
-            interactiveExpansion, fluid, renderErrors);
+            interactiveExpansion, fluid, renderErrors, strictGlyphs);
     }
 
     /** A copy with a different color. */
     public RenderOptions withColor(Color newColor) {
         return new RenderOptions(scale, newColor, mathStyle, macros,
-            interactiveExpansion, fluid, renderErrors);
+            interactiveExpansion, fluid, renderErrors, strictGlyphs);
     }
 
     /** A copy with a different math style. */
     public RenderOptions withMathStyle(MathStyle newStyle) {
         return new RenderOptions(scale, color, newStyle, macros,
-            interactiveExpansion, fluid, renderErrors);
+            interactiveExpansion, fluid, renderErrors, strictGlyphs);
     }
 
     /**
@@ -134,7 +148,7 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      */
     public RenderOptions withMacros(java.util.Map<String, String> newMacros) {
         return new RenderOptions(scale, color, mathStyle, newMacros,
-            interactiveExpansion, fluid, renderErrors);
+            interactiveExpansion, fluid, renderErrors, strictGlyphs);
     }
 
     /**
@@ -146,7 +160,7 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      */
     public RenderOptions withInteractiveExpansion(boolean enabled) {
         return new RenderOptions(scale, color, mathStyle, macros,
-            enabled, fluid, renderErrors);
+            enabled, fluid, renderErrors, strictGlyphs);
     }
 
     /**
@@ -164,7 +178,7 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      */
     public RenderOptions withFluid(boolean enabled) {
         return new RenderOptions(scale, color, mathStyle, macros,
-            interactiveExpansion, enabled, renderErrors);
+            interactiveExpansion, enabled, renderErrors, strictGlyphs);
     }
 
     /**
@@ -174,7 +188,17 @@ public record RenderOptions(double scale, Color color, MathStyle mathStyle,
      */
     public RenderOptions withRenderedErrors(boolean enabled) {
         return new RenderOptions(scale, color, mathStyle, macros,
-            interactiveExpansion, fluid, enabled);
+            interactiveExpansion, fluid, enabled, strictGlyphs);
+    }
+
+    /**
+     * A copy with strict glyphs on or off (default off). With it on, a character the
+     * bundled font has no glyph for fails the render instead of drawing the missing-glyph
+     * box (plan 14579fe4, lattex project); with it off, plan a1866884 stands.
+     */
+    public RenderOptions withStrictGlyphs(boolean enabled) {
+        return new RenderOptions(scale, color, mathStyle, macros,
+            interactiveExpansion, fluid, renderErrors, enabled);
     }
 
     /**
