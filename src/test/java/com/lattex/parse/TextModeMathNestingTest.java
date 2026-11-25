@@ -148,7 +148,9 @@ class TextModeMathNestingTest {
                 try {
                     MathParser.parse(latex);
                 } catch (MathSyntaxException e) {
-                    assertTrue(e.getMessage().contains("no precomposed character"), latex);
+                    // plan 2d5a59ad: the refusal now says which of two reasons holds
+                    assertTrue(e.getMessage().contains("no precomposed character")
+                        || e.getMessage().contains("the bundled font has no glyph for its precomposed character"), latex);
                     continue;
                 }
                 composed++;

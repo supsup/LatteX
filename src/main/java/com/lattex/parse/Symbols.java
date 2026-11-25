@@ -541,7 +541,9 @@ final class Symbols {
         m.put("triangleright", new Sym(0x25B9, MathClass.BIN));   // ▹
         // amssymb's filled partners of the two above, at the same small size (U+25B8 and
         // U+25C2, BLACK RIGHT-/LEFT-POINTING SMALL TRIANGLE), and like amssymb's
-        // \vartriangleright they are relations. Plan 2d5a59ad (lattex project).
+        // \vartriangleright they are relations. NOT CHECKED AT A SOURCE: the code points
+        // follow this table's own pairing for the white triangles, and the class is
+        // amssymb's from memory. Plan 2d5a59ad (lattex project).
         m.put("blacktriangleright", new Sym(0x25B8, MathClass.REL)); // ▸
         m.put("blacktriangleleft", new Sym(0x25C2, MathClass.REL));  // ◂
         m.put("barwedge", new Sym(0x22BC, MathClass.BIN));     // ⊼
@@ -826,10 +828,6 @@ final class Symbols {
         m.put("Box", new Sym(0x25A1, MathClass.ORD));     // □ (amssymb: \Box = \square; the d'Alembertian)
         m.put("Bbbk", new Sym(0x1D55C, MathClass.ORD));   // 𝕜 (amssymb; = \mathbb{k})
         m.put("blacksquare", new Sym(0x25A0, MathClass.ORD)); // ■
-        // LaTeX's \S (section sign) and \P (pilcrow), which work in math as in text.
-        // Plan 2d5a59ad (lattex project).
-        m.put("S", new Sym(0x00A7, MathClass.ORD)); // §
-        m.put("P", new Sym(0x00B6, MathClass.ORD)); // ¶
         m.put("lozenge", new Sym(0x25CA, MathClass.ORD)); // ◊
         m.put("blacklozenge", new Sym(0x29EB, MathClass.ORD)); // ⧫
         m.put("bigstar", new Sym(0x2605, MathClass.ORD)); // ★

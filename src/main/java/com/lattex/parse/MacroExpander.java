@@ -125,6 +125,7 @@ final class MacroExpander {
         }
         int arity = inferArity(bodyTokens, name);
         defs.put(name, new MacroDef(name, arity, bodyTokens, false));
+        MathParser.noteUserMacro(name);
     }
 
     /**
@@ -199,6 +200,7 @@ final class MacroExpander {
             }
         }
         defs.put(name, new MacroDef(name, arity, body, true));
+        MathParser.noteUserMacro(name);
         return bodyEnd + 1; // past the closing brace
     }
 

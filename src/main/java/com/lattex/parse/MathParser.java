@@ -202,6 +202,8 @@ public final class MathParser {
     private static final class TextDecodeWork {
         long units;
         long parsedTokens;
+        /** Macro names the user defined in this render (presets and inline definitions). */
+        final java.util.Set<String> userMacros = new java.util.HashSet<>();
 
         void charge(int amount) {
             if (amount > MAX_TEXT_DECODE_UNITS - units) {
@@ -2560,7 +2562,12 @@ public final class MathParser {
             java.util.OptionalInt delimiter = CommandRegistry.delimiterCodePoint(t.name());
             if (delimiter.isEmpty()) {
                 throw new MathSyntaxException(
-                    context + ": \\" + t.name() + " is not a valid delimiter");
+                    context + ": \\" + t.name() + (t.name().equals("lgroup") || t.name().equals("rgroup")
+                        // Fixpoint review of a3713921: STIX Two Math has no size variants and no
+                        // assembly for U+27EE/U+27EF, so a stretched group bracket would be a
+                        // magnified glyph, its strokes heavier than a parenthesis beside it.
+                        ? " cannot be stretched: the bundled font has no larger sizes of it; use it at its natural size"
+                        : " is not a valid delimiter"));
             }
             return delimiter.getAsInt();
         }
@@ -2852,11 +2859,11 @@ public final class MathParser {
                     i = textReference(s, j, word, sb, t) - 1;
                     continue;
                 }
-                if (TEXT_LETTER_ACCENTS.containsKey(word)) {
+                if (TEXT_LETTER_ACCENTS.containsKey(word) && !isUserMacro(word)) {
                     i = composeAccent("\\" + word, TEXT_LETTER_ACCENTS.get(word), s, j, sb, t) - 1;
                     continue;
                 }
-                if (TEXT_WORD_SYMBOLS.containsKey(word)) {
+                if (TEXT_WORD_SYMBOLS.containsKey(word) && !isUserMacro(word)) {
                     sb.append(TEXT_WORD_SYMBOLS.get(word));
                     // TeX skips the spaces after a control word (TeXbook ch. 3), so
                     // Gro\ss e is "Große" and \S 3 is "§3".
@@ -2941,19 +2948,43 @@ public final class MathParser {
 
     /**
      * Text-mode control words that stand for one character (the LaTeX2e font-encoding
-     * guide's text symbols): the section and paragraph signs, the letters of names
+     * guide's text symbols): the letters of names
      * ({@code \ss \o \O \ae \AE \oe \OE \aa \AA \l \L}), {@code \dag},
      * {@code \ddag}, {@code \copyright} and {@code \pounds}. Each decodes to its literal
      * character, which the bundled font draws (pinned per word by
-     * TextLetterAccentsAndSymbolsTest). Plan 2d5a59ad (lattex project).
+     * TextLetterAccentsAndSymbolsTest). A word the user has defined as a macro is NOT
+     * decoded: the run keeps refusing it, as before. The section and paragraph signs are
+     * deliberately absent (Fixpoint review of a3713921): \\S and \\P are among the
+     * commonest user macros, so they stay free until overridable built-ins exist; the raw
+     * characters draw. Plan 2d5a59ad (lattex project).
      */
     private static final Map<String, Character> TEXT_WORD_SYMBOLS = Map.ofEntries(
-        Map.entry("S", '\u00a7'), Map.entry("P", '\u00b6'), Map.entry("ss", '\u00df'),
+        Map.entry("ss", '\u00df'),
         Map.entry("o", '\u00f8'), Map.entry("O", '\u00d8'), Map.entry("ae", '\u00e6'),
         Map.entry("AE", '\u00c6'), Map.entry("oe", '\u0153'), Map.entry("OE", '\u0152'),
         Map.entry("aa", '\u00e5'), Map.entry("AA", '\u00c5'), Map.entry("l", '\u0142'),
         Map.entry("L", '\u0141'), Map.entry("dag", '\u2020'), Map.entry("ddag", '\u2021'),
         Map.entry("copyright", '\u00a9'), Map.entry("pounds", '\u00a3'));
+
+    /**
+     * Records a user macro name for this render (called by {@link MacroExpander}), so a text
+     * run keeps refusing a word the user has defined rather than reading it as a text symbol
+     * (Fixpoint review of a3713921: \\newcommand{\\L}{...} with \\text{in \\L here}).
+     */
+    static void noteUserMacro(String name) {
+        if (TEXT_DECODE_WORK.isBound()) {
+            TEXT_DECODE_WORK.get().userMacros.add(name);
+        }
+    }
+
+    private static boolean isUserMacro(String name) {
+        return TEXT_DECODE_WORK.isBound() && TEXT_DECODE_WORK.get().userMacros.contains(name);
+    }
+
+    /** The combining mark each text accent stands for, to tell the two refusals apart. */
+    private static final Map<String, String> COMBINING_MARK = Map.of(
+        "\\\"", "\u0308", "\\'", "\u0301", "\\`", "\u0300", "\\^", "\u0302", "\\~", "\u0303",
+        "\\H", "\u030b", "\\v", "\u030c", "\\u", "\u0306", "\\c", "\u0327");
 
     private static Map<Character, Character> accentTable(String pairs) {
         Map<Character, Character> table = new java.util.HashMap<>();
@@ -2998,9 +3029,9 @@ public final class MathParser {
         }
         if (base.equals("\\i") || base.equals("\\j")) {
             base = base.substring(1);
-        } else if (k < s.length() && s.charAt(k) == '\\' && s.startsWith("\\i", k)
+        } else if (k < s.length() && s.charAt(k) == '\\' && (s.startsWith("\\i", k) || s.startsWith("\\j", k))
                 && (k + 2 >= s.length() || !isAsciiLetter(s.charAt(k + 2)))) {
-            base = "i"; // bare \'\i
+            base = s.substring(k + 1, k + 2); // bare \'\i or \v\j, as their braced forms
             end = k + 2;
         }
         if (base.length() != 1 || !isAsciiLetter(base.charAt(0))) {
@@ -3010,9 +3041,17 @@ public final class MathParser {
         }
         Character composed = table.get(base.charAt(0));
         if (composed == null) {
+            // Two different reasons, said apart (Fixpoint review of a3713921): Unicode has a
+            // precomposed character the bundled font does not draw (\\v{a} is U+01CE), or
+            // Unicode has none at all (\\"q).
+            String typed = name + (isAsciiLetter(name.charAt(name.length() - 1)) ? "{" + base + "}" : base);
+            String nfc = java.text.Normalizer.normalize(base + COMBINING_MARK.get(name), java.text.Normalizer.Form.NFC);
             throw MathSyntaxException.unknownCommand(
-                "Unknown command in \\" + t.name() + ": " + name + (isAsciiLetter(name.charAt(name.length() - 1)) ? "{" + base + "}" : base)
-                    + " has no precomposed character", t.offset());
+                "Unknown command in \\" + t.name() + ": " + typed + (nfc.length() == 1
+                    ? String.format(java.util.Locale.ROOT,
+                        " is not drawn: the bundled font has no glyph for its precomposed character U+%04X", (int) nfc.charAt(0))
+                    : " has no precomposed character"),
+                t.offset());
         }
         sb.append(composed.charValue());
         return end;
