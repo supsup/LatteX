@@ -417,17 +417,18 @@ public final class MathParser {
 
     /**
      * A cluster of contiguous Unicode script characters becomes real scripts of their base
-     * characters, all its superscripts as one {@code ^{...}} and all its subscripts as one
-     * {@code _{...}} on the same base, when the cluster holds any character the bundled
-     * font cannot draw: so x followed by subscript i sets exactly as {@code x_{i}}, two
-     * subscript letters in a row as one subscript of two letters, x with superscript two
-     * and subscript i as {@code x^{2}_{i}}, and a script digit in such a cluster moves with
-     * the letters, at one size and height. A run the font draws whole (x followed by superscript two)
-     * is left as the font's own glyphs, exactly as before, and with nothing before it the
-     * script attaches to an empty base as {@code _{i}} does. Returns the index just past
-     * the run when it was rewritten, else {@code i}. Plan 14579fe4 (lattex project),
-     * ruling stafficy/35638: the alternative, a .notdef box with a success exit, drew
-     * the missing-glyph box in visible authored math.
+     * characters when it holds any character the bundled font cannot draw: the lexer emits
+     * one synthesized SUP or SUB token per character, at its own offset, carrying the
+     * character it sets (its base, or itself when the font draws neither) and, as its text,
+     * the character as typed. The parser assembles them: at a list position the whole cluster
+     * attaches to the nucleus before it, its superscripts as one script and its subscripts as
+     * another (x followed by subscript i sets exactly as {@code x_{i}}; x with superscript
+     * two and subscript i as {@code x^{2}_{i}}); where an argument is read it takes ONE
+     * character, as one raw character was one argument before; where it cannot attach it is
+     * its own nucleus on an empty base. A cluster the font draws whole (x followed by
+     * superscript two) is left as the font's own glyphs, exactly as before. Returns the
+     * index just past the cluster, else {@code i}. Plan 14579fe4 (lattex project), rulings
+     * stafficy/35638 and 35720: the rewrite may only improve.
      */
     private static int scriptRun(String s, int i, List<Token> out, int start) {
         if (!SCRIPT_CHARS.containsKey(s.codePointAt(i))) {
@@ -436,9 +437,7 @@ public final class MathParser {
         // ONE pass over the whole cluster of contiguous script characters, of either kind
         // (Lattice review of 4d0f03a: a rescan per character was quadratic, and a mixed
         // cluster such as x, superscript two, subscript i put the i on the two).
-        List<Integer> sup = new ArrayList<>();
-        List<Integer> sub = new ArrayList<>();
-        List<int[]> raw = new ArrayList<>(); // {code point, offset}, for a cluster left as is
+        List<int[]> raw = new ArrayList<>(); // {code point, offset}, in source order
         boolean rewrite = false;
         int j = i;
         while (j < s.length()) {
@@ -447,7 +446,6 @@ public final class MathParser {
             if (e == null) {
                 break;
             }
-            (e[0] == 0 ? sup : sub).add(e[2] == 2 ? cp : e[1]); // '?': kept as typed
             raw.add(new int[] {cp, j});
             rewrite |= e[2] == 1;
             j += Character.charCount(cp);
@@ -458,23 +456,20 @@ public final class MathParser {
             }
             return j;
         }
-        emitScript(out, Kind.SUP, sup, start);
-        emitScript(out, Kind.SUB, sub, start);
+        // One synthesized SUP or SUB token PER CHARACTER, at its own offset, carrying the
+        // character it sets (its base, or itself when the font draws neither): the parser
+        // assembles a cluster at a list position and takes ONE character where an argument
+        // is read, so the original token boundaries survive (Lattice review of b608ecd:
+        // \frac then superscript two, subscript i read the pair as its two arguments on main).
+        for (int[] r : raw) {
+            int[] e = SCRIPT_CHARS.get(r[0]);
+            // text: the character as typed, for a site that reads its argument raw as text
+            out.add(new Token(e[0] == 0 ? Kind.SUP : Kind.SUB, e[2] == 2 ? r[0] : e[1], UNICODE_SCRIPT,
+                new String(Character.toChars(r[0])), r[1]));
+        }
         return j;
     }
 
-    /** One synthesized script group {@code ^{...}} or {@code _{...}}; none for an empty list. */
-    private static void emitScript(List<Token> out, Kind kind, List<Integer> bases, int start) {
-        if (bases.isEmpty()) {
-            return;
-        }
-        out.add(new Token(kind, 0, UNICODE_SCRIPT, null, start));
-        out.add(Token.special(Kind.LBRACE, start));
-        for (int b : bases) {
-            out.add(Token.ch(b, start));
-        }
-        out.add(Token.special(Kind.RBRACE, start));
-    }
 
     private static boolean isAsciiLetter(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -824,6 +819,7 @@ public final class MathParser {
             case CHAR -> new String(Character.toChars(t.codePoint()));
             case COMMAND -> "\\" + t.name();
             case TEXT -> "\\" + t.name() + "{" + t.text() + "}";
+            case SUP, SUB -> t.text(); // a rewritten script character, read raw as main read it
             default -> throw new IllegalStateException("not an argument token: " + t);
         };
         return tagLabel(raw, t.offset());
@@ -1183,6 +1179,9 @@ public final class MathParser {
 
     /** One component: a nucleus, plus any scripts (or big-operator limits). */
     MathNode parseComponent() {
+        if (isUnicodeScript(peek())) {
+            return parseScripts(unicodeScriptNucleus(true)); // a list position: the whole cluster
+        }
         boolean braced = peek().kind() == Kind.LBRACE;
         MathNode nucleus = parseNucleus();
         if (braced) {
@@ -1244,22 +1243,42 @@ public final class MathParser {
      */
     private MathNode parseStackLabel(MathNode.Stack st) {
         MathNode.Stack out = st;
+        MathNode.Stack snap = null; // the label state before the last attached cluster
+        int clusterAt = -1;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.SUP) {
-                if (isUnicodeScript(peek()) && !clusterAttaches(out.above() != null, out.below() != null)) {
+            if (isUnicodeScript(peek())) {
+                boolean[] kinds = clusterKinds(p);
+                if ((kinds[0] && out.above() != null) || (kinds[1] && out.below() != null)) {
                     break;
                 }
+                clusterAt = p;
+                snap = out;
+                MathNode[] c = takeCluster();
+                if (c[0] != null) {
+                    out = out.withAbove(c[0]);
+                }
+                if (c[1] != null) {
+                    out = out.withBelow(c[1]);
+                }
+            } else if (k == Kind.SUP) {
                 if (out.above() != null) {
+                    if (clusterAt >= 0) {
+                        p = clusterAt;
+                        out = snap;
+                        break;
+                    }
                     throw new MathSyntaxException("Double superscript on \\" + braceCommand(st));
                 }
                 next();
                 out = out.withAbove(parseScriptArg("brace label"));
             } else if (k == Kind.SUB) {
-                if (isUnicodeScript(peek()) && !clusterAttaches(out.above() != null, out.below() != null)) {
-                    break;
-                }
                 if (out.below() != null) {
+                    if (clusterAt >= 0) {
+                        p = clusterAt;
+                        out = snap;
+                        break;
+                    }
                     throw new MathSyntaxException("Double subscript on \\" + braceCommand(st));
                 }
                 next();
@@ -1289,26 +1308,59 @@ public final class MathParser {
         List<MathNode> supItems = new ArrayList<>();
         boolean explicitSup = false;
         MathNode sub = null;
+        // The state before the last rewritten Unicode-script cluster that attached here, so a
+        // later collision rewinds it (see takeCluster). -1: none attached.
+        int clusterAt = -1;
+        int snapSup = 0;
+        boolean snapExplicit = false;
+        MathNode snapSub = null;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.CHAR && peek().codePoint() == '\'') {
+            if (isUnicodeScript(peek())) {
+                boolean[] kinds = clusterKinds(p);
+                if ((kinds[0] && explicitSup) || (kinds[1] && sub != null)) {
+                    break; // a script of its kind is already here: the cluster is its own nucleus
+                }
+                clusterAt = p;
+                snapSup = supItems.size();
+                snapExplicit = explicitSup;
+                snapSub = sub;
+                MathNode[] c = takeCluster();
+                if (c[0] != null) {
+                    supItems.add(c[0]);
+                    explicitSup = true;
+                }
+                if (c[1] != null) {
+                    sub = c[1];
+                }
+            } else if (k == Kind.CHAR && peek().codePoint() == '\'') {
                 next();
                 supItems.add(new Atom(0x2032, MathClass.ORD));
             } else if (k == Kind.SUP) {
-                if (isUnicodeScript(peek()) && !clusterAttaches(explicitSup, sub != null)) {
-                    break; // the cluster is its own nucleus (unicodeScriptNucleus)
-                }
                 if (explicitSup) {
+                    if (clusterAt >= 0) {
+                        // the rewrite only improves: on main the cluster's raw character was a
+                        // nucleus that took this script, so rewind and let it be one again
+                        p = clusterAt;
+                        supItems.subList(snapSup, supItems.size()).clear();
+                        explicitSup = snapExplicit;
+                        sub = snapSub;
+                        break;
+                    }
                     throw new MathSyntaxException("Double superscript ('^' after '^')");
                 }
                 next();
                 explicitSup = true;
                 supItems.add(parseScriptArg("superscript"));
             } else if (k == Kind.SUB) {
-                if (isUnicodeScript(peek()) && !clusterAttaches(explicitSup, sub != null)) {
-                    break;
-                }
                 if (sub != null) {
+                    if (clusterAt >= 0) {
+                        p = clusterAt;
+                        supItems.subList(snapSup, supItems.size()).clear();
+                        explicitSup = snapExplicit;
+                        sub = snapSub;
+                        break;
+                    }
                     throw new MathSyntaxException("Double subscript ('_' after '_')");
                 }
                 next();
@@ -1341,26 +1393,55 @@ public final class MathParser {
         List<MathNode> upperItems = new ArrayList<>();
         boolean explicitUpper = false;
         MathNode lower = null;
+        int clusterAt = -1; // as in parseScripts: the state before the last attached cluster
+        int snapUpper = 0;
+        boolean snapExplicit = false;
+        MathNode snapLower = null;
         while (true) {
             Kind k = peek().kind();
-            if (k == Kind.CHAR && peek().codePoint() == '\'') {
+            if (isUnicodeScript(peek())) {
+                boolean[] kinds = clusterKinds(p);
+                if ((kinds[0] && explicitUpper) || (kinds[1] && lower != null)) {
+                    break;
+                }
+                clusterAt = p;
+                snapUpper = upperItems.size();
+                snapExplicit = explicitUpper;
+                snapLower = lower;
+                MathNode[] c = takeCluster();
+                if (c[0] != null) {
+                    upperItems.add(c[0]);
+                    explicitUpper = true;
+                }
+                if (c[1] != null) {
+                    lower = c[1];
+                }
+            } else if (k == Kind.CHAR && peek().codePoint() == '\'') {
                 next();
                 upperItems.add(new Atom(0x2032, MathClass.ORD));
             } else if (k == Kind.SUP) {
-                if (isUnicodeScript(peek()) && !clusterAttaches(explicitUpper, lower != null)) {
-                    break;
-                }
                 if (explicitUpper) {
+                    if (clusterAt >= 0) {
+                        p = clusterAt;
+                        upperItems.subList(snapUpper, upperItems.size()).clear();
+                        explicitUpper = snapExplicit;
+                        lower = snapLower;
+                        break;
+                    }
                     throw new MathSyntaxException("Double superscript on operator");
                 }
                 next();
                 explicitUpper = true;
                 upperItems.add(parseScriptArg("upper limit"));
             } else if (k == Kind.SUB) {
-                if (isUnicodeScript(peek()) && !clusterAttaches(explicitUpper, lower != null)) {
-                    break;
-                }
                 if (lower != null) {
+                    if (clusterAt >= 0) {
+                        p = clusterAt;
+                        upperItems.subList(snapUpper, upperItems.size()).clear();
+                        explicitUpper = snapExplicit;
+                        lower = snapLower;
+                        break;
+                    }
                     throw new MathSyntaxException("Double subscript on operator");
                 }
                 next();
@@ -1496,60 +1577,60 @@ public final class MathParser {
         return (t.kind() == Kind.SUP || t.kind() == Kind.SUB) && UNICODE_SCRIPT.equals(t.name());
     }
 
-    /**
-     * Whether the rewritten Unicode-script cluster at the cursor attaches as scripts to the
-     * nucleus before it. Not when the nucleus already has a script of a kind the cluster
-     * carries, nor when a typed script of such a kind follows the cluster: then the cluster
-     * is its own nucleus ({@link #unicodeScriptNucleus}), as its raw character was on main,
-     * where it drew a box and took whatever script followed. THE RULE (Fixpoint review of
-     * 6160f84, stafficy/35720): the rewrite may only improve; any input main renders, the
-     * branch renders. A cluster's synthesized tokens all carry the cluster's start offset.
-     */
-    private boolean clusterAttaches(boolean supTaken, boolean subTaken) {
-        int q = p;
-        int off = tokens.get(q).offset();
-        boolean sup = false;
-        boolean sub = false;
-        while (isUnicodeScript(tokens.get(q)) && tokens.get(q).offset() == off) {
-            if (tokens.get(q).kind() == Kind.SUP) {
-                sup = true;
-            } else {
-                sub = true;
-            }
-            q += 2; // the marker and its synthesized '{'
-            while (tokens.get(q).kind() != Kind.RBRACE) {
-                q++;
-            }
-            q++;
+    /** The end (exclusive) of the rewritten cluster starting at token {@code q}: its characters are
+     * contiguous in the source, one token each (every script character is in the BMP). */
+    private int clusterEnd(int q) {
+        int end = q + 1;
+        while (isUnicodeScript(tokens.get(end)) && tokens.get(end).offset() == tokens.get(end - 1).offset() + 1) {
+            end++;
         }
-        if ((sup && supTaken) || (sub && subTaken)) {
-            return false;
+        return end;
+    }
+
+    /** {has a superscript character, has a subscript character} in the cluster at {@code q}. */
+    private boolean[] clusterKinds(int q) {
+        boolean[] kinds = new boolean[2];
+        for (int i = q, end = clusterEnd(q); i < end; i++) {
+            kinds[tokens.get(i).kind() == Kind.SUP ? 0 : 1] = true;
         }
-        Token after = tokens.get(q);
-        return isUnicodeScript(after)
-            || !((after.kind() == Kind.SUP && sup) || (after.kind() == Kind.SUB && sub));
+        return kinds;
     }
 
     /**
-     * A rewritten cluster that does not attach (see {@link #clusterAttaches}), or that stands
-     * where an argument is read ({@code x^} then subscript i, {@code \frac1} then subscript
-     * i), or with nothing before it: an empty base carrying the cluster's scripts, one
-     * nucleus, so it still draws as a real script and a following script attaches to it.
+     * Consumes the rewritten cluster at the cursor: {superscript, subscript}, its superscript
+     * characters as one script and its subscript characters as another, either null. Where
+     * a script loop attaches it and a later script collides with what is there, the loop
+     * rewinds to the cluster and stops, and the cluster becomes the next nucleus
+     * ({@link #unicodeScriptNucleus}), which then takes that script, as its raw character
+     * did on main. THE RULE (Fixpoint review of 6160f84, Lattice review of b608ecd): the
+     * rewrite may only improve; any input main renders, this renders.
      */
-    private MathNode unicodeScriptNucleus() {
-        int off = peek().offset();
-        MathNode sup = null;
-        MathNode sub = null;
-        while (isUnicodeScript(peek()) && peek().offset() == off) {
-            Kind k = next().kind();
-            MathNode arg = parseGroup();
-            if (k == Kind.SUP) {
-                sup = arg;
-            } else {
-                sub = arg;
-            }
+    private MathNode[] takeCluster() {
+        int end = clusterEnd(p);
+        List<MathNode> sup = new ArrayList<>();
+        List<MathNode> sub = new ArrayList<>();
+        while (p < end) {
+            Token t = next();
+            (t.kind() == Kind.SUP ? sup : sub).add(charAtom(t.codePoint()));
         }
-        return new SupSub(wrap(List.of()), sup, sub);
+        return new MathNode[] {sup.isEmpty() ? null : wrap(sup), sub.isEmpty() ? null : wrap(sub)};
+    }
+
+    /**
+     * A rewritten cluster as a nucleus: an empty base carrying its scripts. At a list position
+     * ({@link #parseComponent}) the whole cluster; where an argument is read ({@code x^},
+     * {@code \frac}) ONE character, as one raw character was one argument on main.
+     */
+    private MathNode unicodeScriptNucleus(boolean whole) {
+        MathNode[] c;
+        if (whole) {
+            c = takeCluster();
+        } else {
+            Token t = next();
+            MathNode a = charAtom(t.codePoint());
+            c = t.kind() == Kind.SUP ? new MathNode[] {a, null} : new MathNode[] {null, a};
+        }
+        return new SupSub(wrap(List.of()), c[0], c[1]);
     }
 
     /** The argument of a script: a single nucleus ({@code '{'} opens a group). */
@@ -1637,6 +1718,7 @@ public final class MathParser {
             case CHAR -> new String(Character.toChars(t.codePoint()));
             case COMMAND -> "\\" + t.name();
             case TEXT -> "\\" + t.name() + "{" + t.text() + "}";
+            case SUP, SUB -> t.text(); // a rewritten script character, read raw as main read it
             default -> throw new IllegalStateException("not an argument token: " + t);
         };
         return textWithNestedMath(Token.text(name, raw, commandOffset));
@@ -1905,7 +1987,7 @@ public final class MathParser {
             case COMMAND -> parseCommand();
             case SUP, SUB -> {
                 if (UNICODE_SCRIPT.equals(t.name())) {
-                    yield unicodeScriptNucleus();
+                    yield unicodeScriptNucleus(false); // an argument site: one character
                 }
                 throw new MathSyntaxException(t.kind() == Kind.SUP
                     ? "Unexpected '^': no nucleus to attach a superscript to"

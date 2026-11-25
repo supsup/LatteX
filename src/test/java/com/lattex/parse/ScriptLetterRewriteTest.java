@@ -113,41 +113,58 @@ class ScriptLetterRewriteTest {
     }
 
     /**
-     * The rule, over a corpus: for every template and every one of the 163 script characters,
-     * if main renders it, the branch renders it. Main drew a script character as one ordinary
-     * atom, so main's outcome is modelled by the same template with an ordinary non-letter
-     * atom (U+2202) in its place, which this branch parses exactly as main parsed the character.
+     * The rule, over a corpus: for every template, every one of the 163 script characters and
+     * three cluster shapes (alone, then a drawable superscript two, after one), if main renders
+     * it, this renders it. Main drew a script character as one ordinary atom, so main's outcome
+     * is modelled by the same input with an ordinary non-letter atom (U+2202) in its place,
+     * which this branch parses exactly as main parsed the character. The templates cover list
+     * positions, every argument-reading site (Lattice review of b608ecd: \\frac took two raw
+     * characters as its two arguments, and a following explicit-script cluster must be read
+     * whole) and the raw-text argument sites (\\mathrm unbraced).
      */
     @Test
     void renderedOnMainImpliesRenderedHere() {
-        String[] templates = {"x@", "x_1@", "x^1@", "x_1^2@", "x@_j", "x@^j", "x@ @", "x^@", "x_@", "x^{2}@",
-            "\\frac1@", "\\frac@2", "\\sqrt@", "\\hat@", "\\mathbf@", "@x", "@", "{@}", "x'@", "x@'", "@_1", "@^1",
-            "\\left(@\\right)", "\\sum@", "\\sum_1@", "\\sum@_1", "\\sum^1@", "\\int@^b", "\\underbrace{x}_1@",
-            "\\underbrace{x}@_1", "\\overbrace{x}^1@", "\\begin{matrix}a&@\\\\@&b\\end{matrix}", "x@@", "x@\\,@"};
+        String[] templates = {"x@", "x_1@", "x^1@", "x_1^2@", "x@_j", "x@^j", "x@_j^3", "x@^3_j", "x^1@^2", "x_1@_2",
+            "x@ @", "x^@", "x_@", "x^@@", "x^{2}@", "\\frac1@", "\\frac@2", "\\frac@@", "\\frac12@_j^3", "\\sqrt@",
+            "\\sqrt[3]@", "\\hat@", "\\mathbf@", "\\mathrm@", "\\binom@@", "\\overset@=", "@x", "@", "{@}", "x'@",
+            "x@'", "@_1", "@^1", "\\left(@\\right)", "\\sum@", "\\sum_1@", "\\sum@_1", "\\sum^1@", "\\sum@_j^3",
+            "\\int@^b", "\\underbrace{x}_1@", "\\underbrace{x}@_1", "\\overbrace{x}^1@", "\\overbrace{x}@^1_0",
+            "\\begin{matrix}a&@\\\\@&b\\end{matrix}", "x@@", "x@\\,@"};
+        String[] shapes = {"@", "@\u00B2", "\u00B2@"};
         int checked = 0;
         for (String tpl : templates) {
-            boolean mainRenders;
-            try {
-                MathParser.parse(tpl.replace("@", "\u2202"));
-                mainRenders = true;
-            } catch (MathSyntaxException e) {
-                mainRenders = false;
-            }
-            if (!mainRenders) {
-                continue;
-            }
-            for (int cp : MathParser.SCRIPT_CHARS.keySet()) {
-                String in = tpl.replace("@", new String(Character.toChars(cp)));
+            for (String shape : shapes) {
+                String t = tpl.replace("@", shape);
+                boolean mainRenders;
                 try {
-                    MathParser.parse(in);
+                    MathParser.parse(t.replace("@", "\u2202"));
+                    mainRenders = true;
                 } catch (MathSyntaxException e) {
-                    throw new AssertionError(String.format("U+%04X in %s: main renders it, this refuses: %s",
-                        cp, tpl, e.getMessage()), e);
+                    mainRenders = false;
                 }
-                checked++;
+                if (!mainRenders) {
+                    continue;
+                }
+                for (int cp : MathParser.SCRIPT_CHARS.keySet()) {
+                    String in = t.replace("@", new String(Character.toChars(cp)));
+                    try {
+                        MathParser.parse(in);
+                    } catch (MathSyntaxException e) {
+                        throw new AssertionError(String.format("U+%04X in %s: main renders it, this refuses: %s",
+                            cp, t, e.getMessage()), e);
+                    }
+                    checked++;
+                }
             }
         }
-        assertEquals(34 * 163, checked, "every template renders on main, so every pair is checked");
+        assertTrue(checked > 20_000, "the corpus is not vacuous: " + checked + " pairs checked");
+        for (String s : new String[] {"\\frac\u00B2\u1D62", "\\frac12\u1D40_j^3", "\\mathrm\u1D40", "\\mathrm\u00B2\u1D62"}) {
+            assertEquals(com.lattex.api.Outcome.OK, LatteX.renderWithDiagnostics(s).diagnostics().outcome(), s);
+        }
+        // the argument sites take ONE character each, as main did
+        assertEquals(pp("\\frac{{}^{2}}{{}_{i}}"), pp("\\frac\u00B2\u1D62"));
+        // and a following explicit-script cluster is read whole: the raw T takes both scripts
+        assertEquals("L(Frac(A(1,ORD),A(2,ORD)) SS(SS(L(),^A(T,ORD)),^A(3,ORD),_A(j,ORD)))", pp("\\frac12\u1D40_j^3"));
     }
 
     @Test
