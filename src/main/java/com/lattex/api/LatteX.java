@@ -1101,78 +1101,231 @@ public final class LatteX {
 
     /**
      * Reads a row aloud (plan fd362dd3, lattex project; ruling stafficy/35638 for the script
-     * digits). Three things a listener should hear as one word, where the plain join read
-     * them glyph by glyph: a NUMBER (consecutive digits, with a decimal point or a braced
-     * group separator {@code {,}} between digits: 163, 0.5, 4,372; a bare comma stays a
-     * separator, as in f(1, 2)); a run of the font's own script characters after a base
-     * (x² reads "x squared" exactly as x^{2} does, x₁₂ "x sub 12"); and a combining mark
-     * after a base, read as its accent command reads (x with U+0304 is "bar over x", as
-     * \\bar{x} is). Labels only: no geometry changes.
+     * characters; reviews 35705, 35715 and 35732). What a listener should hear as one word,
+     * where the plain join read glyph by glyph:
+     * <ul>
+     * <li>a NUMBER: digits of one numbering system (a digit-only group {@code {23}} included),
+     *     with a decimal point or a braced {@code {,}} between digits, or a point before them
+     *     (163, 0.5, .5, 4,372); a bare or {@code \mathpunct} comma stays a separator, as it is
+     *     drawn (f(1, 2)). TeX puts a script on the LAST digit (10^{-3}), so the whole number
+     *     carries it; a combining mark after a number sits over its last digit only, as
+     *     0.1\bar{6} draws, and reads so ("0.1 bar over 6");</li>
+     * <li>a run of the font's own script characters after a base, its superscripts as one
+     *     script and its subscripts as another, each read as the command form reads (x² is
+     *     "x squared", x⁻¹ "x to the power of - 1"), and only where the font draws them: a
+     *     character drawn as the missing-glyph box is read as itself. With no base in front
+     *     (at the start, or after an operator: ²³⁵U, x + ²³⁵U) the run is read whole
+     *     ("superscript 235"). Ordinal indicators (ª, º) are letters, not scripts;</li>
+     * <li>a combining mark after a base, read as its accent command reads (x with U+0304 is
+     *     "bar over x", as \bar{x} is), also when the mark itself carries a script.</li>
+     * </ul>
+     * Linear in the row: a word's accents are joined once. Labels only: no geometry changes.
      */
     private static String describeRow(List<MathNode> items) {
-        List<String> words = new ArrayList<>();
+        RowWords row = new RowWords();
+        int n = items.size();
         int i = 0;
-        while (i < items.size()) {
+        while (i < n) {
             MathNode it = items.get(i);
-            if (isDigitAtom(it)) {
-                // TeX attaches a script to the LAST digit only (10^{-3} is 1, then 0^{-3}), so a
-                // run may end in a scripted digit; the whole number carries the script.
+            boolean leadingPoint = isAtomOf(it, '.') && i + 1 < n && digitText(items.get(i + 1)) != null;
+            if (digitText(it) != null || leadingPoint) {
                 StringBuilder number = new StringBuilder();
-                int zero = zeroOf(it);
-                SupSub scripts = null;
                 int j = i;
-                while (j < items.size()) {
+                if (leadingPoint) {
+                    number.append('.');
+                    j++;
+                }
+                int zero = zeroOfDigits(items.get(j));
+                SupSub scripts = null;
+                while (j < n) {
                     MathNode x = items.get(j);
-                    if (isDigitAtom(x) && zeroOf(x) == zero) {
-                        number.appendCodePoint(((Atom) x).codePoint());
+                    String d = digitText(x, zero);
+                    if (d != null) {
+                        number.append(d);
                         j++;
-                    } else if (x instanceof SupSub ss && isDigitAtom(ss.base()) && zeroOf(ss.base()) == zero) {
-                        number.appendCodePoint(((Atom) ss.base()).codePoint());
+                    } else if (x instanceof SupSub ss && digitText(ss.base(), zero) != null) {
+                        number.append(digitText(ss.base(), zero));
                         scripts = ss;
                         j++;
                         break;
-                    } else if (j + 1 < items.size() && (isAtomOf(x, '.') || isBracedComma(x))
-                            && continuesNumber(items.get(j + 1), zero)) {
+                    } else if (j + 1 < n && (isAtomOf(x, '.') || isBracedComma(x)) && continuesNumber(items.get(j + 1), zero)) {
                         number.append(isAtomOf(x, '.') ? '.' : ',');
                         j++;
                     } else {
                         break;
                     }
                 }
-                words.add(scripts == null ? number.toString() : scripted(number.toString(), scripts.sup(), scripts.sub()));
+                String num = number.toString();
+                if (scripts != null) {
+                    row.add(scripted(num, scripts.sup(), scripts.sub()), true);
+                } else if (j < n && combiningAccent(items.get(j)) != null && num.codePointCount(0, num.length()) > 1) {
+                    int last = num.offsetByCodePoints(num.length(), -1);
+                    row.add(num.substring(0, last), true);
+                    row.add(num.substring(last), true);
+                } else {
+                    row.add(num, true);
+                }
                 i = j;
                 continue;
             }
-            if (scriptKind(it) != 0 && !words.isEmpty()) {
-                // The font's own script characters after a base, in either order and either
-                // kind (x²₃, x₃²): the superscripts form one script and the subscripts another,
-                // read exactly as the explicit x^{2}_{3} reads (Lattice review of 5e956f64).
-                StringBuilder sup = new StringBuilder();
-                StringBuilder sub = new StringBuilder();
+            if (scriptKind(it) != 0) {
+                List<MathNode> sup = new ArrayList<>();
+                List<MathNode> sub = new ArrayList<>();
                 int j = i;
-                while (j < items.size() && scriptKind(items.get(j)) != 0) {
-                    (scriptKind(items.get(j)) == 2 ? sub : sup).append(java.text.Normalizer.normalize(
-                        Character.toString(((Atom) items.get(j)).codePoint()), java.text.Normalizer.Form.NFKD));
+                while (j < n && scriptKind(items.get(j)) != 0) {
+                    (scriptKind(items.get(j)) == 2 ? sub : sup).addAll(scriptContent(items.get(j)));
                     j++;
                 }
-                words.add(scriptedWords(words.remove(words.size() - 1),
-                    sup.isEmpty() ? null : sup.toString(), sub.isEmpty() ? null : sub.toString()));
+                String supWords = sup.isEmpty() ? null : describeRow(sup);
+                String subWords = sub.isEmpty() ? null : describeRow(sub);
+                if (row.lastIsBase()) {
+                    row.add(scriptedWords(row.removeLast(), supWords, subWords), true);
+                } else {
+                    row.add(wholeScriptRun(supWords, subWords), true);
+                }
                 i = j;
                 continue;
             }
             String accent = combiningAccent(it);
-            if (accent != null && !words.isEmpty()) {
-                words.add(accentName(accent) + " " + words.remove(words.size() - 1));
+            if (accent != null && row.lastIsBase()) {
+                row.accent(accentName(accent));
                 i++;
                 continue;
             }
+            if (it instanceof SupSub ss && row.lastIsBase()) {
+                // a mark or a script character that itself carries a TeX script (x, U+0304, ^2)
+                String markOnIt = combiningAccent(ss.base());
+                int kind = scriptKind(ss.base());
+                if (markOnIt != null || kind != 0) {
+                    String w;
+                    if (markOnIt != null) {
+                        row.accent(accentName(markOnIt));
+                        w = row.removeLast();
+                    } else {
+                        String c = describeRow(scriptContent(ss.base()));
+                        w = scriptedWords(row.removeLast(), kind == 1 ? c : null, kind == 2 ? c : null);
+                    }
+                    row.add(scripted(w, ss.sup(), ss.sub()), true);
+                    i++;
+                    continue;
+                }
+            }
             String part = describe(it);
             if (!part.isEmpty()) {
-                words.add(part);
+                row.add(part, isBaseNode(it));
             }
             i++;
         }
-        return String.join(" ", words);
+        return row.join();
+    }
+
+    /** The words of a row as they are built; a word's accents are joined once, when it is done. */
+    private static final class RowWords {
+        private final List<String> words = new ArrayList<>();
+        private final List<String> accents = new ArrayList<>(); // over the last word, innermost first
+        private boolean lastIsBase;
+
+        void add(String word, boolean base) {
+            flush();
+            words.add(word);
+            lastIsBase = base;
+        }
+
+        boolean lastIsBase() {
+            return !words.isEmpty() && lastIsBase;
+        }
+
+        void accent(String name) {
+            accents.add(name);
+        }
+
+        String removeLast() {
+            flush();
+            return words.remove(words.size() - 1);
+        }
+
+        String join() {
+            flush();
+            return String.join(" ", words);
+        }
+
+        private void flush() {
+            if (accents.isEmpty()) {
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int k = accents.size() - 1; k >= 0; k--) {
+                sb.append(accents.get(k)).append(' ');
+            }
+            words.set(words.size() - 1, sb.append(words.get(words.size() - 1)).toString());
+            accents.clear();
+        }
+    }
+
+    /** A script run with no base in front of it, read whole: "superscript 235", "subscript 12". */
+    private static String wholeScriptRun(String sup, String sub) {
+        if (sub == null) {
+            return "superscript " + sup;
+        }
+        if (sup == null) {
+            return "subscript " + sub;
+        }
+        return "subscript " + sub + " superscript " + sup;
+    }
+
+    /** A script character's content as the atoms its command form would hold: x⁻¹ as x^{-1}. */
+    private static List<MathNode> scriptContent(MathNode n) {
+        String d = java.text.Normalizer.normalize(Character.toString(((Atom) n).codePoint()), java.text.Normalizer.Form.NFKD);
+        List<MathNode> atoms = new ArrayList<>();
+        // the decomposition of a superscript minus is U+2212; a command form holds the typed '-'
+        d.codePoints().forEach(cp -> atoms.add(new Atom(cp == 0x2212 ? '-' : cp, MathNode.MathClass.ORD, false)));
+        return atoms;
+    }
+
+    /** Whether a described item is something a following script or mark sits on (not an operator, an opening or a punctuation). */
+    private static boolean isBaseNode(MathNode n) {
+        if (n instanceof Atom a) {
+            return switch (a.mathClass()) {
+                case BIN, REL, OPEN, PUNCT -> false;
+                default -> true;
+            };
+        }
+        return true;
+    }
+
+    /** The digits of a digit atom or a digit-only group of the given numbering system, else null. */
+    private static String digitText(MathNode n, int zero) {
+        if (isDigitAtom(n)) {
+            return zeroOf(n) == zero ? Character.toString(((Atom) n).codePoint()) : null;
+        }
+        if (n instanceof MathList(var group) && !group.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (MathNode g : group) {
+                if (!isDigitAtom(g) || zeroOf(g) != zero) {
+                    return null;
+                }
+                sb.appendCodePoint(((Atom) g).codePoint());
+            }
+            return sb.toString();
+        }
+        return null;
+    }
+
+    /** {@link #digitText(MathNode, int)} in the node's own numbering system. */
+    private static String digitText(MathNode n) {
+        int zero = zeroOfDigits(n);
+        return zero < 0 ? null : digitText(n, zero);
+    }
+
+    /** The zero of the numbering system of a digit atom or of a group's first digit, or -1. */
+    private static int zeroOfDigits(MathNode n) {
+        if (isDigitAtom(n)) {
+            return zeroOf(n);
+        }
+        if (n instanceof MathList(var group) && !group.isEmpty() && isDigitAtom(group.get(0))) {
+            return zeroOf(group.get(0));
+        }
+        return -1;
     }
 
     /** A decimal digit of any numbering system (ASCII, math bold, full-width, Arabic-Indic, ...). */
@@ -1188,7 +1341,7 @@ public final class LatteX {
 
     private static boolean continuesNumber(MathNode n, int zero) {
         MathNode d = n instanceof SupSub ss ? ss.base() : n;
-        return isDigitAtom(d) && zeroOf(d) == zero;
+        return digitText(d, zero) != null;
     }
 
     /** How a base with scripts reads: "x squared", "x to the power of n", "x sub i ...". */
@@ -1214,9 +1367,12 @@ public final class LatteX {
         return n instanceof Atom a && a.codePoint() == cp;
     }
 
-    /** {@code {,}}: TeX's group separator, a comma wrapped to an ordinary atom. */
+    /**
+     * {@code {,}}: TeX's group separator, a comma wrapped to an ORDINARY atom. A comma forced
+     * to another class ({@code \mathpunct{,}}) is drawn, spaced and read as a separator.
+     */
     private static boolean isBracedComma(MathNode n) {
-        return n instanceof MathNode.ClassOverride co && isAtomOf(co.body(), ',');
+        return n instanceof MathNode.ClassOverride co && co.forcedClass() == MathNode.MathClass.ORD && isAtomOf(co.body(), ',');
     }
 
     /**
@@ -1228,6 +1384,9 @@ public final class LatteX {
     private static int scriptKind(MathNode n) {
         if (!(n instanceof Atom a)) {
             return 0;
+        }
+        if (FontHolder.FONT.glyphId(a.codePoint()) == 0) {
+            return 0; // drawn as the missing-glyph box: read as itself, never as a script
         }
         String ch = Character.toString(a.codePoint());
         String d = java.text.Normalizer.normalize(ch, java.text.Normalizer.Form.NFKD);
@@ -1242,7 +1401,7 @@ public final class LatteX {
             return 2;
         }
         return name.startsWith("SUPERSCRIPT") || name.startsWith("MODIFIER LETTER SMALL")
-            || name.startsWith("MODIFIER LETTER CAPITAL") || name.endsWith("ORDINAL INDICATOR") ? 1 : 0;
+            || name.startsWith("MODIFIER LETTER CAPITAL") ? 1 : 0; // ª and º are letters, not scripts
     }
 
     /** The accent command a combining mark reads as, or null if it is not one we name. */

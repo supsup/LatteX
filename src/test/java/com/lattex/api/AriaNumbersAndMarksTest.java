@@ -1,13 +1,21 @@
 package com.lattex.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.lattex.parse.MathNode;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 /// Plan fd362dd3 (lattex project): the aria-label says a number as a number, reads the font's
 /// own script characters as the script they are, and names a combining mark. Repros from the
 /// crew's showcase pages (Fixpoint 35627, Marlow 35628): on main 5cb804f7 e^{\pi\sqrt{163}} read
-/// "... the square root of 1 6 3" and M=E+\frac{4{,}372}{E} read "4 , 3 7 2".
+/// "... the square root of 1 6 3" and M=E+\frac{4{,}372}{E} read "4 , 3 7 2". Reviews: Lattice
+/// 35715, Fixpoint 35732 (nine defects, each pinned below). Every assertion is a pinned string;
+/// where a raw form must read as its command form, both are pinned to the same string.
 class AriaNumbersAndMarksTest {
 
     private static String label(String latex) {
@@ -16,71 +24,130 @@ class AriaNumbersAndMarksTest {
         return svg.substring(a, svg.indexOf('"', a));
     }
 
+    private static void reads(String expected, String... inputs) {
+        for (String in : inputs) {
+            assertEquals(expected, label(in), in);
+        }
+    }
+
     @Test
     void theShowcaseReprosReadNumbersAsNumbers() {
-        assertEquals("e to the power of π the square root of 163", label("e^{\\pi\\sqrt{163}}"));
-        assertEquals("M = E + the fraction 4,372 over E + the fraction 96,256 over E squared + ⋯",
-            label("M=E+\\frac{4{,}372}{E}+\\frac{96{,}256}{E^2}+\\cdots"));
+        reads("e to the power of π the square root of 163", "e^{\\pi\\sqrt{163}}");
+        reads("M = E + the fraction 4,372 over E + the fraction 96,256 over E squared + ⋯",
+            "M=E+\\frac{4{,}372}{E}+\\frac{96{,}256}{E^2}+\\cdots");
     }
 
     @Test
     void decimalsAndExponentsAreOneNumber() {
-        assertEquals("0.5", label("0.5"));
-        assertEquals("3.14159", label("3.14159"));
-        assertEquals("x to the power of 12", label("x^{12}"));
-        assertEquals("2 to the power of 10", label("2^{10}"));
-        assertEquals("1.5.2", label("1.5.2"), "a section number reads whole");
-        assertEquals("3,14", label("3{,}14"), "a braced decimal comma");
-    }
-
-    @Test
-    void theFontsScriptCharactersInEitherOrderReadAsTheExplicitScripts() {
-        // Lattice review of 5e956f64: x²₃ read 'x squared sub 3' and x₃² 'x sub 3 squared'
-        assertEquals(label("x^2_3"), label("x\u00B2\u2083"));
-        assertEquals(label("x^2_3"), label("x\u2083\u00B2"));
-        assertEquals("x sub 3 to the power of 2", label("x\u00B2\u2083"));
-        assertEquals(label("x^{23}_{4}"), label("x\u00B2\u2084\u00B3"));
-        assertEquals(label("x^{2}"), label("x\u00B2"), "one kind alone, as before");
-        assertEquals(label("x_{12}"), label("x\u2081\u2082"));
+        reads("0.5", "0.5");
+        reads("3.14159", "3.14159");
+        reads("x to the power of 12", "x^{12}");
+        reads("2 to the power of 10", "2^{10}");
+        reads("1.5.2", "1.5.2");
+        reads("3,14", "3{,}14");
+        // your-call questions (35732), decided: a leading point joins; a thin space separates
+        reads(".5", ".5");
+        reads("1 000", "1\\,000");
     }
 
     @Test
     void aScriptOnTheLastDigitCarriesTheWholeNumber() {
-        // TeX attaches a script to the last digit only; the label must not split the number
-        assertEquals("10 to the power of - 3", label("10^{-3}"));
-        assertEquals("10 to the power of 10", label("10^{10}"));
-        assertEquals("12 squared", label("12^2"));
-        assertEquals("1.5 squared", label("1.5^{2}"));
-        assertEquals("10 sub i", label("10_{i}"));
+        reads("10 to the power of - 3", "10^{-3}");
+        reads("10 to the power of 10", "10^{10}");
+        reads("12 squared", "12^2");
+        reads("1.5 squared", "1.5^{2}");
+        reads("10 sub i", "10_{i}");
     }
 
     @Test
     void digitsOfAnyNumberingSystemJoinButSystemsDoNotMix() {
-        assertEquals("\uD835\uDFCF\uD835\uDFD0", label("\\mathbf{12}"));
-        assertEquals("\uFF11\uFF12", label("\uFF11\uFF12"));
-        assertEquals("\u0663\u0664", label("\u0663\u0664"));
-        assertEquals("1 \u0663", label("1\u0663"));
+        reads("𝟏𝟐", "\\mathbf{12}");
+        // the font draws neither Arabic-Indic nor full-width digits: they still read as one
+        // number (and never join ASCII digits), and the mark says they are boxes (14579fe4)
+        reads("٣٤ (missing glyph: U+0663, U+0664)", "٣٤");
+        reads("1 ٣ (missing glyph: U+0663)", "1٣");
+        reads("１２ (missing glyph: U+FF11, U+FF12)", "１２");
     }
 
     @Test
-    void aBareCommaOrPointBetweenNonDigitsStaysASeparator() {
-        assertEquals("f ( 1 , 2 )", label("f(1,2)"));
-        assertEquals("4 , 372", label("4,372"), "unbraced: TeX's list separator, not a group separator");
-        assertEquals("a . b", label("a.b"));
+    void onePictureOneLabel() {
+        // Fixpoint 35732 item 7: \mathpunct{,} draws as the bare comma, so it reads as one; a
+        // digit-only group draws as its digits, so it joins the number
+        reads("1 , 2", "1,2", "1\\mathpunct{,}2");
+        reads("f ( 1 , 2 )", "f(1,2)");
+        reads("4 , 372", "4,372");
+        reads("a . b", "a.b");
+        reads("1234", "1{23}4");
+        reads("123", "1{2}3");
     }
 
     @Test
-    void theFontsOwnScriptCharactersReadAsTheirScripts() {
-        assertEquals(label("x^{2}"), label("x²"));
-        assertEquals(label("x^{3}"), label("x³"));
-        assertEquals(label("x^{n}"), label("xⁿ"));
-        assertEquals(label("x_{12}"), label("x₁₂"));
+    void aMarkAfterANumberSitsOverItsLastDigit() {
+        // item 1: the bar's ink is over the 6 only, as 0.1\bar{6} draws
+        reads("0.1 bar over 6", "0.16̄", "0.1\\bar{6}");
+        reads("1 dot over 2", "12̇", "1\\dot{2}");
+        reads("0.1 vector 6", "0.16⃗", "0.1\\vec{6}");
+    }
+
+    @Test
+    void theFontsScriptCharactersReadAsTheirCommandForms() {
+        reads("x squared", "x²", "x^{2}");
+        reads("x to the power of 3", "x³", "x^{3}");
+        reads("x to the power of n", "xⁿ", "x^{n}");
+        reads("x sub 12", "x₁₂", "x_{12}");
+        reads("x sub 3 to the power of 2", "x²₃", "x₃²", "x^2_3");
+        reads("x sub 4 to the power of 23", "x²₄³", "x^{23}_{4}");
+        // item 9: the content reads as the command form's content
+        reads("x to the power of - 1", "x⁻¹", "x^{-1}");
+        // a character the font lacks, set by plan 14579fe4 as a real script
+        reads("x sub n", "xₙ", "x_{n}");
+    }
+
+    @Test
+    void aScriptRunWithNoBaseIsReadWhole() {
+        // item 2: an isotope's prescript, at the start or after an operator
+        reads("superscript 235 U", "²³⁵U");
+        reads("x + superscript 235 U", "x+²³⁵U");
+    }
+
+    @Test
+    void aCharacterDrawnAsTheBoxIsNeverReadAsAScript() {
+        // item 4: the label must not describe ink that is not there (U+10FC: the font has
+        // neither it nor its base, so it stays as typed and draws the box)
+        reads("x ჼ (missing glyph: U+10FC)", "xჼ");
+    }
+
+    @Test
+    void anOrdinalIndicatorIsALetter() {
+        reads("1 º", "1º");
+    }
+
+    @Test
+    void aMarkOrScriptCharacterThatCarriesAScriptReadsInPlace() {
+        // item 3: x, U+0304, ^2 read 'x', a bare mark, 'squared'
+        reads("bar over x squared", "x̄^2", "x̄²", "\\bar{x}^2");
+        reads("x squared to the power of 3", "x²^3");
     }
 
     @Test
     void aCombiningMarkReadsAsItsAccentCommand() {
-        assertEquals(label("\\bar{x}"), label("x̄"));
-        assertEquals(label("\\hat{x}"), label("x̂"));
-        assertEquals(label("\\vec{v}"), label("v⃗"));
+        reads("bar over x", "x̄", "\\bar{x}");
+        reads("hat over x", "x̂", "\\hat{x}");
+        reads("vector v", "v⃗", "\\vec{v}");
+    }
+
+    @Test
+    void manyMarksOnOneWordAreJoinedInLinearWork() {
+        // item 5: x then 80,000 marks took 649 ms (15 ms on main): each mark rebuilt the word.
+        // A million marks, past any source cap, through the label builder itself.
+        List<MathNode> row = new ArrayList<>();
+        row.add(new MathNode.Atom('x', MathNode.MathClass.ORD, false));
+        for (int k = 0; k < 1_000_000; k++) {
+            row.add(new MathNode.Atom(0x0304, MathNode.MathClass.ORD, false));
+        }
+        MathNode.MathList list = new MathNode.MathList(row);
+        String label = Assertions.assertTimeoutPreemptively(Duration.ofMillis(1500), () -> LatteX.describe(list));
+        assertTrue(label.endsWith("bar over bar over x"), label.substring(Math.max(0, label.length() - 40)));
+        assertEquals(1_000_000 * "bar over ".length() + 1, label.length());
     }
 }

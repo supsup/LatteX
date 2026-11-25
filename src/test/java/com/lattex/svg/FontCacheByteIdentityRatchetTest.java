@@ -78,9 +78,15 @@ class FontCacheByteIdentityRatchetTest {
      * exactly. Three of the 187 corpus labels change, each by its leading space alone
      * ({}^3/_7, \\prescript{14}{6}, \\prescript{a}{b}); stripped of labels, all 187 renders
      * are byte-identical to main.
+     * Re-pinned 2026-11-25 for plan fd362dd3 (an aria label reads a run of digits as one
+     * number, the font's script characters as scripts, a combining mark as its accent).
+     * Sole cause MEASURED 2026-11-25 by a counterfactual: with describeRow bypassed (the
+     * old plain join) the tree reproduces 6d7f53af... exactly. Five of the 187 corpus labels
+     * change, all digit runs (x^{1.01}, \\sum_{i=1}^{10}, \\prescript{14}{6}, two \\text
+     * rows); stripped of labels, all 187 renders are byte-identical.
      */
     private static final String PINNED_SHA256 =
-        "6d7f53afe7bddde271b8cba3b4a814383ea16d1ab4a631b013756e552ba3a3bb";
+        "f03cfa00a49f8dc35b6b337fef201472818f823e6759fb55a7dd45f69af3a440";
 
     private static final SfntFont FONT = SfntFont.loadBundled();
 
