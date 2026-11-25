@@ -224,6 +224,20 @@ public final class LatteX {
         return sb.toString();
     }
 
+    /**
+     * Plan 14579fe4: with the host's strictGlyphs on, a glyph the font lacks fails the render
+     * (render, renderStyledHtml and the tryRenderMath seam, which absorbs it as empty);
+     * renderWithDiagnostics reports it as UNSUPPORTED_CONSTRUCT. Off, plan a1866884 stands.
+     */
+    private static void enforceStrictGlyphs(RenderOptions opts, Layout layout) {
+        if (opts.strictGlyphs()) {
+            String unmapped = unmappedReport(layout);
+            if (!unmapped.isEmpty()) {
+                throw new MathSyntaxException("the font has no glyph for " + unmapped + " (strictGlyphs)");
+            }
+        }
+    }
+
     private static RenderResult diagnosticRender(String latex, RenderOptions opts) {
         String stage = "parse";
         try {
@@ -387,13 +401,7 @@ public final class LatteX {
             // caller's opts even when a \lx wrapper overrides the styling, and it is
             // NOT part of the \lx sub-language — an author can never turn it on.
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
-            if (opts.strictGlyphs()) {
-                String unmapped = unmappedReport(layout);
-                if (!unmapped.isEmpty()) {
-                    // Plan 14579fe4: the host asked for strictness, so the box is a failure.
-                    throw new MathSyntaxException("the font has no glyph for " + unmapped + " (strictGlyphs)");
-                }
-            }
+            enforceStrictGlyphs(opts, layout);
             return svg;
         });
     }
@@ -611,6 +619,7 @@ public final class LatteX {
             // fluid rides the HOST opts (never the \lx wrapper) and lands on the <svg>
             // element only — the container's attribute surface is untouched.
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
+            enforceStrictGlyphs(opts, layout);
 
             // The `thread` and `cancel` effects both read data-lx-glyphmap (thread lights
             // every occurrence of a hovered token; cancel strikes+puffs a code point that
@@ -1014,6 +1023,7 @@ public final class LatteX {
         Layout layout = LayoutEngine.layout(seamBody, ctx);
         // fluid rides the HOST opts, never the \lx wrapper, exactly as in render(latex, opts).
         String svg = SvgEmitter.emit(layout, font, describe(seamBody), seamStyle.color(), opts.fluid());
+        enforceStrictGlyphs(opts, layout); // a strict failure is absorbed like any other: empty
         // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
         // stamping decision, so the seam and the wrapper path cannot drift on whether
         // the sidecar rides the container. A literal THREAD check here silently left

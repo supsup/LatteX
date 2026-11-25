@@ -108,9 +108,11 @@ a1866884). It is no longer silent. Three faces of one condition, which always ag
 - **The CLI says so.** `lattex: warning: no glyph for U+XXXX (drawn as a box)` on stderr
   (in `--batch`, `lattex: warning: record N: ...`, N counting from 1), the SVG still
   written, and exit status 3.
-- **A host can refuse it.** `RenderOptions.withStrictGlyphs(true)` makes `render` throw
-  and `renderWithDiagnostics` return `UNSUPPORTED_CONSTRUCT` with no SVG; the CLI flag
-  `--strict-glyphs` makes it an error (exit 1, or an error record in `--batch`).
+- **A host can refuse it.** `RenderOptions.withStrictGlyphs(true)` makes `render` and
+  `renderStyledHtml` throw, `tryRenderMath` return empty, and `renderWithDiagnostics`
+  return `UNSUPPORTED_CONSTRUCT` (with no SVG, unless the host has also opted in to the
+  rendered error card with `withRenderedErrors(true)`, which then draws that card); the
+  CLI flag `--strict-glyphs` makes it an error (exit 1, or an error record in `--batch`).
 
 Unicode's superscript and subscript letters are not affected: where the font lacks one
 and draws its base letter, the parser sets it as a real script (x followed by subscript

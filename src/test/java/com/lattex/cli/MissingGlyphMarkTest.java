@@ -73,6 +73,15 @@ final class MissingGlyphMarkTest {
         assertEquals(Outcome.UNSUPPORTED_CONSTRUCT, failed.diagnostics().outcome());
         assertEquals("", failed.svg());
         assertEquals(LatteX.render("x^2"), LatteX.render("x^2", strict), "strict changes nothing on a clean render");
+        // the styled and seam APIs honour the same flag (Lattice review of 4d0f03a)
+        assertThrows(MathSyntaxException.class, () -> LatteX.renderStyledHtml(BALLOT_X, strict));
+        assertTrue(LatteX.tryRenderMath(BALLOT_X, strict).isEmpty());
+        assertTrue(LatteX.tryRenderMath(BALLOT_X).isPresent(), "lenient by default");
+        // a host that ALSO opted in to the rendered error card gets that card, not an empty SVG
+        RenderResult card = LatteX.renderWithDiagnostics(BALLOT_X, strict.withRenderedErrors(true));
+        assertEquals(Outcome.UNSUPPORTED_CONSTRUCT, card.diagnostics().outcome());
+        assertTrue(card.svg().startsWith("<svg"), "the opted-in card is drawn");
+        assertFalse(card.svg().contains(SvgEmitter.MISSING_GLYPH_MARK), "the card draws its message, not the box");
     }
 
     @Test

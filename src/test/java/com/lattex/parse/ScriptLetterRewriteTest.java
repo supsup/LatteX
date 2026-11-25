@@ -41,8 +41,27 @@ class ScriptLetterRewriteTest {
     void adjacentScriptLettersOfOneKindFormOneScript() {
         assertEquals(pp("x_{ij}"), pp("x\u1D62\u2C7C"));
         assertEquals(pp("A^{Ta}"), pp("A\u1D40\u1D43"));
-        // a subscript run then a superscript run are two scripts, as x_{i}^{T}
-        assertEquals(pp("x_{i}^{T}"), pp("x\u1D62\u1D40"));
+    }
+
+    @Test
+    void aMixedClusterPutsBothScriptsOnTheSameBase() {
+        // Lattice review of 4d0f03a: these put the second script on the first
+        assertEquals(pp("x^{2}_{i}"), pp("x\u00B2\u1D62"));
+        assertEquals(pp("x^{a}_{2}"), pp("x\u1D43\u2082"));
+        assertEquals(pp("x^{T}_{i}"), pp("x\u1D62\u1D40"));
+    }
+
+    @Test
+    void aLongClusterTheFontDrawsWholeIsLexedInOnePass() {
+        // a cluster with no rewrite keeps its own CHAR tokens and their own offsets
+        String run = "\u00B2".repeat(20000);
+        long t0 = System.nanoTime();
+        String p = pp("x" + run);
+        long ms = (System.nanoTime() - t0) / 1_000_000;
+        assertTrue(p.startsWith("L(A(x,ORD) A(U+00B2,ORD)"), p.substring(0, 60));
+        assertTrue(ms < 5000, "20,000 script characters took " + ms + " ms");
+        assertEquals(1, MathParser.lex("x\u00B2\u00B3").get(1).offset());
+        assertEquals(2, MathParser.lex("x\u00B2\u00B3").get(2).offset());
     }
 
     @Test

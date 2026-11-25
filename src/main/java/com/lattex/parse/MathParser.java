@@ -414,12 +414,13 @@ public final class MathParser {
     }
 
     /**
-     * A run of Unicode script characters of ONE kind (all superscript or all subscript)
-     * becomes one real script of their base characters, {@code ^{...}} or {@code _{...}},
-     * when the run holds any character the bundled font cannot draw: so x followed by
-     * subscript i sets exactly as {@code x_{i}}, two subscript letters in a row as one
-     * subscript of two letters, and a script digit in such a run moves with the letters,
-     * at one size and height. A run the font draws whole (x followed by superscript two)
+     * A cluster of contiguous Unicode script characters becomes real scripts of their base
+     * characters, all its superscripts as one {@code ^{...}} and all its subscripts as one
+     * {@code _{...}} on the same base, when the cluster holds any character the bundled
+     * font cannot draw: so x followed by subscript i sets exactly as {@code x_{i}}, two
+     * subscript letters in a row as one subscript of two letters, x with superscript two
+     * and subscript i as {@code x^{2}_{i}}, and a script digit in such a cluster moves with
+     * the letters, at one size and height. A run the font draws whole (x followed by superscript two)
      * is left as the font's own glyphs, exactly as before, and with nothing before it the
      * script attaches to an empty base as {@code _{i}} does. Returns the index just past
      * the run when it was rewritten, else {@code i}. Plan 14579fe4 (lattex project),
@@ -427,33 +428,50 @@ public final class MathParser {
      * the missing-glyph box in visible authored math.
      */
     private static int scriptRun(String s, int i, List<Token> out, int start) {
-        int[] first = SCRIPT_CHARS.get(s.codePointAt(i));
-        if (first == null) {
+        if (!SCRIPT_CHARS.containsKey(s.codePointAt(i))) {
             return i;
         }
-        List<Integer> bases = new ArrayList<>();
+        // ONE pass over the whole cluster of contiguous script characters, of either kind
+        // (Lattice review of 4d0f03a: a rescan per character was quadratic, and a mixed
+        // cluster such as x, superscript two, subscript i put the i on the two).
+        List<Integer> sup = new ArrayList<>();
+        List<Integer> sub = new ArrayList<>();
+        List<int[]> raw = new ArrayList<>(); // {code point, offset}, for a cluster left as is
         boolean rewrite = false;
         int j = i;
         while (j < s.length()) {
             int cp = s.codePointAt(j);
             int[] e = SCRIPT_CHARS.get(cp);
-            if (e == null || e[0] != first[0]) {
+            if (e == null) {
                 break;
             }
-            bases.add(e[1]);
+            (e[0] == 0 ? sup : sub).add(e[1]);
+            raw.add(new int[] {cp, j});
             rewrite |= e[2] == 1;
             j += Character.charCount(cp);
         }
         if (!rewrite) {
-            return i;
+            for (int[] r : raw) {
+                out.add(Token.ch(r[0], r[1])); // the font's own glyphs, exactly as before
+            }
+            return j;
         }
-        out.add(new Token(first[0] == 0 ? Kind.SUP : Kind.SUB, 0, UNICODE_SCRIPT, null, start));
+        emitScript(out, Kind.SUP, sup, start);
+        emitScript(out, Kind.SUB, sub, start);
+        return j;
+    }
+
+    /** One synthesized script group {@code ^{...}} or {@code _{...}}; none for an empty list. */
+    private static void emitScript(List<Token> out, Kind kind, List<Integer> bases, int start) {
+        if (bases.isEmpty()) {
+            return;
+        }
+        out.add(new Token(kind, 0, UNICODE_SCRIPT, null, start));
         out.add(Token.special(Kind.LBRACE, start));
         for (int b : bases) {
             out.add(Token.ch(b, start));
         }
         out.add(Token.special(Kind.RBRACE, start));
-        return j;
     }
 
     private static boolean isAsciiLetter(char c) {
