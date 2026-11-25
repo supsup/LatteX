@@ -7,8 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.lattex.parse.MathSyntaxException;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -121,6 +124,59 @@ class OutputBoundaryLegalityTest {
         // POSITIVE: a normal plottable body carries through.
         assertTrue(LatteX.renderStyledHtml("\\lx[graph.domain=-3..3]{ x^2 }")
             .contains("data-lx-graph-expr="), "graph-expr still stamped");
+    }
+
+    // ---- full XML 1.0 Char production at the XML boundaries (plan e5324119) ----
+
+    /** The JDK's XML 1.0 parser, independent of LatteX's own predicate, is the judge. */
+    private static void assertXmlParses(String xml, String where) {
+        assertDoesNotThrow(() -> {
+            DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
+            f.setNamespaceAware(true);
+            f.newDocumentBuilder().parse(
+                new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+        }, () -> where + " must be accepted by an XML 1.0 parser: " + xml);
+    }
+
+    private static final int[] KEPT = {0xD7FF, 0xE000, 0xFFFD, 0x10000, 0x10FFFF};
+    private static final int[] STRIPPED = {0xFFFE, 0xFFFF};
+
+    @Test
+    void mathmlAndSvgAriaAreLegalXmlAcrossTheCharProductionEdges() {
+        for (int cp : KEPT) {
+            String ch = Character.toString(cp);
+            String tag = String.format("U+%04X", cp);
+            for (String src : new String[] {"x" + ch + "y", "\\text{a" + ch + "b}"}) {
+                String mml = LatteX.toMathML(src);
+                assertXmlParses(mml, "MathML " + tag);
+                assertTrue(mml.contains(ch), "MathML must preserve legal " + tag + ": " + mml);
+                String svg = LatteX.render(src);
+                assertXmlParses(svg, "SVG " + tag);
+                assertTrue(svg.contains(ch), "SVG aria must preserve legal " + tag);
+            }
+        }
+    }
+
+    @Test
+    void bmpNoncharactersAreStrippedFromMathmlAndSvgAria() {
+        for (int cp : STRIPPED) {
+            String ch = Character.toString(cp);
+            String tag = String.format("U+%04X", cp);
+            for (String src : new String[] {"x" + ch + "y", "\\text{a" + ch + "b}"}) {
+                String mml = LatteX.toMathML(src);
+                assertFalse(mml.contains(ch), tag + " must not survive into MathML: " + mml);
+                assertXmlParses(mml, "MathML " + tag);
+                String svg = LatteX.render(src);
+                assertFalse(svg.contains(ch), tag + " must not survive into SVG aria");
+                assertXmlParses(svg, "SVG " + tag);
+            }
+        }
+    }
+
+    @Test
+    void a11yLabelStripsBmpNoncharacters() {
+        String html = LatteX.renderStyledHtml("\\lx[a11y.label=\"a\uFFFEb\uFFFF\"]{ x }");
+        assertTrue(html.contains("aria-label=\"ab\""), "noncharacters stripped: " + html);
     }
 
     // ---- renderFragment size validation (LTX-07) ----

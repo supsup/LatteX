@@ -1,5 +1,6 @@
 package com.lattex.api;
 
+import com.lattex.parse.OutputLegality;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -379,10 +380,14 @@ public final class InteractiveMath {
         if (lower.contains("javascript:") || lower.contains("href")) {
             return false;
         }
+        // Character legality is the shared XML 1.0 Char production (plan e5324119),
+        // not a local C0-only copy of it: U+FFFE/U+FFFF and lone surrogates refuse too.
+        if (!OutputLegality.isXmlLegal(value)) {
+            return false;
+        }
         for (int i = 0; i < value.length(); i++) {
             char ch = value.charAt(i);
-            if ((ch < 0x20 && ch != '\t' && ch != '\n' && ch != '\r')
-                    || ch == '<' || ch == '>') {
+            if (ch == '<' || ch == '>') {
                 return false;
             }
             if (ch != '&') {

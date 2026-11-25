@@ -248,6 +248,9 @@ class InteractiveMathTest {
 
         String safe = safeSvg();
         assertTrue(InteractiveMath.staticSvgSafe(safe));
+        // POSITIVE: legal edges of the Char production and a valid pair stay accepted.
+        assertTrue(InteractiveMath.staticSvgSafe(safe.replace("aria-label=\"x\"",
+            "aria-label=\"x\uD7FF\uE000\uFFFD\uD800\uDC00\uDBFF\uDFFF\"")));
         for (String mutant : List.of(
                 safe.replace("</svg>", "<script></script></svg>"),
                 safe.replace("role=\"img\"", "role=\"img\" onload=\"boom()\""),
@@ -261,6 +264,11 @@ class InteractiveMathTest {
                         + " width=\"1\" height=\"1\" role=\"img\" aria-label=\"nested\">"
                         + "</svg>"),
                 safe.replace("aria-label=\"x\"", "aria-label=\"&#120;\""),
+                // Plan e5324119: the label check is the shared XML 1.0 Char production.
+                safe.replace("aria-label=\"x\"", "aria-label=\"x\uFFFE\""),
+                safe.replace("aria-label=\"x\"", "aria-label=\"x\uFFFF\""),
+                safe.replace("aria-label=\"x\"", "aria-label=\"x\uD800\""),
+                safe.replace("aria-label=\"x\"", "aria-label=\"x\uDC00\""),
                 safe.replace("width=\"1\"", "width=\"1\" width=\"1\""),
                 safe.replace("width=\"1\" height", "width=\"1\"height"),
                 safe.replace(" d=\"M0 0\"", ""),

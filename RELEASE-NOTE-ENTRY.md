@@ -155,3 +155,25 @@ below are kept verbatim as their branches wrote them.
   move across it (measured by Fixpoint: x followed by combining marks renders on main up to
   17,233 marks and here up to 16,252; a run of sevens renders here up to 10,252 and on main
   up to 10,200; within about 5 percent of the cap).
+
+### fixpoint/xml-legality
+
+#### U+FFFE and U+FFFF no longer reach MathML or SVG
+
+The shared output-legality policy checked only C0 controls and surrogates, so U+FFFE and
+U+FFFF, the two BMP noncharacters the XML `Char` production excludes, passed straight into
+MathML text and the SVG `aria-label`, and an XML 1.0 parser rejected the document.
+`OutputLegality` now expresses the whole XML 1.0 `Char` production once, as
+`isXmlChar(int)`; the boundaries already call that shared policy, so they pick it up
+without being edited one by one.
+
+- **The two noncharacters are stripped**, exactly as an illegal C0 control already was, at
+  every boundary that runs the shared policy: MathML, the SVG `aria-label`, and the
+  styled-HTML `aria-label` and `data.*` values. A lone surrogate still fails loud rather than
+  being stripped, and the other 32 BMP noncharacters (U+FDD0 to U+FDEF), legal XML characters,
+  are kept.
+- **Legal characters at the edges are unchanged**: U+D7FF, U+E000, U+FFFD, and astral code
+  points up to U+10FFFF (as valid surrogate pairs) are preserved verbatim.
+- **The interactive endpoint validator uses the same predicate.** Its `aria-label` check
+  carried a private C0-only copy of the rule; it now refuses any label outside the `Char`
+  production through `OutputLegality.isXmlLegal`.
