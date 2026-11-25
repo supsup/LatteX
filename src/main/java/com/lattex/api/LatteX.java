@@ -1099,43 +1099,548 @@ public final class LatteX {
         return sb.toString();
     }
 
+    /**
+     * Reads a row aloud (plan fd362dd3, lattex project; ruling stafficy/35638 for the script
+     * characters; reviews 35705, 35715 and 35732). What a listener should hear as one word,
+     * where the plain join read glyph by glyph:
+     * <ul>
+     * <li>a NUMBER: digits of one numbering system (a digit-only group {@code {23}} included),
+     *     with a decimal point or a braced {@code {,}} between digits, or a point before them
+     *     (163, 0.5, .5, 4,372); a bare or {@code \mathpunct} comma stays a separator, as it is
+     *     drawn (f(1, 2)). TeX puts a script on the LAST digit (10^{-3}), so the whole number
+     *     carries it; a combining mark after a number sits over its last digit only, as
+     *     0.1\bar{6} draws, and reads so ("0.1 bar over 6");</li>
+     * <li>a run of the font's own script characters after a base, its superscripts as one
+     *     script and its subscripts as another, each read as the command form reads (x² is
+     *     "x squared", x⁻¹ "x to the power of - 1"), and only where the font draws them: a
+     *     character drawn as the missing-glyph box is read as itself. With no base in front
+     *     (at the start, or after an operator: ²³⁵U, x + ²³⁵U) the run is read whole
+     *     ("superscript 235"). Ordinal indicators (ª, º) are letters, not scripts;</li>
+     * <li>a combining mark after a base, read as its accent command reads (x with U+0304 is
+     *     "bar over x", as \bar{x} is), also when the mark itself carries a script.</li>
+     * </ul>
+     * Linear in the row: a word's accents are joined once. Labels only: no geometry changes.
+     */
+    private static String describeRow(List<MathNode> items) {
+        RowWords row = new RowWords();
+        int n = items.size();
+        int i = 0;
+        while (i < n) {
+            MathNode it = items.get(i);
+            boolean leadingPoint = isDecimalPoint(it) && i + 1 < n && startsNumber(items.get(i + 1));
+            if (digitText(it) != null || leadingPoint) {
+                StringBuilder number = new StringBuilder();
+                int j = i;
+                if (leadingPoint) {
+                    number.append('.');
+                    j++;
+                }
+                MathNode first = items.get(j);
+                int zero = zeroOfDigits(first instanceof SupSub s0 ? s0.base() : first);
+                SupSub scripts = null;
+                while (j < n) {
+                    MathNode x = items.get(j);
+                    String d = digitText(x, zero);
+                    if (d != null) {
+                        number.append(d);
+                        j++;
+                    } else if (x instanceof SupSub ss && digitText(ss.base(), zero) != null) {
+                        number.append(digitText(ss.base(), zero));
+                        scripts = ss;
+                        j++;
+                        break;
+                    } else if (j + 1 < n && isEmptyGroup(x) && number.length() > 0 && continuesNumber(items.get(j + 1), zero)) {
+                        j++; // 1{}23 draws as 123
+                    } else if (j + 1 < n && (isDecimalPoint(x) || isBracedComma(x)) && continuesNumber(items.get(j + 1), zero)) {
+                        number.append(isBracedComma(x) ? ',' : '.');
+                        j++;
+                    } else {
+                        break;
+                    }
+                }
+                String num = number.toString();
+                if (scripts != null) {
+                    row.add(num, true).script(words(scripts.sup()), words(scripts.sub()));
+                } else if (j < n && markFollows(items.get(j)) && num.codePointCount(0, num.length()) > 1) {
+                    // the mark sits over the LAST digit only, as 0.1\bar{6} draws; a point or comma
+                    // left at the end of the head is its own word, as 0.\bar{3} reads it
+                    int last = num.offsetByCodePoints(num.length(), -1);
+                    String head = num.substring(0, last);
+                    char end = head.charAt(head.length() - 1);
+                    if (end == '.' || end == ',') {
+                        if (head.length() > 1) {
+                            row.add(head.substring(0, head.length() - 1), true);
+                        }
+                        row.add(String.valueOf(end), false);
+                    } else {
+                        row.add(head, true);
+                    }
+                    row.add(num.substring(last), true);
+                } else {
+                    row.add(num, true);
+                }
+                i = j;
+                continue;
+            }
+            if (scriptKind(it) != 0) {
+                List<MathNode> sup = new ArrayList<>();
+                List<MathNode> sub = new ArrayList<>();
+                int j = i;
+                while (j < n && scriptKind(items.get(j)) != 0) {
+                    (scriptKind(items.get(j)) == 2 ? sub : sup).addAll(scriptContent(items.get(j)));
+                    j++;
+                }
+                String supWords = sup.isEmpty() ? null : describeRow(sup);
+                String subWords = sub.isEmpty() ? null : describeRow(sub);
+                if (row.lastIsBase()) {
+                    row.last().script(supWords, subWords);
+                } else {
+                    row.add(wholeScriptRun(supWords, subWords), true);
+                }
+                i = j;
+                continue;
+            }
+            String accent = combiningAccent(it);
+            if (accent != null && row.lastIsBase()) {
+                row.last().mark(accentName(accent));
+                i++;
+                continue;
+            }
+            if (it instanceof SupSub ss) {
+                String markOnIt = combiningAccent(ss.base());
+                int kind = scriptKind(ss.base());
+                if ((markOnIt != null || kind != 0) && row.lastIsBase()) {
+                    // a mark or a script character that itself carries a TeX script (x, U+0304, ^2):
+                    // it lands where it is drawn, then its own scripts follow it
+                    Word w = row.last();
+                    if (markOnIt != null) {
+                        w.mark(accentName(markOnIt));
+                    } else {
+                        String c = describeRow(scriptContent(ss.base()));
+                        w.script(kind == 1 ? c : null, kind == 2 ? c : null);
+                    }
+                    w.closeSegment();
+                    w.script(words(ss.sup()), words(ss.sub()));
+                    i++;
+                    continue;
+                }
+                if (markOnIt == null && kind == 0) {
+                    // an ordinary scripted nucleus: its scripts stay open, so a mark that follows
+                    // lands on the script it is drawn over (x^2 then U+0304), not on the whole word
+                    row.add(describe(ss.base()), true).script(words(ss.sup()), words(ss.sub()));
+                    i++;
+                    continue;
+                }
+            }
+            String part = describe(it);
+            if (!part.isEmpty()) {
+                row.add(part, isBaseNode(it));
+            }
+            i++;
+        }
+        return row.join();
+    }
+
+    private static String words(MathNode n) {
+        return n == null ? null : describe(n);
+    }
+
+    /**
+     * The words of a row. Each word is built from parts and rendered ONCE, at the end: accents
+     * over the whole word as prefixes, the core, then script segments. Nothing re-copies a
+     * growing word, so any mix of marks and scripts is linear (Fixpoint review of 17e5c34, B1).
+     */
+    private static final class RowWords {
+        private final List<Word> words = new ArrayList<>();
+
+        Word add(String text, boolean base) {
+            Word w = new Word(text, base);
+            words.add(w);
+            return w;
+        }
+
+        boolean lastIsBase() {
+            return !words.isEmpty() && words.get(words.size() - 1).base;
+        }
+
+        Word last() {
+            return words.get(words.size() - 1);
+        }
+
+        String join() {
+            StringBuilder sb = new StringBuilder();
+            for (Word w : words) {
+                int before = sb.length();
+                if (before > 0) {
+                    sb.append(' ');
+                }
+                int start = sb.length();
+                w.render(sb);
+                if (sb.length() == start) {
+                    sb.setLength(before);
+                }
+            }
+            return sb.toString();
+        }
+    }
+
+    /**
+     * One word: accents over all of it (outermost first), its core, and its script segments. A
+     * mark lands on the OPEN segment when there is one, because that is where it is drawn (x,
+     * superscript two, bar: the bar is over the 2), and over the whole word otherwise.
+     */
+    private static final class Word {
+        private final java.util.ArrayDeque<String> prefixes = new java.util.ArrayDeque<>();
+        private final String core;
+        private final List<Segment> segments = new ArrayList<>();
+        private boolean open;
+        final boolean base;
+
+        Word(String core, boolean base) {
+            this.core = core;
+            this.base = base;
+        }
+
+        void mark(String name) {
+            if (open) {
+                segments.get(segments.size() - 1).mark(name);
+            } else {
+                prefixes.addFirst(name);
+            }
+        }
+
+        /** A script after this word: it joins the open segment if that lacks its kind (x_1 then
+         *  superscript two reads as x_1^2), else it starts a new one. */
+        void script(String sup, String sub) {
+            if (sup == null && sub == null) {
+                return;
+            }
+            Segment s = open ? segments.get(segments.size() - 1) : null;
+            if (s != null && s.accepts(sup, sub)) {
+                s.add(sup, sub);
+            } else {
+                Segment t = new Segment();
+                t.add(sup, sub);
+                segments.add(t);
+            }
+            open = true;
+        }
+
+        void closeSegment() {
+            open = false;
+        }
+
+        void render(StringBuilder out) {
+            int start = out.length();
+            for (String p : prefixes) {
+                out.append(p).append(' ');
+            }
+            out.append(core);
+            for (Segment s : segments) {
+                if (out.length() > start && out.charAt(out.length() - 1) != ' ') {
+                    out.append(' ');
+                }
+                s.render(out);
+            }
+        }
+    }
+
+    /** A script segment: its superscript and subscript words, and the marks drawn over each. */
+    private static final class Segment {
+        private String sup;
+        private String sub;
+        private final List<String> supMarks = new ArrayList<>();
+        private final List<String> subMarks = new ArrayList<>();
+        private boolean lastWasSub;
+
+        boolean accepts(String sp, String sb) {
+            return (sp == null || sup == null) && (sb == null || sub == null);
+        }
+
+        void add(String sp, String sb) {
+            if (sp != null) {
+                sup = sp;
+                lastWasSub = false;
+            }
+            if (sb != null) {
+                sub = sb;
+                lastWasSub = true;
+            }
+        }
+
+        void mark(String name) {
+            (lastWasSub && sub != null ? subMarks : supMarks).add(name);
+        }
+
+        void render(StringBuilder out) {
+            if (sub == null) {
+                if (supMarks.isEmpty() && sup.equals("2")) {
+                    out.append("squared");
+                } else {
+                    out.append("to the power of ");
+                    withMarks(out, sup, supMarks);
+                }
+            } else if (sup == null) {
+                out.append("sub ");
+                withMarks(out, sub, subMarks);
+            } else {
+                out.append("sub ");
+                withMarks(out, sub, subMarks);
+                out.append(" to the power of ");
+                withMarks(out, sup, supMarks);
+            }
+        }
+
+        /** The words with the marks over their LAST character, as drawn: "23" with a bar is
+         *  "2 bar over 3". A number keeps the rest of itself as one word, and a point or comma
+         *  left at its end is its own word, as the row reads 0.\bar{3} (Lattice 1752): "0.5"
+         *  with a bar is "0 . bar over 5", "4,372" is "4,37 bar over 2". Later marks are outer. */
+        private static void withMarks(StringBuilder out, String words, List<String> marks) {
+            if (marks.isEmpty()) {
+                out.append(words);
+                return;
+            }
+            int sp = words.lastIndexOf(' ');
+            String head = words.substring(0, sp + 1);
+            String last = words.substring(sp + 1);
+            if (isNumberWord(last)) {
+                int k = last.offsetByCodePoints(last.length(), -1);
+                String rest = last.substring(0, k);
+                char end = rest.charAt(rest.length() - 1);
+                if (end == '.' || end == ',') {
+                    if (rest.length() > 1) {
+                        head = head + rest.substring(0, rest.length() - 1) + " ";
+                    }
+                    head = head + end + " ";
+                } else {
+                    head = head + rest + " ";
+                }
+                last = last.substring(k);
+            }
+            out.append(head);
+            for (int m = marks.size() - 1; m >= 0; m--) {
+                out.append(marks.get(m)).append(' ');
+            }
+            out.append(last);
+        }
+    }
+
+    /** A word the number builder made: more than one character, ending in a digit, of digits
+     *  and the points and grouping commas it joins (".5" and "1.5.2" included). */
+    private static boolean isNumberWord(String w) {
+        int count = w.codePointCount(0, w.length());
+        if (count < 2 || !Character.isDigit(w.codePointBefore(w.length()))) {
+            return false;
+        }
+        return w.codePoints().allMatch(c -> Character.isDigit(c) || c == '.' || c == ',');
+    }
+
+    /** A script run with no base in front of it, read whole: "superscript 235", "subscript 12". */
+    private static String wholeScriptRun(String sup, String sub) {
+        if (sub == null) {
+            return "superscript " + sup;
+        }
+        if (sup == null) {
+            return "subscript " + sub;
+        }
+        return "subscript " + sub + " superscript " + sup;
+    }
+
+    /** A script character's content as the atoms its command form would hold: x⁻¹ as x^{-1}. */
+    private static List<MathNode> scriptContent(MathNode n) {
+        String d = java.text.Normalizer.normalize(Character.toString(((Atom) n).codePoint()), java.text.Normalizer.Form.NFKD);
+        List<MathNode> atoms = new ArrayList<>();
+        // the decomposition of a superscript minus is U+2212; a command form holds the typed '-'
+        d.codePoints().forEach(cp -> atoms.add(new Atom(cp == 0x2212 ? '-' : cp, MathNode.MathClass.ORD, false)));
+        return atoms;
+    }
+
+    /** A decimal point: a bare '.', or one forced ordinary ({@code 1\mathord{.}5} draws as 1.5). */
+    private static boolean isDecimalPoint(MathNode n) {
+        return isAtomOf(n, '.') || (n instanceof MathNode.ClassOverride co && co.forcedClass() == MathNode.MathClass.ORD
+            && isAtomOf(co.body(), '.'));
+    }
+
+    private static boolean isEmptyGroup(MathNode n) {
+        return n instanceof MathList(var g) && g.isEmpty();
+    }
+
+    /** A digit, or a digit carrying a script, that can start a number after a leading point (.5^2). */
+    private static boolean startsNumber(MathNode n) {
+        return digitText(n) != null || (n instanceof SupSub ss && digitText(ss.base()) != null);
+    }
+
+    /** A combining mark, bare or carrying a TeX script (0.16, U+0304, ^2), next in the row. */
+    private static boolean markFollows(MathNode n) {
+        return combiningAccent(n) != null || (n instanceof SupSub ss && combiningAccent(ss.base()) != null);
+    }
+
+    /**
+     * Whether a described item is something a following script or mark sits on: not an
+     * operator, an opening or a punctuation, by its EFFECTIVE class, so {@code \mathbin{+}}
+     * is an operator as a bare + is (Lattice review of f94842f).
+     */
+    private static boolean isBaseNode(MathNode n) {
+        if (n instanceof MathNode.Colored c) {
+            return isBaseNode(c.body()); // colour is presentation: a red + is still an operator
+        }
+        if (n instanceof BigOperator || n instanceof MathNode.SizedDelim || n instanceof MathNode.MiddleDelim) {
+            return false; // a \sum or a \big( is not what a following script or mark sits on
+        }
+        MathNode.MathClass c = n instanceof Atom a ? a.mathClass()
+            : n instanceof MathNode.ClassOverride co ? co.forcedClass() : null;
+        if (c == null) {
+            return true;
+        }
+        return switch (c) {
+            case BIN, REL, OPEN, PUNCT -> false;
+            default -> true;
+        };
+    }
+
+    /** The digits of a digit atom or a digit-only group of the given numbering system, else null. */
+    private static String digitText(MathNode n, int zero) {
+        if (isDigitAtom(n)) {
+            return zeroOf(n) == zero ? Character.toString(((Atom) n).codePoint()) : null;
+        }
+        if (n instanceof MathList(var group) && !group.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (MathNode g : group) {
+                if (!isDigitAtom(g) || zeroOf(g) != zero) {
+                    return null;
+                }
+                sb.appendCodePoint(((Atom) g).codePoint());
+            }
+            return sb.toString();
+        }
+        return null;
+    }
+
+    /** {@link #digitText(MathNode, int)} in the node's own numbering system. */
+    private static String digitText(MathNode n) {
+        int zero = zeroOfDigits(n);
+        return zero < 0 ? null : digitText(n, zero);
+    }
+
+    /** The zero of the numbering system of a digit atom or of a group's first digit, or -1. */
+    private static int zeroOfDigits(MathNode n) {
+        if (isDigitAtom(n)) {
+            return zeroOf(n);
+        }
+        if (n instanceof MathList(var group) && !group.isEmpty() && isDigitAtom(group.get(0))) {
+            return zeroOf(group.get(0));
+        }
+        return -1;
+    }
+
+    /** A decimal digit of any numbering system (ASCII, math bold, full-width, Arabic-Indic, ...). */
+    private static boolean isDigitAtom(MathNode n) {
+        return n instanceof Atom a && Character.getType(a.codePoint()) == Character.DECIMAL_DIGIT_NUMBER;
+    }
+
+    /** The code point of the zero of a digit's numbering system: digits of one system join. */
+    private static int zeroOf(MathNode n) {
+        int cp = ((Atom) n).codePoint();
+        return cp - Character.digit(cp, 10);
+    }
+
+    private static boolean continuesNumber(MathNode n, int zero) {
+        MathNode d = n instanceof SupSub ss ? ss.base() : n;
+        return digitText(d, zero) != null;
+    }
+
+    /** How a base with scripts reads: "x squared", "x to the power of n", "x sub i ...". */
+    private static String scripted(String b, MathNode sup, MathNode sub) {
+        return scriptedWords(b, sup == null ? null : describe(sup), sub == null ? null : describe(sub));
+    }
+
+    /** The one reading rule for scripts, given their words; {@code null} means absent. */
+    private static String scriptedWords(String b, String sup, String sub) {
+        // an empty base ({}_{i}, or a Unicode script with nothing before it) reads 'sub i', not
+        // ' sub i' (Fixpoint review of 6160f84, plan 14579fe4)
+        String base = b.isEmpty() ? "" : b + " ";
+        if (sub == null) {
+            return sup.equals("2") ? base + "squared" : base + "to the power of " + sup;
+        }
+        if (sup == null) {
+            return base + "sub " + sub;
+        }
+        return base + "sub " + sub + " to the power of " + sup;
+    }
+
+    private static boolean isAtomOf(MathNode n, int cp) {
+        return n instanceof Atom a && a.codePoint() == cp;
+    }
+
+    /**
+     * {@code {,}}: TeX's group separator, a comma wrapped to an ORDINARY atom. A comma forced
+     * to another class ({@code \mathpunct{,}}) is drawn, spaced and read as a separator.
+     */
+    private static boolean isBracedComma(MathNode n) {
+        return n instanceof MathNode.ClassOverride co && co.forcedClass() == MathNode.MathClass.ORD && isAtomOf(co.body(), ',');
+    }
+
+    /**
+     * 1 for a superscript character, 2 for a subscript one, 0 otherwise: a single atom whose
+     * compatibility decomposition is one other character and whose Unicode name marks it as
+     * a superscript, a subscript or a modifier letter (the script characters the parser left
+     * as the font's own glyphs because the font draws them).
+     */
+    private static int scriptKind(MathNode n) {
+        if (!(n instanceof Atom a)) {
+            return 0;
+        }
+        if (FontHolder.FONT.glyphId(a.codePoint()) == 0) {
+            return 0; // drawn as the missing-glyph box: read as itself, never as a script
+        }
+        String ch = Character.toString(a.codePoint());
+        String d = java.text.Normalizer.normalize(ch, java.text.Normalizer.Form.NFKD);
+        if (d.equals(ch) || d.codePointCount(0, d.length()) != 1) {
+            return 0;
+        }
+        String name = Character.getName(a.codePoint());
+        if (name == null) {
+            return 0;
+        }
+        if (name.contains("SUBSCRIPT")) {
+            return 2;
+        }
+        return name.startsWith("SUPERSCRIPT") || name.startsWith("MODIFIER LETTER SMALL")
+            || name.startsWith("MODIFIER LETTER CAPITAL") ? 1 : 0; // ª and º are letters, not scripts
+    }
+
+    /** The accent command a combining mark reads as, or null if it is not one we name. */
+    private static String combiningAccent(MathNode n) {
+        if (!(n instanceof Atom a)) {
+            return null;
+        }
+        return switch (a.codePoint()) {
+            case 0x0300 -> "grave";
+            case 0x0301 -> "acute";
+            case 0x0302 -> "hat";
+            case 0x0303 -> "tilde";
+            case 0x0304 -> "bar";
+            case 0x0305 -> "overline";
+            case 0x0306 -> "breve";
+            case 0x0307 -> "dot";
+            case 0x0308 -> "ddot";
+            case 0x030A -> "mathring";
+            case 0x030C -> "check";
+            case 0x20D7 -> "vec";
+            default -> null;
+        };
+    }
+
     /** A plain-language accessibility label for a math tree. */
     static String describe(MathNode node) {
         return switch (node) {
-            case Atom atom -> Character.toString(atom.codePoint());
+            case Atom atom -> scriptKind(atom) != 0 // a lone script character reads whole: superscript 2
+                ? wholeScriptRun(scriptKind(atom) == 1 ? describeRow(scriptContent(atom)) : null,
+                    scriptKind(atom) == 2 ? describeRow(scriptContent(atom)) : null)
+                : Character.toString(atom.codePoint());
             case MathNode.MiddleDelim(var delimCp) -> Character.toString(delimCp);
-            case MathList(var items) -> {
-                StringBuilder sb = new StringBuilder();
-                for (MathNode item : items) {
-                    String part = describe(item);
-                    if (part.isEmpty()) {
-                        continue;
-                    }
-                    if (sb.length() > 0) {
-                        sb.append(' ');
-                    }
-                    sb.append(part);
-                }
-                yield sb.toString();
-            }
-            case SupSub(var base, var sup, var sub) -> {
-                String b = describe(base);
-                if (b.isEmpty()) {
-                    // an empty base ({}_{i}, or a Unicode script with nothing before it): the
-                    // label reads 'sub i', not ' sub i' (Fixpoint review of 6160f84)
-                    String s = sub == null ? "" : "sub " + describe(sub);
-                    String p = sup == null ? "" : (describe(sup).equals("2") && sub == null ? "squared" : "to the power of " + describe(sup));
-                    yield (s + (s.isEmpty() || p.isEmpty() ? "" : " ") + p);
-                }
-                if (sub == null) {
-                    String exp = describe(sup);
-                    yield exp.equals("2") ? b + " squared" : b + " to the power of " + exp;
-                }
-                if (sup == null) {
-                    yield b + " sub " + describe(sub);
-                }
-                yield b + " sub " + describe(sub) + " to the power of " + describe(sup);
-            }
+            case MathList(var items) -> describeRow(items);
+            case SupSub(var base, var sup, var sub) -> scripted(describe(base), sup, sub);
             case Fraction f -> f.hasRule()
                 ? "the fraction " + describe(f.numerator()) + " over " + describe(f.denominator())
                 : describe(f.numerator()) + " choose " + describe(f.denominator());

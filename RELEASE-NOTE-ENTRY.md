@@ -126,3 +126,32 @@ below are kept verbatim as their branches wrote them.
   triangles ▸ ◂, one command each, stay relations, though MathClass-15 says binary). The
   symbol table now refuses to build if a future pair of spellings disagrees with no sourced
   choice, or if a choice goes stale (its spellings agree, or none remains).
+
+### confluence/lattex-aria-numbers-and-marks
+
+- Accessibility labels read numbers as numbers (plan fd362dd3; repros from the crew's
+  showcase pages, 2026-11-25; reviews by Lattice and Fixpoint). A run of digits of one
+  numbering system, a digit-only group `{23}` included, with a decimal point or a braced
+  group separator `{,}` between digits, or a point before them, is one word
+  (`e^{\pi\sqrt{163}}` ends "the square root of 163"; `\frac{4{,}372}{E}` reads "4,372";
+  `.5` reads ".5"). A bare or `\mathpunct` comma stays a separator, as it is drawn (f(1, 2)),
+  and a thin space separates (`1\,000` reads "1 000"). TeX puts a script on the LAST digit,
+  so `10^{-3}` reads "10 to the power of - 3" and `12^2` "12 squared"; a combining mark
+  after a number sits over its last digit only, as `0.1\bar{6}` draws ("0.1 bar over 6").
+- The font's own script characters read as the scripts they are, each read as its command
+  form reads: x² is "x squared" as `x^{2}` is, x²₃ and x₃² both "x sub 3 to the power of 2"
+  as `x^2_3` is, x⁻¹ "x to the power of - 1" as `x^{-1}` is. Only characters the font draws:
+  one drawn as the missing-glyph box is read as itself. With no base in front (at the start,
+  or after an operator: ²³⁵U) a run is read whole ("superscript 235 U"). The ordinals ª and º
+  are letters, not scripts ("1 º").
+- A combining mark after a base reads as its accent command (x with U+0304 is "bar over x",
+  as `\bar{x}` is), and lands where it is drawn: after a superscript it is over the script
+  (x, superscript two, bar reads "x to the power of bar over 2"). Any mix of marks and
+  scripts is read in linear work.
+- Labels only: no geometry changes (stripped of labels, every corpus render is
+  byte-identical). Five of the 187 corpus labels change, all digit runs; the two
+  whole-corpus hash pins are re-pinned with that measured as their sole cause, and the
+  tracked example pages gallery, sum and the symbol index are regenerated. Because a label can grow or shrink, an input near the 2,000,000-character output cap can
+  move across it (measured by Fixpoint: x followed by combining marks renders on main up to
+  17,233 marks and here up to 16,252; a run of sevens renders here up to 10,252 and on main
+  up to 10,200; within about 5 percent of the cap).
