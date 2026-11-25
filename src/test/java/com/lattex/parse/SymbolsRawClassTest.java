@@ -77,6 +77,14 @@ class SymbolsRawClassTest {
         IllegalStateException stale = assertThrows(IllegalStateException.class,
             () -> Symbols.buildClassByCodepoint(agree, Set.of(), Map.of(0x2601, MathClass.ORD)));
         assertTrue(stale.getMessage().contains("remove the stale entry"), stale.getMessage());
+        // and a choice whose last spelling was removed (Lattice review of 132bd1e)
+        IllegalStateException orphan = assertThrows(IllegalStateException.class,
+            () -> Symbols.buildClassByCodepoint(agree, Set.of(), Map.of(0x2602, MathClass.REL)));
+        assertTrue(orphan.getMessage().contains("U+2602, which has no remaining spelling"), orphan.getMessage());
+        // a spelling that is class-tagged out counts as removed too
+        IllegalStateException tagged = assertThrows(IllegalStateException.class,
+            () -> Symbols.buildClassByCodepoint(pair, Set.of("sunord"), Map.of(0x2600, MathClass.REL)));
+        assertTrue(tagged.getMessage().contains("U+2600, which has spellings that all agree"), tagged.getMessage());
     }
 
     @Test

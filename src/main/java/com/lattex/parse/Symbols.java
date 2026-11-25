@@ -101,14 +101,20 @@ final class Symbols {
                 classes.computeIfAbsent(s.codePoint(), k -> java.util.EnumSet.noneOf(MathClass.class)).add(s.mathClass());
             }
         }
+        // every choice must answer a real conflict: a choice whose spellings now agree, or whose
+        // last remaining spelling was removed, is stale (Lattice review of 132bd1e)
+        for (int cp : choice.keySet()) {
+            java.util.EnumSet<MathClass> c = classes.get(cp);
+            if (c == null || c.size() < 2) {
+                throw new IllegalStateException(String.format(
+                    "raw-class choice for U+%04X, which has %s: remove the stale entry", cp,
+                    c == null ? "no remaining spelling" : "spellings that all agree (" + c + ")"));
+            }
+        }
         Map<Integer, MathClass> m = new java.util.HashMap<>();
         for (Map.Entry<Integer, java.util.EnumSet<MathClass>> e : classes.entrySet()) {
             int cp = e.getKey();
             if (e.getValue().size() == 1) {
-                if (choice.containsKey(cp)) {
-                    throw new IllegalStateException(String.format(
-                        "raw-class choice for U+%04X, whose spellings all agree (%s): remove the stale entry", cp, e.getValue()));
-                }
                 m.put(cp, e.getValue().iterator().next());
             } else {
                 MathClass chosen = choice.get(cp);
