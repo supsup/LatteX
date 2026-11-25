@@ -72,6 +72,13 @@ final class Symbols {
      * {@code 22A5;R}, {@code 25B3;B}, {@code 25BD;B}. Each named command keeps its own class
      * ({@code \bot} Ord, {@code \perp} Rel; {@code \triangle} and {@code \triangledown} Ord,
      * {@code \bigtriangleup} and {@code \bigtriangledown} Bin): this decides the paste only.
+     *
+     * <p>THE RULE (Fixpoint ruling, stafficy/35753): a pasted character takes the class of the
+     * command that names it. Unicode's MathClass file is only the tie-breaker for the code
+     * points that several commands name with different classes, where the two-output bug
+     * lived. A code point with one command keeps that command's class even where Unicode's
+     * file differs: the small black triangles U+25B8/U+25C2 are relations, as amssymb's
+     * commands are, though MathClass-15 says B.
      */
     static final Map<Integer, MathClass> RAW_CLASS_CHOICE = Map.of(
         0x22A5, MathClass.REL,   // ⊥ UP TACK: MathClass-15 R (\perp's class)
