@@ -145,13 +145,13 @@ below are kept verbatim as their branches wrote them.
   or after an operator: ²³⁵U) a run is read whole ("superscript 235 U"). The ordinals ª and º
   are letters, not scripts ("1 º").
 - A combining mark after a base reads as its accent command (x with U+0304 is "bar over x",
-  as `\bar{x}` is), also when the mark carries a script ("bar over x squared"); a long run of
-  marks is read in linear work.
+  as `\bar{x}` is), and lands where it is drawn: after a superscript it is over the script
+  (x, superscript two, bar reads "x to the power of bar over 2"). Any mix of marks and
+  scripts is read in linear work.
 - Labels only: no geometry changes (stripped of labels, every corpus render is
   byte-identical). Five of the 187 corpus labels change, all digit runs; the two
   whole-corpus hash pins are re-pinned with that measured as their sole cause, and the
-  tracked example pages gallery, sum and the symbol index are regenerated. Because a label
-  can grow or shrink, an input within a few characters of the 2,000,000-character output
-  cap can move across it: one that rendered just under the cap may be refused, and the
-  reverse (Fixpoint measured, at an earlier tip of this plan: x with about 17,000 combining
-  marks rendered on main and is refused, a run of about 10,230 sevens the other way).
+  tracked example pages gallery, sum and the symbol index are regenerated. Because a label can grow or shrink, an input near the 2,000,000-character output cap can
+  move across it (measured by Fixpoint: x followed by combining marks renders on main up to
+  17,233 marks and here up to 16,252; a run of sevens renders here up to 10,252 and on main
+  up to 10,200; within about 5 percent of the cap).

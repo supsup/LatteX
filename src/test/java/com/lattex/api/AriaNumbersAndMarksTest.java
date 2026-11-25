@@ -157,4 +157,45 @@ class AriaNumbersAndMarksTest {
         assertTrue(label.endsWith("bar over bar over x"), label.substring(Math.max(0, label.length() - 40)));
         assertEquals(1_000_000 * "bar over ".length() + 1, label.length());
     }
+
+    @Test
+    void aMarkLandsOnTheScriptItIsDrawnOver() {
+        // Fixpoint review of 17e5c34, B3: the bar after a superscript two is drawn over the 2
+        reads("x to the power of bar over 2", "x\u00B2\u0304", "x^2\u0304");
+        reads("bar over x squared", "x\u0304\u00B2", "x\u0304^2", "\\bar{x}^2");
+        reads("12 to the power of bar over 3", "12^3\u0304");
+        reads("x to the power of 2 bar over 3", "x^{23}\u0304");
+        // a point left at the end of a split number is its own word, as the command form reads it
+        reads("0 . bar over 3", "0.3\u0304", "0.\\bar{3}");
+        reads("1 . bar over 5", "1.5\u0304");
+    }
+
+    @Test
+    void alternatingMarksAndScriptsAreLinear() {
+        // B1: x then (U+0304, U+00B2) repeated copied the growing word on every pair
+        List<MathNode> row = new ArrayList<>();
+        row.add(new MathNode.Atom('x', MathNode.MathClass.ORD, false));
+        for (int k = 0; k < 200_000; k++) {
+            row.add(new MathNode.Atom(0x0304, MathNode.MathClass.ORD, false));
+            row.add(new MathNode.Atom(0x00B2, MathNode.MathClass.ORD, false));
+        }
+        MathNode.MathList list = new MathNode.MathList(row);
+        String label = Assertions.assertTimeoutPreemptively(Duration.ofMillis(1500), () -> LatteX.describe(list));
+        // each bar after the first is drawn over the 2 before it; the last 2 has none
+        assertTrue(label.startsWith("bar over x to the power of bar over 2 to the power of bar over 2 "), label.substring(0, 80));
+        assertTrue(label.endsWith(" squared"), label.substring(label.length() - 40));
+    }
+
+    @Test
+    void theCheapOnesFromTheSameReview() {
+        reads("1.5", "1\\mathord{.}5", "1.5");
+        reads("123", "1{}23", "123");
+        reads(".5 squared", ".5^2");
+        reads("superscript 2", "\u00B2");
+        reads("x sub 1 to the power of 2", "x_1\u00B2", "x_1^2");
+        // an operator, a \big delimiter or a big operator is no base, coloured or not
+        reads("x + \u0304", "x+\u0304", "x\\textcolor{red}{+}\u0304");
+        assertTrue(!label("\\sum\u00B2").contains("squared"), label("\\sum\u00B2"));
+        assertTrue(!label("x\\big(\u00B2U").contains("squared"), label("x\\big(\u00B2U"));
+    }
 }

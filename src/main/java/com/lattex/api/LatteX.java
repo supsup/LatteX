@@ -1127,7 +1127,7 @@ public final class LatteX {
         int i = 0;
         while (i < n) {
             MathNode it = items.get(i);
-            boolean leadingPoint = isAtomOf(it, '.') && i + 1 < n && digitText(items.get(i + 1)) != null;
+            boolean leadingPoint = isDecimalPoint(it) && i + 1 < n && startsNumber(items.get(i + 1));
             if (digitText(it) != null || leadingPoint) {
                 StringBuilder number = new StringBuilder();
                 int j = i;
@@ -1135,7 +1135,8 @@ public final class LatteX {
                     number.append('.');
                     j++;
                 }
-                int zero = zeroOfDigits(items.get(j));
+                MathNode first = items.get(j);
+                int zero = zeroOfDigits(first instanceof SupSub s0 ? s0.base() : first);
                 SupSub scripts = null;
                 while (j < n) {
                     MathNode x = items.get(j);
@@ -1148,8 +1149,10 @@ public final class LatteX {
                         scripts = ss;
                         j++;
                         break;
-                    } else if (j + 1 < n && (isAtomOf(x, '.') || isBracedComma(x)) && continuesNumber(items.get(j + 1), zero)) {
-                        number.append(isAtomOf(x, '.') ? '.' : ',');
+                    } else if (j + 1 < n && isEmptyGroup(x) && number.length() > 0 && continuesNumber(items.get(j + 1), zero)) {
+                        j++; // 1{}23 draws as 123
+                    } else if (j + 1 < n && (isDecimalPoint(x) || isBracedComma(x)) && continuesNumber(items.get(j + 1), zero)) {
+                        number.append(isBracedComma(x) ? ',' : '.');
                         j++;
                     } else {
                         break;
@@ -1157,10 +1160,21 @@ public final class LatteX {
                 }
                 String num = number.toString();
                 if (scripts != null) {
-                    row.add(scripted(num, scripts.sup(), scripts.sub()), true);
+                    row.add(num, true).script(words(scripts.sup()), words(scripts.sub()));
                 } else if (j < n && markFollows(items.get(j)) && num.codePointCount(0, num.length()) > 1) {
+                    // the mark sits over the LAST digit only, as 0.1\bar{6} draws; a point or comma
+                    // left at the end of the head is its own word, as 0.\bar{3} reads it
                     int last = num.offsetByCodePoints(num.length(), -1);
-                    row.add(num.substring(0, last), true);
+                    String head = num.substring(0, last);
+                    char end = head.charAt(head.length() - 1);
+                    if (end == '.' || end == ',') {
+                        if (head.length() > 1) {
+                            row.add(head.substring(0, head.length() - 1), true);
+                        }
+                        row.add(String.valueOf(end), false);
+                    } else {
+                        row.add(head, true);
+                    }
                     row.add(num.substring(last), true);
                 } else {
                     row.add(num, true);
@@ -1179,7 +1193,7 @@ public final class LatteX {
                 String supWords = sup.isEmpty() ? null : describeRow(sup);
                 String subWords = sub.isEmpty() ? null : describeRow(sub);
                 if (row.lastIsBase()) {
-                    row.add(scriptedWords(row.removeLast(), supWords, subWords), true);
+                    row.last().script(supWords, subWords);
                 } else {
                     row.add(wholeScriptRun(supWords, subWords), true);
                 }
@@ -1188,24 +1202,32 @@ public final class LatteX {
             }
             String accent = combiningAccent(it);
             if (accent != null && row.lastIsBase()) {
-                row.accent(accentName(accent));
+                row.last().mark(accentName(accent));
                 i++;
                 continue;
             }
-            if (it instanceof SupSub ss && row.lastIsBase()) {
-                // a mark or a script character that itself carries a TeX script (x, U+0304, ^2)
+            if (it instanceof SupSub ss) {
                 String markOnIt = combiningAccent(ss.base());
                 int kind = scriptKind(ss.base());
-                if (markOnIt != null || kind != 0) {
-                    String w;
+                if ((markOnIt != null || kind != 0) && row.lastIsBase()) {
+                    // a mark or a script character that itself carries a TeX script (x, U+0304, ^2):
+                    // it lands where it is drawn, then its own scripts follow it
+                    Word w = row.last();
                     if (markOnIt != null) {
-                        row.accent(accentName(markOnIt));
-                        w = row.removeLast();
+                        w.mark(accentName(markOnIt));
                     } else {
                         String c = describeRow(scriptContent(ss.base()));
-                        w = scriptedWords(row.removeLast(), kind == 1 ? c : null, kind == 2 ? c : null);
+                        w.script(kind == 1 ? c : null, kind == 2 ? c : null);
                     }
-                    row.add(scripted(w, ss.sup(), ss.sub()), true);
+                    w.closeSegment();
+                    w.script(words(ss.sup()), words(ss.sub()));
+                    i++;
+                    continue;
+                }
+                if (markOnIt == null && kind == 0) {
+                    // an ordinary scripted nucleus: its scripts stay open, so a mark that follows
+                    // lands on the script it is drawn over (x^2 then U+0304), not on the whole word
+                    row.add(describe(ss.base()), true).script(words(ss.sup()), words(ss.sub()));
                     i++;
                     continue;
                 }
@@ -1219,46 +1241,176 @@ public final class LatteX {
         return row.join();
     }
 
-    /** The words of a row as they are built; a word's accents are joined once, when it is done. */
-    private static final class RowWords {
-        private final List<String> words = new ArrayList<>();
-        private final List<String> accents = new ArrayList<>(); // over the last word, innermost first
-        private boolean lastIsBase;
+    private static String words(MathNode n) {
+        return n == null ? null : describe(n);
+    }
 
-        void add(String word, boolean base) {
-            flush();
-            words.add(word);
-            lastIsBase = base;
+    /**
+     * The words of a row. Each word is built from parts and rendered ONCE, at the end: accents
+     * over the whole word as prefixes, the core, then script segments. Nothing re-copies a
+     * growing word, so any mix of marks and scripts is linear (Fixpoint review of 17e5c34, B1).
+     */
+    private static final class RowWords {
+        private final List<Word> words = new ArrayList<>();
+
+        Word add(String text, boolean base) {
+            Word w = new Word(text, base);
+            words.add(w);
+            return w;
         }
 
         boolean lastIsBase() {
-            return !words.isEmpty() && lastIsBase;
+            return !words.isEmpty() && words.get(words.size() - 1).base;
         }
 
-        void accent(String name) {
-            accents.add(name);
-        }
-
-        String removeLast() {
-            flush();
-            return words.remove(words.size() - 1);
+        Word last() {
+            return words.get(words.size() - 1);
         }
 
         String join() {
-            flush();
-            return String.join(" ", words);
+            StringBuilder sb = new StringBuilder();
+            for (Word w : words) {
+                int before = sb.length();
+                if (before > 0) {
+                    sb.append(' ');
+                }
+                int start = sb.length();
+                w.render(sb);
+                if (sb.length() == start) {
+                    sb.setLength(before);
+                }
+            }
+            return sb.toString();
+        }
+    }
+
+    /**
+     * One word: accents over all of it (outermost first), its core, and its script segments. A
+     * mark lands on the OPEN segment when there is one, because that is where it is drawn (x,
+     * superscript two, bar: the bar is over the 2), and over the whole word otherwise.
+     */
+    private static final class Word {
+        private final java.util.ArrayDeque<String> prefixes = new java.util.ArrayDeque<>();
+        private final String core;
+        private final List<Segment> segments = new ArrayList<>();
+        private boolean open;
+        final boolean base;
+
+        Word(String core, boolean base) {
+            this.core = core;
+            this.base = base;
         }
 
-        private void flush() {
-            if (accents.isEmpty()) {
+        void mark(String name) {
+            if (open) {
+                segments.get(segments.size() - 1).mark(name);
+            } else {
+                prefixes.addFirst(name);
+            }
+        }
+
+        /** A script after this word: it joins the open segment if that lacks its kind (x_1 then
+         *  superscript two reads as x_1^2), else it starts a new one. */
+        void script(String sup, String sub) {
+            if (sup == null && sub == null) {
                 return;
             }
-            StringBuilder sb = new StringBuilder();
-            for (int k = accents.size() - 1; k >= 0; k--) {
-                sb.append(accents.get(k)).append(' ');
+            Segment s = open ? segments.get(segments.size() - 1) : null;
+            if (s != null && s.accepts(sup, sub)) {
+                s.add(sup, sub);
+            } else {
+                Segment t = new Segment();
+                t.add(sup, sub);
+                segments.add(t);
             }
-            words.set(words.size() - 1, sb.append(words.get(words.size() - 1)).toString());
-            accents.clear();
+            open = true;
+        }
+
+        void closeSegment() {
+            open = false;
+        }
+
+        void render(StringBuilder out) {
+            int start = out.length();
+            for (String p : prefixes) {
+                out.append(p).append(' ');
+            }
+            out.append(core);
+            for (Segment s : segments) {
+                if (out.length() > start && out.charAt(out.length() - 1) != ' ') {
+                    out.append(' ');
+                }
+                s.render(out);
+            }
+        }
+    }
+
+    /** A script segment: its superscript and subscript words, and the marks drawn over each. */
+    private static final class Segment {
+        private String sup;
+        private String sub;
+        private final List<String> supMarks = new ArrayList<>();
+        private final List<String> subMarks = new ArrayList<>();
+        private boolean lastWasSub;
+
+        boolean accepts(String sp, String sb) {
+            return (sp == null || sup == null) && (sb == null || sub == null);
+        }
+
+        void add(String sp, String sb) {
+            if (sp != null) {
+                sup = sp;
+                lastWasSub = false;
+            }
+            if (sb != null) {
+                sub = sb;
+                lastWasSub = true;
+            }
+        }
+
+        void mark(String name) {
+            (lastWasSub && sub != null ? subMarks : supMarks).add(name);
+        }
+
+        void render(StringBuilder out) {
+            if (sub == null) {
+                if (supMarks.isEmpty() && sup.equals("2")) {
+                    out.append("squared");
+                } else {
+                    out.append("to the power of ");
+                    withMarks(out, sup, supMarks);
+                }
+            } else if (sup == null) {
+                out.append("sub ");
+                withMarks(out, sub, subMarks);
+            } else {
+                out.append("sub ");
+                withMarks(out, sub, subMarks);
+                out.append(" to the power of ");
+                withMarks(out, sup, supMarks);
+            }
+        }
+
+        /** The words with the marks over their LAST character, as drawn: "23" with a bar is
+         *  "2 bar over 3". Later marks are outer, as for a word. */
+        private static void withMarks(StringBuilder out, String words, List<String> marks) {
+            if (marks.isEmpty()) {
+                out.append(words);
+                return;
+            }
+            int sp = words.lastIndexOf(' ');
+            String head = words.substring(0, sp + 1);
+            String last = words.substring(sp + 1);
+            if (last.codePointCount(0, last.length()) > 1 && last.codePoints().allMatch(Character::isDigit)) {
+                int k = last.offsetByCodePoints(last.length(), -1);
+                head = head + last.substring(0, k) + " ";
+                last = last.substring(k);
+            }
+            out.append(head);
+            for (int m = marks.size() - 1; m >= 0; m--) {
+                out.append(marks.get(m)).append(' ');
+            }
+            out.append(last);
         }
     }
 
@@ -1282,6 +1434,21 @@ public final class LatteX {
         return atoms;
     }
 
+    /** A decimal point: a bare '.', or one forced ordinary ({@code 1\mathord{.}5} draws as 1.5). */
+    private static boolean isDecimalPoint(MathNode n) {
+        return isAtomOf(n, '.') || (n instanceof MathNode.ClassOverride co && co.forcedClass() == MathNode.MathClass.ORD
+            && isAtomOf(co.body(), '.'));
+    }
+
+    private static boolean isEmptyGroup(MathNode n) {
+        return n instanceof MathList(var g) && g.isEmpty();
+    }
+
+    /** A digit, or a digit carrying a script, that can start a number after a leading point (.5^2). */
+    private static boolean startsNumber(MathNode n) {
+        return digitText(n) != null || (n instanceof SupSub ss && digitText(ss.base()) != null);
+    }
+
     /** A combining mark, bare or carrying a TeX script (0.16, U+0304, ^2), next in the row. */
     private static boolean markFollows(MathNode n) {
         return combiningAccent(n) != null || (n instanceof SupSub ss && combiningAccent(ss.base()) != null);
@@ -1293,6 +1460,12 @@ public final class LatteX {
      * is an operator as a bare + is (Lattice review of f94842f).
      */
     private static boolean isBaseNode(MathNode n) {
+        if (n instanceof MathNode.Colored c) {
+            return isBaseNode(c.body()); // colour is presentation: a red + is still an operator
+        }
+        if (n instanceof BigOperator || n instanceof MathNode.SizedDelim || n instanceof MathNode.MiddleDelim) {
+            return false; // a \sum or a \big( is not what a following script or mark sits on
+        }
         MathNode.MathClass c = n instanceof Atom a ? a.mathClass()
             : n instanceof MathNode.ClassOverride co ? co.forcedClass() : null;
         if (c == null) {
@@ -1440,7 +1613,10 @@ public final class LatteX {
     /** A plain-language accessibility label for a math tree. */
     static String describe(MathNode node) {
         return switch (node) {
-            case Atom atom -> Character.toString(atom.codePoint());
+            case Atom atom -> scriptKind(atom) != 0 // a lone script character reads whole: superscript 2
+                ? wholeScriptRun(scriptKind(atom) == 1 ? describeRow(scriptContent(atom)) : null,
+                    scriptKind(atom) == 2 ? describeRow(scriptContent(atom)) : null)
+                : Character.toString(atom.codePoint());
             case MathNode.MiddleDelim(var delimCp) -> Character.toString(delimCp);
             case MathList(var items) -> describeRow(items);
             case SupSub(var base, var sup, var sub) -> scripted(describe(base), sup, sub);
