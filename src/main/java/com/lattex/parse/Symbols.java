@@ -63,17 +63,60 @@ final class Symbols {
     private static final java.util.Set<String> CLASS_TAGGED_SPELLINGS = java.util.Set.of(
         "lVert", "rVert", "lhd", "rhd", "unlhd", "unrhd");
 
+    /**
+     * The class of a PASTED character whose remaining spellings disagree (plan a9dde3b4,
+     * lattex project). Before this, the class was whichever spelling {@code Map.copyOf}'s
+     * per-JVM iteration order met first, so 'a ⊥ b' gave two different SVGs from one jar
+     * (Fixpoint 35720, Lattice 35723). The choices are Unicode's own math class for the
+     * character, MathClass-15.txt (revision 15, 2017-06-01), read at the source:
+     * {@code 22A5;R}, {@code 25B3;B}, {@code 25BD;B}. Each named command keeps its own class
+     * ({@code \bot} Ord, {@code \perp} Rel; {@code \triangle} and {@code \triangledown} Ord,
+     * {@code \bigtriangleup} and {@code \bigtriangledown} Bin): this decides the paste only.
+     */
+    static final Map<Integer, MathClass> RAW_CLASS_CHOICE = Map.of(
+        0x22A5, MathClass.REL,   // ⊥ UP TACK: MathClass-15 R (\perp's class)
+        0x25B3, MathClass.BIN,   // △ WHITE UP-POINTING TRIANGLE: B (\bigtriangleup's)
+        0x25BD, MathClass.BIN);  // ▽ WHITE DOWN-POINTING TRIANGLE: B (\bigtriangledown's)
+
     static {
-        CLASS_BY_CODEPOINT = buildClassByCodepoint();
+        CLASS_BY_CODEPOINT = buildClassByCodepoint(SYMBOLS, CLASS_TAGGED_SPELLINGS, RAW_CLASS_CHOICE);
     }
 
-    private static Map<Integer, MathClass> buildClassByCodepoint() {
-        Map<Integer, MathClass> m = new java.util.HashMap<>();
-        for (Map.Entry<String, Sym> e : SYMBOLS.entrySet()) {
+    /**
+     * The class of each pasted non-ASCII character, independent of the table's iteration
+     * order: a code point all of whose remaining spellings agree takes that class; one whose
+     * spellings disagree takes its entry in {@code choice}, and with no entry the table does
+     * not build (an {@link IllegalStateException} at class initialisation, which every test
+     * meets), so a future conflicting pair cannot be decided by iteration order again. A
+     * choice for a code point whose spellings agree is refused too, so no entry goes stale.
+     * Package-private for SymbolsRawClassTest.
+     */
+    static Map<Integer, MathClass> buildClassByCodepoint(Map<String, Sym> symbols, java.util.Set<String> tagged,
+            Map<Integer, MathClass> choice) {
+        Map<Integer, java.util.EnumSet<MathClass>> classes = new java.util.TreeMap<>();
+        for (Map.Entry<String, Sym> e : symbols.entrySet()) {
             Sym s = e.getValue();
             if (s.codePoint() > 0x7F // non-ASCII only; ASCII is the classify() switch's job
-                    && !CLASS_TAGGED_SPELLINGS.contains(e.getKey())) {
-                m.putIfAbsent(s.codePoint(), s.mathClass());
+                    && !tagged.contains(e.getKey())) {
+                classes.computeIfAbsent(s.codePoint(), k -> java.util.EnumSet.noneOf(MathClass.class)).add(s.mathClass());
+            }
+        }
+        Map<Integer, MathClass> m = new java.util.HashMap<>();
+        for (Map.Entry<Integer, java.util.EnumSet<MathClass>> e : classes.entrySet()) {
+            int cp = e.getKey();
+            if (e.getValue().size() == 1) {
+                if (choice.containsKey(cp)) {
+                    throw new IllegalStateException(String.format(
+                        "raw-class choice for U+%04X, whose spellings all agree (%s): remove the stale entry", cp, e.getValue()));
+                }
+                m.put(cp, e.getValue().iterator().next());
+            } else {
+                MathClass chosen = choice.get(cp);
+                if (chosen == null) {
+                    throw new IllegalStateException(String.format(
+                        "U+%04X has spellings of classes %s and no raw-class choice: add one, from a source", cp, e.getValue()));
+                }
+                m.put(cp, chosen);
             }
         }
         return Map.copyOf(m);
