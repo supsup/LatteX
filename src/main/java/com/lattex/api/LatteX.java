@@ -62,6 +62,19 @@ import java.util.Map;
  */
 public final class LatteX {
 
+    /**
+     * The reserved substring a caller tests for (plan 14579fe4, lattex project, rulings
+     * stafficy/35665 and 35720): a render that drew the font's missing-glyph box ends its
+     * aria-label with {@code " (missing glyph: U+XXXX, U+YYYY)"}, naming the characters the
+     * author typed, in order of first appearance, each once, at most eight then
+     * {@code ", +N more"}. No clean render contains it: author text that spells it (a
+     * {@code \text} label, an {@code a11y.label}) has a zero-width space U+200B put after the
+     * word "glyph" once the text is normalised, which a screen reader does not voice and
+     * which breaks the match. The mark is text of the one aria-label the SVG root already
+     * carries, inside the emitter's minimal subset (CONTRIBUTING section 5).
+     */
+    public static final String MISSING_GLYPH_MARK = "(missing glyph: U+";
+
     /** Default display font size, in user units (px at 1:1). */
     public static final double DISPLAY_FONT_SIZE = 40.0;
 
@@ -224,6 +237,20 @@ public final class LatteX {
         return sb.toString();
     }
 
+    /**
+     * Plan 14579fe4: with the host's strictGlyphs on, a glyph the font lacks fails the render
+     * (render, renderStyledHtml and the tryRenderMath seam, which absorbs it as empty);
+     * renderWithDiagnostics reports it as UNSUPPORTED_CONSTRUCT. Off, plan a1866884 stands.
+     */
+    private static void enforceStrictGlyphs(RenderOptions opts, Layout layout) {
+        if (opts.strictGlyphs()) {
+            String unmapped = unmappedReport(layout);
+            if (!unmapped.isEmpty()) {
+                throw new MathSyntaxException("the font has no glyph for " + unmapped + " (strictGlyphs)");
+            }
+        }
+    }
+
     private static RenderResult diagnosticRender(String latex, RenderOptions opts) {
         String stage = "parse";
         try {
@@ -246,6 +273,13 @@ public final class LatteX {
             String svg = SvgEmitter.emit(
                 layout, font, describe(body), style.color(), opts.fluid());
             String unmapped = unmappedReport(layout);
+            if (!unmapped.isEmpty() && opts.strictGlyphs()) {
+                // Plan 14579fe4: the host opted in to strictness, so the condition plan
+                // a1866884 keeps non-fatal by default is a failure here, with no SVG.
+                return new RenderResult("", new Diagnostics(Outcome.UNSUPPORTED_CONSTRUCT, "layout",
+                    "the font has no glyph for " + unmapped + " (strictGlyphs)",
+                    -1, "unmapped-glyph:" + unmapped, -1, ""));
+            }
             if (!unmapped.isEmpty()) {
                 // Non-fatal by construction: outcome stays OK so the host's renderErrors()
                 // gate cannot swap this SVG for an error card. A doc build must not lose a
@@ -379,7 +413,9 @@ public final class LatteX {
             // fluid is a HOST flag (like interactiveExpansion): it reads from the
             // caller's opts even when a \lx wrapper overrides the styling, and it is
             // NOT part of the \lx sub-language — an author can never turn it on.
-            return SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
+            String svg = SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
+            enforceStrictGlyphs(opts, layout);
+            return svg;
         });
     }
 
@@ -596,6 +632,7 @@ public final class LatteX {
             // fluid rides the HOST opts (never the \lx wrapper) and lands on the <svg>
             // element only — the container's attribute surface is untouched.
             String svg = SvgEmitter.emit(layout, font, describe(body), style.color(), opts.fluid());
+            enforceStrictGlyphs(opts, layout);
 
             // The `thread` and `cancel` effects both read data-lx-glyphmap (thread lights
             // every occurrence of a hovered token; cancel strikes+puffs a code point that
@@ -808,8 +845,9 @@ public final class LatteX {
               .append(htmlAttrEscape(e.getValue())).append('"');
         }
         // a11y label — stored RAW; legality policy + HTML-attr escaping applied here.
+        // An author label may not spell the missing-glyph mark (Fixpoint review of 6160f84).
         sem.a11yLabelValue().ifPresent(v -> sb.append(" aria-label=\"")
-            .append(htmlAttrEscape(v)).append('"'));
+            .append(com.lattex.parse.OutputLegality.unmark(htmlAttrEscape(v))).append('"'));
         return sb.append('>').toString();
     }
 
@@ -999,6 +1037,7 @@ public final class LatteX {
         Layout layout = LayoutEngine.layout(seamBody, ctx);
         // fluid rides the HOST opts, never the \lx wrapper, exactly as in render(latex, opts).
         String svg = SvgEmitter.emit(layout, font, describe(seamBody), seamStyle.color(), opts.fluid());
+        enforceStrictGlyphs(opts, layout); // a strict failure is absorbed like any other: empty
         // SAME gate as renderStyledHtml — usesGlyphmap is the ONE producer for the
         // stamping decision, so the seam and the wrapper path cannot drift on whether
         // the sidecar rides the container. A literal THREAD check here silently left
@@ -1081,6 +1120,13 @@ public final class LatteX {
             }
             case SupSub(var base, var sup, var sub) -> {
                 String b = describe(base);
+                if (b.isEmpty()) {
+                    // an empty base ({}_{i}, or a Unicode script with nothing before it): the
+                    // label reads 'sub i', not ' sub i' (Fixpoint review of 6160f84)
+                    String s = sub == null ? "" : "sub " + describe(sub);
+                    String p = sup == null ? "" : (describe(sup).equals("2") && sub == null ? "squared" : "to the power of " + describe(sup));
+                    yield (s + (s.isEmpty() || p.isEmpty() ? "" : " ") + p);
+                }
                 if (sub == null) {
                     String exp = describe(sup);
                     yield exp.equals("2") ? b + " squared" : b + " to the power of " + exp;

@@ -43,6 +43,19 @@ public final class OutputLegality {
      * @return the same text with illegal C0 controls removed
      * @throws MathSyntaxException if {@code s} contains an unpaired UTF-16 surrogate
      */
+    /**
+     * Breaks every spelling of the reserved missing-glyph mark ({@code "(missing glyph: "})
+     * in author text with a zero-width space U+200B after "glyph", which a screen reader
+     * does not voice. Applied to the FINAL text of a label, after {@link #sanitize} and
+     * escaping, so no later normalisation can rejoin a spelling (a control character
+     * stripped from between "glyph" and ":" did, Fixpoint review of 6160f84). The mark
+     * contains no character that escaping changes, so matching the escaped text is exact.
+     * Plan 14579fe4 (lattex project).
+     */
+    public static String unmark(String finalText) {
+        return finalText.replace("(missing glyph: ", "(missing glyph\u200B: ");
+    }
+
     public static String sanitize(String s) {
         // Fast path: scan once; only allocate a builder if something must change.
         int n = s.length();

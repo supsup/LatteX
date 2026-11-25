@@ -575,9 +575,12 @@ svg = subprocess.run(["lattex", r"\frac{a}{b}"],
                      capture_output=True, text=True).stdout
 ```
 
-Flags: `-o/--output <file>`, `-h/--help`, `-V/--version`, and `--` to end option
-parsing. Exit status is `0` on success, `1` on a render/IO error (including a failed
-stdout write or flush, such as a closed downstream pipe), `2` on a usage error.
+Flags: `-o/--output <file>`, `--strict-glyphs`, `-h/--help`, `-V/--version`, and `--` to
+end option parsing. Exit status is `0` on success, `1` on a render/IO error (including a
+failed stdout write or flush, such as a closed downstream pipe), `2` on a usage error. A
+character the font has no glyph for is drawn as a box with a `lattex: warning:` line on
+stderr and does NOT change the exit status (still `0`); `--strict-glyphs` makes it an
+error (`1`).
 In one-shot mode, invalid LaTeX is explained on stderr. In `--batch`, successful SVG
 and in-place `lattex: error: …` records remain NUL-delimited on stdout.
 Output-delivery failures are explained on stderr; a stdout failure may leave incomplete
